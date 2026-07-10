@@ -11,19 +11,47 @@ import type {
 // ---- Building definitions -------------------------------------------------
 
 export type BuildingEffect =
-  | { type: 'produce'; resource: ResourceId; perMinute: number; bufferCap: number }
-  | { type: 'capacity'; need: NeedId; amount: number }
+  /**
+   * Production flows directly into city storage (no manual collecting).
+   * `inputsPerMinute` is the production-chain hook: if set, the building
+   * consumes those resources and scales its output by input availability —
+   * later chains (wheat → bakery, ore → factory) are just config entries.
+   */
+  | { type: 'produce'; resource: ResourceId; perMinute: number; inputsPerMinute?: Partial<Record<ResourceId, number>> }
+  /** With `radius`, the capacity only reaches housing within that range (wells). */
+  | { type: 'capacity'; need: NeedId; amount: number; radius?: number }
   | { type: 'coverage'; need: NeedId; radius: number }
   | { type: 'storage'; resource: ResourceId; amount: number }
   | { type: 'jobs'; amount: number }
   | { type: 'distribution'; need: NeedId }
-  | { type: 'protection'; hazard: 'fire'; radius: number };
+  | { type: 'protection'; hazard: 'fire'; radius: number }
+  /**
+   * Environment quality aura (positive: parks/deco, negative: industry).
+   * Groundwork for residential attractiveness & zoning (MVP 2): the derived
+   * layer already aggregates it per residential building.
+   */
+  | { type: 'ambience'; amount: number; radius: number };
 
 export interface BuildingUpgradeDef {
   cost: Partial<Record<ResourceId, number>>;
   constructionSec: number;
   effects: BuildingEffect[];
   xpReward: number;
+}
+
+/**
+ * Location bonus: production scales with matching terrain near the building
+ * (sawmill ↔ forest, quarry ↔ mountain, farm ↔ fertile soil). Placement
+ * becomes a real decision instead of "anywhere next to a road".
+ */
+export interface LocationBonusDef {
+  terrain: TerrainType;
+  /** Chebyshev distance from the footprint within which tiles count. */
+  radius: number;
+  /** Bonus percent contributed by each matching tile. */
+  perTilePct: number;
+  /** Upper bound for the total bonus percent. */
+  maxPct: number;
 }
 
 export interface BuildingDef {
@@ -38,6 +66,7 @@ export interface BuildingDef {
   xpReward: number;
   effects: BuildingEffect[];
   upgrades?: BuildingUpgradeDef[];
+  locationBonus?: LocationBonusDef;
   /** Only one instance allowed (town hall, mayor house). */
   unique?: boolean;
   /** Cannot be built from the menu (pre-placed buildings). */
@@ -78,7 +107,8 @@ export type QuestObjective =
   | { type: 'build'; defId: BuildingDefId; count: number }
   | { type: 'population'; amount: number }
   | { type: 'resource'; resource: ResourceId; amount: number }
-  | { type: 'collect'; resource: ResourceId; amount: number }
+  /** Lifetime production of a resource (production stores automatically). */
+  | { type: 'produce'; resource: ResourceId; amount: number }
   | { type: 'level'; level: number }
   | { type: 'sectors'; count: number }
   | { type: 'mayorAction'; actionId: MayorActionId; count: number }

@@ -40,12 +40,16 @@ type PanelId = 'build' | 'mayor' | 'happiness' | 'settings' | 'quests' | undefin
 interface UiState {
   openPanel: PanelId;
   placingDefId: string | undefined;
+  /** Building currently being relocated (hold-drag or "Verschieben" button). */
+  movingBuildingId: string | undefined;
   selectedBuildingId: string | undefined;
   sectorDialog: SectorId | undefined;
   toasts: Toast[];
   setPanel(panel: PanelId): void;
   startPlacing(defId: string): void;
   stopPlacing(): void;
+  startMoving(id: string): void;
+  stopMoving(): void;
   selectBuilding(id?: string): void;
   openSectorDialog(id?: SectorId): void;
   pushToast(text: string, kind?: Toast['kind']): void;
@@ -57,13 +61,17 @@ let toastId = 0;
 export const useUiStore = create<UiState>((set) => ({
   openPanel: 'quests',
   placingDefId: undefined,
+  movingBuildingId: undefined,
   selectedBuildingId: undefined,
   sectorDialog: undefined,
   toasts: [],
   setPanel: (panel) => set((s) => ({ openPanel: s.openPanel === panel ? undefined : panel })),
   startPlacing: (defId) =>
-    set({ placingDefId: defId, selectedBuildingId: undefined, sectorDialog: undefined, openPanel: undefined }),
+    set({ placingDefId: defId, movingBuildingId: undefined, selectedBuildingId: undefined, sectorDialog: undefined, openPanel: undefined }),
   stopPlacing: () => set({ placingDefId: undefined }),
+  startMoving: (id) =>
+    set({ movingBuildingId: id, placingDefId: undefined, selectedBuildingId: undefined, sectorDialog: undefined, openPanel: undefined }),
+  stopMoving: () => set({ movingBuildingId: undefined }),
   selectBuilding: (id) =>
     set(id ? { selectedBuildingId: id, placingDefId: undefined, sectorDialog: undefined } : { selectedBuildingId: undefined }),
   openSectorDialog: (id) =>

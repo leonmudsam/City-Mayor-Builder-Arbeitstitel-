@@ -29,7 +29,7 @@ export const questsConfig: QuestDef[] = [
     unlockLevel: 2,
     objectives: [
       { type: 'build', defId: 'sawmill', count: 1 },
-      { type: 'collect', resource: 'wood', amount: 30 },
+      { type: 'produce', resource: 'wood', amount: 30 },
     ],
     rewards: { money: 100, xp: 15 },
     nextQuestId: 'q04_water',
@@ -62,7 +62,7 @@ export const questsConfig: QuestDef[] = [
     unlockLevel: 4,
     objectives: [
       { type: 'build', defId: 'farm', count: 1 },
-      { type: 'collect', resource: 'food', amount: 50 },
+      { type: 'produce', resource: 'food', amount: 50 },
     ],
     rewards: { money: 150, xp: 20 },
     nextQuestId: 'q07_stone',
@@ -74,7 +74,7 @@ export const questsConfig: QuestDef[] = [
     unlockLevel: 4,
     objectives: [
       { type: 'build', defId: 'quarry', count: 1 },
-      { type: 'collect', resource: 'stone', amount: 40 },
+      { type: 'produce', resource: 'stone', amount: 40 },
     ],
     rewards: { money: 180, xp: 25 },
     nextQuestId: 'q08_market',

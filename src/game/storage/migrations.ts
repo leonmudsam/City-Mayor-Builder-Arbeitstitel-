@@ -1,5 +1,6 @@
 import { SCHEMA_VERSION } from '../newGame.ts';
 import { saveGameSchema } from '../config/schemas.ts';
+import { SECTOR_SIZE, terrainAt } from '../config/startRegion.config.ts';
 import type { SaveGame } from '../types.ts';
 
 type Migration = (raw: Record<string, unknown>) => Record<string, unknown>;
@@ -10,8 +11,37 @@ type Migration = (raw: Record<string, unknown>) => Record<string, unknown>;
  * every release (§15).
  */
 const migrations: Record<number, Migration> = {
-  // Example for the future:
-  // 1: (raw) => ({ ...raw, schemaVersion: 2, newField: defaultValue }),
+  // v1 → v2: manual collecting removed (buffers credited to storage once),
+  // stats.collected renamed to stats.produced, and unbuilt tiles re-derive
+  // their terrain so the new lake/mountain features appear in old saves.
+  1: (raw) => {
+    const resources = { ...(raw.resources as Record<string, number>) };
+    const buildings: Record<string, Record<string, unknown>> = {};
+    for (const [id, b] of Object.entries(raw.buildings as Record<string, Record<string, unknown>>)) {
+      const { buffer, ...rest } = b;
+      buildings[id] = rest;
+      if (typeof buffer === 'number' && buffer > 0) {
+        const def = String(b.defId);
+        const resource = def === 'sawmill' ? 'wood' : def === 'quarry' ? 'stone' : def === 'shop_small' ? 'money' : 'food';
+        resources[resource] = (resources[resource] ?? 0) + Math.floor(buffer);
+      }
+    }
+    const stats = raw.stats as Record<string, unknown>;
+    const world = raw.world as { sectors: Record<string, { sx: number; sy: number; tiles: { terrain: string; buildingId?: string }[] }> };
+    for (const sector of Object.values(world.sectors)) {
+      sector.tiles.forEach((tile, i) => {
+        if (tile.buildingId) return;
+        tile.terrain = terrainAt(sector.sx * SECTOR_SIZE + (i % SECTOR_SIZE), sector.sy * SECTOR_SIZE + Math.floor(i / SECTOR_SIZE));
+      });
+    }
+    return {
+      ...raw,
+      schemaVersion: 2,
+      resources,
+      buildings,
+      stats: { ...stats, produced: (stats.collected as Record<string, number> | undefined) ?? { money: 0, wood: 0, stone: 0, food: 0 }, collected: undefined },
+    };
+  },
 };
 
 export class SaveValidationError extends Error {}
@@ -28,7 +58,12 @@ export function migrateAndValidate(rawInput: unknown): SaveGame {
   while (version < SCHEMA_VERSION) {
     const migrate = migrations[version];
     if (!migrate) throw new SaveValidationError(`Missing migration from v${version}`);
-    raw = migrate(raw);
+    try {
+      raw = migrate(raw);
+    } catch (error) {
+      // A migration crashing means the save is structurally broken.
+      throw new SaveValidationError(`Migration from v${version} failed: ${String(error)}`);
+    }
     version = raw.schemaVersion as number;
   }
   const parsed = saveGameSchema.safeParse(raw);

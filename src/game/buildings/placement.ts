@@ -14,6 +14,12 @@ export type PlacementError =
   | 'occupied'
   | 'needs_road';
 
+export interface PlacementOptions {
+  /** Set when relocating an existing building: its own tiles don't block,
+   *  and unlock/unique checks are skipped (it already exists). */
+  ignoreBuildingId?: string;
+}
+
 export function validatePlacement(
   state: GameState,
   config: GameConfig,
@@ -21,12 +27,16 @@ export function validatePlacement(
   def: BuildingDef,
   x: number,
   y: number,
+  options?: PlacementOptions,
 ): PlacementError | undefined {
-  if (def.buildable === false) return 'locked_building';
-  if (def.unlockLevel > state.level.current || (def.unlockLevel > 1 && !unlockedBuildings(config, state.level.current).has(def.id))) {
-    return 'locked_building';
+  const moving = options?.ignoreBuildingId;
+  if (!moving) {
+    if (def.buildable === false) return 'locked_building';
+    if (def.unlockLevel > state.level.current || (def.unlockLevel > 1 && !unlockedBuildings(config, state.level.current).has(def.id))) {
+      return 'locked_building';
+    }
+    if (def.unique && Object.values(state.buildings).some((b) => b.defId === def.id)) return 'unique_exists';
   }
-  if (def.unique && Object.values(state.buildings).some((b) => b.defId === def.id)) return 'unique_exists';
 
   for (let dy = 0; dy < def.size.h; dy++) {
     for (let dx = 0; dx < def.size.w; dx++) {
@@ -35,7 +45,7 @@ export function validatePlacement(
       const sector = sectorOfTile(state, x + dx, y + dy);
       if (!sector || sector.status !== 'unlocked') return 'sector_locked';
       if (!isTerrainBuildable(tile)) return 'terrain';
-      if (tile.buildingId) return 'occupied';
+      if (tile.buildingId && tile.buildingId !== moving) return 'occupied';
     }
   }
 

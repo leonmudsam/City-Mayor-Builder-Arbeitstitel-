@@ -24,10 +24,25 @@ export function TopBar() {
         </div>
       </div>
       <div className="topbar-resources">
-        <Stat icon={<Coins size={15} />} label={t('resource.money')} value={fmt(res.money)} />
-        <Stat icon={<Logs size={15} />} label={t('resource.wood')} value={`${fmt(res.wood)}/${fmt(caps.wood)}`} />
-        <Stat icon={<Mountain size={15} />} label={t('resource.stone')} value={`${fmt(res.stone)}/${fmt(caps.stone)}`} />
-        <Stat icon={<Wheat size={15} />} label={t('resource.food')} value={`${fmt(res.food)}/${fmt(caps.food)}`} />
+        <Stat icon={<Coins size={15} />} label={rateLabel(t('resource.money'), derived.productionPerMin.money)} value={fmt(res.money)} />
+        <Stat
+          icon={<Logs size={15} />}
+          label={rateLabel(t('resource.wood'), derived.productionPerMin.wood)}
+          value={`${fmt(res.wood)}/${fmt(caps.wood)}`}
+          warn={caps.wood > 0 && res.wood >= caps.wood}
+        />
+        <Stat
+          icon={<Mountain size={15} />}
+          label={rateLabel(t('resource.stone'), derived.productionPerMin.stone)}
+          value={`${fmt(res.stone)}/${fmt(caps.stone)}`}
+          warn={caps.stone > 0 && res.stone >= caps.stone}
+        />
+        <Stat
+          icon={<Wheat size={15} />}
+          label={rateLabel(t('resource.food'), derived.productionPerMin.food)}
+          value={`${fmt(res.food)}/${fmt(caps.food)}`}
+          warn={caps.food > 0 && res.food >= caps.food}
+        />
         {waterPct !== undefined && (
           <Stat icon={<Droplets size={15} />} label={t('need.water')} value={`${waterPct}%`} warn={waterPct < 100} />
         )}
@@ -50,4 +65,9 @@ function Stat({ icon, label, value, warn }: { icon: React.ReactNode; label: stri
 
 function fmt(n: number): string {
   return Math.floor(n).toLocaleString('de-DE');
+}
+
+/** Tooltip text: resource name + current production rate (storage is automatic). */
+function rateLabel(name: string, perMin: number): string {
+  return perMin > 0 ? `${name} — +${perMin % 1 === 0 ? perMin : perMin.toFixed(1)}/min` : name;
 }

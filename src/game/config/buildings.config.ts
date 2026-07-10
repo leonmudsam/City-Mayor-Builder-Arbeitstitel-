@@ -57,7 +57,7 @@ export const buildingsConfig: BuildingDef[] = [
     size: { w: 2, h: 2 },
     requiresRoad: true,
     unlockLevel: 1,
-    cost: { money: 50, wood: 10 },
+    cost: { money: 50, wood: 15 },
     constructionSec: 20,
     xpReward: 10,
     effects: [{ type: 'capacity', need: 'housing', amount: 6 }],
@@ -83,7 +83,7 @@ export const buildingsConfig: BuildingDef[] = [
     size: { w: 2, h: 2 },
     requiresRoad: true,
     unlockLevel: 6,
-    cost: { money: 180, wood: 50, stone: 20 },
+    cost: { money: 160, wood: 60, stone: 30 },
     constructionSec: 120,
     xpReward: 20,
     effects: [{ type: 'capacity', need: 'housing', amount: 14 }],
@@ -95,7 +95,7 @@ export const buildingsConfig: BuildingDef[] = [
     size: { w: 2, h: 3 },
     requiresRoad: true,
     unlockLevel: 9,
-    cost: { money: 520, wood: 80, stone: 120 },
+    cost: { money: 450, wood: 100, stone: 140 },
     constructionSec: 360,
     xpReward: 45,
     effects: [{ type: 'capacity', need: 'housing', amount: 34 }],
@@ -113,9 +113,11 @@ export const buildingsConfig: BuildingDef[] = [
     constructionSec: 30,
     xpReward: 12,
     effects: [
-      { type: 'produce', resource: 'wood', perMinute: 6, bufferCap: 60 },
+      { type: 'produce', resource: 'wood', perMinute: 9 },
       { type: 'jobs', amount: 4 },
+      { type: 'ambience', amount: -1, radius: 4 },
     ],
+    locationBonus: { terrain: 'forest', radius: 3, perTilePct: 5, maxPct: 50 },
   },
   {
     id: 'quarry',
@@ -124,13 +126,15 @@ export const buildingsConfig: BuildingDef[] = [
     size: { w: 3, h: 3 },
     requiresRoad: true,
     unlockLevel: 4,
-    cost: { money: 140, wood: 40 },
+    cost: { money: 140, wood: 50 },
     constructionSec: 90,
     xpReward: 18,
     effects: [
-      { type: 'produce', resource: 'stone', perMinute: 4, bufferCap: 50 },
+      { type: 'produce', resource: 'stone', perMinute: 6 },
       { type: 'jobs', amount: 6 },
+      { type: 'ambience', amount: -2, radius: 5 },
     ],
+    locationBonus: { terrain: 'mountain', radius: 3, perTilePct: 8, maxPct: 60 },
   },
   {
     id: 'farm',
@@ -143,9 +147,10 @@ export const buildingsConfig: BuildingDef[] = [
     constructionSec: 60,
     xpReward: 15,
     effects: [
-      { type: 'produce', resource: 'food', perMinute: 8, bufferCap: 80 },
+      { type: 'produce', resource: 'food', perMinute: 10 },
       { type: 'jobs', amount: 4 },
     ],
+    locationBonus: { terrain: 'fertile', radius: 2, perTilePct: 4, maxPct: 40 },
   },
   {
     id: 'well',
@@ -157,7 +162,7 @@ export const buildingsConfig: BuildingDef[] = [
     cost: { money: 40, wood: 5 },
     constructionSec: 15,
     xpReward: 8,
-    effects: [{ type: 'capacity', need: 'water', amount: 25 }],
+    effects: [{ type: 'capacity', need: 'water', amount: 25, radius: 7 }],
   },
   {
     id: 'water_pump',
@@ -170,7 +175,7 @@ export const buildingsConfig: BuildingDef[] = [
     constructionSec: 180,
     xpReward: 28,
     effects: [
-      { type: 'capacity', need: 'water', amount: 90 },
+      { type: 'capacity', need: 'water', amount: 90, radius: 12 },
       { type: 'jobs', amount: 2 },
     ],
   },
@@ -219,7 +224,7 @@ export const buildingsConfig: BuildingDef[] = [
     constructionSec: 240,
     xpReward: 32,
     effects: [
-      { type: 'produce', resource: 'food', perMinute: 5, bufferCap: 60 },
+      { type: 'produce', resource: 'food', perMinute: 6 },
       { type: 'jobs', amount: 4 },
     ],
   },
@@ -251,7 +256,7 @@ export const buildingsConfig: BuildingDef[] = [
     constructionSec: 150,
     xpReward: 24,
     effects: [
-      { type: 'produce', resource: 'money', perMinute: 8, bufferCap: 120 },
+      { type: 'produce', resource: 'money', perMinute: 4 },
       { type: 'jobs', amount: 8 },
     ],
   },
@@ -267,7 +272,10 @@ export const buildingsConfig: BuildingDef[] = [
     cost: { money: 120, wood: 20 },
     constructionSec: 60,
     xpReward: 15,
-    effects: [{ type: 'coverage', need: 'leisure', radius: 8 }],
+    effects: [
+      { type: 'coverage', need: 'leisure', radius: 8 },
+      { type: 'ambience', amount: 2, radius: 6 },
+    ],
   },
   {
     id: 'playground',
@@ -279,7 +287,10 @@ export const buildingsConfig: BuildingDef[] = [
     cost: { money: 60, wood: 15 },
     constructionSec: 30,
     xpReward: 8,
-    effects: [{ type: 'coverage', need: 'leisure', radius: 5 }],
+    effects: [
+      { type: 'coverage', need: 'leisure', radius: 5 },
+      { type: 'ambience', amount: 1, radius: 4 },
+    ],
   },
 
   // ---- Dekoration ----
@@ -293,7 +304,7 @@ export const buildingsConfig: BuildingDef[] = [
     cost: { money: 10 },
     constructionSec: 0,
     xpReward: 1,
-    effects: [],
+    effects: [{ type: 'ambience', amount: 1, radius: 3 }],
   },
   {
     id: 'deco_flowerbed',
@@ -305,7 +316,7 @@ export const buildingsConfig: BuildingDef[] = [
     cost: { money: 15 },
     constructionSec: 0,
     xpReward: 1,
-    effects: [],
+    effects: [{ type: 'ambience', amount: 1, radius: 3 }],
   },
   {
     id: 'deco_fountain',
@@ -317,7 +328,7 @@ export const buildingsConfig: BuildingDef[] = [
     cost: { money: 80, stone: 10 },
     constructionSec: 20,
     xpReward: 3,
-    effects: [],
+    effects: [{ type: 'ambience', amount: 2, radius: 4 }],
   },
   {
     id: 'deco_bench',
@@ -329,6 +340,6 @@ export const buildingsConfig: BuildingDef[] = [
     cost: { money: 20, wood: 5 },
     constructionSec: 0,
     xpReward: 1,
-    effects: [],
+    effects: [{ type: 'ambience', amount: 1, radius: 2 }],
   },
 ];

@@ -34,8 +34,6 @@ export interface BuildingInstance {
   upgradeLevel: number;
   status: BuildingStatus;
   constructionEndsAt?: number;
-  /** Accumulated, uncollected yield in resource units (produce buildings only). */
-  buffer: number;
 }
 
 export interface TileState {
@@ -108,7 +106,8 @@ export interface GoldTransaction {
 /** Lifetime counters used by quests, achievements, and mayor messages. */
 export interface GameStats {
   built: Record<BuildingDefId, number>;
-  collected: Record<ResourceId, number>;
+  /** Lifetime resources produced into storage (production is automatic). */
+  produced: Record<ResourceId, number>;
   mayorActions: Record<MayorActionId, number>;
   sectorsUnlocked: number;
 }

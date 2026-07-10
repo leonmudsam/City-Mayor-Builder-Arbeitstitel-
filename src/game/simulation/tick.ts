@@ -1,5 +1,5 @@
 import type { GameConfig } from '../config/index.ts';
-import type { GameState, NeedId } from '../types.ts';
+import type { GameState, NeedId, ResourceId } from '../types.ts';
 import type { Derived } from './derived.ts';
 import { recomputeDerived } from './derived.ts';
 import { effectiveEffects } from '../buildings/effects.ts';
@@ -53,16 +53,33 @@ export function advance(state: GameState, config: GameConfig, derived: Derived, 
     state.events = state.events.filter((e) => e.endsAt > chunkEnd);
     if (expired) derived = recomputeDerived(state, config);
 
-    // 2. Production into per-building buffers (collect moves it to storage).
+    // 2. Production flows directly into city storage (no manual collecting).
+    //    Storage caps make warehouses matter; full storage halts production.
     const dtMin = dtSec / 60;
     for (const b of Object.values(state.buildings)) {
       if (b.status !== 'active') continue;
       const def = config.buildings.get(b.defId);
       if (!def) continue;
+      const bonus = 1 + (derived.productionBonus[b.id] ?? 0) / 100;
       for (const eff of effectiveEffects(def, b.upgradeLevel)) {
-        if (eff.type === 'produce') {
-          b.buffer = Math.min(eff.bufferCap, b.buffer + eff.perMinute * dtMin);
+        if (eff.type !== 'produce') continue;
+        // Production-chain hook: output scales with input availability.
+        let efficiency = 1;
+        if (eff.inputsPerMinute) {
+          for (const [res, perMin] of Object.entries(eff.inputsPerMinute)) {
+            const required = (perMin ?? 0) * dtMin;
+            if (required > 0) efficiency = Math.min(efficiency, state.resources[res as ResourceId] / required);
+          }
+          efficiency = Math.max(0, Math.min(1, efficiency));
+          for (const [res, perMin] of Object.entries(eff.inputsPerMinute)) {
+            state.resources[res as ResourceId] -= (perMin ?? 0) * dtMin * efficiency;
+          }
         }
+        const produced = eff.perMinute * bonus * efficiency * dtMin;
+        const cap = derived.storageCaps[eff.resource] ?? Number.POSITIVE_INFINITY;
+        const stored = Math.min(produced, Math.max(0, cap - state.resources[eff.resource]));
+        state.resources[eff.resource] += stored;
+        state.stats.produced[eff.resource] = (state.stats.produced[eff.resource] ?? 0) + stored;
       }
     }
 
@@ -74,13 +91,16 @@ export function advance(state: GameState, config: GameConfig, derived: Derived, 
     for (const need of activeNeeds) {
       const ns = state.citizens.needs[need.id];
       if (need.kind === 'capacity') {
+        // Radius-based sources (wells) only serve housing they actually reach:
+        // total capacity × covered-housing share.
         ns.supply = derived.capacity[need.id];
         ns.demand = pop * need.demandPerCapita;
-        ns.fulfillment = ns.demand <= 0 ? 1 : Math.min(1, ns.supply / ns.demand);
+        const base = ns.demand <= 0 ? 1 : Math.min(1, ns.supply / ns.demand);
+        ns.fulfillment = ns.demand <= 0 ? 1 : base * derived.needCoverage[need.id];
       } else if (need.kind === 'coverage') {
-        ns.supply = derived.leisureCoverage;
+        ns.supply = derived.needCoverage[need.id];
         ns.demand = 1;
-        ns.fulfillment = pop <= 0 ? 1 : derived.leisureCoverage;
+        ns.fulfillment = pop <= 0 ? 1 : derived.needCoverage[need.id];
       } else {
         // consumption (food): eat from storage, fulfillment = fed share.
         const required = pop * need.demandPerCapita * dtMin;

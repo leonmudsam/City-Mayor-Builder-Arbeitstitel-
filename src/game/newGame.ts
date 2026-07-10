@@ -4,7 +4,7 @@ import type { GameState } from './types.ts';
 import { sectorId } from './types.ts';
 import { materializeSector, tileAt } from './map/world.ts';
 
-export const SCHEMA_VERSION = 1;
+export const SCHEMA_VERSION = 2;
 
 export function createNewGame(config: GameConfig, cityName: string, now: number): GameState {
   const state: GameState = {
@@ -32,7 +32,7 @@ export function createNewGame(config: GameConfig, cityName: string, now: number)
     quests: { completed: [], active: [] },
     buffs: [],
     events: [],
-    stats: { built: {}, collected: { money: 0, wood: 0, stone: 0, food: 0 }, mayorActions: {}, sectorsUnlocked: 1 },
+    stats: { built: {}, produced: { money: 0, wood: 0, stone: 0, food: 0 }, mayorActions: {}, sectorsUnlocked: 1 },
     nextId: 0,
   };
 
@@ -59,7 +59,6 @@ export function createNewGame(config: GameConfig, cityName: string, now: number)
     y: th.y,
     upgradeLevel: 0,
     status: 'active',
-    buffer: 0,
   };
   for (let dy = 0; dy < townHallDef.size.h; dy++) {
     for (let dx = 0; dx < townHallDef.size.w; dx++) {
@@ -76,7 +75,7 @@ export function createNewGame(config: GameConfig, cityName: string, now: number)
   let roadIndex = 0;
   for (const pos of startRegionConfig.startRoads) {
     const roadId = `b_startroad_${roadIndex++}`;
-    state.buildings[roadId] = { id: roadId, defId: 'road', x: pos.x, y: pos.y, upgradeLevel: 0, status: 'active', buffer: 0 };
+    state.buildings[roadId] = { id: roadId, defId: 'road', x: pos.x, y: pos.y, upgradeLevel: 0, status: 'active' };
     const tile = tileAt(state, pos.x, pos.y);
     if (tile) {
       tile.terrain = 'grass';

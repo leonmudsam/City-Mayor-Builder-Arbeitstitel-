@@ -1,8 +1,10 @@
 import type { BalancingConfig, FeaturesConfig } from './types.ts';
 
 export const balancingConfig: BalancingConfig = {
-  taxPerCapitaPerMin: 0.5,
-  taxFactorMin: 0.5,
+  // Taxes are deliberately modest and strongly happiness-coupled: money should
+  // reward a well-run city, not accumulate while idling (§ AFK reduction).
+  taxPerCapitaPerMin: 0.3,
+  taxFactorMin: 0.35,
   taxFactorMax: 1.5,
   growthPerMin: 2,
   declinePerMin: 1,

@@ -26,6 +26,11 @@ function tileHash(x: number, y: number): number {
   return ((h ^ (h >>> 16)) >>> 0) / 0xffffffff;
 }
 
+/** The lake ("Weiher") in the western neighbor sector — not just decoration:
+ * shore tiles stay buildable and are reserved for water-side gameplay
+ * (fishing hut, kayak rental …) in later MVPs. */
+export const lakeConfig = { cx: 10, cy: 42, rx: 4.2, ry: 3.2 };
+
 /**
  * Terrain for any world tile — also used for sectors materialized later,
  * so expansion beyond the start region keeps a coherent landscape (open end).
@@ -35,6 +40,15 @@ export function terrainAt(x: number, y: number): TerrainType {
   const riverCenter = 57 + Math.round(Math.sin(y / 9) * 2);
   if (x >= riverCenter - 1 && x <= riverCenter + 1) return 'river';
   if (x === riverCenter - 2 || x === riverCenter + 2) return 'sand';
+
+  // Lake in sector (0,2) with a sandy shore ring.
+  const lakeDist = Math.hypot((x - lakeConfig.cx) / lakeConfig.rx, (y - lakeConfig.cy) / lakeConfig.ry);
+  if (lakeDist <= 1) return 'water';
+  if (lakeDist <= 1.35) return 'sand';
+
+  // Mountain ridge on the western edge (quarry location bonus target).
+  const ridgeDist = Math.hypot((x - 3) / 3.2, (y - 28) / 6.5);
+  if (ridgeDist <= 1 && tileHash(x * 3, y * 5) > 0.15) return 'mountain';
 
   // Forest: northern band, thinning toward the south.
   if (y < 12 && tileHash(x, y) > 0.15) return 'forest';

@@ -1,7 +1,24 @@
 import { useState } from 'react';
-import { Factory, Flower2, Home, Landmark, Route, ShoppingBasket, Store, TreePine } from 'lucide-react';
+import {
+  Clock,
+  Coins,
+  Factory,
+  Flower2,
+  Home,
+  Landmark,
+  Lock,
+  Logs,
+  Mountain,
+  Route,
+  ShoppingBasket,
+  Sparkles,
+  Store,
+  TreePine,
+  Wheat,
+  X,
+} from 'lucide-react';
 import { useGame, useUiStore } from '../../state/store.ts';
-import type { BuildingCategory } from '../../game/types.ts';
+import type { BuildingCategory, ResourceId } from '../../game/types.ts';
 import type { BuildingDef } from '../../game/config/types.ts';
 import { t } from '../../i18n/index.ts';
 
@@ -16,27 +33,41 @@ const CATEGORY_ORDER: { id: BuildingCategory; icon: React.ReactNode }[] = [
   { id: 'decoration', icon: <Flower2 size={16} /> },
 ];
 
+const RESOURCE_ICONS: Record<ResourceId, React.ReactNode> = {
+  money: <Coins size={13} />,
+  wood: <Logs size={13} />,
+  stone: <Mountain size={13} />,
+  food: <Wheat size={13} />,
+};
+
 export function BuildMenu() {
   const game = useGame();
-  const startPlacing = useUiStore((s) => s.startPlacing);
+  const { startPlacing, setPanel } = useUiStore();
   const [category, setCategory] = useState<BuildingCategory>('roads');
 
-  const buildings = game.config.buildingList.filter((b) => b.category === category && b.buildable !== false);
+  const buildings = game.config.buildingList
+    .filter((b) => b.category === category && b.buildable !== false)
+    .sort((a, b) => a.unlockLevel - b.unlockLevel);
   const level = game.state.level.current;
 
   return (
     <div className="panel build-menu">
-      <div className="build-tabs">
-        {CATEGORY_ORDER.map((cat) => (
-          <button
-            key={cat.id}
-            className={`btn-tab${category === cat.id ? ' active' : ''}`}
-            onClick={() => setCategory(cat.id)}
-          >
-            {cat.icon}
-            <span>{t(`category.${cat.id}`)}</span>
-          </button>
-        ))}
+      <div className="build-menu-head">
+        <div className="build-tabs">
+          {CATEGORY_ORDER.map((cat) => (
+            <button
+              key={cat.id}
+              className={`btn-tab${category === cat.id ? ' active' : ''}`}
+              onClick={() => setCategory(cat.id)}
+            >
+              {cat.icon}
+              <span>{t(`category.${cat.id}`)}</span>
+            </button>
+          ))}
+        </div>
+        <button className="btn-icon" onClick={() => setPanel(undefined)} title={t('ui.close')}>
+          <X size={18} />
+        </button>
       </div>
       <div className="build-cards">
         {buildings.map((def) => (
@@ -54,18 +85,41 @@ function BuildCard({ def, locked, onPick }: { def: BuildingDef; locked: boolean;
   const disabled = locked || !affordable || Boolean(uniqueBuilt);
 
   return (
-    <button className={`build-card${disabled ? ' disabled' : ''}`} onClick={onPick} disabled={disabled}>
-      <div className="build-card-name">{t(def.nameKey)}</div>
+    <button className={`build-card${disabled ? ' disabled' : ''}${locked ? ' locked' : ''}`} onClick={onPick} disabled={disabled}>
+      <div className="build-card-top">
+        <span className="build-card-name">{t(def.nameKey)}</span>
+        <span className="build-card-size">{def.size.w}×{def.size.h}</span>
+      </div>
       <div className="build-card-info">
         {Object.entries(def.cost).map(([res, amount]) => (
-          <span key={res} className={game.state.resources[res as keyof typeof game.state.resources] < (amount ?? 0) ? 'cost-missing' : ''}>
-            {amount} {t(`resource.${res}`)}
+          <span
+            key={res}
+            className={`chip${game.state.resources[res as ResourceId] < (amount ?? 0) ? ' cost-missing' : ''}`}
+          >
+            {RESOURCE_ICONS[res as ResourceId]}
+            {amount}
           </span>
         ))}
-        {def.constructionSec > 0 && <span>{def.constructionSec}s</span>}
+        {def.constructionSec > 0 && (
+          <span className="chip">
+            <Clock size={13} />
+            {def.constructionSec}s
+          </span>
+        )}
       </div>
       <div className="build-card-effect">{effectSummary(def)}</div>
-      {locked && <div className="build-card-lock">{t('ui.locked_at', { level: def.unlockLevel })}</div>}
+      {def.locationBonus && (
+        <div className="build-card-bonus">
+          <Sparkles size={12} />
+          {t('ui.location_bonus_hint', { terrain: t(`terrain.${def.locationBonus.terrain}`) })}
+        </div>
+      )}
+      {locked && (
+        <div className="build-card-lock">
+          <Lock size={12} />
+          {t('ui.locked_at', { level: def.unlockLevel })}
+        </div>
+      )}
       {uniqueBuilt && <div className="build-card-lock">{t('error.unique_exists')}</div>}
     </button>
   );
@@ -79,22 +133,29 @@ function effectSummary(def: BuildingDef): string {
         parts.push(`+${eff.perMinute} ${t(`resource.${eff.resource}`)}/min`);
         break;
       case 'capacity':
-        parts.push(`+${eff.amount} ${t(`need.${eff.need}`)}`);
+        parts.push(
+          eff.radius !== undefined
+            ? `+${eff.amount} ${t(`need.${eff.need}`)} (${t('ui.radius')} ${eff.radius})`
+            : `+${eff.amount} ${t(`need.${eff.need}`)}`,
+        );
         break;
       case 'coverage':
-        parts.push(`${t(`need.${eff.need}`)} (Radius ${eff.radius})`);
+        parts.push(`${t(`need.${eff.need}`)} (${t('ui.radius')} ${eff.radius})`);
         break;
       case 'storage':
-        parts.push(`+${eff.amount} Lager`);
+        parts.push(`+${eff.amount} ${t('ui.storage')}`);
         break;
       case 'jobs':
         parts.push(`+${eff.amount} ${t('ui.jobs')}`);
         break;
       case 'distribution':
-        parts.push(`Verteilt ${t(`need.${eff.need}`)}`);
+        parts.push(t('ui.effect.distribution', { need: t(`need.${eff.need}`) }));
         break;
       case 'protection':
-        parts.push(`Brandschutz (Radius ${eff.radius})`);
+        parts.push(t('ui.effect.protection', { radius: eff.radius }));
+        break;
+      case 'ambience':
+        if (eff.amount > 0) parts.push(`${t('ui.ambience')} +${eff.amount}`);
         break;
     }
   }

@@ -53,15 +53,15 @@ body {
 
 /* ---- Bottom bar: actions in three fixed groups ---- */
 .bottombar {
-  display: flex; align-items: center; justify-content: space-between; gap: 10px;
-  padding: 8px 14px; background: var(--surface); border-top: 1px solid var(--border); z-index: 5;
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  padding: 10px 16px; background: var(--surface); border-top: 1px solid var(--border); z-index: 5;
 }
-.bar-group { display: flex; align-items: center; gap: 8px; flex: 1; }
+.bar-group { display: flex; align-items: center; gap: 10px; flex: 1; }
 .bar-group-center { justify-content: center; }
 .bar-group:last-child { justify-content: flex-end; }
 .btn-bar, .bar-stat {
-  display: flex; align-items: center; gap: 7px; padding: 8px 12px; border-radius: var(--radius);
-  background: var(--surface-2); font-size: 13.5px; font-weight: 600; border: 1px solid transparent;
+  display: flex; align-items: center; gap: 7px; padding: 9px 14px; border-radius: var(--radius);
+  background: var(--surface-2); font-size: 14px; font-weight: 600; border: 1px solid transparent;
 }
 .btn-bar:hover { border-color: var(--border); }
 .btn-bar.active { border-color: var(--primary); color: var(--primary); }
@@ -124,9 +124,10 @@ body {
 
 /* ---- Build menu (bottom sheet) ---- */
 .build-menu {
-  position: absolute; left: 12px; right: 12px; bottom: 12px; max-height: 46%;
-  display: flex; flex-direction: column; gap: 10px;
+  position: absolute; left: 12px; right: 12px; bottom: 12px; max-height: 48%;
+  display: flex; flex-direction: column; gap: 12px; padding: 16px;
 }
+.build-menu-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
 .build-tabs { display: flex; gap: 6px; overflow-x: auto; padding-bottom: 2px; }
 .btn-tab {
   display: flex; align-items: center; gap: 6px; padding: 7px 12px; border-radius: 8px;
@@ -134,17 +135,26 @@ body {
   border: 1px solid transparent; color: var(--text-muted);
 }
 .btn-tab.active { border-color: var(--primary); color: var(--primary); }
-.build-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 8px; overflow-y: auto; }
+.build-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 10px; overflow-y: auto; padding-bottom: 2px; }
 .build-card {
   text-align: left; background: var(--surface-2); border: 1px solid var(--border);
-  border-radius: 8px; padding: 10px; display: flex; flex-direction: column; gap: 4px;
+  border-radius: 10px; padding: 11px 12px; display: flex; flex-direction: column; gap: 6px;
 }
-.build-card:not(.disabled):hover { border-color: var(--primary); }
+.build-card:not(.disabled):hover { border-color: var(--primary); transform: translateY(-1px); transition: transform 0.1s; }
+.build-card.locked { opacity: 0.6; }
+.build-card-top { display: flex; align-items: baseline; justify-content: space-between; gap: 6px; }
 .build-card-name { font-weight: 700; font-size: 13.5px; }
-.build-card-info { display: flex; flex-wrap: wrap; gap: 8px; font-size: 12px; color: var(--text-muted); }
-.build-card-effect { font-size: 11.5px; color: var(--text-muted); }
-.build-card-lock { font-size: 11.5px; color: var(--warn); font-weight: 600; }
-.cost-missing { color: var(--bad); }
+.build-card-size { font-size: 11px; color: var(--text-muted); }
+.build-card-info { display: flex; flex-wrap: wrap; gap: 5px; }
+.chip {
+  display: inline-flex; align-items: center; gap: 4px; padding: 2px 7px; border-radius: 6px;
+  background: rgba(0, 0, 0, 0.25); font-size: 12px; color: var(--text); font-variant-numeric: tabular-nums;
+}
+.chip svg { color: var(--text-muted); }
+.build-card-effect { font-size: 11.5px; color: var(--text-muted); line-height: 1.4; }
+.build-card-bonus { display: flex; align-items: center; gap: 4px; font-size: 11.5px; color: var(--good); font-weight: 600; }
+.build-card-lock { display: flex; align-items: center; gap: 4px; font-size: 11.5px; color: var(--warn); font-weight: 600; }
+.cost-missing, .cost-missing svg { color: var(--bad); }
 
 /* ---- Needs / happiness ---- */
 .need-row { display: flex; flex-direction: column; gap: 4px; }
@@ -178,24 +188,51 @@ body {
 
 /* ---- Dialog ---- */
 .dialog-backdrop {
-  position: absolute; inset: 0; background: rgba(0, 0, 0, 0.5); display: grid; place-items: center; z-index: 10;
+  position: absolute; inset: 0; background: rgba(0, 0, 0, 0.55); display: grid; place-items: center; z-index: 10;
 }
-.dialog { width: 340px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 16px; box-shadow: var(--shadow); }
+.dialog { width: 340px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 18px; box-shadow: var(--shadow); }
 .dialog-buttons { display: flex; gap: 8px; margin-top: 14px; }
 .dialog-buttons > * { flex: 1; }
 .sector-price { font-weight: 700; margin-top: 8px; }
 
+/* Building dialog: bigger, centered, readable (§6 UX). */
+.building-dialog { width: 440px; max-width: calc(100vw - 40px); max-height: 80vh; overflow-y: auto; }
+.building-dialog .panel-head h3 { font-size: 17px; }
+.building-dialog .effect-list { font-size: 13.5px; gap: 8px; margin: 12px 0 4px; }
+.building-dialog .effect-list li { display: flex; align-items: center; gap: 8px; }
+.building-dialog .effect-list svg { flex-shrink: 0; color: var(--text-muted); }
+.building-dialog .effect-list .text-good svg { color: var(--good); }
+.building-dialog .effect-list .text-bad svg { color: var(--bad); }
+.dialog-status { display: flex; align-items: center; gap: 7px; font-size: 13.5px; color: var(--text-muted); margin-bottom: 4px; }
+.dialog-buttons-stack { flex-direction: column; }
+.level-pips { display: inline-flex; gap: 3px; margin-left: 6px; }
+.pip { width: 9px; height: 9px; border-radius: 3px; background: var(--surface-2); border: 1px solid var(--border); }
+.pip.filled { background: var(--primary); border-color: var(--primary); }
+.confirm-row { display: flex; align-items: center; gap: 8px; font-size: 13px; }
+.confirm-row span { flex: 1; color: var(--text-muted); }
+
 /* ---- Toasts & hints ---- */
-.toasts { position: fixed; bottom: 74px; left: 50%; transform: translateX(-50%); display: flex; flex-direction: column; gap: 6px; z-index: 20; }
+.toasts { position: fixed; bottom: 84px; left: 50%; transform: translateX(-50%); display: flex; flex-direction: column; gap: 6px; z-index: 20; align-items: center; }
 .toast {
-  padding: 9px 16px; border-radius: 8px; background: var(--surface-2); border: 1px solid var(--border);
-  font-size: 13px; box-shadow: var(--shadow); cursor: pointer;
+  padding: 11px 20px; border-radius: 10px; background: var(--surface-2); border: 1px solid var(--border);
+  font-size: 14px; font-weight: 600; box-shadow: var(--shadow); cursor: pointer;
 }
 .toast-success { border-color: var(--good); }
-.toast-error { border-color: var(--bad); }
-.placement-hint {
-  position: absolute; top: 12px; left: 50%; transform: translateX(-50%);
-  background: var(--surface); border: 1px solid var(--border); border-radius: 8px;
-  padding: 7px 14px; font-size: 13px; color: var(--text-muted); z-index: 6;
+.toast-error { border-color: var(--bad); background: rgba(227, 93, 93, 0.14); }
+
+/* Placement banner: large, central feedback while placing/moving. */
+.placement-banner {
+  position: absolute; top: 16px; left: 50%; transform: translateX(-50%);
+  display: flex; align-items: center; gap: 10px;
+  background: var(--surface); border: 2px solid var(--border); border-radius: 12px;
+  padding: 12px 20px; font-size: 15px; font-weight: 600; z-index: 6;
+  box-shadow: var(--shadow); max-width: min(640px, calc(100vw - 32px));
 }
+.placement-banner .banner-sub { font-size: 12px; font-weight: 500; color: var(--text-muted); margin-left: 6px; white-space: nowrap; }
+.placement-banner.banner-bad { border-color: var(--bad); }
+.placement-banner.banner-bad svg { color: var(--bad); }
+.placement-banner.banner-ok { border-color: var(--good); }
+.placement-banner.banner-ok svg { color: var(--good); }
+.placement-banner.banner-bonus { border-color: var(--good); }
+.placement-banner.banner-bonus svg { color: var(--good); }
 .version { margin-top: auto; font-size: 11px; }

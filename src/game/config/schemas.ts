@@ -6,14 +6,22 @@ import { z } from 'zod';
 const resourceId = z.enum(['money', 'wood', 'stone', 'food']);
 const needId = z.enum(['housing', 'water', 'food', 'work', 'leisure']);
 
+const terrainType = z.enum(['grass', 'forest', 'water', 'river', 'mountain', 'sand', 'fertile']);
+
 const buildingEffect = z.discriminatedUnion('type', [
-  z.object({ type: z.literal('produce'), resource: resourceId, perMinute: z.number().positive(), bufferCap: z.number().positive() }),
-  z.object({ type: z.literal('capacity'), need: needId, amount: z.number().positive() }),
+  z.object({
+    type: z.literal('produce'),
+    resource: resourceId,
+    perMinute: z.number().positive(),
+    inputsPerMinute: z.record(resourceId, z.number().positive()).optional(),
+  }),
+  z.object({ type: z.literal('capacity'), need: needId, amount: z.number().positive(), radius: z.number().positive().optional() }),
   z.object({ type: z.literal('coverage'), need: needId, radius: z.number().positive() }),
   z.object({ type: z.literal('storage'), resource: resourceId, amount: z.number().positive() }),
   z.object({ type: z.literal('jobs'), amount: z.number().positive() }),
   z.object({ type: z.literal('distribution'), need: needId }),
   z.object({ type: z.literal('protection'), hazard: z.literal('fire'), radius: z.number().positive() }),
+  z.object({ type: z.literal('ambience'), amount: z.number(), radius: z.number().positive() }),
 ]);
 
 export const buildingDefSchema = z.object({
@@ -29,6 +37,9 @@ export const buildingDefSchema = z.object({
   effects: z.array(buildingEffect),
   upgrades: z
     .array(z.object({ cost: z.record(resourceId, z.number().nonnegative()), constructionSec: z.number().nonnegative(), effects: z.array(buildingEffect), xpReward: z.number().nonnegative() }))
+    .optional(),
+  locationBonus: z
+    .object({ terrain: terrainType, radius: z.number().positive(), perTilePct: z.number().positive(), maxPct: z.number().positive() })
     .optional(),
   unique: z.boolean().optional(),
   buildable: z.boolean().optional(),
@@ -52,7 +63,7 @@ export const questDefSchema = z.object({
       z.object({ type: z.literal('build'), defId: z.string(), count: z.number().int().positive() }),
       z.object({ type: z.literal('population'), amount: z.number().positive() }),
       z.object({ type: z.literal('resource'), resource: resourceId, amount: z.number().positive() }),
-      z.object({ type: z.literal('collect'), resource: resourceId, amount: z.number().positive() }),
+      z.object({ type: z.literal('produce'), resource: resourceId, amount: z.number().positive() }),
       z.object({ type: z.literal('level'), level: z.number().int().positive() }),
       z.object({ type: z.literal('sectors'), count: z.number().int().positive() }),
       z.object({ type: z.literal('mayorAction'), actionId: z.string(), count: z.number().int().positive() }),
@@ -118,7 +129,6 @@ export const saveGameSchema = z.object({
       upgradeLevel: z.number().int().nonnegative(),
       status: z.enum(['constructing', 'active', 'paused']),
       constructionEndsAt: z.number().optional(),
-      buffer: z.number().nonnegative(),
     }),
   ),
   citizens: z.object({
@@ -150,7 +160,7 @@ export const saveGameSchema = z.object({
   ),
   stats: z.object({
     built: z.record(z.string(), z.number()),
-    collected: z.record(resourceId, z.number()),
+    produced: z.record(resourceId, z.number()),
     mayorActions: z.record(z.string(), z.number()),
     sectorsUnlocked: z.number(),
   }),
