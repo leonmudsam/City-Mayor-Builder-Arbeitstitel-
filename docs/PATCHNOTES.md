@@ -1,5 +1,23 @@
 # Patch Notes
 
+## v0.2.1 — „Umbauen ohne Reue"
+
+- **Abreißen erstattet Material zurück.** Beim Abriss gibt es **50 %** der
+  investierten Bau- **und** Ausbaukosten zurück (pro Ressource abgerundet, Geld
+  uneingeschränkt, Material im Rahmen der Lagerkapazität). Der
+  Abriss-Bestätigungsdialog zeigt die Rückerstattung vorab an, ein Toast
+  bestätigt sie danach.
+  - *Warum:* Umplanen soll ein Werkzeug sein, keine Bestrafung. Der 50-%-Abschlag
+    verhindert nur, dass Bauen–Abreißen–Schleifen kostenlos sind.
+  - *Technisch:* `demolishRefundFactor` in `balancing.config.ts`; reine Funktion
+    `demolishRefund(def, upgradeLevel, factor)` (in `buildings/effects.ts`);
+    Rückerstattung läuft über den `EconomyService` (`grantResources`), also
+    denselben Buchungsweg wie jede andere Gutschrift. `getDemolishRefund()` am
+    Controller liefert der UI die Vorschau.
+- **Verschieben direkt aus der Auswahl.** Ein ausgewähltes Gebäude lässt sich
+  über den „Verschieben"-Button im Info-Dialog aufheben und neu platzieren
+  (zusätzlich zum Gedrückt-Halten auf der Karte). Verschieben bleibt kostenlos.
+
 ## v0.2 — „Stadtplanung statt Warten"
 
 Ziel dieses Updates: weniger AFK-Wartespiel, mehr aktives Planen und Gestalten.

@@ -208,8 +208,9 @@ body {
 .level-pips { display: inline-flex; gap: 3px; margin-left: 6px; }
 .pip { width: 9px; height: 9px; border-radius: 3px; background: var(--surface-2); border: 1px solid var(--border); }
 .pip.filled { background: var(--primary); border-color: var(--primary); }
-.confirm-row { display: flex; align-items: center; gap: 8px; font-size: 13px; }
-.confirm-row span { flex: 1; color: var(--text-muted); }
+.confirm-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; font-size: 13px; }
+.confirm-row > span:first-child { flex: 1 1 100%; color: var(--text-muted); }
+.confirm-row .refund-hint { flex: 1 1 100%; color: var(--good); font-weight: 600; }
 
 /* ---- Toasts & hints ---- */
 .toasts { position: fixed; bottom: 84px; left: 50%; transform: translateX(-50%); display: flex; flex-direction: column; gap: 6px; z-index: 20; align-items: center; }

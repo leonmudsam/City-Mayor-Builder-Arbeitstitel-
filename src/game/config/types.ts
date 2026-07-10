@@ -173,6 +173,8 @@ export interface BalancingConfig {
   maxTickChunkSec: number;
   /** Gold cost per started minute of remaining construction time. */
   speedupMinutesPerGold: number;
+  /** Share of the invested build + upgrade cost refunded on demolition (0..1). */
+  demolishRefundFactor: number;
 }
 
 export interface FeaturesConfig {

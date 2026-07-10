@@ -5,6 +5,7 @@ import { recomputeDerived, type Derived } from '../simulation/derived.ts';
 import { advance } from '../simulation/tick.ts';
 import { updateQuests, objectiveTarget } from '../simulation/quests.ts';
 import { validatePlacement, type PlacementError } from '../buildings/placement.ts';
+import { demolishRefund } from '../buildings/effects.ts';
 import { canAfford, grantGold, grantResources, spendCost, spendGold } from '../economy/economyService.ts';
 import { addXp } from '../progression/levels.ts';
 import {
@@ -128,8 +129,20 @@ export class GameController {
     }
     delete this.state.buildings[buildingId];
     this.state.events = this.state.events.filter((e) => e.buildingId !== buildingId);
+    // Refund a share of the invested materials so tearing down is a plannable
+    // refactor, not a total loss. Money is uncapped; materials respect storage.
+    const refund = demolishRefund(def, b.upgradeLevel, this.config.balancing.demolishRefundFactor);
+    grantResources(this.state, refund, this.derived.storageCaps, `demolish_${b.defId}`);
     this.afterStructuralChange();
     return ok;
+  }
+
+  /** What a demolition would return right now (for the confirmation UI). */
+  getDemolishRefund(buildingId: string): Partial<Record<ResourceId, number>> {
+    const b = this.state.buildings[buildingId];
+    const def = b && this.config.buildings.get(b.defId);
+    if (!b || !def || def.unique) return {};
+    return demolishRefund(def, b.upgradeLevel, this.config.balancing.demolishRefundFactor);
   }
 
   upgradeBuilding(buildingId: string): CommandResult {

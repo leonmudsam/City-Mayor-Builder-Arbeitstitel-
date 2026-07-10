@@ -40,6 +40,9 @@ export function BuildingPanel() {
   const bonusPct = game.derived.productionBonus[b.id] ?? 0;
   const ambience = game.derived.ambience[b.id];
   const now = game.state.meta.lastSimTime;
+  const refundLabel = Object.entries(game.getDemolishRefund(b.id))
+    .map(([res, amount]) => `${amount} ${t(`resource.${res}`)}`)
+    .join(', ');
   const close = () => selectBuilding(undefined);
 
   return (
@@ -132,10 +135,12 @@ export function BuildingPanel() {
             (confirmDemolish ? (
               <div className="confirm-row">
                 <span>{t('ui.demolish.confirm')}</span>
+                {refundLabel && <span className="refund-hint">{t('ui.demolish.refund', { resources: refundLabel })}</span>}
                 <button
                   className="btn-danger"
                   onClick={() => {
                     game.demolishBuilding(b.id);
+                    if (refundLabel) pushToast(t('ui.demolish.refunded', { resources: refundLabel }), 'success');
                     close();
                   }}
                 >

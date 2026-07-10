@@ -65,6 +65,20 @@ describe('simulation tick', () => {
     expect(controller.state.citizens.needs.water.fulfillment).toBe(1);
   });
 
+  it('refunds a share of the invested cost when demolishing', () => {
+    const { controller } = newController();
+    controller.placeBuilding('road', 26, 26);
+    controller.placeBuilding('house_small', 26, 27); // cost: 50 money, 15 wood
+    const house = Object.values(controller.state.buildings).find((b) => b.defId === 'house_small')!;
+    const moneyBefore = controller.state.resources.money;
+    const woodBefore = controller.state.resources.wood;
+    // 50 % refund, floored per resource: 25 money, 7 wood.
+    expect(controller.getDemolishRefund(house.id)).toEqual({ money: 25, wood: 7 });
+    expect(controller.demolishBuilding(house.id)).toEqual({ ok: true });
+    expect(controller.state.resources.money).toBe(moneyBefore + 25);
+    expect(controller.state.resources.wood).toBe(woodBefore + 7);
+  });
+
   it('grows population when housing exists and happiness is high', () => {
     const { controller } = newController();
     controller.placeBuilding('road', 26, 26);

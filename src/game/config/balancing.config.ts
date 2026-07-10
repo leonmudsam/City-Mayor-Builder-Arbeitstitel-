@@ -20,6 +20,10 @@ export const balancingConfig: BalancingConfig = {
   fireUnlockLevel: 8,
   maxTickChunkSec: 60,
   speedupMinutesPerGold: 3,
+  // Demolishing returns half of everything invested (build + upgrades). Tearing
+  // down is a plannable refactor, not a punishment — but the 50 % haircut keeps
+  // build/demolish loops from being free (§ economy balancing).
+  demolishRefundFactor: 0.5,
 };
 
 // Feature flags: the test shop and gold system are wired in as the LAST
