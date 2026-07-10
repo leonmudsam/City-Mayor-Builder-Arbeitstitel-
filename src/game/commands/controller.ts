@@ -6,6 +6,7 @@ import { advance } from '../simulation/tick.ts';
 import { updateQuests, objectiveTarget } from '../simulation/quests.ts';
 import { validatePlacement, type PlacementError } from '../buildings/placement.ts';
 import { demolishRefund } from '../buildings/effects.ts';
+import { buildLimitAt, countOf, nextLimitLevel } from '../buildings/limits.ts';
 import { canAfford, grantGold, grantResources, spendCost, spendGold } from '../economy/economyService.ts';
 import { addXp } from '../progression/levels.ts';
 import {
@@ -167,6 +168,7 @@ export class GameController {
    * blocked for them.
    */
   moveBuilding(buildingId: string, x: number, y: number): CommandResult {
+    if (!this.config.features.moveBuildings) return fail('feature_disabled');
     const b = this.state.buildings[buildingId];
     if (!b) return fail('not_found');
     const def = this.config.buildings.get(b.defId);
@@ -298,6 +300,18 @@ export class GameController {
 
   canAffordCost(cost: Partial<Record<ResourceId, number>>): boolean {
     return canAfford(this.state, cost);
+  }
+
+  /**
+   * Build-limit status for a building type (undefined = no limit). `count` is
+   * how many exist, `max` the current cap, `nextLevel` the level that raises it.
+   */
+  getBuildLimit(defId: string): { count: number; max: number; nextLevel: number | undefined } | undefined {
+    const def = this.config.buildings.get(defId);
+    if (!def) return undefined;
+    const max = buildLimitAt(def, this.state.level.current);
+    if (max === undefined) return undefined;
+    return { count: countOf(this.state, defId), max, nextLevel: nextLimitLevel(def, this.state.level.current) };
   }
 
   getSectorCost(id: SectorId): number {

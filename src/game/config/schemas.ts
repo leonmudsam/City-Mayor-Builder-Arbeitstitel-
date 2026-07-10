@@ -19,7 +19,8 @@ const buildingEffect = z.discriminatedUnion('type', [
   z.object({ type: z.literal('coverage'), need: needId, radius: z.number().positive() }),
   z.object({ type: z.literal('storage'), resource: resourceId, amount: z.number().positive() }),
   z.object({ type: z.literal('jobs'), amount: z.number().positive() }),
-  z.object({ type: z.literal('distribution'), need: needId }),
+  z.object({ type: z.literal('demand'), need: needId, amount: z.number().positive() }),
+  z.object({ type: z.literal('distribution'), need: needId, radius: z.number().positive() }),
   z.object({ type: z.literal('protection'), hazard: z.literal('fire'), radius: z.number().positive() }),
   z.object({ type: z.literal('ambience'), amount: z.number(), radius: z.number().positive() }),
 ]);
@@ -41,6 +42,7 @@ export const buildingDefSchema = z.object({
   locationBonus: z
     .object({ terrain: terrainType, radius: z.number().positive(), perTilePct: z.number().positive(), maxPct: z.number().positive() })
     .optional(),
+  buildLimit: z.array(z.object({ level: z.number().int().min(1), max: z.number().int().nonnegative() })).optional(),
   unique: z.boolean().optional(),
   buildable: z.boolean().optional(),
   biomeRequirement: z.array(z.string()).optional(),

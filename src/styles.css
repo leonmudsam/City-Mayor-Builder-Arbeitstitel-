@@ -154,6 +154,8 @@ body {
 .build-card-effect { font-size: 11.5px; color: var(--text-muted); line-height: 1.4; }
 .build-card-bonus { display: flex; align-items: center; gap: 4px; font-size: 11.5px; color: var(--good); font-weight: 600; }
 .build-card-lock { display: flex; align-items: center; gap: 4px; font-size: 11.5px; color: var(--warn); font-weight: 600; }
+.build-card-limit { font-size: 11.5px; color: var(--text-muted); font-weight: 600; }
+.build-card-limit.reached { color: var(--warn); }
 .cost-missing, .cost-missing svg { color: var(--bad); }
 
 /* ---- Needs / happiness ---- */
@@ -236,4 +238,22 @@ body {
 .placement-banner.banner-ok svg { color: var(--good); }
 .placement-banner.banner-bonus { border-color: var(--good); }
 .placement-banner.banner-bonus svg { color: var(--good); }
+.dialog-hint { font-size: 12.5px; color: var(--text-muted); font-style: italic; margin: 0; }
+
+/* Central, animated "new area unlocked" popup (§7/§16). */
+.event-popup {
+  position: absolute; top: 22px; left: 50%; transform: translateX(-50%);
+  display: flex; align-items: center; gap: 12px;
+  background: var(--surface); border: 2px solid var(--good); border-radius: 14px;
+  padding: 14px 22px; z-index: 8; box-shadow: var(--shadow);
+  animation: event-pop 320ms ease-out;
+}
+.event-popup svg { color: var(--good); }
+.event-popup strong { display: block; font-size: 15px; }
+.event-popup span { display: block; font-size: 12.5px; color: var(--text-muted); }
+@keyframes event-pop {
+  from { opacity: 0; transform: translate(-50%, -10px) scale(0.94); }
+  to { opacity: 1; transform: translate(-50%, 0) scale(1); }
+}
+
 .version { margin-top: auto; font-size: 11px; }

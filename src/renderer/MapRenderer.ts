@@ -48,6 +48,16 @@ export interface RendererCallbacks {
   onMove(id: string, x: number, y: number): void;
   /** Ghost validation changed — UI shows/hides the placement banner. */
   onHoverInfo(info: HoverInfo | undefined): void;
+  /** A sector just went from locked → unlocked (central "new area" popup). */
+  onSectorUnlocked(id: string): void;
+}
+
+/** Short-lived visual effect (demolish dust, sector-unlock flash). */
+interface FxItem {
+  gfx: Graphics;
+  age: number;
+  ttl: number;
+  kind: 'puff' | 'flash';
 }
 
 /**
@@ -61,11 +71,15 @@ export class MapRenderer {
   private world = new Container();
   private terrainLayer = new Container();
   private buildingLayer = new Container();
+  private fxLayer = new Container();
   private overlayLayer = new Container();
   private ghost = new Graphics();
   private ghostRadius = new Graphics();
   private selectionBox = new Graphics();
 
+  private fx: FxItem[] = [];
+  /** Footprints from the previous redraw — used to detect demolitions. */
+  private prevFootprints = new Map<string, { x: number; y: number; w: number; h: number }>();
   private sectorViews = new Map<string, { container: Container; status: string }>();
   private lastVersion = -1;
   private placingDefId: string | undefined;
@@ -87,7 +101,7 @@ export class MapRenderer {
       return;
     }
     host.appendChild(this.app.canvas);
-    this.world.addChild(this.terrainLayer, this.buildingLayer, this.overlayLayer);
+    this.world.addChild(this.terrainLayer, this.buildingLayer, this.fxLayer, this.overlayLayer);
     this.overlayLayer.addChild(this.ghostRadius, this.selectionBox, this.ghost);
     this.app.stage.addChild(this.world);
 
@@ -152,8 +166,9 @@ export class MapRenderer {
       dragging = true;
       moved = false;
       last = { x: e.clientX, y: e.clientY };
-      // Press-and-hold on a building picks it up for moving.
-      if (e.button === 0 && !this.placingDefId && !this.movingId) {
+      // Press-and-hold on a building picks it up for moving (only when the
+      // move feature is enabled — off in MVP 1, §5).
+      if (this.controller.config.features.moveBuildings && e.button === 0 && !this.placingDefId && !this.movingId) {
         const tile = this.screenToTile(e.offsetX, e.offsetY);
         const buildingId = this.buildingAt(tile.x, tile.y);
         if (buildingId) {
@@ -273,8 +288,52 @@ export class MapRenderer {
       this.syncSectors();
       this.redrawBuildings();
     }
+    this.updateFx();
     this.drawGhost();
     this.drawSelection();
+  }
+
+  /** Advance and retire short-lived effects (demolish dust, unlock flash). */
+  private updateFx(): void {
+    if (this.fx.length === 0) return;
+    const dt = this.app.ticker.deltaMS;
+    for (const item of this.fx) {
+      item.age += dt;
+      const p = Math.min(1, item.age / item.ttl);
+      if (item.kind === 'puff') {
+        item.gfx.alpha = 1 - p;
+        item.gfx.scale.set(1 + p * 0.9);
+      } else {
+        // flash: quick bright pop, then ease out.
+        item.gfx.alpha = (1 - p) * 0.55;
+      }
+    }
+    this.fx = this.fx.filter((item) => {
+      if (item.age < item.ttl) return true;
+      item.gfx.destroy();
+      return false;
+    });
+  }
+
+  private spawnPuff(x: number, y: number, w: number, h: number): void {
+    const g = new Graphics();
+    for (const [ox, oy, r] of [[-9, -3, 8], [9, -1, 7], [0, -11, 7], [-5, 7, 6], [7, 7, 6], [0, 2, 8]] as const) {
+      g.circle(ox, oy, r).fill({ color: 0xd8d2c6, alpha: 0.92 });
+    }
+    g.position.set((x + w / 2) * TILE, (y + h / 2) * TILE);
+    this.fxLayer.addChild(g);
+    this.fx.push({ gfx: g, age: 0, ttl: 520, kind: 'puff' });
+  }
+
+  private spawnSectorFlash(sx: number, sy: number): void {
+    const g = new Graphics();
+    const size = SECTOR_SIZE * TILE;
+    g.roundRect(2, 2, size - 4, size - 4, 10)
+      .fill({ color: 0xffffff, alpha: 1 })
+      .stroke({ width: 4, color: 0x8fe388, alpha: 1 });
+    g.position.set(sx * size, sy * size);
+    this.fxLayer.addChild(g);
+    this.fx.push({ gfx: g, age: 0, ttl: 1400, kind: 'flash' });
   }
 
   /** Show only sectors intersecting the viewport (open-end performance, §8). */
@@ -295,6 +354,11 @@ export class MapRenderer {
     for (const sector of Object.values(this.controller.state.world.sectors)) {
       const existing = this.sectorViews.get(sector.id);
       if (existing && existing.status === sector.status) continue;
+      // Locked → unlocked: celebrate the expansion (flash + central popup, §7).
+      if (existing && existing.status === 'locked' && sector.status === 'unlocked') {
+        this.spawnSectorFlash(sector.sx, sector.sy);
+        this.callbacks.onSectorUnlocked(sector.id);
+      }
       if (existing) this.terrainLayer.removeChild(existing.container);
       const container = this.buildSectorView(sector);
       this.terrainLayer.addChild(container);
@@ -345,6 +409,18 @@ export class MapRenderer {
     this.buildingLayer.removeChildren().forEach((c) => c.destroy({ children: true }));
     const state = this.controller.state;
     const now = state.meta.lastSimTime;
+
+    // Detect demolitions (a footprint that existed last redraw is gone) and
+    // puff a little dust where the building stood (§6).
+    const current = new Map<string, { x: number; y: number; w: number; h: number }>();
+    for (const b of Object.values(state.buildings)) {
+      const def = this.controller.config.buildings.get(b.defId);
+      if (def) current.set(b.id, { x: b.x, y: b.y, w: def.size.w, h: def.size.h });
+    }
+    for (const [id, fp] of this.prevFootprints) {
+      if (!current.has(id)) this.spawnPuff(fp.x, fp.y, fp.w, fp.h);
+    }
+    this.prevFootprints = current;
 
     // Road connectivity lookup for auto-tiling (visual only). District-center
     // footprints count as connections so roads dock onto the town hall.

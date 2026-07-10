@@ -23,7 +23,15 @@ export type BuildingEffect =
   | { type: 'coverage'; need: NeedId; radius: number }
   | { type: 'storage'; resource: ResourceId; amount: number }
   | { type: 'jobs'; amount: number }
-  | { type: 'distribution'; need: NeedId }
+  /**
+   * Extra demand a building itself places on a need, independent of raw
+   * population: bigger/upgraded homes want more water, later industry will want
+   * power. Aggregated into the need's demand alongside per-capita demand — the
+   * generic hook that lets "house type & level raise the water bill" (§3/§4).
+   */
+  | { type: 'demand'; need: NeedId; amount: number }
+  /** Distributes a consumption need to housing within `radius` (market ↔ food). */
+  | { type: 'distribution'; need: NeedId; radius: number }
   | { type: 'protection'; hazard: 'fire'; radius: number }
   /**
    * Environment quality aura (positive: parks/deco, negative: industry).
@@ -67,6 +75,13 @@ export interface BuildingDef {
   effects: BuildingEffect[];
   upgrades?: BuildingUpgradeDef[];
   locationBonus?: LocationBonusDef;
+  /**
+   * Per-level build cap (production buildings). Ascending breakpoints: the
+   * active cap is the last entry with `level` ≤ the city level. Absent → no
+   * cap (houses, roads, decoration stay freely buildable, §13). Keeps players
+   * from spamming resource buildings and makes placement/location a decision.
+   */
+  buildLimit?: { level: number; max: number }[];
   /** Only one instance allowed (town hall, mayor house). */
   unique?: boolean;
   /** Cannot be built from the menu (pre-placed buildings). */
@@ -175,10 +190,26 @@ export interface BalancingConfig {
   speedupMinutesPerGold: number;
   /** Share of the invested build + upgrade cost refunded on demolition (0..1). */
   demolishRefundFactor: number;
+  /** Happiness points per average ambience point (residential quality → zoning). */
+  ambienceHappinessPerPoint: number;
+  /** Absolute cap on the ambience happiness contribution (± this value). */
+  ambienceHappinessCap: number;
+  /**
+   * Citizens grow more demanding as the city levels up: every level above 1
+   * raises each need's demand by this fraction (expectation creep). Keeps
+   * happiness from sticking at 100 % as the city grows (§3).
+   */
+  needExpectationPerLevel: number;
 }
 
 export interface FeaturesConfig {
   goldSystem: boolean;
   testShop: boolean;
   debugTools: boolean;
+  /**
+   * Relocating placed buildings. Off in MVP 1: realistic planning means a
+   * misplacement is torn down and rebuilt, not dragged (§5). The engine command
+   * stays for a possible later toggle; the UI gesture/button are gated on this.
+   */
+  moveBuildings: boolean;
 }

@@ -4,10 +4,12 @@ import type { GameState } from '../types.ts';
 import type { Derived } from '../simulation/derived.ts';
 import { isTerrainBuildable, sectorOfTile, tileAt } from '../map/world.ts';
 import { unlockedBuildings } from '../progression/levels.ts';
+import { buildLimitAt, countOf } from './limits.ts';
 
 export type PlacementError =
   | 'locked_building'
   | 'unique_exists'
+  | 'limit_reached'
   | 'out_of_bounds'
   | 'sector_locked'
   | 'terrain'
@@ -36,6 +38,8 @@ export function validatePlacement(
       return 'locked_building';
     }
     if (def.unique && Object.values(state.buildings).some((b) => b.defId === def.id)) return 'unique_exists';
+    const cap = buildLimitAt(def, state.level.current);
+    if (cap !== undefined && countOf(state, def.id) >= cap) return 'limit_reached';
   }
 
   for (let dy = 0; dy < def.size.h; dy++) {

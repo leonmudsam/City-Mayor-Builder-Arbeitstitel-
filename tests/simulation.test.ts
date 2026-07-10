@@ -21,12 +21,12 @@ describe('simulation tick', () => {
     setLevel(controller, 2);
     flattenTerrain(controller); // no location bonus in this test
     controller.placeBuilding('road', 26, 26);
-    controller.placeBuilding('sawmill', 26, 27); // 9 wood/min
+    controller.placeBuilding('sawmill', 26, 27); // 14 wood/min
     const woodAfterBuild = controller.state.resources.wood;
     controller.update(T0 + 31_000); // construction (30s) done
     controller.update(T0 + 31_000 + 5 * MIN);
-    expect(controller.state.resources.wood).toBeCloseTo(woodAfterBuild + 45, 0);
-    expect(controller.state.stats.produced.wood).toBeCloseTo(45, 0);
+    expect(controller.state.resources.wood).toBeCloseTo(woodAfterBuild + 70, 0);
+    expect(controller.state.stats.produced.wood).toBeCloseTo(70, 0);
     // 8 hours offline → storage cap (town hall: 300 wood), not 4000+.
     controller.update(T0 + 8 * 60 * MIN);
     expect(controller.state.resources.wood).toBe(300);
@@ -44,8 +44,8 @@ describe('simulation tick', () => {
     const woodAfterBuild = controller.state.resources.wood;
     controller.update(T0 + 31_000); // construction done → bonus becomes active
     expect(controller.derived.productionBonus[sawmill!.id]).toBe(20);
-    controller.update(T0 + 31_000 + 5 * MIN); // 9/min × 1.2 × 5 min = 54
-    expect(controller.state.resources.wood).toBeCloseTo(woodAfterBuild + 54, 0);
+    controller.update(T0 + 31_000 + 5 * MIN); // 14/min × 1.2 × 5 min = 84
+    expect(controller.state.resources.wood).toBeCloseTo(woodAfterBuild + 84, 0);
   });
 
   it('only counts water supply for housing inside a well radius', () => {
@@ -72,11 +72,55 @@ describe('simulation tick', () => {
     const house = Object.values(controller.state.buildings).find((b) => b.defId === 'house_small')!;
     const moneyBefore = controller.state.resources.money;
     const woodBefore = controller.state.resources.wood;
-    // 50 % refund, floored per resource: 25 money, 7 wood.
-    expect(controller.getDemolishRefund(house.id)).toEqual({ money: 25, wood: 7 });
+    // 25 % refund, floored per resource: 12 money, 3 wood.
+    expect(controller.getDemolishRefund(house.id)).toEqual({ money: 12, wood: 3 });
     expect(controller.demolishBuilding(house.id)).toEqual({ ok: true });
-    expect(controller.state.resources.money).toBe(moneyBefore + 25);
-    expect(controller.state.resources.wood).toBe(woodBefore + 7);
+    expect(controller.state.resources.money).toBe(moneyBefore + 12);
+    expect(controller.state.resources.wood).toBe(woodBefore + 3);
+  });
+
+  it('raises happiness when residential quality improves (zoning)', () => {
+    const { controller } = newController();
+    setLevel(controller, 7);
+    controller.placeBuilding('road', 26, 26);
+    controller.placeBuilding('house_small', 26, 27);
+    controller.update(T0 + 30_000 + 5 * MIN); // citizens settle in
+    const before = controller.state.citizens.happiness;
+    expect(controller.derived.avgAmbience).toBe(0);
+    // A tree next to the house (ambience +1, radius 3) — a pure ambience source.
+    expect(controller.placeBuilding('deco_tree', 28, 27)).toEqual({ ok: true });
+    expect(controller.derived.avgAmbience).toBe(1);
+    controller.update(T0 + 30_000 + 6 * MIN); // happiness recomputed with ambience
+    expect(controller.state.citizens.happiness).toBeGreaterThan(before);
+  });
+
+  it('caps production buildings per level and lifts the cap with progress', () => {
+    const { controller } = newController();
+    setLevel(controller, 2); // sawmill cap 2 at level 2
+    for (let x = 26; x <= 31; x++) controller.placeBuilding('road', x, 26);
+    expect(controller.getBuildLimit('sawmill')).toEqual({ count: 0, max: 2, nextLevel: 5 });
+    expect(controller.placeBuilding('sawmill', 26, 27)).toEqual({ ok: true });
+    expect(controller.placeBuilding('sawmill', 28, 27)).toEqual({ ok: true });
+    // Third sawmill exceeds the level-2 cap.
+    expect(controller.placeBuilding('sawmill', 30, 27)).toEqual({ ok: false, error: 'limit_reached' });
+    expect(controller.getBuildLimit('sawmill')).toEqual({ count: 2, max: 2, nextLevel: 5 });
+    // Houses are never capped (§13).
+    expect(controller.getBuildLimit('house_small')).toBeUndefined();
+    // Reaching level 5 raises the cap to 3.
+    setLevel(controller, 5);
+    expect(controller.placeBuilding('sawmill', 30, 27)).toEqual({ ok: true });
+  });
+
+  it('feeds only homes a market reaches (food distribution coverage)', () => {
+    const { controller } = newController();
+    setLevel(controller, 5);
+    for (let x = 26; x <= 31; x++) controller.placeBuilding('road', x, 26);
+    controller.placeBuilding('house_small', 26, 27);
+    controller.update(T0 + 25_000); // house finishes construction
+    expect(controller.derived.distributionCoverage.food).toBe(0); // no market yet
+    controller.placeBuilding('market', 30, 27); // center within radius 9 of the house
+    controller.update(T0 + 25_000 + 95_000); // market finishes construction
+    expect(controller.derived.distributionCoverage.food).toBe(1);
   });
 
   it('grows population when housing exists and happiness is high', () => {

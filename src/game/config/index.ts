@@ -59,8 +59,10 @@ export function loadConfig(): GameConfig {
     quests: new Map(questsConfig.map((q) => [q.id, q])),
     questList: questsConfig,
     mayorActions: mayorActionsConfig,
-    balancing: balancingConfig,
-    features: featuresConfig,
+    // Fresh copies so a controller/test can override a value without leaking
+    // into the shared singleton (e.g. tests toggling features.moveBuildings).
+    balancing: { ...balancingConfig },
+    features: { ...featuresConfig },
     biomes: biomesConfig,
   };
 }

@@ -86,15 +86,20 @@ export function advance(state: GameState, config: GameConfig, derived: Derived, 
     // 3. Needs & happiness.
     const pop = state.citizens.population;
     const activeNeeds = config.needs.filter((n) => n.unlockLevel <= state.level.current);
+    // Expectation creep: citizens want more as the city levels up (§3). Combined
+    // with per-building demand (bigger homes want more water) this keeps a
+    // growing city working for its happiness instead of coasting at 100 %.
+    const expectation = 1 + Math.max(0, state.level.current - 1) * config.balancing.needExpectationPerLevel;
     let weightSum = 0;
     let weighted = 0;
     for (const need of activeNeeds) {
       const ns = state.citizens.needs[need.id];
+      const extra = derived.extraDemand[need.id];
       if (need.kind === 'capacity') {
         // Radius-based sources (wells) only serve housing they actually reach:
         // total capacity × covered-housing share.
         ns.supply = derived.capacity[need.id];
-        ns.demand = pop * need.demandPerCapita;
+        ns.demand = pop * need.demandPerCapita * expectation + extra;
         const base = ns.demand <= 0 ? 1 : Math.min(1, ns.supply / ns.demand);
         ns.fulfillment = ns.demand <= 0 ? 1 : base * derived.needCoverage[need.id];
       } else if (need.kind === 'coverage') {
@@ -103,21 +108,30 @@ export function advance(state: GameState, config: GameConfig, derived: Derived, 
         ns.fulfillment = pop <= 0 ? 1 : derived.needCoverage[need.id];
       } else {
         // consumption (food): eat from storage, fulfillment = fed share.
-        const required = pop * need.demandPerCapita * dtMin;
+        const required = (pop * need.demandPerCapita * expectation + extra) * dtMin;
         const available = Math.min(state.resources.food, required);
         state.resources.food -= available;
         let fulfillment = required <= 0 ? 1 : available / required;
-        if (!derived.hasFoodDistribution) {
-          fulfillment = Math.min(fulfillment, config.balancing.foodWithoutDistributionCap);
-        }
+        // Only the housing share a market reaches gets full distribution; the
+        // rest is capped (no logistics) — so market placement matters (§8).
+        const coverage = derived.distributionCoverage[need.id];
+        const distCap = coverage + (1 - coverage) * config.balancing.foodWithoutDistributionCap;
+        fulfillment = Math.min(fulfillment, distCap);
         ns.supply = state.resources.food;
-        ns.demand = pop * need.demandPerCapita;
+        ns.demand = pop * need.demandPerCapita * expectation + extra;
         ns.fulfillment = fulfillment;
       }
       weightSum += need.weight;
       weighted += need.weight * ns.fulfillment;
     }
     let happiness = pop <= 0 || weightSum <= 0 ? 75 : (100 * weighted) / weightSum;
+    if (pop > 0) {
+      // Zoning: residential quality shifts happiness. Nearby parks/decoration
+      // lift it, nearby industry drags it down (§12 residential attractiveness).
+      const cap = config.balancing.ambienceHappinessCap;
+      const ambienceDelta = derived.avgAmbience * config.balancing.ambienceHappinessPerPoint;
+      happiness += Math.max(-cap, Math.min(cap, ambienceDelta));
+    }
     for (const buff of state.buffs) {
       if (buff.kind === 'happiness') happiness += buff.amount;
     }

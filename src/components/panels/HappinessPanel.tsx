@@ -17,6 +17,12 @@ export function HappinessPanel() {
     leisure: 'park',
   };
 
+  const { ambienceHappinessPerPoint, ambienceHappinessCap } = game.config.balancing;
+  const ambienceDelta = Math.round(
+    Math.max(-ambienceHappinessCap, Math.min(ambienceHappinessCap, game.derived.avgAmbience * ambienceHappinessPerPoint)),
+  );
+  const showAmbience = state.citizens.population > 0 && (game.derived.avgAmbience !== 0 || ambienceDelta !== 0);
+
   return (
     <aside className="panel side-panel">
       <div className="panel-head">
@@ -58,6 +64,18 @@ export function HappinessPanel() {
           </div>
         );
       })}
+      {showAmbience && (
+        <div className="need-row">
+          <div className="need-head">
+            <span>{t('ui.zoning')}</span>
+            <span className={ambienceDelta < 0 ? 'text-bad' : ambienceDelta > 0 ? 'text-good' : ''}>
+              {ambienceDelta > 0 ? '+' : ''}
+              {ambienceDelta}
+            </span>
+          </div>
+          <div className="need-hint">{t(ambienceDelta < 0 ? 'ui.zoning.hint_bad' : 'ui.zoning.hint_good')}</div>
+        </div>
+      )}
     </aside>
   );
 }

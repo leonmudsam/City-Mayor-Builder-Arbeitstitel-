@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { AlertTriangle, CheckCircle2, Move, Sparkles } from 'lucide-react';
+import { AlertTriangle, CheckCircle2, MapPin, Move, Sparkles } from 'lucide-react';
 import { MapRenderer, type HoverInfo } from '../renderer/MapRenderer.ts';
 import { getController, useUiStore } from '../state/store.ts';
 import { t } from '../i18n/index.ts';
@@ -8,12 +8,14 @@ export function MapView() {
   const hostRef = useRef<HTMLDivElement>(null);
   const rendererRef = useRef<MapRenderer>(undefined);
   const [hoverInfo, setHoverInfo] = useState<HoverInfo | undefined>(undefined);
+  const [showUnlock, setShowUnlock] = useState(false);
 
   useEffect(() => {
     const host = hostRef.current;
     if (!host) return;
     const controller = getController();
     const ui = useUiStore.getState();
+    let unlockTimer: ReturnType<typeof setTimeout> | undefined;
 
     const renderer = new MapRenderer(controller, {
       onSelectBuilding: (id) => useUiStore.getState().selectBuilding(id),
@@ -32,10 +34,15 @@ export function MapView() {
         }
       },
       onHoverInfo: (info) => setHoverInfo(info),
+      onSectorUnlocked: () => {
+        setShowUnlock(true);
+        if (unlockTimer) clearTimeout(unlockTimer);
+        unlockTimer = setTimeout(() => setShowUnlock(false), 2800);
+      },
       onPlace: (defId, x, y) => {
         const result = controller.placeBuilding(defId, x, y);
         if (!result.ok) {
-          ui.pushToast(t(`error.${result.error}`), 'error');
+          ui.pushToast(placementErrorText(defId, result.error), 'error');
           return;
         }
         // Roads & decoration stay in placement mode for quick drawing.
@@ -67,6 +74,7 @@ export function MapView() {
 
     return () => {
       window.removeEventListener('keydown', onKey);
+      if (unlockTimer) clearTimeout(unlockTimer);
       unsubscribe();
       renderer.destroy();
       rendererRef.current = undefined;
@@ -80,8 +88,27 @@ export function MapView() {
   return (
     <div className="map-host" ref={hostRef}>
       {active && <PlacementBanner info={hoverInfo} moving={moving !== undefined} />}
+      {showUnlock && (
+        <div className="event-popup">
+          <MapPin size={22} />
+          <div>
+            <strong>{t('ui.sector.unlocked_title')}</strong>
+            <span>{t('ui.sector.unlocked_desc')}</span>
+          </div>
+        </div>
+      )}
     </div>
   );
+}
+
+/** Build-limit failures carry the next unlock level for a clear message (§16). */
+function placementErrorText(defId: string, error: string): string {
+  if (error !== 'limit_reached') return t(`error.${error}`);
+  const controller = getController();
+  const limit = controller.getBuildLimit(defId);
+  const building = t(controller.config.buildings.get(defId)?.nameKey ?? '');
+  if (limit?.nextLevel !== undefined) return t('ui.limit.reached_next', { building, level: limit.nextLevel });
+  return t('ui.limit.reached_max', { building });
 }
 
 /**
