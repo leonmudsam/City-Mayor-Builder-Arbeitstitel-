@@ -1,0 +1,67 @@
+import { Download, RefreshCw, Upload, X } from 'lucide-react';
+import { useGame, useUiStore } from '../../state/store.ts';
+import { exportSave, importSave } from '../../game/storage/exportImport.ts';
+import { t } from '../../i18n/index.ts';
+
+declare const __APP_VERSION__: string;
+
+export function SettingsPanel({ onImport, onReset }: { onImport(json: string): boolean; onReset(): void }) {
+  const game = useGame();
+  const { setPanel, pushToast } = useUiStore();
+
+  return (
+    <aside className="panel side-panel">
+      <div className="panel-head">
+        <h3>{t('ui.settings')}</h3>
+        <button className="btn-icon" onClick={() => setPanel(undefined)}>
+          <X size={16} />
+        </button>
+      </div>
+      <button
+        className="btn-secondary"
+        onClick={() => {
+          const blob = new Blob([exportSave(game.state)], { type: 'application/json' });
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = url;
+          a.download = `${game.state.meta.cityName.replaceAll(' ', '_')}.citysave.json`;
+          a.click();
+          URL.revokeObjectURL(url);
+        }}
+      >
+        <Download size={16} /> {t('ui.export')}
+      </button>
+      <button
+        className="btn-secondary"
+        onClick={() => {
+          const input = document.createElement('input');
+          input.type = 'file';
+          input.accept = '.json,application/json';
+          input.onchange = async () => {
+            const file = input.files?.[0];
+            if (!file) return;
+            const text = await file.text();
+            try {
+              importSave(text); // validate before handing over
+              if (!onImport(text)) pushToast(t('ui.import.error'), 'error');
+            } catch {
+              pushToast(t('ui.import.error'), 'error');
+            }
+          };
+          input.click();
+        }}
+      >
+        <Upload size={16} /> {t('ui.import')}
+      </button>
+      <button
+        className="btn-danger"
+        onClick={() => {
+          if (window.confirm(t('ui.reset.confirm'))) onReset();
+        }}
+      >
+        <RefreshCw size={16} /> {t('ui.reset')}
+      </button>
+      <p className="muted version">v{__APP_VERSION__}</p>
+    </aside>
+  );
+}

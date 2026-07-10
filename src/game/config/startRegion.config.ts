@@ -1,0 +1,50 @@
+import type { TerrainType } from '../types.ts';
+
+export const SECTOR_SIZE = 16;
+
+// The start region is a hand-designed 4×4 sector area (64×64 tiles):
+// forest to the north, a river along the east (visible but locked in MVP 1),
+// fertile plains in the south-center. Sector (1,1) is the free start sector,
+// with the town hall pre-placed at its center.
+export const startRegionConfig = {
+  /** Sector-grid extents of the initially materialized region. */
+  sectors: { minSx: 0, minSy: 0, maxSx: 3, maxSy: 3 },
+  startSector: { sx: 1, sy: 1 },
+  townHall: { x: 23, y: 23 }, // world tile coords (3×3 footprint)
+  /** Pre-placed road tiles below the town hall so the tutorial has an anchor. */
+  startRoads: [
+    { x: 23, y: 26 },
+    { x: 24, y: 26 },
+    { x: 25, y: 26 },
+  ],
+};
+
+/** Small deterministic hash so terrain variation is stable per tile. */
+function tileHash(x: number, y: number): number {
+  let h = (x * 374761393 + y * 668265263) ^ 0x5bf03635;
+  h = Math.imul(h ^ (h >>> 13), 1274126177);
+  return ((h ^ (h >>> 16)) >>> 0) / 0xffffffff;
+}
+
+/**
+ * Terrain for any world tile — also used for sectors materialized later,
+ * so expansion beyond the start region keeps a coherent landscape (open end).
+ */
+export function terrainAt(x: number, y: number): TerrainType {
+  // River: vertical band around x = 57 with a gentle meander.
+  const riverCenter = 57 + Math.round(Math.sin(y / 9) * 2);
+  if (x >= riverCenter - 1 && x <= riverCenter + 1) return 'river';
+  if (x === riverCenter - 2 || x === riverCenter + 2) return 'sand';
+
+  // Forest: northern band, thinning toward the south.
+  if (y < 12 && tileHash(x, y) > 0.15) return 'forest';
+  if (y < 16 && tileHash(x, y) > 0.6) return 'forest';
+
+  // Fertile plains: south-center band.
+  if (y >= 40 && y < 60 && x >= 12 && x < 48 && tileHash(x, y) > 0.35) return 'fertile';
+
+  // Scattered forest patches everywhere else.
+  if (tileHash(x * 7, y * 3) > 0.93) return 'forest';
+
+  return 'grass';
+}
