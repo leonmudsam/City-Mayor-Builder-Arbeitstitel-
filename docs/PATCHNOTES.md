@@ -1,5 +1,25 @@
 # Patch Notes
 
+## v0.2.2 — „Wohnen mit Aussicht" (Zoning aktiv)
+
+- **Wohnqualität wirkt jetzt auf die Zufriedenheit.** Die bisher nur berechnete
+  Umgebungsqualität (`ambience`) ist jetzt ein echter Spielfaktor: Wohnhäuser
+  in der Nähe von **Parks und Dekoration** werden zufriedener, Wohnhäuser neben
+  **Industrie** (Sägewerk, Steinbruch) unzufriedener. Damit wird das Trennen von
+  Wohn- und Industriegebieten (§12) eine echte Planungsentscheidung statt bloßer
+  Vorbereitung.
+  - *Wirkung:* stadtweiter, wohnraum-gewichteter Ambience-Schnitt × Faktor,
+    gedeckelt auf ±15 Zufriedenheitspunkte (`ambienceHappinessPerPoint`,
+    `ambienceHappinessCap` in `balancing.config.ts`).
+  - *Sichtbar:* neue Zeile „Wohnqualität" im Zufriedenheits-Panel mit
+    Punktbeitrag und Hinweis („… trenne Wohn- und Industriegebiete"); der
+    Gebäudedialog zeigt die Umgebung pro Wohnhaus weiterhin einzeln.
+  - *Technisch:* `avgAmbience` wird in `derived.ts` einmal pro Strukturänderung
+    aggregiert (Tick bleibt O(1) dafür); der Tick addiert den gedeckelten
+    Beitrag zur Zufriedenheit. Wohlstands-abhängige Gewichtung (reiche Bürger
+    meiden Industrie stärker) kann später als Faktor auf denselben Wert
+    aufsetzen — keine neue Struktur nötig.
+
 ## v0.2.1 — „Umbauen ohne Reue"
 
 - **Abreißen erstattet Material zurück.** Beim Abriss gibt es **50 %** der

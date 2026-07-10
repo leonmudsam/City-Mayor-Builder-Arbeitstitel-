@@ -79,6 +79,21 @@ describe('simulation tick', () => {
     expect(controller.state.resources.wood).toBe(woodBefore + 7);
   });
 
+  it('raises happiness when residential quality improves (zoning)', () => {
+    const { controller } = newController();
+    setLevel(controller, 7);
+    controller.placeBuilding('road', 26, 26);
+    controller.placeBuilding('house_small', 26, 27);
+    controller.update(T0 + 30_000 + 5 * MIN); // citizens settle in
+    const before = controller.state.citizens.happiness;
+    expect(controller.derived.avgAmbience).toBe(0);
+    // A tree next to the house (ambience +1, radius 3) — a pure ambience source.
+    expect(controller.placeBuilding('deco_tree', 28, 27)).toEqual({ ok: true });
+    expect(controller.derived.avgAmbience).toBe(1);
+    controller.update(T0 + 30_000 + 6 * MIN); // happiness recomputed with ambience
+    expect(controller.state.citizens.happiness).toBeGreaterThan(before);
+  });
+
   it('grows population when housing exists and happiness is high', () => {
     const { controller } = newController();
     controller.placeBuilding('road', 26, 26);

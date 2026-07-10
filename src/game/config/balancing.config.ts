@@ -24,6 +24,11 @@ export const balancingConfig: BalancingConfig = {
   // down is a plannable refactor, not a punishment — but the 50 % haircut keeps
   // build/demolish loops from being free (§ economy balancing).
   demolishRefundFactor: 0.5,
+  // Zoning: living next to parks/decoration lifts happiness, living next to
+  // industry (sawmill, quarry) lowers it. Makes separating residential and
+  // industrial areas a real planning decision (§12).
+  ambienceHappinessPerPoint: 3,
+  ambienceHappinessCap: 15,
 };
 
 // Feature flags: the test shop and gold system are wired in as the LAST

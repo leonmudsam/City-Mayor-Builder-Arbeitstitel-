@@ -24,8 +24,10 @@ export interface Derived {
   roadNetwork: Set<string>;
   /** Location bonus percent per producing building (terrain-dependent). */
   productionBonus: Record<string, number>;
-  /** Environment score per residential building (ambience auras; zoning prep). */
+  /** Environment score per residential building (ambience auras; zoning). */
   ambience: Record<string, number>;
+  /** Housing-weighted average ambience across the city (drives happiness). */
+  avgAmbience: number;
   /** Gross production per minute per resource (active buildings, incl. bonus). */
   productionPerMin: Record<ResourceId, number>;
 }
@@ -109,12 +111,15 @@ export function recomputeDerived(state: GameState, config: GameConfig): Derived 
     }
     needCoverage[need] = totalHousing > 0 ? covered / totalHousing : 0;
   }
+  let ambienceWeighted = 0;
   for (const r of residential) {
     ambience[r.id] = ambienceSources.reduce(
       (sum, s) => (chebyshev(r.cx, r.cy, s.cx, s.cy) <= s.radius ? sum + s.amount : sum),
       0,
     );
+    ambienceWeighted += ambience[r.id]! * r.housing;
   }
+  const avgAmbience = totalHousing > 0 ? ambienceWeighted / totalHousing : 0;
 
   const fireProtected = new Set<string>();
   for (const b of Object.values(state.buildings)) {
@@ -133,6 +138,7 @@ export function recomputeDerived(state: GameState, config: GameConfig): Derived 
     roadNetwork: computeRoadNetwork(state, config),
     productionBonus,
     ambience,
+    avgAmbience,
     productionPerMin,
   };
 }

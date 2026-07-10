@@ -175,6 +175,10 @@ export interface BalancingConfig {
   speedupMinutesPerGold: number;
   /** Share of the invested build + upgrade cost refunded on demolition (0..1). */
   demolishRefundFactor: number;
+  /** Happiness points per average ambience point (residential quality → zoning). */
+  ambienceHappinessPerPoint: number;
+  /** Absolute cap on the ambience happiness contribution (± this value). */
+  ambienceHappinessCap: number;
 }
 
 export interface FeaturesConfig {

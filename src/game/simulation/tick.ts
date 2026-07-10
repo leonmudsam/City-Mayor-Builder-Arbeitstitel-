@@ -118,6 +118,13 @@ export function advance(state: GameState, config: GameConfig, derived: Derived, 
       weighted += need.weight * ns.fulfillment;
     }
     let happiness = pop <= 0 || weightSum <= 0 ? 75 : (100 * weighted) / weightSum;
+    if (pop > 0) {
+      // Zoning: residential quality shifts happiness. Nearby parks/decoration
+      // lift it, nearby industry drags it down (§12 residential attractiveness).
+      const cap = config.balancing.ambienceHappinessCap;
+      const ambienceDelta = derived.avgAmbience * config.balancing.ambienceHappinessPerPoint;
+      happiness += Math.max(-cap, Math.min(cap, ambienceDelta));
+    }
     for (const buff of state.buffs) {
       if (buff.kind === 'happiness') happiness += buff.amount;
     }
