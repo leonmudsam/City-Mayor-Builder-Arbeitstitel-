@@ -56,17 +56,17 @@ export function QuestPanel() {
 function describeObjective(obj: QuestObjective): string {
   switch (obj.type) {
     case 'build':
-      return `${t(`building.${obj.defId}`)} bauen`;
+      return t('ui.objective.build', { building: t(`building.${obj.defId}`) });
     case 'population':
       return `${obj.amount} ${t('ui.population')}`;
     case 'resource':
-      return `${obj.amount} ${t(`resource.${obj.resource}`)} besitzen`;
-    case 'collect':
-      return `${obj.amount} ${t(`resource.${obj.resource}`)} einsammeln`;
+      return t('ui.objective.resource', { amount: obj.amount, resource: t(`resource.${obj.resource}`) });
+    case 'produce':
+      return t('ui.objective.produce', { amount: obj.amount, resource: t(`resource.${obj.resource}`) });
     case 'level':
       return `${t('ui.level')} ${obj.level}`;
     case 'sectors':
-      return `${obj.count} Sektoren freischalten`;
+      return t('ui.objective.sectors', { count: obj.count });
     case 'mayorAction':
       return t(`mayor.action.${obj.actionId}`);
     case 'happiness':

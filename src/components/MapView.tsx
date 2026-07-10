@@ -1,11 +1,13 @@
-import { useEffect, useRef } from 'react';
-import { MapRenderer } from '../renderer/MapRenderer.ts';
+import { useEffect, useRef, useState } from 'react';
+import { AlertTriangle, CheckCircle2, Move, Sparkles } from 'lucide-react';
+import { MapRenderer, type HoverInfo } from '../renderer/MapRenderer.ts';
 import { getController, useUiStore } from '../state/store.ts';
 import { t } from '../i18n/index.ts';
 
 export function MapView() {
   const hostRef = useRef<HTMLDivElement>(null);
   const rendererRef = useRef<MapRenderer>(undefined);
+  const [hoverInfo, setHoverInfo] = useState<HoverInfo | undefined>(undefined);
 
   useEffect(() => {
     const host = hostRef.current;
@@ -16,12 +18,20 @@ export function MapView() {
     const renderer = new MapRenderer(controller, {
       onSelectBuilding: (id) => useUiStore.getState().selectBuilding(id),
       onClickLockedSector: (id) => useUiStore.getState().openSectorDialog(id),
-      onCancelPlacement: () => useUiStore.getState().stopPlacing(),
-      onQuickCollect: (id) => {
-        const b = controller.state.buildings[id];
-        if (b && Math.floor(b.buffer) >= 1) return controller.collectYield(id).ok;
-        return false;
+      onCancelPlacement: () => {
+        useUiStore.getState().stopPlacing();
+        useUiStore.getState().stopMoving();
       },
+      onRequestMove: (id) => useUiStore.getState().startMoving(id),
+      onMove: (id, x, y) => {
+        const result = controller.moveBuilding(id, x, y);
+        if (result.ok) {
+          useUiStore.getState().stopMoving();
+        } else {
+          ui.pushToast(t(`error.${result.error}`), 'error');
+        }
+      },
+      onHoverInfo: (info) => setHoverInfo(info),
       onPlace: (defId, x, y) => {
         const result = controller.placeBuilding(defId, x, y);
         if (!result.ok) {
@@ -38,15 +48,17 @@ export function MapView() {
     rendererRef.current = renderer;
     void renderer.init(host);
 
-    // Mirror UI state (placement/selection) into the renderer.
+    // Mirror UI state (placement/move/selection) into the renderer.
     const unsubscribe = useUiStore.subscribe((s) => {
       renderer.setPlacing(s.placingDefId);
+      renderer.setMoving(s.movingBuildingId);
       renderer.setSelected(s.selectedBuildingId);
     });
 
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
         useUiStore.getState().stopPlacing();
+        useUiStore.getState().stopMoving();
         useUiStore.getState().selectBuilding(undefined);
         useUiStore.getState().openSectorDialog(undefined);
       }
@@ -62,10 +74,46 @@ export function MapView() {
   }, []);
 
   const placing = useUiStore((s) => s.placingDefId);
+  const moving = useUiStore((s) => s.movingBuildingId);
+  const active = placing !== undefined || moving !== undefined;
 
   return (
     <div className="map-host" ref={hostRef}>
-      {placing && <div className="placement-hint">{t('ui.placement.hint')}</div>}
+      {active && <PlacementBanner info={hoverInfo} moving={moving !== undefined} />}
+    </div>
+  );
+}
+
+/**
+ * Large, central placement feedback: the reason a spot doesn't work (or the
+ * location bonus it would get) — no squinting at small toasts (§ UX).
+ */
+function PlacementBanner({ info, moving }: { info: HoverInfo | undefined; moving: boolean }) {
+  const controller = getController();
+  const defName = info ? t(controller.config.buildings.get(info.defId)?.nameKey ?? '') : '';
+
+  let className = 'placement-banner';
+  let icon = <Move size={18} />;
+  let text = moving ? t('ui.move.hint') : t('ui.placement.hint');
+  if (info?.error) {
+    className += ' banner-bad';
+    icon = <AlertTriangle size={18} />;
+    text = `${defName}: ${t(`error.${info.error}`)}`;
+  } else if (info && info.bonusPct > 0) {
+    className += ' banner-bonus';
+    icon = <Sparkles size={18} />;
+    text = `${defName}: ${t('ui.location_bonus', { pct: Math.round(info.bonusPct) })}`;
+  } else if (info) {
+    className += ' banner-ok';
+    icon = <CheckCircle2 size={18} />;
+    text = `${defName}: ${moving ? t('ui.move.valid') : t('ui.placement.valid')}`;
+  }
+
+  return (
+    <div className={className}>
+      {icon}
+      <span>{text}</span>
+      <span className="banner-sub">{t('ui.placement.cancel_hint')}</span>
     </div>
   );
 }

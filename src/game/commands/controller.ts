@@ -5,7 +5,7 @@ import { recomputeDerived, type Derived } from '../simulation/derived.ts';
 import { advance } from '../simulation/tick.ts';
 import { updateQuests, objectiveTarget } from '../simulation/quests.ts';
 import { validatePlacement, type PlacementError } from '../buildings/placement.ts';
-import { effectiveEffects } from '../buildings/effects.ts';
+import { demolishRefund } from '../buildings/effects.ts';
 import { canAfford, grantGold, grantResources, spendCost, spendGold } from '../economy/economyService.ts';
 import { addXp } from '../progression/levels.ts';
 import {
@@ -100,7 +100,6 @@ export class GameController {
       upgradeLevel: 0,
       status: instant ? 'active' : 'constructing',
       ...(instant ? {} : { constructionEndsAt: now + def.constructionSec * 1000 }),
-      buffer: 0,
     };
     for (let dy = 0; dy < def.size.h; dy++) {
       for (let dx = 0; dx < def.size.w; dx++) {
@@ -130,8 +129,20 @@ export class GameController {
     }
     delete this.state.buildings[buildingId];
     this.state.events = this.state.events.filter((e) => e.buildingId !== buildingId);
+    // Refund a share of the invested materials so tearing down is a plannable
+    // refactor, not a total loss. Money is uncapped; materials respect storage.
+    const refund = demolishRefund(def, b.upgradeLevel, this.config.balancing.demolishRefundFactor);
+    grantResources(this.state, refund, this.derived.storageCaps, `demolish_${b.defId}`);
     this.afterStructuralChange();
     return ok;
+  }
+
+  /** What a demolition would return right now (for the confirmation UI). */
+  getDemolishRefund(buildingId: string): Partial<Record<ResourceId, number>> {
+    const b = this.state.buildings[buildingId];
+    const def = b && this.config.buildings.get(b.defId);
+    if (!b || !def || def.unique) return {};
+    return demolishRefund(def, b.upgradeLevel, this.config.balancing.demolishRefundFactor);
   }
 
   upgradeBuilding(buildingId: string): CommandResult {
@@ -150,23 +161,36 @@ export class GameController {
     return ok;
   }
 
-  collectYield(buildingId: string): CommandResult {
+  /**
+   * Relocate an existing building (free): city redesign should never be
+   * punished. Unique buildings (town hall) may move too — only demolish is
+   * blocked for them.
+   */
+  moveBuilding(buildingId: string, x: number, y: number): CommandResult {
     const b = this.state.buildings[buildingId];
     if (!b) return fail('not_found');
     const def = this.config.buildings.get(b.defId);
     if (!def) return fail('not_found');
-    const produce = effectiveEffects(def, b.upgradeLevel).find((e) => e.type === 'produce');
-    if (!produce || produce.type !== 'produce') return fail('invalid');
-    const resource = produce.resource as ResourceId;
-    const cap = this.derived.storageCaps[resource] ?? Number.POSITIVE_INFINITY;
-    const space = Math.max(0, cap - this.state.resources[resource]);
-    const amount = Math.min(Math.floor(b.buffer), Math.floor(space));
-    if (amount <= 0) return fail('invalid'); // nothing to collect or storage full
-    grantResources(this.state, { [resource]: amount }, this.derived.storageCaps, `collect_${b.defId}`);
-    b.buffer -= amount;
-    this.state.stats.collected[resource] = (this.state.stats.collected[resource] ?? 0) + amount;
-    updateQuests(this.state, this.config);
-    this.notify({ type: 'change' });
+    if (b.x === x && b.y === y) return ok;
+    const placementError = validatePlacement(this.state, this.config, this.derived, def, x, y, {
+      ignoreBuildingId: buildingId,
+    });
+    if (placementError) return fail(placementError);
+    for (let dy = 0; dy < def.size.h; dy++) {
+      for (let dx = 0; dx < def.size.w; dx++) {
+        const tile = tileAt(this.state, b.x + dx, b.y + dy);
+        if (tile && tile.buildingId === buildingId) delete tile.buildingId;
+      }
+    }
+    b.x = x;
+    b.y = y;
+    for (let dy = 0; dy < def.size.h; dy++) {
+      for (let dx = 0; dx < def.size.w; dx++) {
+        const tile = tileAt(this.state, x + dx, y + dy);
+        if (tile) tile.buildingId = buildingId;
+      }
+    }
+    this.afterStructuralChange();
     return ok;
   }
 

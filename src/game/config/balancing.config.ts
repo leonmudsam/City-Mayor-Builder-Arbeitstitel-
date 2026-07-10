@@ -1,8 +1,10 @@
 import type { BalancingConfig, FeaturesConfig } from './types.ts';
 
 export const balancingConfig: BalancingConfig = {
-  taxPerCapitaPerMin: 0.5,
-  taxFactorMin: 0.5,
+  // Taxes are deliberately modest and strongly happiness-coupled: money should
+  // reward a well-run city, not accumulate while idling (§ AFK reduction).
+  taxPerCapitaPerMin: 0.3,
+  taxFactorMin: 0.35,
   taxFactorMax: 1.5,
   growthPerMin: 2,
   declinePerMin: 1,
@@ -18,6 +20,10 @@ export const balancingConfig: BalancingConfig = {
   fireUnlockLevel: 8,
   maxTickChunkSec: 60,
   speedupMinutesPerGold: 3,
+  // Demolishing returns half of everything invested (build + upgrades). Tearing
+  // down is a plannable refactor, not a punishment — but the 50 % haircut keeps
+  // build/demolish loops from being free (§ economy balancing).
+  demolishRefundFactor: 0.5,
 };
 
 // Feature flags: the test shop and gold system are wired in as the LAST

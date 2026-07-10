@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { newController, setLevel, T0 } from './helpers.ts';
+import { flattenTerrain, newController, paintTerrain, setLevel, T0 } from './helpers.ts';
 
 const MIN = 60_000;
 
@@ -16,31 +16,67 @@ describe('simulation tick', () => {
     expect(controller.state.level.xp).toBe(xpBefore + 10);
   });
 
-  it('fills production buffers up to the cap (offline catch-up)', () => {
+  it('produces directly into storage and stops at the storage cap (offline catch-up)', () => {
     const { controller } = newController();
     setLevel(controller, 2);
+    flattenTerrain(controller); // no location bonus in this test
     controller.placeBuilding('road', 26, 26);
-    controller.placeBuilding('sawmill', 26, 27); // 6 wood/min, cap 60
+    controller.placeBuilding('sawmill', 26, 27); // 9 wood/min
+    const woodAfterBuild = controller.state.resources.wood;
     controller.update(T0 + 31_000); // construction (30s) done
     controller.update(T0 + 31_000 + 5 * MIN);
-    const sawmill = Object.values(controller.state.buildings).find((b) => b.defId === 'sawmill');
-    expect(sawmill?.buffer).toBeCloseTo(30, 0);
-    // 8 hours offline → buffer caps at 60, not 2880.
+    expect(controller.state.resources.wood).toBeCloseTo(woodAfterBuild + 45, 0);
+    expect(controller.state.stats.produced.wood).toBeCloseTo(45, 0);
+    // 8 hours offline → storage cap (town hall: 300 wood), not 4000+.
     controller.update(T0 + 8 * 60 * MIN);
-    expect(sawmill?.buffer).toBe(60);
+    expect(controller.state.resources.wood).toBe(300);
   });
 
-  it('collects yield into storage and tracks stats', () => {
+  it('applies the terrain location bonus to production', () => {
     const { controller } = newController();
     setLevel(controller, 2);
+    flattenTerrain(controller);
     controller.placeBuilding('road', 26, 26);
     controller.placeBuilding('sawmill', 26, 27);
-    controller.update(T0 + 31_000 + 10 * MIN);
+    // 4 forest tiles in radius 3 → +20 % (5 %/tile).
+    paintTerrain(controller, [[30, 27], [30, 28], [23, 29], [24, 30]], 'forest');
     const sawmill = Object.values(controller.state.buildings).find((b) => b.defId === 'sawmill');
+    const woodAfterBuild = controller.state.resources.wood;
+    controller.update(T0 + 31_000); // construction done → bonus becomes active
+    expect(controller.derived.productionBonus[sawmill!.id]).toBe(20);
+    controller.update(T0 + 31_000 + 5 * MIN); // 9/min × 1.2 × 5 min = 54
+    expect(controller.state.resources.wood).toBeCloseTo(woodAfterBuild + 54, 0);
+  });
+
+  it('only counts water supply for housing inside a well radius', () => {
+    const { controller } = newController();
+    setLevel(controller, 3);
+    flattenTerrain(controller);
+    controller.placeBuilding('road', 26, 26);
+    controller.placeBuilding('house_small', 26, 27);
+    controller.update(T0 + 30_000 + 5 * MIN); // citizens move in
+    // Well far away (>7 Chebyshev from the house center): capacity exists, coverage 0.
+    expect(controller.placeBuilding('well', 18, 18)).toEqual({ ok: true });
+    controller.update(T0 + 30_000 + 6 * MIN);
+    expect(controller.state.citizens.needs.water.fulfillment).toBe(0);
+    // A well next to the house covers it fully.
+    expect(controller.placeBuilding('well', 28, 26)).toEqual({ ok: true });
+    controller.update(T0 + 30_000 + 7 * MIN);
+    expect(controller.state.citizens.needs.water.fulfillment).toBe(1);
+  });
+
+  it('refunds a share of the invested cost when demolishing', () => {
+    const { controller } = newController();
+    controller.placeBuilding('road', 26, 26);
+    controller.placeBuilding('house_small', 26, 27); // cost: 50 money, 15 wood
+    const house = Object.values(controller.state.buildings).find((b) => b.defId === 'house_small')!;
+    const moneyBefore = controller.state.resources.money;
     const woodBefore = controller.state.resources.wood;
-    expect(controller.collectYield(sawmill!.id)).toEqual({ ok: true });
-    expect(controller.state.resources.wood).toBe(woodBefore + 60);
-    expect(controller.state.stats.collected.wood).toBe(60);
+    // 50 % refund, floored per resource: 25 money, 7 wood.
+    expect(controller.getDemolishRefund(house.id)).toEqual({ money: 25, wood: 7 });
+    expect(controller.demolishBuilding(house.id)).toEqual({ ok: true });
+    expect(controller.state.resources.money).toBe(moneyBefore + 25);
+    expect(controller.state.resources.wood).toBe(woodBefore + 7);
   });
 
   it('grows population when housing exists and happiness is high', () => {

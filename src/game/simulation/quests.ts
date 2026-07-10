@@ -10,8 +10,8 @@ function objectiveProgress(state: GameState, obj: QuestObjective): number {
       return Math.min(obj.amount, Math.floor(state.citizens.population));
     case 'resource':
       return Math.min(obj.amount, Math.floor(state.resources[obj.resource]));
-    case 'collect':
-      return Math.min(obj.amount, Math.floor(state.stats.collected[obj.resource] ?? 0));
+    case 'produce':
+      return Math.min(obj.amount, Math.floor(state.stats.produced[obj.resource] ?? 0));
     case 'level':
       return Math.min(obj.level, state.level.current);
     case 'sectors':
@@ -30,7 +30,7 @@ export function objectiveTarget(obj: QuestObjective): number {
     case 'population':
     case 'happiness':
     case 'resource':
-    case 'collect':
+    case 'produce':
       return obj.amount;
     case 'level':
       return obj.level;
