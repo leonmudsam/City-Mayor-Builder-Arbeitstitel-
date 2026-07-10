@@ -103,15 +103,14 @@ export function BuildingPanel() {
         </ul>
 
         <div className="dialog-buttons dialog-buttons-stack">
-          <button
-            className="btn-secondary"
-            onClick={() => {
-              startMoving(b.id);
-            }}
-          >
-            <Move size={16} />
-            {t('ui.move')}
-          </button>
+          {game.config.features.moveBuildings ? (
+            <button className="btn-secondary" onClick={() => startMoving(b.id)}>
+              <Move size={16} />
+              {t('ui.move')}
+            </button>
+          ) : (
+            !def.unique && <p className="dialog-hint">{t('ui.move.disabled')}</p>
+          )}
 
           {nextUpgrade && b.status === 'active' && (
             <button
@@ -180,6 +179,8 @@ function effectIcon(eff: BuildingEffect) {
       return <ShieldCheck size={15} />;
     case 'ambience':
       return <Leaf size={15} />;
+    case 'demand':
+      return null;
   }
 }
 
@@ -200,7 +201,9 @@ function describeEffect(eff: BuildingEffect, bonusPct: number): string | undefin
     case 'jobs':
       return t('ui.effect.jobs', { amount: eff.amount });
     case 'distribution':
-      return t('ui.effect.distribution', { need: t(`need.${eff.need}`) });
+      return t('ui.effect.distribution', { need: t(`need.${eff.need}`), radius: eff.radius });
+    case 'demand':
+      return undefined; // demand is infrastructure load, not a headline effect
     case 'protection':
       return t('ui.effect.protection', { radius: eff.radius });
     case 'ambience':

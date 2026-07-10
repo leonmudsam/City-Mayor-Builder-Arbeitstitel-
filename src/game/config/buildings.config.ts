@@ -19,6 +19,9 @@ export const buildingsConfig: BuildingDef[] = [
       { type: 'storage', resource: 'wood', amount: 300 },
       { type: 'storage', resource: 'stone', amount: 300 },
       { type: 'storage', resource: 'food', amount: 300 },
+      // Civic presence: a small attractiveness aura for the surrounding blocks
+      // (§9), reusing the same ambience → happiness path as parks/zoning.
+      { type: 'ambience', amount: 2, radius: 3 },
     ],
   },
   {
@@ -60,19 +63,29 @@ export const buildingsConfig: BuildingDef[] = [
     cost: { money: 50, wood: 15 },
     constructionSec: 20,
     xpReward: 10,
-    effects: [{ type: 'capacity', need: 'housing', amount: 6 }],
+    // Homes place their own water demand (§3): bigger/upgraded houses want more.
+    effects: [
+      { type: 'capacity', need: 'housing', amount: 6 },
+      { type: 'demand', need: 'water', amount: 3 },
+    ],
     upgrades: [
       {
         cost: { money: 120, wood: 30, stone: 10 },
         constructionSec: 60,
         xpReward: 15,
-        effects: [{ type: 'capacity', need: 'housing', amount: 11 }],
+        effects: [
+          { type: 'capacity', need: 'housing', amount: 11 },
+          { type: 'demand', need: 'water', amount: 7 },
+        ],
       },
       {
         cost: { money: 300, wood: 60, stone: 40 },
         constructionSec: 180,
         xpReward: 25,
-        effects: [{ type: 'capacity', need: 'housing', amount: 18 }],
+        effects: [
+          { type: 'capacity', need: 'housing', amount: 18 },
+          { type: 'demand', need: 'water', amount: 13 },
+        ],
       },
     ],
   },
@@ -86,7 +99,10 @@ export const buildingsConfig: BuildingDef[] = [
     cost: { money: 160, wood: 60, stone: 30 },
     constructionSec: 120,
     xpReward: 20,
-    effects: [{ type: 'capacity', need: 'housing', amount: 14 }],
+    effects: [
+      { type: 'capacity', need: 'housing', amount: 14 },
+      { type: 'demand', need: 'water', amount: 9 },
+    ],
   },
   {
     id: 'apartment',
@@ -98,7 +114,10 @@ export const buildingsConfig: BuildingDef[] = [
     cost: { money: 450, wood: 100, stone: 140 },
     constructionSec: 360,
     xpReward: 45,
-    effects: [{ type: 'capacity', need: 'housing', amount: 34 }],
+    effects: [
+      { type: 'capacity', need: 'housing', amount: 34 },
+      { type: 'demand', need: 'water', amount: 24 },
+    ],
   },
 
   // ---- Ressourcen / Produktion ----
@@ -113,11 +132,13 @@ export const buildingsConfig: BuildingDef[] = [
     constructionSec: 30,
     xpReward: 12,
     effects: [
-      { type: 'produce', resource: 'wood', perMinute: 9 },
+      { type: 'produce', resource: 'wood', perMinute: 14 },
       { type: 'jobs', amount: 4 },
       { type: 'ambience', amount: -1, radius: 4 },
     ],
     locationBonus: { terrain: 'forest', radius: 3, perTilePct: 5, maxPct: 50 },
+    // Few but strong (§1/§2): grows slowly with city level, never a spam build.
+    buildLimit: [{ level: 2, max: 2 }, { level: 5, max: 3 }, { level: 8, max: 5 }],
   },
   {
     id: 'quarry',
@@ -130,11 +151,12 @@ export const buildingsConfig: BuildingDef[] = [
     constructionSec: 90,
     xpReward: 18,
     effects: [
-      { type: 'produce', resource: 'stone', perMinute: 6 },
+      { type: 'produce', resource: 'stone', perMinute: 11 },
       { type: 'jobs', amount: 6 },
       { type: 'ambience', amount: -2, radius: 5 },
     ],
     locationBonus: { terrain: 'mountain', radius: 3, perTilePct: 8, maxPct: 60 },
+    buildLimit: [{ level: 4, max: 2 }, { level: 7, max: 3 }, { level: 10, max: 4 }],
   },
   {
     id: 'farm',
@@ -147,10 +169,12 @@ export const buildingsConfig: BuildingDef[] = [
     constructionSec: 60,
     xpReward: 15,
     effects: [
-      { type: 'produce', resource: 'food', perMinute: 10 },
+      { type: 'produce', resource: 'food', perMinute: 15 },
       { type: 'jobs', amount: 4 },
+      { type: 'ambience', amount: -1, radius: 3 },
     ],
     locationBonus: { terrain: 'fertile', radius: 2, perTilePct: 4, maxPct: 40 },
+    buildLimit: [{ level: 4, max: 2 }, { level: 6, max: 3 }, { level: 9, max: 5 }],
   },
   {
     id: 'well',
@@ -209,7 +233,9 @@ export const buildingsConfig: BuildingDef[] = [
     constructionSec: 90,
     xpReward: 20,
     effects: [
-      { type: 'distribution', need: 'food' },
+      // Food only reaches homes within range (§8): place the market among the
+      // houses it feeds, not off in a corner.
+      { type: 'distribution', need: 'food', radius: 9 },
       { type: 'jobs', amount: 6 },
     ],
   },
@@ -224,9 +250,10 @@ export const buildingsConfig: BuildingDef[] = [
     constructionSec: 240,
     xpReward: 32,
     effects: [
-      { type: 'produce', resource: 'food', perMinute: 6 },
+      { type: 'produce', resource: 'food', perMinute: 9 },
       { type: 'jobs', amount: 4 },
     ],
+    buildLimit: [{ level: 9, max: 2 }],
   },
   {
     id: 'fire_station',
@@ -256,9 +283,10 @@ export const buildingsConfig: BuildingDef[] = [
     constructionSec: 150,
     xpReward: 24,
     effects: [
-      { type: 'produce', resource: 'money', perMinute: 4 },
+      { type: 'produce', resource: 'money', perMinute: 6 },
       { type: 'jobs', amount: 8 },
     ],
+    buildLimit: [{ level: 6, max: 2 }, { level: 9, max: 4 }],
   },
 
   // ---- Freizeit ----
@@ -281,11 +309,11 @@ export const buildingsConfig: BuildingDef[] = [
     id: 'playground',
     category: 'leisure',
     nameKey: 'building.playground',
-    size: { w: 1, h: 1 },
+    size: { w: 2, h: 2 },
     requiresRoad: false,
     unlockLevel: 7,
-    cost: { money: 60, wood: 15 },
-    constructionSec: 30,
+    cost: { money: 80, wood: 20 },
+    constructionSec: 40,
     xpReward: 8,
     effects: [
       { type: 'coverage', need: 'leisure', radius: 5 },

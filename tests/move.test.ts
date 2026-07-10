@@ -1,10 +1,27 @@
 import { describe, expect, it } from 'vitest';
 import { newController } from './helpers.ts';
 import { tileAt } from '../src/game/map/world.ts';
+import type { GameController } from '../src/game/commands/controller.ts';
+
+// Moving is disabled in MVP 1 (§5) but the engine command is retained behind a
+// feature flag. These tests exercise the command with the flag enabled.
+function movableController(): GameController {
+  const { controller } = newController();
+  controller.config.features.moveBuildings = true;
+  return controller;
+}
 
 describe('moveBuilding', () => {
-  it('relocates a building and rewrites its footprint tiles', () => {
+  it('is disabled by default — buildings must be demolished and rebuilt', () => {
     const { controller } = newController();
+    controller.placeBuilding('road', 26, 26);
+    controller.placeBuilding('house_small', 26, 27);
+    const house = Object.values(controller.state.buildings).find((b) => b.defId === 'house_small')!;
+    expect(controller.moveBuilding(house.id, 28, 27)).toEqual({ ok: false, error: 'feature_disabled' });
+  });
+
+  it('relocates a building and rewrites its footprint tiles', () => {
+    const controller = movableController();
     controller.placeBuilding('road', 26, 26);
     controller.placeBuilding('road', 27, 26);
     controller.placeBuilding('road', 28, 26);
@@ -19,7 +36,7 @@ describe('moveBuilding', () => {
   });
 
   it('allows moving onto tiles overlapping the old position', () => {
-    const { controller } = newController();
+    const controller = movableController();
     controller.placeBuilding('road', 26, 26);
     controller.placeBuilding('road', 27, 26);
     controller.placeBuilding('house_small', 26, 27);
@@ -30,7 +47,7 @@ describe('moveBuilding', () => {
   });
 
   it('rejects occupied or roadless targets and keeps the building in place', () => {
-    const { controller } = newController();
+    const controller = movableController();
     controller.placeBuilding('road', 26, 26);
     controller.placeBuilding('house_small', 26, 27);
     const house = Object.values(controller.state.buildings).find((b) => b.defId === 'house_small')!;
@@ -43,7 +60,7 @@ describe('moveBuilding', () => {
   });
 
   it('moves unique buildings (town hall) even though they cannot be demolished', () => {
-    const { controller } = newController();
+    const controller = movableController();
     const townHall = controller.state.buildings['b_townhall']!;
     expect(controller.demolishBuilding(townHall.id)).toEqual({ ok: false, error: 'invalid' });
     expect(controller.moveBuilding(townHall.id, 18, 20)).toEqual({ ok: true });
@@ -52,7 +69,7 @@ describe('moveBuilding', () => {
   });
 
   it('rejects moves into locked sectors', () => {
-    const { controller } = newController();
+    const controller = movableController();
     const townHall = controller.state.buildings['b_townhall']!;
     expect(controller.moveBuilding(townHall.id, 2, 2)).toEqual({ ok: false, error: 'sector_locked' });
   });

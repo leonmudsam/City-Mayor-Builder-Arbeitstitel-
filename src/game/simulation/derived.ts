@@ -18,7 +18,13 @@ export interface Derived {
    * (water via wells, leisure via parks). Needs without radius sources are 1.
    */
   needCoverage: Record<NeedId, number>;
-  hasFoodDistribution: boolean;
+  /** Extra demand per need from buildings themselves (homes' water, §3/§4). */
+  extraDemand: Record<NeedId, number>;
+  /**
+   * 0..1 housing-weighted share of homes reached by a distribution service
+   * (market → food). Uncovered homes fall back to the no-distribution cap (§8).
+   */
+  distributionCoverage: Record<NeedId, number>;
   /** Buildings inside a fire-station radius. */
   fireProtected: Set<string>;
   roadNetwork: Set<string>;
@@ -43,9 +49,10 @@ export function recomputeDerived(state: GameState, config: GameConfig): Derived 
   const capacity: Record<NeedId, number> = { housing: 0, water: 0, food: 0, work: 0, leisure: 0 };
   const productionPerMin: Record<ResourceId, number> = { money: 0, wood: 0, stone: 0, food: 0 };
   const productionBonus: Record<string, number> = {};
-  let hasFoodDistribution = false;
+  const extraDemand: Record<NeedId, number> = { housing: 0, water: 0, food: 0, work: 0, leisure: 0 };
 
   const coverageSources: Partial<Record<NeedId, RadiusSource[]>> = {};
+  const distributionSources: Partial<Record<NeedId, RadiusSource[]>> = {};
   const ambienceSources: { cx: number; cy: number; radius: number; amount: number }[] = [];
   const fireStations: RadiusSource[] = [];
   const residential: { id: string; cx: number; cy: number; housing: number }[] = [];
@@ -76,8 +83,11 @@ export function recomputeDerived(state: GameState, config: GameConfig): Derived 
         case 'coverage':
           addCoverageSource(eff.need, { cx, cy, radius: eff.radius });
           break;
+        case 'demand':
+          extraDemand[eff.need] += eff.amount;
+          break;
         case 'distribution':
-          if (eff.need === 'food') hasFoodDistribution = true;
+          (distributionSources[eff.need] ??= []).push({ cx, cy, radius: eff.radius });
           break;
         case 'protection':
           fireStations.push({ cx, cy, radius: eff.radius });
@@ -102,14 +112,23 @@ export function recomputeDerived(state: GameState, config: GameConfig): Derived 
     if (need.kind === 'coverage') coverageSources[need.id] ??= [];
   }
   const needCoverage: Record<NeedId, number> = { housing: 1, water: 1, food: 1, work: 1, leisure: 1 };
+  const distributionCoverage: Record<NeedId, number> = { housing: 0, water: 0, food: 0, work: 0, leisure: 0 };
   const totalHousing = residential.reduce((sum, r) => sum + r.housing, 0);
   const ambience: Record<string, number> = {};
-  for (const [need, sources] of Object.entries(coverageSources) as [NeedId, RadiusSource[]][]) {
+  // Housing-weighted share of homes reached by any of a need's radius sources.
+  const coveredShare = (sources: RadiusSource[]): number => {
+    if (totalHousing <= 0) return 0;
     let covered = 0;
     for (const r of residential) {
       if (sources.some((s) => chebyshev(r.cx, r.cy, s.cx, s.cy) <= s.radius)) covered += r.housing;
     }
-    needCoverage[need] = totalHousing > 0 ? covered / totalHousing : 0;
+    return covered / totalHousing;
+  };
+  for (const [need, sources] of Object.entries(coverageSources) as [NeedId, RadiusSource[]][]) {
+    needCoverage[need] = coveredShare(sources);
+  }
+  for (const [need, sources] of Object.entries(distributionSources) as [NeedId, RadiusSource[]][]) {
+    distributionCoverage[need] = coveredShare(sources);
   }
   let ambienceWeighted = 0;
   for (const r of residential) {
@@ -133,7 +152,8 @@ export function recomputeDerived(state: GameState, config: GameConfig): Derived 
     storageCaps,
     capacity,
     needCoverage,
-    hasFoodDistribution,
+    extraDemand,
+    distributionCoverage,
     fireProtected,
     roadNetwork: computeRoadNetwork(state, config),
     productionBonus,

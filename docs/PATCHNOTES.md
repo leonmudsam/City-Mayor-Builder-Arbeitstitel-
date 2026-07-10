@@ -1,5 +1,123 @@
 # Patch Notes
 
+## v0.3 — „Stadtplanung mit Konsequenzen"
+
+Großer Balancing- und Planungs-Pass: Produktionsgebäude sind jetzt wertvoll
+statt Spam, Bürger sind anspruchsvoller, Standort und Nähe zählen mehr, und
+Fehlplatzierungen haben Konsequenzen (kein freies Verschieben mehr). Alle
+neuen Stellschrauben liegen in Configs.
+
+### Gebäude-Limits pro Level (kein Spam mehr)
+
+- **Produktionsgebäude haben jetzt eine Obergrenze, die mit dem Level wächst**
+  (`buildLimit` pro Gebäude in `buildings.config.ts`):
+  - Sägewerk: 2 (L2) → 3 (L5) → 5 (L8)
+  - Steinbruch: 2 (L4) → 3 (L7) → 4 (L10)
+  - Farm: 2 (L4) → 3 (L6) → 5 (L9)
+  - Kleiner Laden: 2 (L6) → 4 (L9); Bäckerei: 2 (L9)
+- **Wohnhäuser, Straßen und Dekoration bleiben unbegrenzt baubar** (§13) — das
+  Wachstum wird durch Versorgung/Bedürfnisse gesteuert, nicht durch harte Caps.
+- Erreichtes Limit ist klar sichtbar: Zähler „2/2 gebaut · mehr ab Level 7" auf
+  der Baukarte (ausgegraut), und beim Platzierungsversuch ein deutlicher Toast
+  „Limit erreicht: Mehr Sägewerke ab Level 7."
+- *Technisch:* reines Config-Feld + Helfer `buildLimitAt`/`countOf`/`nextLimitLevel`
+  (`buildings/limits.ts`); Platzierung prüft `limit_reached`; `getBuildLimit()`
+  am Controller liefert der UI Stand/Cap/nächstes Level.
+
+### Produktion neu balanciert (weniger Gebäude, mehr Wert)
+
+- Sägewerk **9 → 14 Holz/min**, Steinbruch **6 → 11 Stein/min**, Farm
+  **10 → 15 Essen/min**, Bäckerei **6 → 9**, Kleiner Laden **4 → 6 Geld/min**.
+- Wenige, gut platzierte Betriebe reichen jetzt für eine sinnvolle Produktion;
+  Standortboni (Wald/Gebirge/Boden) wiegen dadurch schwerer.
+
+### Bürger werden anspruchsvoller (Zufriedenheit realistischer)
+
+- **Erwartungs-Inflation:** Mit jedem Level steigt der Bedarf pro Bedürfnis um
+  4 % (`needExpectationPerLevel`). Eine wachsende Stadt muss weiter investieren —
+  Zufriedenheit klebt nicht mehr bei 100 %, eine gut geplante Stadt liegt eher
+  bei 70–90 %.
+- **Wasserbedarf nach Haustyp/-stufe:** Wohnhäuser stellen jetzt eigenen
+  Wasserbedarf (neuer, generischer `demand`-Effekt): Kleines Haus 3 → 7 → 13 je
+  Ausbaustufe, Reihenhaus 9, Apartment 24. Größer/höher ausgebaut = mehr
+  Wasserdruck (§3/§4).
+- Beides zusammen macht Unterversorgung spürbar und Überversorgung nicht
+  automatisch perfekt.
+
+### Nähe & Radien wichtiger
+
+- **Marktplatz verteilt Essen nur noch im Radius 9** (statt stadtweit): Nur
+  Wohnhäuser in Reichweite bekommen volle Versorgung, der Rest fällt auf den
+  Ohne-Markt-Deckel zurück. Markt gehört jetzt mitten ins Wohngebiet (§8).
+- **Rathaus gibt einen kleinen Attraktivitäts-Bonus** an die direkt umliegenden
+  Blocks (Ambience +2, Radius 3) — läuft über dieselbe Zoning-/Ambience-Mechanik
+  wie Parks (§9).
+- **Farm** wirkt sich jetzt (leicht) negativ auf direkte Wohnnähe aus
+  (Ambience −1), wie Sägewerk/Steinbruch — Wohn- und Industriegebiete trennen
+  lohnt sich mehr (§11/§12). Ambience-Deckel auf Zufriedenheit **15 → 20**, damit
+  Grünflächen stärker zählen.
+- Radius wird beim Platzieren/Anklicken weiterhin als Overlay angezeigt.
+
+### Verschieben deaktiviert, Abriss inszeniert
+
+- **Gebäude lassen sich nach dem Bau nicht mehr verschieben** (§5): realistische
+  Planung, Fehlplatzierung hat Konsequenzen. Der Info-Dialog erklärt: „Gebäude
+  können nach dem Bau nicht verschoben werden. Reiße es ab und baue es neu."
+  Verschiebe-Button und Gedrückt-Halten-Geste sind aus (Feature-Flag
+  `features.moveBuildings` — Engine-Befehl bleibt für später erhalten).
+- **Abriss-Rückerstattung 50 % → 25 %** (`demolishRefundFactor`, konfigurierbar):
+  Umplanen bleibt möglich, kostet aber etwas.
+- **Abriss-Animation:** kleine Staubwolke am Gebäudeplatz; die
+  Rückerstattung erscheint weiter als Toast.
+
+### Expansion inszeniert
+
+- **Neues Gebiet freischalten** blitzt jetzt sichtbar auf dem neuen Sektor auf
+  und zeigt ein zentrales Popup „Neues Gebiet freigeschaltet" (§7) — Expansion
+  fühlt sich belohnend an statt nur ein UI-Zustand zu wechseln.
+
+### Spielplatz & Grün
+
+- **Spielplatz ist jetzt 2×2** statt 1×1 (§10) — Freizeitplanung braucht Platz.
+- Parks, Spielplatz, Bäume und der Rathaus-Bonus verbessern über Ambience die
+  Wohnqualität und damit die Zufriedenheit (§11).
+
+### Für später vorbereitet (Architektur)
+
+- **Generischer `demand`-Effekt** und **radiusbasierte `distribution`** sind so
+  angelegt, dass weitere Bedürfnisse (Strom, Sicherheit, Gesundheit, Bildung)
+  und Verteil-Dienste reine Config-Einträge werden.
+- Produktionsketten bleiben über `inputsPerMinute` vorbereitet (Verbrauch →
+  Produktion, im Tick implementiert); Logistik/Verkehr kann später als
+  Modifikator auf Produktion/Verteilung aufsetzen, ohne neue Struktur.
+
+### Balancing-Referenz (geänderte Werte)
+
+| Wert | vorher | jetzt |
+|---|---|---|
+| Sägewerk | 9 Holz/min | 14 Holz/min |
+| Steinbruch | 6 Stein/min | 11 Stein/min |
+| Farm | 10 Essen/min | 15 Essen/min |
+| Bäckerei | 6 Essen/min | 9 Essen/min |
+| Kleiner Laden | 4 Geld/min | 6 Geld/min |
+| Abriss-Rückerstattung | 50 % | 25 % |
+| Ambience-Deckel (Zufriedenheit) | ±15 | ±20 |
+| Erwartung pro Level | — | +4 % Bedarf |
+| Wasserbedarf Kl. Haus (Stufe 0/1/2) | 0 | 3 / 7 / 13 |
+| Markt-Verteilung | stadtweit | Radius 9 |
+| Rathaus-Aura | — | Ambience +2, Radius 3 |
+| Spielplatz | 1×1 | 2×2 |
+
+### Was als Nächstes testen
+
+- Sehr frühes Spiel (L1–3): fühlt sich das Sammeln mit 1–2 Sägewerken flott an?
+- Nach vielen Wohnhäusern ohne Brunnen/Pumpe: sinkt die Zufriedenheit spürbar?
+- Markt weit weg vs. mitten im Wohngebiet: Unterschied bei „Essen"?
+- Produktionsgebäude direkt neben Wohnhäusern: Ambience-Malus sichtbar?
+- Produktions-Limit erreichen: klare Meldung, Karte ausgegraut?
+- Abriss + neues Gebiet freischalten: Animationen und Popups sichtbar?
+- Nach längerer Offline-Zeit: Lager gedeckelt, keine Wunderwerte.
+
 ## v0.2.2 — „Wohnen mit Aussicht" (Zoning aktiv)
 
 - **Wohnqualität wirkt jetzt auf die Zufriedenheit.** Die bisher nur berechnete

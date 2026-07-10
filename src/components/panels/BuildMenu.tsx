@@ -82,7 +82,9 @@ function BuildCard({ def, locked, onPick }: { def: BuildingDef; locked: boolean;
   const game = useGame();
   const affordable = game.canAffordCost(def.cost);
   const uniqueBuilt = def.unique && Object.values(game.state.buildings).some((b) => b.defId === def.id);
-  const disabled = locked || !affordable || Boolean(uniqueBuilt);
+  const limit = game.getBuildLimit(def.id);
+  const limitReached = limit ? limit.count >= limit.max : false;
+  const disabled = locked || !affordable || Boolean(uniqueBuilt) || limitReached;
 
   return (
     <button className={`build-card${disabled ? ' disabled' : ''}${locked ? ' locked' : ''}`} onClick={onPick} disabled={disabled}>
@@ -120,6 +122,12 @@ function BuildCard({ def, locked, onPick }: { def: BuildingDef; locked: boolean;
           {t('ui.locked_at', { level: def.unlockLevel })}
         </div>
       )}
+      {!locked && limit && (
+        <div className={`build-card-limit${limitReached ? ' reached' : ''}`}>
+          {t('ui.limit.count', { count: limit.count, max: limit.max })}
+          {limitReached && limit.nextLevel !== undefined && ` · ${t('ui.limit.more_at', { level: limit.nextLevel })}`}
+        </div>
+      )}
       {uniqueBuilt && <div className="build-card-lock">{t('error.unique_exists')}</div>}
     </button>
   );
@@ -149,13 +157,15 @@ function effectSummary(def: BuildingDef): string {
         parts.push(`+${eff.amount} ${t('ui.jobs')}`);
         break;
       case 'distribution':
-        parts.push(t('ui.effect.distribution', { need: t(`need.${eff.need}`) }));
+        parts.push(t('ui.effect.distribution', { need: t(`need.${eff.need}`), radius: eff.radius }));
         break;
       case 'protection':
         parts.push(t('ui.effect.protection', { radius: eff.radius }));
         break;
       case 'ambience':
         if (eff.amount > 0) parts.push(`${t('ui.ambience')} +${eff.amount}`);
+        break;
+      case 'demand':
         break;
     }
   }
