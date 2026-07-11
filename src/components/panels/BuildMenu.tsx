@@ -20,7 +20,7 @@ import {
 import { useGame, useUiStore } from '../../state/store.ts';
 import type { BuildingCategory, ResourceId } from '../../game/types.ts';
 import type { BuildingDef } from '../../game/config/types.ts';
-import { t } from '../../i18n/index.ts';
+import { formatMoney, t } from '../../i18n/index.ts';
 
 const CATEGORY_ORDER: { id: BuildingCategory; icon: React.ReactNode }[] = [
   { id: 'roads', icon: <Route size={16} /> },
@@ -99,7 +99,7 @@ function BuildCard({ def, locked, onPick }: { def: BuildingDef; locked: boolean;
             className={`chip${game.state.resources[res as ResourceId] < (amount ?? 0) ? ' cost-missing' : ''}`}
           >
             {RESOURCE_ICONS[res as ResourceId]}
-            {amount}
+            {res === 'money' ? formatMoney(amount ?? 0) : amount}
           </span>
         ))}
         {def.constructionSec > 0 && (
@@ -139,6 +139,12 @@ function effectSummary(def: BuildingDef): string {
     switch (eff.type) {
       case 'produce':
         parts.push(`+${eff.perMinute} ${t(`resource.${eff.resource}`)}/min`);
+        break;
+      case 'housing':
+        parts.push(`${eff.units} ${t('ui.housing.units')} · ${eff.units * eff.maxResidentsPerUnit} ${t('need.housing')}`);
+        break;
+      case 'revenue':
+        parts.push(`+${formatMoney(eff.perMinute)} ${t('resource.money')}/min`);
         break;
       case 'capacity':
         parts.push(

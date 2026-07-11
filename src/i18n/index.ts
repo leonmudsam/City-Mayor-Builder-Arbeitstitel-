@@ -16,6 +16,18 @@ export function t(key: string, params?: Record<string, string | number>): string
   return text;
 }
 
+/**
+ * Money formatting on the municipal scale (§4): grouped thousands up to a
+ * million, then compact "1,2 Mio." / "1,2 Mrd." so big budgets stay readable.
+ */
+export function formatMoney(n: number): string {
+  const v = Math.round(n);
+  const abs = Math.abs(v);
+  if (abs >= 1_000_000_000) return `${(v / 1_000_000_000).toLocaleString('de-DE', { maximumFractionDigits: 1 })} Mrd.`;
+  if (abs >= 1_000_000) return `${(v / 1_000_000).toLocaleString('de-DE', { maximumFractionDigits: 1 })} Mio.`;
+  return v.toLocaleString('de-DE');
+}
+
 export function formatDuration(ms: number): string {
   const totalSec = Math.max(0, Math.ceil(ms / 1000));
   const h = Math.floor(totalSec / 3600);

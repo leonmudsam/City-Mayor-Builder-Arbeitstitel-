@@ -1,6 +1,6 @@
 import { Lock, X } from 'lucide-react';
 import { useGame, useUiStore } from '../../state/store.ts';
-import { t } from '../../i18n/index.ts';
+import { formatMoney, t } from '../../i18n/index.ts';
 
 export function SectorDialog() {
   const game = useGame();
@@ -23,7 +23,7 @@ export function SectorDialog() {
         </div>
         <p className="muted">{levelOk ? t('ui.sector.desc') : t('ui.sector.locked_level')}</p>
         <p className="sector-price">
-          {t('ui.cost')}: {cost.toLocaleString('de-DE')} {t('resource.money')}
+          {t('ui.cost')}: {formatMoney(cost)} {t('resource.money')}
         </p>
         <div className="dialog-buttons">
           <button className="btn-secondary" onClick={() => openSectorDialog(undefined)}>

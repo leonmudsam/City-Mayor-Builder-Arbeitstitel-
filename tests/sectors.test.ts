@@ -11,7 +11,7 @@ describe('sector expansion (open-end world)', () => {
   it('unlocks adjacent sectors for scaling money costs', () => {
     const { controller } = newController();
     setLevel(controller, 5);
-    controller.state.resources.money = 10_000;
+    controller.state.resources.money = 1_000_000;
     const cost1 = controller.getSectorCost(sectorId(1, 2));
     expect(controller.unlockSector(sectorId(1, 2))).toEqual({ ok: true });
     expect(controller.state.stats.sectorsUnlocked).toBe(2);
@@ -22,14 +22,14 @@ describe('sector expansion (open-end world)', () => {
   it('rejects non-adjacent sectors', () => {
     const { controller } = newController();
     setLevel(controller, 5);
-    controller.state.resources.money = 10_000;
+    controller.state.resources.money = 1_000_000;
     expect(controller.unlockSector(sectorId(3, 3))).toEqual({ ok: false, error: 'invalid' });
   });
 
   it('materializes new terrain beyond the start region (open end)', () => {
     const { controller } = newController();
     setLevel(controller, 5);
-    controller.state.resources.money = 100_000;
+    controller.state.resources.money = 5_000_000;
     expect(controller.unlockSector(sectorId(1, 0))).toEqual({ ok: true });
     expect(controller.unlockSector(sectorId(1, -1))).toEqual({ ok: true }); // outside start region
     // Neighbor ring materialized for the "visible but locked" effect.

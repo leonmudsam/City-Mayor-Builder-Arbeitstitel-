@@ -20,6 +20,7 @@ import {
   COLOR_LOCKED_OVERLAY,
   COLOR_SELECTION,
   COLOR_SIDEWALK,
+  COVERAGE_COLORS,
   RADIUS_COLORS,
   TERRAIN_COLORS,
 } from './colors.ts';
@@ -50,6 +51,8 @@ export interface RendererCallbacks {
   onHoverInfo(info: HoverInfo | undefined): void;
   /** A sector just went from locked → unlocked (central "new area" popup). */
   onSectorUnlocked(id: string): void;
+  /** Coverage overlay is active (or cleared) — UI shows/hides the legend (§1). */
+  onCoverageInfo(info: { label: string; underCapacity: boolean } | undefined): void;
 }
 
 /** Short-lived visual effect (demolish dust, sector-unlock flash). */
@@ -73,6 +76,7 @@ export class MapRenderer {
   private buildingLayer = new Container();
   private fxLayer = new Container();
   private overlayLayer = new Container();
+  private coverageLayer = new Graphics();
   private ghost = new Graphics();
   private ghostRadius = new Graphics();
   private selectionBox = new Graphics();
@@ -87,6 +91,8 @@ export class MapRenderer {
   private hoverTile: { x: number; y: number } | undefined;
   private selectedId: string | undefined;
   private lastHoverKey = '';
+  private coverageKey = '';
+  private hasCoverage = false;
   private destroyed = false;
 
   constructor(
@@ -102,7 +108,7 @@ export class MapRenderer {
     }
     host.appendChild(this.app.canvas);
     this.world.addChild(this.terrainLayer, this.buildingLayer, this.fxLayer, this.overlayLayer);
-    this.overlayLayer.addChild(this.ghostRadius, this.selectionBox, this.ghost);
+    this.overlayLayer.addChild(this.coverageLayer, this.ghostRadius, this.selectionBox, this.ghost);
     this.app.stage.addChild(this.world);
 
     // Center the camera on the town hall.
@@ -290,7 +296,58 @@ export class MapRenderer {
     }
     this.updateFx();
     this.drawGhost();
+    this.drawCoverage();
     this.drawSelection();
+  }
+
+  /**
+   * Generic coverage overlay (§1): when a supply building is selected, show
+   * every source of that type, their combined reach, and each home tinted by
+   * how well it's served (supplied / partial / redundant / unsupplied). Pure
+   * overlay data comes from the game layer; this only paints it. Recomputed
+   * only when the selection or world version changes (not per frame).
+   */
+  private drawCoverage(): void {
+    const active = this.selectedId && !this.placingDefId && !this.movingId;
+    const key = active ? `${this.selectedId}|${this.controller.version}` : '';
+    if (key === this.coverageKey) return;
+    this.coverageKey = key;
+    this.coverageLayer.clear();
+
+    const overlay = active ? this.controller.getCoverageOverlay(this.selectedId!) : undefined;
+    this.hasCoverage = Boolean(overlay);
+    if (!overlay) {
+      this.callbacks.onCoverageInfo(undefined);
+      return;
+    }
+    const groupColor = RADIUS_COLORS[overlay.colorKey] ?? COLOR_SELECTION;
+    const g = this.coverageLayer;
+
+    // Combined reach of every source (low alpha so overlaps stay readable).
+    for (const s of overlay.sources) {
+      const cx = (s.x + s.w / 2) * TILE;
+      const cy = (s.y + s.h / 2) * TILE;
+      const half = s.radius * TILE;
+      g.roundRect(cx - half, cy - half, half * 2, half * 2, 10).fill({ color: groupColor, alpha: 0.06 });
+    }
+    for (const s of overlay.sources) {
+      const cx = (s.x + s.w / 2) * TILE;
+      const cy = (s.y + s.h / 2) * TILE;
+      const half = s.radius * TILE;
+      g.roundRect(cx - half, cy - half, half * 2, half * 2, 10).stroke({ width: s.selected ? 2.5 : 1.5, color: groupColor, alpha: s.selected ? 0.85 : 0.4 });
+      // Source footprint marker.
+      g.roundRect(s.x * TILE + 2, s.y * TILE + 2, s.w * TILE - 4, s.h * TILE - 4, 5)
+        .stroke({ width: s.selected ? 3 : 2, color: COVERAGE_COLORS.source, alpha: s.selected ? 1 : 0.6 });
+    }
+    // Consumers: a clear status dot + border, no map-wide flood of color.
+    for (const c of overlay.consumers) {
+      const color = COVERAGE_COLORS[c.state];
+      g.roundRect(c.x * TILE + 2, c.y * TILE + 2, c.w * TILE - 4, c.h * TILE - 4, 5).stroke({ width: 2, color, alpha: 0.9 });
+      const dotX = (c.x + c.w / 2) * TILE;
+      const dotY = (c.y + c.h / 2) * TILE;
+      g.circle(dotX, dotY, 5).fill({ color, alpha: 0.95 }).stroke({ width: 1.5, color: 0x10151c, alpha: 0.6 });
+    }
+    this.callbacks.onCoverageInfo({ label: t(overlay.labelKey), underCapacity: overlay.underCapacity });
   }
 
   /** Advance and retire short-lived effects (demolish dust, unlock flash). */
@@ -606,8 +663,9 @@ export class MapRenderer {
     this.selectionBox
       .roundRect(b.x * TILE - 2, b.y * TILE - 2, def.size.w * TILE + 4, def.size.h * TILE + 4, 6)
       .stroke({ width: 2.5, color: COLOR_SELECTION, alpha: 0.9 });
-    // Show what the building reaches (well radius, park coverage, fire protection).
-    this.drawEffectRadii(this.selectionBox, def, b.x, b.y, b.upgradeLevel);
+    // The coverage overlay already shows a supply building's reach in full; for
+    // everything else, fall back to the simple radius outlines.
+    if (!this.hasCoverage) this.drawEffectRadii(this.selectionBox, def, b.x, b.y, b.upgradeLevel);
   }
 }
 

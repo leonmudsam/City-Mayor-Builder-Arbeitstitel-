@@ -1,7 +1,7 @@
 import { Award, Coins, Droplets, Logs, Mountain, Star, Wheat } from 'lucide-react';
 import { useGame } from '../../state/store.ts';
 import { xpForNextLevel } from '../../game/progression/levels.ts';
-import { t } from '../../i18n/index.ts';
+import { formatMoney, t } from '../../i18n/index.ts';
 
 export function TopBar() {
   const game = useGame();
@@ -13,6 +13,7 @@ export function TopBar() {
   const xpProgress = nextXp === undefined ? 1 : Math.min(1, (state.level.xp - prevXp) / (nextXp - prevXp));
   const waterNeed = state.citizens.needs.water;
   const waterPct = state.level.current >= 3 ? Math.round(waterNeed.fulfillment * 100) : undefined;
+  const income = game.getIncome().total;
 
   return (
     <header className="topbar">
@@ -24,7 +25,12 @@ export function TopBar() {
         </div>
       </div>
       <div className="topbar-resources">
-        <Stat icon={<Coins size={15} />} label={rateLabel(t('resource.money'), derived.productionPerMin.money)} value={fmt(res.money)} />
+        <Stat
+          icon={<Coins size={15} />}
+          label={`${t('resource.money')} — ${t('ui.income.short', { amount: formatMoney(income) })}`}
+          value={formatMoney(res.money)}
+          sub={income > 0 ? `+${formatMoney(income)}` : undefined}
+        />
         <Stat
           icon={<Logs size={15} />}
           label={rateLabel(t('resource.wood'), derived.productionPerMin.wood)}
@@ -54,11 +60,12 @@ export function TopBar() {
   );
 }
 
-function Stat({ icon, label, value, warn }: { icon: React.ReactNode; label: string; value: string; warn?: boolean }) {
+function Stat({ icon, label, value, warn, sub }: { icon: React.ReactNode; label: string; value: string; warn?: boolean; sub?: string | undefined }) {
   return (
     <div className={`stat${warn ? ' stat-warn' : ''}`} title={label}>
       {icon}
       <span>{value}</span>
+      {sub && <span className="stat-sub">{sub}</span>}
     </div>
   );
 }

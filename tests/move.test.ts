@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { newController } from './helpers.ts';
+import { newController, setLevel, T0 } from './helpers.ts';
 import { tileAt } from '../src/game/map/world.ts';
 import type { GameController } from '../src/game/commands/controller.ts';
 
@@ -72,5 +72,43 @@ describe('moveBuilding', () => {
     const controller = movableController();
     const townHall = controller.state.buildings['b_townhall']!;
     expect(controller.moveBuilding(townHall.id, 2, 2)).toEqual({ ok: false, error: 'sector_locked' });
+  });
+});
+
+// §2: non-demolishable specials relocate via their own action even with the
+// global move feature OFF, re-validating placement and charging a fee.
+describe('relocate special buildings', () => {
+  it('relocates the town hall without the move feature (it cannot be demolished)', () => {
+    const { controller } = newController();
+    expect(controller.config.features.moveBuildings).toBe(false);
+    const townHall = controller.state.buildings['b_townhall']!;
+    expect(controller.demolishBuilding(townHall.id)).toEqual({ ok: false, error: 'invalid' });
+    expect(controller.moveBuilding(townHall.id, 18, 20)).toEqual({ ok: true });
+    expect(tileAt(controller.state, 18, 20)?.buildingId).toBe(townHall.id);
+    expect(tileAt(controller.state, 23, 23)?.buildingId).toBeUndefined();
+  });
+
+  it('charges the relocation fee for the mayor house and rejects when unaffordable', () => {
+    const { controller } = newController();
+    setLevel(controller, 3);
+    for (let x = 26; x <= 31; x++) controller.placeBuilding('road', x, 26);
+    controller.placeBuilding('mayor_house', 26, 27);
+    controller.update(T0 + 61_000); // finish construction
+    const house = Object.values(controller.state.buildings).find((b) => b.defId === 'mayor_house')!;
+    controller.state.resources.money = 5_000;
+    expect(controller.moveBuilding(house.id, 28, 27)).toEqual({ ok: true });
+    expect(controller.state.resources.money).toBe(3_000); // 2 000 fee
+    // Valid target, but now too poor for the fee.
+    controller.state.resources.money = 500;
+    expect(controller.moveBuilding(house.id, 30, 27)).toEqual({ ok: false, error: 'insufficient' });
+    expect(house.x).toBe(28);
+  });
+
+  it('still refuses to relocate ordinary buildings with the feature off', () => {
+    const { controller } = newController();
+    controller.placeBuilding('road', 26, 26);
+    controller.placeBuilding('house_small', 26, 27);
+    const h = Object.values(controller.state.buildings).find((b) => b.defId === 'house_small')!;
+    expect(controller.moveBuilding(h.id, 28, 27)).toEqual({ ok: false, error: 'feature_disabled' });
   });
 });

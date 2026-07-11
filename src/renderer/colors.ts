@@ -39,10 +39,20 @@ export const COLOR_SIDEWALK = 0x9aa1ab;
 export const COLOR_ASPHALT = 0x454b54;
 export const COLOR_LANE = 0xf5f0e6;
 
-/** Radius overlays per effect kind (water/leisure/fire/ambience). */
+/** Radius overlays per effect kind (water/leisure/food/fire/ambience). */
 export const RADIUS_COLORS: Record<string, number> = {
   water: 0x4a90cf,
   leisure: 0x6fc276,
+  food: 0xe0a03a,
   protection: 0xe35d5d,
   ambience: 0xffd54f,
 };
+
+/** Coverage overlay states (§1): how well a home/building is served. */
+export const COVERAGE_COLORS = {
+  source: 0xffffff,
+  supplied: 0x4caf50,
+  partial: 0xf0c020,
+  redundant: 0x4a90cf,
+  unsupplied: 0xe53935,
+} as const;

@@ -4,7 +4,7 @@ import type { GameState } from './types.ts';
 import { sectorId } from './types.ts';
 import { materializeSector, tileAt } from './map/world.ts';
 
-export const SCHEMA_VERSION = 2;
+export const SCHEMA_VERSION = 3;
 
 export function createNewGame(config: GameConfig, cityName: string, now: number): GameState {
   const state: GameState = {

@@ -1,5 +1,86 @@
 # Patch Notes
 
+## v0.4 — „Wirtschaft, Wohnraum & Versorgung"
+
+Ein zusammenhängender System-Pass: glaubwürdige Geldgrößen mit mehreren
+Einnahmequellen, ein echtes Wohn-/Bevölkerungsmodell, ein generisches
+Versorgungs-Overlay und verschiebbare Spezialgebäude. Alle Werte liegen in
+Configs; die Spiellogik bleibt frei von React/Pixi.
+
+### Wirtschaft auf glaubwürdiger Größenordnung (§3–§5)
+
+- **Geld läuft jetzt auf Stadt-Maßstab** statt zweistelliger Spielgeld-Beträge:
+  kleines Haus 6.000, Reihenhaus 22.000, Apartment 90.000, Markt 20.000,
+  Wasserpumpe 40.000, Sektor-Freischaltung ab ~80.000. Startkapital 45.000.
+- **Materialien (Holz/Stein/Essen) bleiben kleinskalig** — dadurch sind sie ein
+  *eigener* Engpass neben Geld: Geld kauft den Bauplatz, Material und Versorgung
+  begrenzen, *was* du baust. Geld blockiert nicht mehr jede Aktion (§3).
+- **Mehrere Einnahmequellen statt nur Miete** (§5), als generischer `revenue`-
+  Effekt: **Wohnen** (Grundsteuer pro Kopf, zufriedenheitsabhängig), **Gewerbe**
+  (Läden/Markt, skaliert mit besetzten Arbeitsplätzen) und **Produktion**
+  (Industrieabgaben). Neue Quellen (Tourismus, Transport) sind reine Config.
+- **Neues Finanz-/Wirtschaftspanel** im Bürgermeister-Tab zeigt Einnahmen pro
+  Minute nach Quelle + Beschäftigungsgrad — „woher das Geld kommt" auf einen
+  Blick. In der Kopfleiste steht das Netto-Einkommen pro Minute am Geldwert.
+- **Zahlenformat** `formatMoney`: 12.500 · 250.000 · 1,2 Mio. · 1,2 Mrd.
+- *Technisch:* `economy/income.ts` (`computeIncome`) ist die einzige Quelle der
+  Wahrheit — Tick und UI rechnen identisch.
+
+### Echtes Wohn- & Bevölkerungsmodell (§6/§7)
+
+- Wohngebäude bestehen jetzt aus **Wohnungen × Bewohner pro Wohnung**
+  (generischer `housing`-Effekt) statt einer einzelnen Zahl:
+  - **Kleines Haus** – 1 Wohnung, bis 5 Bewohner: Vorstadt, hohe Wohnqualität,
+    reagiert stark auf Grün & Industrie in der Nähe.
+  - **Reihenhaus** – 5 Wohnungen (bis 20 Bewohner): dichter, höhere Versorgungs-
+    und Wassernachfrage.
+  - **Apartment** – 16 Wohnungen (bis 48 Bewohner): hohe Verdichtung, braucht
+    Infrastruktur & Parks.
+  - Haus-Upgrades erhöhen Wohnungen und Bewohner sichtbar.
+- Einwohnerzahl ergibt sich aus **tatsächlicher Belegung**: mehr Wohnraum füllt
+  sich nur nach und nach und nur bei guter Versorgung/Zufriedenheit. Die
+  Kopfzeile zeigt „Einwohner / Kapazität" + Wohnungszahl.
+- **Haustyp-Profile** wirken spürbar über `ambienceSensitivity` (Vorstadt
+  gewichtet Umgebungsqualität stärker) und unterschiedlichen Wasserbedarf.
+- Wasserbedarf kommt jetzt **vollständig aus den Häusern** (skaliert mit Typ &
+  Ausbaustufe), nicht mehr aus einer pauschalen Pro-Kopf-Zahl.
+
+### Generisches Versorgungs-Overlay (§1)
+
+- **Ein System für alle Versorgungsarten** (`buildings/coverage.ts`): Klick auf
+  ein Versorgungsgebäude zeigt **alle Gebäude desselben Typs** samt Radien und
+  markiert jedes Wohngebäude nach Zustand — *versorgt*, *mehrfach versorgt*,
+  *unterversorgt* (Kapazität reicht nicht) oder *nicht versorgt*. Das
+  ausgewählte Quellgebäude ist hervorgehoben.
+- Funktioniert ohne Sonderlogik für Wasser, Freizeit, Essen-Verteilung und
+  Brandschutz — und ist damit für Polizei/Gesundheit/Bildung/Umwelt/ÖPNV
+  vorbereitet (nur neue Config nötig).
+- Halbtransparente Flächen + Status-Punkte über den Gebäuden + **Legende** unten
+  links; Überlappungen bleiben lesbar.
+
+### Verschiebbare Spezialgebäude (§2)
+
+- Normale Gebäude bleiben **nach dem Bau unverschiebbar** (abreißen & neu bauen).
+- **Nicht abreißbare Spezialgebäude** (Rathaus, Bürgermeisterhaus) sind dafür
+  über eine eigene Aktion im Gebäude-Sheet **verschiebbar** — Fehlplatzierungen
+  beschädigen den Spielstand nicht mehr dauerhaft. Platzierungsregeln
+  (Straße, Untergrund, freier Platz) werden erneut geprüft; optionale Gebühr
+  (`relocationCost`) per Config. Steuerung über `canDemolish`/`canRelocate`.
+
+### Migration
+
+- Save-Schema **v2 → v3**: gespeichertes Geld wird ×100 skaliert, damit alte
+  Spielstände ihren relativen Wohlstand behalten. Wohn-/Einkommensmodell ist
+  config-abgeleitet und greift automatisch.
+
+### Für später vorbereitet
+
+Generischer `revenue`-Effekt (weitere Einnahmearten), generisches
+Coverage-System (weitere Versorgungsbedürfnisse), `housing`-Modell (Hochhäuser
+mit hoher Verdichtung), `canRelocate` (Distrikt-Zentren).
+
+---
+
 ## v0.3 — „Stadtplanung mit Konsequenzen"
 
 Großer Balancing- und Planungs-Pass: Produktionsgebäude sind jetzt wertvoll

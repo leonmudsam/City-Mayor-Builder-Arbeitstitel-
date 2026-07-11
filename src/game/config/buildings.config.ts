@@ -1,5 +1,10 @@
 import type { BuildingDef } from './types.ts';
 
+// Money is now on a believable municipal scale (tens of thousands and up, §4);
+// materials (wood/stone/food) stay small-scale so they remain a *separate*
+// bottleneck from money (§3). Income comes from several legible sources (§5):
+// residential tax (per capita), commercial revenue (shops/market) and
+// industrial revenue (production) — the latter two scale with staffing.
 export const buildingsConfig: BuildingDef[] = [
   // ---- Verwaltung / Regierung ----
   {
@@ -14,6 +19,10 @@ export const buildingsConfig: BuildingDef[] = [
     xpReward: 0,
     unique: true,
     buildable: false,
+    // The city's anchor can never be torn down — but it can be relocated so an
+    // awkward starting spot isn't permanent (§2).
+    canDemolish: false,
+    canRelocate: true,
     effects: [
       { type: 'jobs', amount: 5 },
       { type: 'storage', resource: 'wood', amount: 300 },
@@ -31,10 +40,13 @@ export const buildingsConfig: BuildingDef[] = [
     size: { w: 2, h: 2 },
     requiresRoad: true,
     unlockLevel: 3,
-    cost: { money: 120, wood: 30 },
+    cost: { money: 18_000, wood: 30 },
     constructionSec: 60,
     xpReward: 25,
     unique: true,
+    canDemolish: false,
+    canRelocate: true,
+    relocationCost: { money: 2_000 },
     effects: [],
   },
 
@@ -46,13 +58,15 @@ export const buildingsConfig: BuildingDef[] = [
     size: { w: 1, h: 1 },
     requiresRoad: false,
     unlockLevel: 1,
-    cost: { money: 5 },
+    cost: { money: 200 },
     constructionSec: 0,
     xpReward: 1,
     effects: [],
   },
 
   // ---- Wohnen ----
+  // Small house — suburban, low density, high quality: a single family home
+  // that reacts strongly to nearby green space and industry (§7).
   {
     id: 'house_small',
     category: 'residential',
@@ -60,35 +74,36 @@ export const buildingsConfig: BuildingDef[] = [
     size: { w: 2, h: 2 },
     requiresRoad: true,
     unlockLevel: 1,
-    cost: { money: 50, wood: 15 },
+    cost: { money: 6_000, wood: 15 },
     constructionSec: 20,
     xpReward: 10,
-    // Homes place their own water demand (§3): bigger/upgraded houses want more.
     effects: [
-      { type: 'capacity', need: 'housing', amount: 6 },
-      { type: 'demand', need: 'water', amount: 3 },
+      { type: 'housing', units: 1, minResidentsPerUnit: 2, maxResidentsPerUnit: 5, ambienceSensitivity: 1.4 },
+      { type: 'demand', need: 'water', amount: 4 },
     ],
     upgrades: [
       {
-        cost: { money: 120, wood: 30, stone: 10 },
+        cost: { money: 18_000, wood: 30, stone: 10 },
         constructionSec: 60,
         xpReward: 15,
         effects: [
-          { type: 'capacity', need: 'housing', amount: 11 },
-          { type: 'demand', need: 'water', amount: 7 },
+          { type: 'housing', units: 2, minResidentsPerUnit: 2, maxResidentsPerUnit: 5, ambienceSensitivity: 1.4 },
+          { type: 'demand', need: 'water', amount: 8 },
         ],
       },
       {
-        cost: { money: 300, wood: 60, stone: 40 },
+        cost: { money: 45_000, wood: 60, stone: 40 },
         constructionSec: 180,
         xpReward: 25,
         effects: [
-          { type: 'capacity', need: 'housing', amount: 18 },
-          { type: 'demand', need: 'water', amount: 13 },
+          { type: 'housing', units: 3, minResidentsPerUnit: 2, maxResidentsPerUnit: 6, ambienceSensitivity: 1.3 },
+          { type: 'demand', need: 'water', amount: 14 },
         ],
       },
     ],
   },
+  // Row house — denser: several households per footprint, medium quality,
+  // higher water/supply demand. The efficient way to grow a neighborhood (§7).
   {
     id: 'house_row',
     category: 'residential',
@@ -96,14 +111,16 @@ export const buildingsConfig: BuildingDef[] = [
     size: { w: 2, h: 2 },
     requiresRoad: true,
     unlockLevel: 6,
-    cost: { money: 160, wood: 60, stone: 30 },
+    cost: { money: 22_000, wood: 60, stone: 30 },
     constructionSec: 120,
     xpReward: 20,
     effects: [
-      { type: 'capacity', need: 'housing', amount: 14 },
-      { type: 'demand', need: 'water', amount: 9 },
+      { type: 'housing', units: 5, minResidentsPerUnit: 2, maxResidentsPerUnit: 4, ambienceSensitivity: 1.0 },
+      { type: 'demand', need: 'water', amount: 16 },
     ],
   },
+  // Apartment — high density, many units, heavy infrastructure demand; without
+  // parks its neighborhood quality suffers (§7).
   {
     id: 'apartment',
     category: 'residential',
@@ -111,12 +128,12 @@ export const buildingsConfig: BuildingDef[] = [
     size: { w: 2, h: 3 },
     requiresRoad: true,
     unlockLevel: 9,
-    cost: { money: 450, wood: 100, stone: 140 },
+    cost: { money: 90_000, wood: 100, stone: 140 },
     constructionSec: 360,
     xpReward: 45,
     effects: [
-      { type: 'capacity', need: 'housing', amount: 34 },
-      { type: 'demand', need: 'water', amount: 24 },
+      { type: 'housing', units: 16, minResidentsPerUnit: 2, maxResidentsPerUnit: 3, ambienceSensitivity: 1.15 },
+      { type: 'demand', need: 'water', amount: 40 },
     ],
   },
 
@@ -128,12 +145,13 @@ export const buildingsConfig: BuildingDef[] = [
     size: { w: 2, h: 2 },
     requiresRoad: true,
     unlockLevel: 2,
-    cost: { money: 80 },
+    cost: { money: 5_000 },
     constructionSec: 30,
     xpReward: 12,
     effects: [
       { type: 'produce', resource: 'wood', perMinute: 14 },
       { type: 'jobs', amount: 4 },
+      { type: 'revenue', category: 'industrial', perMinute: 600 },
       { type: 'ambience', amount: -1, radius: 4 },
     ],
     locationBonus: { terrain: 'forest', radius: 3, perTilePct: 5, maxPct: 50 },
@@ -147,12 +165,13 @@ export const buildingsConfig: BuildingDef[] = [
     size: { w: 3, h: 3 },
     requiresRoad: true,
     unlockLevel: 4,
-    cost: { money: 140, wood: 50 },
+    cost: { money: 14_000, wood: 50 },
     constructionSec: 90,
     xpReward: 18,
     effects: [
       { type: 'produce', resource: 'stone', perMinute: 11 },
       { type: 'jobs', amount: 6 },
+      { type: 'revenue', category: 'industrial', perMinute: 1_000 },
       { type: 'ambience', amount: -2, radius: 5 },
     ],
     locationBonus: { terrain: 'mountain', radius: 3, perTilePct: 8, maxPct: 60 },
@@ -165,12 +184,13 @@ export const buildingsConfig: BuildingDef[] = [
     size: { w: 3, h: 3 },
     requiresRoad: true,
     unlockLevel: 4,
-    cost: { money: 110, wood: 30 },
+    cost: { money: 9_000, wood: 30 },
     constructionSec: 60,
     xpReward: 15,
     effects: [
       { type: 'produce', resource: 'food', perMinute: 15 },
       { type: 'jobs', amount: 4 },
+      { type: 'revenue', category: 'industrial', perMinute: 700 },
       { type: 'ambience', amount: -1, radius: 3 },
     ],
     locationBonus: { terrain: 'fertile', radius: 2, perTilePct: 4, maxPct: 40 },
@@ -183,10 +203,10 @@ export const buildingsConfig: BuildingDef[] = [
     size: { w: 1, h: 1 },
     requiresRoad: false,
     unlockLevel: 3,
-    cost: { money: 40, wood: 5 },
+    cost: { money: 3_500, wood: 5 },
     constructionSec: 15,
     xpReward: 8,
-    effects: [{ type: 'capacity', need: 'water', amount: 25, radius: 7 }],
+    effects: [{ type: 'capacity', need: 'water', amount: 60, radius: 7 }],
   },
   {
     id: 'water_pump',
@@ -195,11 +215,11 @@ export const buildingsConfig: BuildingDef[] = [
     size: { w: 2, h: 2 },
     requiresRoad: true,
     unlockLevel: 7,
-    cost: { money: 260, stone: 60 },
+    cost: { money: 40_000, stone: 60 },
     constructionSec: 180,
     xpReward: 28,
     effects: [
-      { type: 'capacity', need: 'water', amount: 90, radius: 12 },
+      { type: 'capacity', need: 'water', amount: 240, radius: 12 },
       { type: 'jobs', amount: 2 },
     ],
   },
@@ -210,7 +230,7 @@ export const buildingsConfig: BuildingDef[] = [
     size: { w: 2, h: 2 },
     requiresRoad: true,
     unlockLevel: 6,
-    cost: { money: 200, wood: 60, stone: 30 },
+    cost: { money: 26_000, wood: 60, stone: 30 },
     constructionSec: 120,
     xpReward: 22,
     effects: [
@@ -229,7 +249,7 @@ export const buildingsConfig: BuildingDef[] = [
     size: { w: 2, h: 2 },
     requiresRoad: true,
     unlockLevel: 5,
-    cost: { money: 150, wood: 40 },
+    cost: { money: 20_000, wood: 40 },
     constructionSec: 90,
     xpReward: 20,
     effects: [
@@ -237,6 +257,8 @@ export const buildingsConfig: BuildingDef[] = [
       // houses it feeds, not off in a corner.
       { type: 'distribution', need: 'food', radius: 9 },
       { type: 'jobs', amount: 6 },
+      // Market fees — commercial income that scales with staffing & happiness.
+      { type: 'revenue', category: 'commercial', perMinute: 2_000 },
     ],
   },
   {
@@ -246,12 +268,13 @@ export const buildingsConfig: BuildingDef[] = [
     size: { w: 2, h: 2 },
     requiresRoad: true,
     unlockLevel: 9,
-    cost: { money: 320, wood: 50, stone: 40 },
+    cost: { money: 48_000, wood: 50, stone: 40 },
     constructionSec: 240,
     xpReward: 32,
     effects: [
       { type: 'produce', resource: 'food', perMinute: 9 },
       { type: 'jobs', amount: 4 },
+      { type: 'revenue', category: 'industrial', perMinute: 1_200 },
     ],
     buildLimit: [{ level: 9, max: 2 }],
   },
@@ -262,7 +285,7 @@ export const buildingsConfig: BuildingDef[] = [
     size: { w: 2, h: 2 },
     requiresRoad: true,
     unlockLevel: 8,
-    cost: { money: 400, wood: 60, stone: 80 },
+    cost: { money: 60_000, wood: 60, stone: 80 },
     constructionSec: 300,
     xpReward: 40,
     effects: [
@@ -279,11 +302,12 @@ export const buildingsConfig: BuildingDef[] = [
     size: { w: 2, h: 2 },
     requiresRoad: true,
     unlockLevel: 6,
-    cost: { money: 220, wood: 40 },
+    cost: { money: 30_000, wood: 40 },
     constructionSec: 150,
     xpReward: 24,
     effects: [
-      { type: 'produce', resource: 'money', perMinute: 6 },
+      // Trade tax — the backbone of commercial income once jobs are staffed.
+      { type: 'revenue', category: 'commercial', perMinute: 4_000 },
       { type: 'jobs', amount: 8 },
     ],
     buildLimit: [{ level: 6, max: 2 }, { level: 9, max: 4 }],
@@ -297,7 +321,7 @@ export const buildingsConfig: BuildingDef[] = [
     size: { w: 2, h: 2 },
     requiresRoad: false,
     unlockLevel: 7,
-    cost: { money: 120, wood: 20 },
+    cost: { money: 14_000, wood: 20 },
     constructionSec: 60,
     xpReward: 15,
     effects: [
@@ -312,7 +336,7 @@ export const buildingsConfig: BuildingDef[] = [
     size: { w: 2, h: 2 },
     requiresRoad: false,
     unlockLevel: 7,
-    cost: { money: 80, wood: 20 },
+    cost: { money: 9_000, wood: 20 },
     constructionSec: 40,
     xpReward: 8,
     effects: [
@@ -329,7 +353,7 @@ export const buildingsConfig: BuildingDef[] = [
     size: { w: 1, h: 1 },
     requiresRoad: false,
     unlockLevel: 7,
-    cost: { money: 10 },
+    cost: { money: 1_200 },
     constructionSec: 0,
     xpReward: 1,
     effects: [{ type: 'ambience', amount: 1, radius: 3 }],
@@ -341,7 +365,7 @@ export const buildingsConfig: BuildingDef[] = [
     size: { w: 1, h: 1 },
     requiresRoad: false,
     unlockLevel: 7,
-    cost: { money: 15 },
+    cost: { money: 1_800 },
     constructionSec: 0,
     xpReward: 1,
     effects: [{ type: 'ambience', amount: 1, radius: 3 }],
@@ -353,7 +377,7 @@ export const buildingsConfig: BuildingDef[] = [
     size: { w: 1, h: 1 },
     requiresRoad: false,
     unlockLevel: 7,
-    cost: { money: 80, stone: 10 },
+    cost: { money: 9_000, stone: 10 },
     constructionSec: 20,
     xpReward: 3,
     effects: [{ type: 'ambience', amount: 2, radius: 4 }],
@@ -365,7 +389,7 @@ export const buildingsConfig: BuildingDef[] = [
     size: { w: 1, h: 1 },
     requiresRoad: false,
     unlockLevel: 7,
-    cost: { money: 20, wood: 5 },
+    cost: { money: 2_400, wood: 5 },
     constructionSec: 0,
     xpReward: 1,
     effects: [{ type: 'ambience', amount: 1, radius: 2 }],

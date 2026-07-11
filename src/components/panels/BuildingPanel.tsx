@@ -3,6 +3,7 @@ import {
   BriefcaseBusiness,
   Building2,
   Clock,
+  Coins,
   Flame,
   Home,
   Leaf,
@@ -19,7 +20,14 @@ import { useState } from 'react';
 import { useGame, useUiStore } from '../../state/store.ts';
 import { effectiveEffects } from '../../game/buildings/effects.ts';
 import type { BuildingEffect } from '../../game/config/types.ts';
-import { formatDuration, t } from '../../i18n/index.ts';
+import { formatDuration, formatMoney, t } from '../../i18n/index.ts';
+
+/** Money costs use the compact format; materials stay plain integers. */
+function costLabel(cost: Partial<Record<string, number>>): string {
+  return Object.entries(cost)
+    .map(([res, amount]) => `${res === 'money' ? formatMoney(amount ?? 0) : amount} ${t(`resource.${res}`)}`)
+    .join(', ');
+}
 
 /**
  * Centered building dialog: the important facts in one clear, readable place
@@ -40,9 +48,9 @@ export function BuildingPanel() {
   const bonusPct = game.derived.productionBonus[b.id] ?? 0;
   const ambience = game.derived.ambience[b.id];
   const now = game.state.meta.lastSimTime;
-  const refundLabel = Object.entries(game.getDemolishRefund(b.id))
-    .map(([res, amount]) => `${amount} ${t(`resource.${res}`)}`)
-    .join(', ');
+  const refundLabel = costLabel(game.getDemolishRefund(b.id));
+  const canRelocate = game.config.features.moveBuildings || def.canRelocate === true;
+  const relocateHint = def.relocationCost ? t('ui.relocate.cost', { resources: costLabel(def.relocationCost) }) : t('ui.relocate.free');
   const close = () => selectBuilding(undefined);
 
   return (
@@ -103,11 +111,18 @@ export function BuildingPanel() {
         </ul>
 
         <div className="dialog-buttons dialog-buttons-stack">
-          {game.config.features.moveBuildings ? (
-            <button className="btn-secondary" onClick={() => startMoving(b.id)}>
-              <Move size={16} />
-              {t('ui.move')}
-            </button>
+          {canRelocate ? (
+            <>
+              <button
+                className="btn-secondary"
+                disabled={Boolean(def.relocationCost) && !game.canAffordCost(def.relocationCost!)}
+                onClick={() => startMoving(b.id)}
+              >
+                <Move size={16} />
+                {def.canRelocate ? t('ui.relocate') : t('ui.move')}
+              </button>
+              {def.canRelocate && <p className="dialog-hint">{t('ui.relocate.hint')} {relocateHint}</p>}
+            </>
           ) : (
             !def.unique && <p className="dialog-hint">{t('ui.move.disabled')}</p>
           )}
@@ -122,11 +137,7 @@ export function BuildingPanel() {
               }}
             >
               <ArrowUp size={16} />
-              {t('ui.upgrade')} (
-              {Object.entries(nextUpgrade.cost)
-                .map(([res, amount]) => `${amount} ${t(`resource.${res}`)}`)
-                .join(', ')}
-              )
+              {t('ui.upgrade')} ({costLabel(nextUpgrade.cost)})
             </button>
           )}
 
@@ -165,6 +176,10 @@ function effectIcon(eff: BuildingEffect) {
   switch (eff.type) {
     case 'produce':
       return <TrendingUp size={15} />;
+    case 'housing':
+      return <Home size={15} />;
+    case 'revenue':
+      return <Coins size={15} />;
     case 'capacity':
       return eff.need === 'housing' ? <Home size={15} /> : <PackageOpen size={15} />;
     case 'coverage':
@@ -190,6 +205,10 @@ function describeEffect(eff: BuildingEffect, bonusPct: number): string | undefin
       const rate = eff.perMinute * (1 + bonusPct / 100);
       return t('ui.effect.produce', { rate: rate % 1 === 0 ? rate : rate.toFixed(1), resource: t(`resource.${eff.resource}`) });
     }
+    case 'housing':
+      return `${t('ui.effect.housing', { units: eff.units, residents: eff.units * eff.maxResidentsPerUnit })} (${t('ui.effect.housing_units', { min: eff.minResidentsPerUnit, max: eff.maxResidentsPerUnit })})`;
+    case 'revenue':
+      return t('ui.effect.revenue', { amount: formatMoney(eff.perMinute), category: t(`ui.revenue.${eff.category}`) });
     case 'capacity':
       return eff.radius !== undefined
         ? t('ui.effect.capacity_radius', { amount: eff.amount, need: t(`need.${eff.need}`), radius: eff.radius })

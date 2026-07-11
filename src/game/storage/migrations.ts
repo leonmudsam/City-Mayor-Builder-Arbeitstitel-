@@ -42,7 +42,19 @@ const migrations: Record<number, Migration> = {
       stats: { ...stats, produced: (stats.collected as Record<string, number> | undefined) ?? { money: 0, wood: 0, stone: 0, food: 0 }, collected: undefined },
     };
   },
+  // v2 → v3: money moved to a realistic municipal scale (§4). Stored cash is
+  // scaled up so an old save keeps its relative wealth instead of being
+  // bankrupt against the new costs. Housing/income are config-derived, so they
+  // update automatically. Materials (wood/stone/food) keep their small scale.
+  2: (raw) => {
+    const resources = { ...(raw.resources as Record<string, number>) };
+    if (typeof resources.money === 'number') resources.money = Math.round(resources.money * MONEY_SCALE_V3);
+    return { ...raw, schemaVersion: 3, resources };
+  },
 };
+
+/** Money rescale applied when upgrading v2 saves to the v3 economy. */
+const MONEY_SCALE_V3 = 100;
 
 export class SaveValidationError extends Error {}
 

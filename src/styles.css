@@ -257,3 +257,37 @@ body {
 }
 
 .version { margin-top: auto; font-size: 11px; }
+
+/* ---- Income sub-label on the money stat (§5) ---- */
+.stat-sub { color: var(--good); font-size: 11px; font-weight: 600; }
+.bar-stat-cap { color: var(--text-muted); font-weight: 500; }
+
+/* ---- Finance box in the mayor panel (§5/§11) ---- */
+.finance-box {
+  background: var(--surface-2); border: 1px solid var(--border); border-radius: var(--radius);
+  padding: 10px 12px; margin-bottom: 12px;
+}
+.finance-head { display: flex; align-items: center; gap: 7px; font-weight: 700; font-size: 13.5px; }
+.finance-head svg { color: var(--primary); }
+.finance-total { margin-left: auto; color: var(--good); font-variant-numeric: tabular-nums; }
+.finance-row { display: flex; justify-content: space-between; font-size: 12.5px; color: var(--text-muted); margin-top: 5px; }
+.finance-value { color: var(--text); font-variant-numeric: tabular-nums; }
+.finance-foot { margin-top: 7px; font-size: 11.5px; }
+.message-feed-mayor { margin-top: 4px; }
+
+/* ---- Coverage overlay legend (§1) ---- */
+.coverage-legend {
+  position: absolute; left: 16px; bottom: 16px; z-index: 7;
+  background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
+  padding: 10px 13px; box-shadow: var(--shadow); max-width: 260px;
+  animation: event-pop 200ms ease-out;
+}
+.coverage-legend-head { font-weight: 700; font-size: 13px; margin-bottom: 7px; }
+.coverage-legend-items { display: flex; flex-wrap: wrap; gap: 6px 12px; }
+.coverage-legend-item { display: flex; align-items: center; gap: 5px; font-size: 12px; color: var(--text-muted); }
+.coverage-swatch { width: 11px; height: 11px; border-radius: 50%; border: 1.5px solid rgba(0, 0, 0, 0.35); }
+.coverage-supplied { background: #4caf50; }
+.coverage-partial { background: #f0c020; }
+.coverage-redundant { background: #4a90cf; }
+.coverage-unsupplied { background: #e53935; }
+.coverage-legend-warn { margin-top: 8px; font-size: 12px; color: var(--warn); font-weight: 600; }

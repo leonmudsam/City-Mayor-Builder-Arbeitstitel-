@@ -3,6 +3,7 @@ import type { GameState, NeedId, ResourceId } from '../types.ts';
 import type { Derived } from './derived.ts';
 import { recomputeDerived } from './derived.ts';
 import { effectiveEffects } from '../buildings/effects.ts';
+import { computeIncome } from '../economy/income.ts';
 import { addXp } from '../progression/levels.ts';
 import { updateQuests } from './quests.ts';
 import { nextRandom, newId } from '../engine/rng.ts';
@@ -97,9 +98,10 @@ export function advance(state: GameState, config: GameConfig, derived: Derived, 
       const extra = derived.extraDemand[need.id];
       if (need.kind === 'capacity') {
         // Radius-based sources (wells) only serve housing they actually reach:
-        // total capacity × covered-housing share.
+        // total capacity × covered-housing share. Both per-capita and
+        // per-building demand grow with expectation (§3).
         ns.supply = derived.capacity[need.id];
-        ns.demand = pop * need.demandPerCapita * expectation + extra;
+        ns.demand = (pop * need.demandPerCapita + extra) * expectation;
         const base = ns.demand <= 0 ? 1 : Math.min(1, ns.supply / ns.demand);
         ns.fulfillment = ns.demand <= 0 ? 1 : base * derived.needCoverage[need.id];
       } else if (need.kind === 'coverage') {
@@ -108,7 +110,7 @@ export function advance(state: GameState, config: GameConfig, derived: Derived, 
         ns.fulfillment = pop <= 0 ? 1 : derived.needCoverage[need.id];
       } else {
         // consumption (food): eat from storage, fulfillment = fed share.
-        const required = (pop * need.demandPerCapita * expectation + extra) * dtMin;
+        const required = (pop * need.demandPerCapita + extra) * expectation * dtMin;
         const available = Math.min(state.resources.food, required);
         state.resources.food -= available;
         let fulfillment = required <= 0 ? 1 : available / required;
@@ -118,7 +120,7 @@ export function advance(state: GameState, config: GameConfig, derived: Derived, 
         const distCap = coverage + (1 - coverage) * config.balancing.foodWithoutDistributionCap;
         fulfillment = Math.min(fulfillment, distCap);
         ns.supply = state.resources.food;
-        ns.demand = pop * need.demandPerCapita * expectation + extra;
+        ns.demand = (pop * need.demandPerCapita + extra) * expectation;
         ns.fulfillment = fulfillment;
       }
       weightSum += need.weight;
@@ -137,14 +139,9 @@ export function advance(state: GameState, config: GameConfig, derived: Derived, 
     }
     state.citizens.happiness = Math.max(0, Math.min(100, happiness));
 
-    // 4. Taxes.
+    // 4. Income (residential tax + commercial + industrial revenue, §5).
     const bal = config.balancing;
-    const taxFactor = bal.taxFactorMin + (bal.taxFactorMax - bal.taxFactorMin) * (state.citizens.happiness / 100);
-    let taxBuff = 1;
-    for (const buff of state.buffs) {
-      if (buff.kind === 'tax') taxBuff *= buff.amount;
-    }
-    state.resources.money += pop * bal.taxPerCapitaPerMin * taxFactor * taxBuff * dtMin;
+    state.resources.money += computeIncome(state, config, derived).total * dtMin;
 
     // 5. Population flow.
     const housingCap = derived.capacity.housing;

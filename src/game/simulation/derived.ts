@@ -36,6 +36,13 @@ export interface Derived {
   avgAmbience: number;
   /** Gross production per minute per resource (active buildings, incl. bonus). */
   productionPerMin: Record<ResourceId, number>;
+  /** Total households across all active homes (§6). */
+  housingUnits: number;
+  /**
+   * Base revenue per minute by source, before happiness & staffing factors
+   * (§5). Residential income is per-capita (see income.ts), so it isn't here.
+   */
+  revenueBase: { commercial: number; industrial: number };
 }
 
 interface RadiusSource {
@@ -50,12 +57,14 @@ export function recomputeDerived(state: GameState, config: GameConfig): Derived 
   const productionPerMin: Record<ResourceId, number> = { money: 0, wood: 0, stone: 0, food: 0 };
   const productionBonus: Record<string, number> = {};
   const extraDemand: Record<NeedId, number> = { housing: 0, water: 0, food: 0, work: 0, leisure: 0 };
+  const revenueBase = { commercial: 0, industrial: 0 };
+  let housingUnits = 0;
 
   const coverageSources: Partial<Record<NeedId, RadiusSource[]>> = {};
   const distributionSources: Partial<Record<NeedId, RadiusSource[]>> = {};
   const ambienceSources: { cx: number; cy: number; radius: number; amount: number }[] = [];
   const fireStations: RadiusSource[] = [];
-  const residential: { id: string; cx: number; cy: number; housing: number }[] = [];
+  const residential: { id: string; cx: number; cy: number; housing: number; sensitivity: number }[] = [];
 
   const addCoverageSource = (need: NeedId, source: RadiusSource): void => {
     (coverageSources[need] ??= []).push(source);
@@ -67,6 +76,7 @@ export function recomputeDerived(state: GameState, config: GameConfig): Derived 
     if (!def) continue;
     const { cx, cy } = centerOf(def, b);
     let housingHere = 0;
+    let sensitivityHere = 1;
     for (const eff of effectiveEffects(def, b.upgradeLevel)) {
       switch (eff.type) {
         case 'storage':
@@ -74,8 +84,18 @@ export function recomputeDerived(state: GameState, config: GameConfig): Derived 
           break;
         case 'capacity':
           capacity[eff.need] += eff.amount;
-          if (eff.need === 'housing') housingHere += eff.amount;
           if (eff.radius !== undefined) addCoverageSource(eff.need, { cx, cy, radius: eff.radius });
+          break;
+        case 'housing': {
+          const cap = eff.units * eff.maxResidentsPerUnit;
+          capacity.housing += cap;
+          housingHere += cap;
+          housingUnits += eff.units;
+          sensitivityHere = eff.ambienceSensitivity ?? 1;
+          break;
+        }
+        case 'revenue':
+          revenueBase[eff.category] += eff.perMinute;
           break;
         case 'jobs':
           capacity.work += eff.amount;
@@ -103,7 +123,7 @@ export function recomputeDerived(state: GameState, config: GameConfig): Derived 
         }
       }
     }
-    if (housingHere > 0) residential.push({ id: b.id, cx, cy, housing: housingHere });
+    if (housingHere > 0) residential.push({ id: b.id, cx, cy, housing: housingHere, sensitivity: sensitivityHere });
   }
 
   // Housing-weighted coverage per radius-served need + ambience per home.
@@ -132,11 +152,14 @@ export function recomputeDerived(state: GameState, config: GameConfig): Derived 
   }
   let ambienceWeighted = 0;
   for (const r of residential) {
-    ambience[r.id] = ambienceSources.reduce(
+    // Raw environmental score (integer) — shown as-is in the building sheet.
+    const raw = ambienceSources.reduce(
       (sum, s) => (chebyshev(r.cx, r.cy, s.cx, s.cy) <= s.radius ? sum + s.amount : sum),
       0,
     );
-    ambienceWeighted += ambience[r.id]! * r.housing;
+    ambience[r.id] = raw;
+    // Suburbs weigh their surroundings more heavily than dense blocks (§7).
+    ambienceWeighted += raw * r.sensitivity * r.housing;
   }
   const avgAmbience = totalHousing > 0 ? ambienceWeighted / totalHousing : 0;
 
@@ -160,5 +183,7 @@ export function recomputeDerived(state: GameState, config: GameConfig): Derived 
     ambience,
     avgAmbience,
     productionPerMin,
+    housingUnits,
+    revenueBase,
   };
 }

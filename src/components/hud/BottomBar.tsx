@@ -22,9 +22,12 @@ export function BottomBar() {
           <HappyIcon size={18} className={happiness < 40 ? 'icon-bad' : happiness >= 65 ? 'icon-good' : ''} />
           <span>{happiness}</span>
         </button>
-        <div className="bar-stat" title={t('ui.population')}>
+        <div className="bar-stat" title={`${t('ui.population')} · ${game.derived.housingUnits} ${t('ui.housing.units')}`}>
           <Users size={18} />
-          <span>{Math.floor(game.state.citizens.population)}</span>
+          <span>
+            {Math.floor(game.state.citizens.population)}
+            <span className="bar-stat-cap"> / {game.derived.capacity.housing}</span>
+          </span>
         </div>
       </div>
       <div className="bar-group bar-group-center">
