@@ -35,7 +35,16 @@ export interface Toast {
   kind: 'info' | 'error' | 'success';
 }
 
-type PanelId = 'build' | 'mayor' | 'happiness' | 'settings' | 'quests' | undefined;
+/** A staged, acknowledge-me moment shown in an EventModal (§9). */
+export interface GameEvent {
+  id: number;
+  kind: 'levelUp' | 'sectorUnlocked' | 'fire' | 'celebrate';
+  titleKey: string;
+  bodyKey: string;
+  params?: Record<string, string | number>;
+}
+
+type PanelId = 'build' | 'mayor' | 'happiness' | 'status' | 'economy' | 'settings' | 'quests' | undefined;
 
 interface UiState {
   openPanel: PanelId;
@@ -45,6 +54,7 @@ interface UiState {
   selectedBuildingId: string | undefined;
   sectorDialog: SectorId | undefined;
   toasts: Toast[];
+  events: GameEvent[];
   setPanel(panel: PanelId): void;
   startPlacing(defId: string): void;
   stopPlacing(): void;
@@ -54,9 +64,12 @@ interface UiState {
   openSectorDialog(id?: SectorId): void;
   pushToast(text: string, kind?: Toast['kind']): void;
   removeToast(id: number): void;
+  pushEvent(event: Omit<GameEvent, 'id'>): void;
+  dismissEvent(id: number): void;
 }
 
 let toastId = 0;
+let eventId = 0;
 
 export const useUiStore = create<UiState>((set) => ({
   openPanel: 'quests',
@@ -65,6 +78,7 @@ export const useUiStore = create<UiState>((set) => ({
   selectedBuildingId: undefined,
   sectorDialog: undefined,
   toasts: [],
+  events: [],
   setPanel: (panel) => set((s) => ({ openPanel: s.openPanel === panel ? undefined : panel })),
   startPlacing: (defId) =>
     set({ placingDefId: defId, movingBuildingId: undefined, selectedBuildingId: undefined, sectorDialog: undefined, openPanel: undefined }),
@@ -83,4 +97,11 @@ export const useUiStore = create<UiState>((set) => ({
       return { toasts: [...s.toasts.slice(-3), toast] };
     }),
   removeToast: (id) => set((s) => ({ toasts: s.toasts.filter((toast) => toast.id !== id) })),
+  pushEvent: (event) =>
+    set((s) => {
+      eventId += 1;
+      // Cap the backlog so a burst of events can never stack indefinitely.
+      return { events: [...s.events.slice(-4), { ...event, id: eventId }] };
+    }),
+  dismissEvent: (id) => set((s) => ({ events: s.events.filter((e) => e.id !== id) })),
 }));

@@ -1,5 +1,78 @@
 # Patch Notes
 
+## v0.5 — „UI/UX-Überarbeitung: modernes City-Builder-Gefühl"
+
+Ein durchgehender Oberflächen-Pass in Richtung eines hochwertigen, modernen
+Aufbau-Spiels. Die Spielmechanik bleibt unverändert — neu sind Darstellung,
+Interaktion und ein Baukasten wiederverwendbarer UI-Bausteine. Keine Emojis,
+durchgängig SVG-Icons; die Spiellogik bleibt strikt von React/Pixi getrennt.
+
+### Wiederverwendbare Komponenten-Basis (§15)
+
+Neu als eigenständige, kombinierbare Bausteine — nicht als Einmal-Widgets:
+`Popover`, `Modal`, `ConfirmModal`, `EventModal`, `ResourceBadge`,
+`ResourceDetailPopover`, `ActionBubble`, `BuildingPreview`, `FloatingBuildingSheet`,
+`EconomyPanel`, `CityStatusPanel` sowie ein zentrales Icon-Modul
+(`common/icons.tsx`). Ressourcen-, Bedürfnis- und Kategorie-Icons haben jetzt
+**eine** Quelle der Wahrheit — ein neues Icon ist eine Zeile, keine Suche durch
+die Komponenten.
+
+### Kopfleiste: Ressourcen-Badges mit Detail-Popover (§2, §12)
+
+- Jede Ressource ist ein **anklickbares Badge** mit Farbakzent; ein Klick öffnet
+  ein **Detail-Popover** (Bestand vs. Lagerkapazität als Balken, Produktion pro
+  Minute, kurze Erklärung „woher kommt das?").
+- Das **Geld-Badge** zeigt das Netto-Einkommen und verlinkt direkt in die
+  Wirtschaftsübersicht.
+
+### Gebäude-Interaktion: schwebendes Sheet + Aktions-Bubbles (§3, §4, §13)
+
+- Das Gebäude-Panel ist jetzt ein **schwebendes Sheet über der Karte** statt
+  eines abdunkelnden Vollbild-Dialogs — die Stadt bleibt sichtbar.
+- Beim Anklicken **zentriert die Kamera sanft** auf das Gebäude (weiche
+  Ease-Animation; jede manuelle Geste bricht sie ab).
+- Aktionen (Upgrade, Verschieben/Umsetzen, Abriss) sind **runde Aktions-Bubbles**
+  im Tonfall der Aktion; Abriss läuft über den gemeinsamen `ConfirmModal`.
+
+### Visuelles Baumenü mit Mini-Vorschau (§5, §12)
+
+- Jede Gebäudekarte zeigt eine **programmatische Mini-Vorschau** (Gebäude-Körper
+  mit Fenstern, Straßen als Fahrbahn, Grün als Laub) — dieselbe Bildsprache wie
+  auf der Karte, ganz ohne Assets, gestochen scharf in jeder Größe.
+
+### Stadt-Status: umsetzbare Hinweise (§10)
+
+- Neues **Stadt-Status-Panel**: zuerst **anklickbare Alarme** (Bedürfnis niedrig,
+  Lager voll, Quest-Belohnung wartet) — jeder Alarm führt direkt zur Lösung
+  (ins Baumenü mit vorgewähltem Gebäude bzw. ins passende Panel) —, darunter die
+  vollständige Bedürfnis-Aufschlüsselung mit Balken.
+
+### Wirtschaftspanel (§11)
+
+- Eigenes **Wirtschaftspanel** mit Einnahmen-Split (Wohnen/Gewerbe/Produktion)
+  als Balken, Gesamtsumme und Beschäftigungsgrad. Liest ausschließlich die
+  bestehende `computeIncome`-Quelle — keine Zahl wird im UI nachgerechnet.
+
+### Vereinheitlichtes Popup-System (§9)
+
+- **Toast** (flüchtig) · **EventModal** (bestätigungspflichtige Momente wie
+  Level-Up und neuer Sektor, datengetrieben aus einer UI-Event-Queue) ·
+  **ConfirmModal** (destruktive Aktionen). Alle bauen auf einer gemeinsamen
+  `Modal`-Hülle auf.
+
+### Karten-Interaktion (§7, §13)
+
+- **Straßen per Ziehen bauen:** Mit gedrückter Maustaste über die Karte fahren
+  legt einen ganzen Straßenzug; Überlappungen bleiben stumm, echte Blocker
+  (Geld, gesperrter Sektor) melden sich einmalig.
+- **Kamerafokus** beim Auswählen (siehe oben).
+
+### Bewusst als nächste Schritte offen
+
+Karten-verankerte Aktions-Blasen, die ein Gebäude beim Verschieben der Karte
+mitverfolgen, echte Gebäude-Sprites und der Besichtigungsmodus bleiben spätere
+Ausbaustufen — die Komponenten-Basis ist darauf ausgelegt.
+
 ## v0.4 — „Wirtschaft, Wohnraum & Versorgung"
 
 Ein zusammenhängender System-Pass: glaubwürdige Geldgrößen mit mehreren

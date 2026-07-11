@@ -1,4 +1,4 @@
-import { Crown, Frown, Hammer, Meh, ScrollText, Settings, Smile, Users } from 'lucide-react';
+import { Crown, Frown, Hammer, Meh, ScrollText, Settings, Smile, Users, Wallet } from 'lucide-react';
 import { useGame, useUiStore } from '../../state/store.ts';
 import { t } from '../../i18n/index.ts';
 
@@ -18,9 +18,17 @@ export function BottomBar() {
           <Crown size={18} />
           <span>{t('ui.mayor')}</span>
         </button>
-        <button className={btn(openPanel === 'happiness')} onClick={() => setPanel('happiness')} title={t('ui.happiness')}>
+        <button
+          className={btn(openPanel === 'status') + (happiness < 40 ? ' attention' : '')}
+          onClick={() => setPanel('status')}
+          title={t('ui.status.title')}
+        >
           <HappyIcon size={18} className={happiness < 40 ? 'icon-bad' : happiness >= 65 ? 'icon-good' : ''} />
           <span>{happiness}</span>
+        </button>
+        <button className={btn(openPanel === 'economy')} onClick={() => setPanel('economy')} title={t('ui.economy.title')}>
+          <Wallet size={18} />
+          <span>{t('ui.economy.short')}</span>
         </button>
         <div className="bar-stat" title={`${t('ui.population')} · ${game.derived.housingUnits} ${t('ui.housing.units')}`}>
           <Users size={18} />
