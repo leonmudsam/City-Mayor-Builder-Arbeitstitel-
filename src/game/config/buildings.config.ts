@@ -40,13 +40,13 @@ export const buildingsConfig: BuildingDef[] = [
     size: { w: 2, h: 2 },
     requiresRoad: true,
     unlockLevel: 3,
-    cost: { money: 18_000, wood: 30 },
+    cost: { money: 25_000, wood: 40 },
     constructionSec: 60,
     xpReward: 25,
     unique: true,
     canDemolish: false,
     canRelocate: true,
-    relocationCost: { money: 2_000 },
+    relocationCost: { money: 3_000 },
     effects: [],
   },
 
@@ -58,7 +58,7 @@ export const buildingsConfig: BuildingDef[] = [
     size: { w: 1, h: 1 },
     requiresRoad: false,
     unlockLevel: 1,
-    cost: { money: 200 },
+    cost: { money: 300 },
     constructionSec: 0,
     xpReward: 1,
     // Road maintenance: tiny per tile, but it scales with sprawl — a gentle
@@ -76,7 +76,7 @@ export const buildingsConfig: BuildingDef[] = [
     size: { w: 2, h: 2 },
     requiresRoad: true,
     unlockLevel: 1,
-    cost: { money: 6_000, wood: 15 },
+    cost: { money: 9_000, wood: 22 },
     constructionSec: 20,
     xpReward: 10,
     effects: [
@@ -88,7 +88,7 @@ export const buildingsConfig: BuildingDef[] = [
     ],
     upgrades: [
       {
-        cost: { money: 18_000, wood: 30, stone: 10 },
+        cost: { money: 27_000, wood: 45, stone: 15 },
         constructionSec: 60,
         xpReward: 15,
         effects: [
@@ -98,7 +98,7 @@ export const buildingsConfig: BuildingDef[] = [
         ],
       },
       {
-        cost: { money: 45_000, wood: 60, stone: 40 },
+        cost: { money: 68_000, wood: 90, stone: 60 },
         constructionSec: 180,
         xpReward: 25,
         effects: [
@@ -118,7 +118,7 @@ export const buildingsConfig: BuildingDef[] = [
     size: { w: 2, h: 2 },
     requiresRoad: true,
     unlockLevel: 6,
-    cost: { money: 22_000, wood: 60, stone: 30 },
+    cost: { money: 34_000, wood: 90, stone: 45 },
     constructionSec: 120,
     xpReward: 20,
     effects: [
@@ -136,7 +136,7 @@ export const buildingsConfig: BuildingDef[] = [
     size: { w: 2, h: 3 },
     requiresRoad: true,
     unlockLevel: 9,
-    cost: { money: 90_000, wood: 100, stone: 140 },
+    cost: { money: 145_000, wood: 150, stone: 210 },
     constructionSec: 360,
     xpReward: 45,
     effects: [
@@ -154,11 +154,11 @@ export const buildingsConfig: BuildingDef[] = [
     size: { w: 2, h: 2 },
     requiresRoad: true,
     unlockLevel: 2,
-    cost: { money: 5_000 },
+    cost: { money: 8_000 },
     constructionSec: 30,
     xpReward: 12,
     effects: [
-      { type: 'produce', resource: 'wood', perMinute: 32 },
+      { type: 'produce', resource: 'wood', perMinute: 45 },
       { type: 'jobs', amount: 4 },
       { type: 'revenue', category: 'industrial', perMinute: 600 },
       { type: 'upkeep', resource: 'money', perMinute: 300 },
@@ -175,11 +175,11 @@ export const buildingsConfig: BuildingDef[] = [
     size: { w: 3, h: 3 },
     requiresRoad: true,
     unlockLevel: 4,
-    cost: { money: 14_000, wood: 50 },
+    cost: { money: 22_000, wood: 75 },
     constructionSec: 90,
     xpReward: 18,
     effects: [
-      { type: 'produce', resource: 'stone', perMinute: 26 },
+      { type: 'produce', resource: 'stone', perMinute: 38 },
       { type: 'jobs', amount: 6 },
       { type: 'revenue', category: 'industrial', perMinute: 1_000 },
       { type: 'upkeep', resource: 'money', perMinute: 500 },
@@ -195,11 +195,11 @@ export const buildingsConfig: BuildingDef[] = [
     size: { w: 3, h: 3 },
     requiresRoad: true,
     unlockLevel: 4,
-    cost: { money: 9_000, wood: 30 },
+    cost: { money: 14_000, wood: 45 },
     constructionSec: 60,
     xpReward: 15,
     effects: [
-      { type: 'produce', resource: 'food', perMinute: 30 },
+      { type: 'produce', resource: 'food', perMinute: 42 },
       { type: 'jobs', amount: 4 },
       { type: 'revenue', category: 'industrial', perMinute: 700 },
       { type: 'upkeep', resource: 'money', perMinute: 300 },
@@ -215,7 +215,7 @@ export const buildingsConfig: BuildingDef[] = [
     size: { w: 1, h: 1 },
     requiresRoad: false,
     unlockLevel: 3,
-    cost: { money: 3_500, wood: 5 },
+    cost: { money: 5_000, wood: 8 },
     constructionSec: 15,
     xpReward: 8,
     effects: [
@@ -230,7 +230,7 @@ export const buildingsConfig: BuildingDef[] = [
     size: { w: 2, h: 2 },
     requiresRoad: true,
     unlockLevel: 7,
-    cost: { money: 40_000, stone: 60 },
+    cost: { money: 60_000, stone: 90 },
     constructionSec: 180,
     xpReward: 28,
     effects: [
@@ -247,7 +247,7 @@ export const buildingsConfig: BuildingDef[] = [
     size: { w: 2, h: 2 },
     requiresRoad: true,
     unlockLevel: 6,
-    cost: { money: 26_000, wood: 60, stone: 30 },
+    cost: { money: 40_000, wood: 90, stone: 45 },
     constructionSec: 120,
     xpReward: 22,
     effects: [
@@ -261,7 +261,11 @@ export const buildingsConfig: BuildingDef[] = [
       { type: 'jobs', amount: 2 },
       { type: 'upkeep', resource: 'money', perMinute: 300 },
     ],
-    buildLimit: [{ level: 6, max: 2 }, { level: 8, max: 3 }, { level: 10, max: 4 }],
+    // Storage stays modest per building, but with pricier materials and faster
+    // production the ceiling is now raised generously (max 10) so a committed,
+    // actively-built logistics quarter can hold a real buffer — you still pay
+    // money + materials + upkeep for every one, so it's investment, not spam.
+    buildLimit: [{ level: 6, max: 3 }, { level: 8, max: 6 }, { level: 10, max: 10 }],
   },
   // Logistics depot — the first real supply chain (§1). Lifts the output of
   // every production building it reaches, so clustering sawmills/quarries/farms
@@ -274,7 +278,7 @@ export const buildingsConfig: BuildingDef[] = [
     size: { w: 3, h: 3 },
     requiresRoad: true,
     unlockLevel: 7,
-    cost: { money: 70_000, wood: 60, stone: 80 },
+    cost: { money: 105_000, wood: 90, stone: 120 },
     constructionSec: 240,
     xpReward: 35,
     effects: [
@@ -293,7 +297,7 @@ export const buildingsConfig: BuildingDef[] = [
     size: { w: 2, h: 2 },
     requiresRoad: true,
     unlockLevel: 5,
-    cost: { money: 20_000, wood: 40 },
+    cost: { money: 30_000, wood: 60 },
     constructionSec: 90,
     xpReward: 20,
     effects: [
@@ -314,11 +318,11 @@ export const buildingsConfig: BuildingDef[] = [
     size: { w: 2, h: 2 },
     requiresRoad: true,
     unlockLevel: 9,
-    cost: { money: 48_000, wood: 50, stone: 40 },
+    cost: { money: 72_000, wood: 75, stone: 60 },
     constructionSec: 240,
     xpReward: 32,
     effects: [
-      { type: 'produce', resource: 'food', perMinute: 9 },
+      { type: 'produce', resource: 'food', perMinute: 14 },
       { type: 'jobs', amount: 4 },
       { type: 'revenue', category: 'industrial', perMinute: 1_200 },
       { type: 'upkeep', resource: 'money', perMinute: 600 },
@@ -332,7 +336,7 @@ export const buildingsConfig: BuildingDef[] = [
     size: { w: 2, h: 2 },
     requiresRoad: true,
     unlockLevel: 8,
-    cost: { money: 60_000, wood: 60, stone: 80 },
+    cost: { money: 90_000, wood: 90, stone: 120 },
     constructionSec: 300,
     xpReward: 40,
     effects: [
@@ -351,7 +355,7 @@ export const buildingsConfig: BuildingDef[] = [
     size: { w: 2, h: 2 },
     requiresRoad: true,
     unlockLevel: 6,
-    cost: { money: 30_000, wood: 40 },
+    cost: { money: 46_000, wood: 60 },
     constructionSec: 150,
     xpReward: 24,
     effects: [
@@ -372,7 +376,7 @@ export const buildingsConfig: BuildingDef[] = [
     size: { w: 4, h: 2 },
     requiresRoad: true,
     unlockLevel: 8,
-    cost: { money: 120_000, wood: 80, stone: 120 },
+    cost: { money: 185_000, wood: 120, stone: 180 },
     constructionSec: 300,
     xpReward: 50,
     effects: [
@@ -391,7 +395,7 @@ export const buildingsConfig: BuildingDef[] = [
     size: { w: 2, h: 2 },
     requiresRoad: false,
     unlockLevel: 7,
-    cost: { money: 14_000, wood: 20 },
+    cost: { money: 20_000, wood: 30 },
     constructionSec: 60,
     xpReward: 15,
     effects: [
@@ -407,7 +411,7 @@ export const buildingsConfig: BuildingDef[] = [
     size: { w: 2, h: 2 },
     requiresRoad: false,
     unlockLevel: 7,
-    cost: { money: 9_000, wood: 20 },
+    cost: { money: 13_000, wood: 30 },
     constructionSec: 40,
     xpReward: 8,
     effects: [
@@ -425,7 +429,7 @@ export const buildingsConfig: BuildingDef[] = [
     size: { w: 1, h: 1 },
     requiresRoad: false,
     unlockLevel: 7,
-    cost: { money: 1_200 },
+    cost: { money: 1_500 },
     constructionSec: 0,
     xpReward: 1,
     effects: [{ type: 'ambience', amount: 1, radius: 3 }],
@@ -437,7 +441,7 @@ export const buildingsConfig: BuildingDef[] = [
     size: { w: 1, h: 1 },
     requiresRoad: false,
     unlockLevel: 7,
-    cost: { money: 1_800 },
+    cost: { money: 2_400 },
     constructionSec: 0,
     xpReward: 1,
     effects: [{ type: 'ambience', amount: 1, radius: 3 }],
@@ -449,7 +453,7 @@ export const buildingsConfig: BuildingDef[] = [
     size: { w: 1, h: 1 },
     requiresRoad: false,
     unlockLevel: 7,
-    cost: { money: 9_000, stone: 10 },
+    cost: { money: 12_000, stone: 15 },
     constructionSec: 20,
     xpReward: 3,
     effects: [{ type: 'ambience', amount: 2, radius: 4 }],
@@ -461,7 +465,7 @@ export const buildingsConfig: BuildingDef[] = [
     size: { w: 1, h: 1 },
     requiresRoad: false,
     unlockLevel: 7,
-    cost: { money: 2_400, wood: 5 },
+    cost: { money: 3_000, wood: 8 },
     constructionSec: 0,
     xpReward: 1,
     effects: [{ type: 'ambience', amount: 1, radius: 2 }],

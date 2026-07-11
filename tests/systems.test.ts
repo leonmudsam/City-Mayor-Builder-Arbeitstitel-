@@ -19,6 +19,7 @@ describe('income breakdown (§5)', () => {
     const { controller } = newController();
     setLevel(controller, 6);
     flattenTerrain(controller);
+    controller.state.resources = { money: 200_000, wood: 500, stone: 500, food: 100 };
     for (let x = 26; x <= 31; x++) controller.placeBuilding('road', x, 26);
     controller.placeBuilding('sawmill', 26, 27); // industrial 600
     controller.placeBuilding('shop_small', 28, 27); // commercial 4000
@@ -70,7 +71,7 @@ describe('logistics & workplaces', () => {
     expect(controller.placeBuilding('depot', 28, 27)).toEqual({ ok: true }); // within radius 6
     controller.update(T0 + 300_000); // depot finishes
     expect(controller.derived.productionBonus[sawmill.id]).toBe(25); // +25 % throughput
-    expect(controller.derived.productionPerMin.wood).toBeCloseTo(32 * 1.25, 5);
+    expect(controller.derived.productionPerMin.wood).toBeCloseTo(45 * 1.25, 5);
   });
 
   it('an office supplies a large block of jobs (§ Arbeitsversorgung)', () => {

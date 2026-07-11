@@ -14,7 +14,7 @@ describe('quests', () => {
     expect(active?.claimable).toBe(true);
     const moneyBefore = controller.state.resources.money;
     expect(controller.claimQuest('q01_roads')).toEqual({ ok: true });
-    expect(controller.state.resources.money).toBe(moneyBefore + 6_000);
+    expect(controller.state.resources.money).toBe(moneyBefore + 8_000);
     expect(controller.state.quests.completed).toContain('q01_roads');
     // Chain: next quest activated.
     expect(controller.state.quests.active.map((a) => a.questId)).toContain('q02_houses');

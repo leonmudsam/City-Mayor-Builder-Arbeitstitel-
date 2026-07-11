@@ -1,5 +1,49 @@
 # Patch Notes
 
+## v0.8 — „Geld verdient man, Kosten spürt man"
+
+Feintuning nach Spieler-Feedback: **Geld war zu viel, Kosten zu niedrig.** Leitidee
+jetzt: Geld wird über **Herausforderungen (Quests) belohnend verdient** und über
+**spürbar teurere Bauten** wieder ausgegeben — Rohstoffe sind der eigentliche
+Engpass, fließen dafür aber schneller.
+
+### Bau- & Rohstoffkosten deutlich erhöht
+
+- **Geldkosten quer durch alle Gebäude angehoben** (~1,5× früh, bis ~2× spät):
+  z. B. Kleines Haus 6.000 → **9.000**, Markt 20.000 → **30.000**, Laden 30.000 →
+  **46.000**, Lagerhaus 26.000 → **40.000**, Feuerwehr 60.000 → **90.000**,
+  Apartment 90.000 → **145.000**, Bürogebäude 120.000 → **185.000**. Bauen ist
+  wieder eine Entscheidung, kein Rundungsfehler.
+- **Rohstoffkosten (Holz/Stein) teurer** — Material ist jetzt der harte Engpass,
+  nicht das Geld.
+
+### Dafür: schnellere Produktion
+
+- **Sägewerk 32 → 45**, **Steinbruch 26 → 38**, **Farm 30 → 42**, **Bäckerei
+  9 → 14** pro Minute. Teurere Bauten, aber die Rohstoffe kommen schneller rein —
+  wer aktiv einsammelt und verbaut, kommt gut voran.
+
+### Geld über Herausforderungen, nicht AFK
+
+- **Quest-Belohnungen kräftig erhöht** (grob +60 %): z. B. erste Straßen 6.000 →
+  **8.000**, Markt-Quest 35.000 → **60.000**, Feuerwehr 70.000 → **130.000**,
+  Metropole 250.000 → **400.000**. Wer die Herausforderungen aktiv abschließt,
+  finanziert damit die nächste Ausbaustufe — deutlich lohnender als passives
+  Farmen.
+
+### Lagerhaus-Limit erhöht (4 → 10)
+
+- Das **Lagerhaus-Limit steigt auf max 10** (gestaffelt: L6 max 3, L8 max 6,
+  L10 max 10). Pro Lager weiterhin knappe 600 je Ressource + Geld-, Material- und
+  Unterhaltskosten — ein echtes Logistikviertel ist jetzt möglich, bleibt aber
+  eine Investition, kein Spam.
+
+### Nächster Schritt
+
+Danach geht es weiter mit **MVP 2** (Energie & Kraftwerke, Polizei/Krankenhaus
+nach dem Feuerwehr-Muster, Level 11–20, Steuer-/Mieten-Regler, erste
+Fern-Expansion ins Fluss-Biom).
+
 ## v0.7 — „Aktiv statt AFK: Lager, Limits, Arbeit & Logistik"
 
 Balance-Kurskorrektur nach Spieler-Feedback (riesige Stadt, nur 1.450 Einwohner,
