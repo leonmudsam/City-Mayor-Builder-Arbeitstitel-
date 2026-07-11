@@ -51,6 +51,30 @@ const migrations: Record<number, Migration> = {
     if (typeof resources.money === 'number') resources.money = Math.round(resources.money * MONEY_SCALE_V3);
     return { ...raw, schemaVersion: 3, resources };
   },
+  // v3 → v4: energy grid (MVP 2). The new `energy` need is seeded on old saves
+  // so the citizens state stays complete; it only starts biting once the city
+  // reaches its unlock level and buildings draw power.
+  3: (raw) => {
+    const citizens = { ...(raw.citizens as Record<string, unknown>) };
+    const needs = { ...((citizens.needs as Record<string, unknown>) ?? {}) };
+    needs.energy ??= { supply: 0, demand: 0, fulfillment: 1 };
+    return { ...raw, schemaVersion: 4, citizens: { ...citizens, needs } };
+  },
+  // v4 → v5: emergency services (MVP 2). Seed the safety & health coverage needs
+  // so old saves stay complete; they only bite once the city reaches their level.
+  4: (raw) => {
+    const citizens = { ...(raw.citizens as Record<string, unknown>) };
+    const needs = { ...((citizens.needs as Record<string, unknown>) ?? {}) };
+    needs.safety ??= { supply: 0, demand: 0, fulfillment: 1 };
+    needs.health ??= { supply: 0, demand: 0, fulfillment: 1 };
+    return { ...raw, schemaVersion: 5, citizens: { ...citizens, needs } };
+  },
+  // v5 → v6: mayor tax policy (§ tax sliders). Old saves start at neutral rates.
+  5: (raw) => ({
+    ...raw,
+    schemaVersion: 6,
+    policy: (raw.policy as unknown) ?? { residentialTaxRate: 1, commercialTaxRate: 1 },
+  }),
 };
 
 /** Money rescale applied when upgrading v2 saves to the v3 economy. */

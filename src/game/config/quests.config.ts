@@ -3,7 +3,9 @@ import type { QuestDef } from './types.ts';
 // Linear tutorial/build-up chain that carries the player through level 1–10.
 // Quests activate when their unlockLevel is reached AND the previous quest in
 // the chain is completed. Money rewards match the municipal scale (§4) and act
-// as "city development grants" — a legible extra income source (§5).
+// as "city development grants" — with building costs raised (v0.8), these
+// challenge grants are now the *rewarding* money source: active play (finishing
+// objectives) funds the next expansion far better than passive AFK income.
 export const questsConfig: QuestDef[] = [
   {
     id: 'q01_roads',
@@ -11,7 +13,7 @@ export const questsConfig: QuestDef[] = [
     descriptionKey: 'quest.q01.desc',
     unlockLevel: 1,
     objectives: [{ type: 'build', defId: 'road', count: 5 }],
-    rewards: { money: 6_000, xp: 5 },
+    rewards: { money: 8_000, xp: 5 },
     nextQuestId: 'q02_houses',
   },
   {
@@ -20,7 +22,7 @@ export const questsConfig: QuestDef[] = [
     descriptionKey: 'quest.q02.desc',
     unlockLevel: 1,
     objectives: [{ type: 'build', defId: 'house_small', count: 2 }],
-    rewards: { money: 10_000, xp: 10 },
+    rewards: { money: 16_000, xp: 10 },
     nextQuestId: 'q03_sawmill',
   },
   {
@@ -32,7 +34,7 @@ export const questsConfig: QuestDef[] = [
       { type: 'build', defId: 'sawmill', count: 1 },
       { type: 'produce', resource: 'wood', amount: 30 },
     ],
-    rewards: { money: 14_000, xp: 15 },
+    rewards: { money: 22_000, xp: 15 },
     nextQuestId: 'q04_water',
   },
   {
@@ -41,7 +43,7 @@ export const questsConfig: QuestDef[] = [
     descriptionKey: 'quest.q04.desc',
     unlockLevel: 3,
     objectives: [{ type: 'build', defId: 'well', count: 2 }],
-    rewards: { money: 14_000, xp: 15 },
+    rewards: { money: 22_000, xp: 15 },
     nextQuestId: 'q05_mayor',
   },
   {
@@ -53,7 +55,7 @@ export const questsConfig: QuestDef[] = [
       { type: 'build', defId: 'mayor_house', count: 1 },
       { type: 'mayorAction', actionId: 'speech', count: 1 },
     ],
-    rewards: { money: 20_000, xp: 20 },
+    rewards: { money: 32_000, xp: 20 },
     nextQuestId: 'q06_food',
   },
   {
@@ -65,7 +67,7 @@ export const questsConfig: QuestDef[] = [
       { type: 'build', defId: 'farm', count: 1 },
       { type: 'produce', resource: 'food', amount: 50 },
     ],
-    rewards: { money: 20_000, xp: 20 },
+    rewards: { money: 32_000, xp: 20 },
     nextQuestId: 'q07_stone',
   },
   {
@@ -77,7 +79,7 @@ export const questsConfig: QuestDef[] = [
       { type: 'build', defId: 'quarry', count: 1 },
       { type: 'produce', resource: 'stone', amount: 40 },
     ],
-    rewards: { money: 24_000, xp: 25 },
+    rewards: { money: 40_000, xp: 25 },
     nextQuestId: 'q08_market',
   },
   {
@@ -89,7 +91,7 @@ export const questsConfig: QuestDef[] = [
       { type: 'build', defId: 'market', count: 1 },
       { type: 'happiness', amount: 70 },
     ],
-    rewards: { money: 35_000, xp: 30 },
+    rewards: { money: 60_000, xp: 30 },
     nextQuestId: 'q09_expand',
   },
   {
@@ -98,7 +100,7 @@ export const questsConfig: QuestDef[] = [
     descriptionKey: 'quest.q09.desc',
     unlockLevel: 5,
     objectives: [{ type: 'sectors', count: 2 }],
-    rewards: { money: 45_000, xp: 40 },
+    rewards: { money: 80_000, xp: 40 },
     nextQuestId: 'q10_growth',
   },
   {
@@ -107,7 +109,7 @@ export const questsConfig: QuestDef[] = [
     descriptionKey: 'quest.q10.desc',
     unlockLevel: 5,
     objectives: [{ type: 'population', amount: 80 }],
-    rewards: { money: 45_000, xp: 40 },
+    rewards: { money: 80_000, xp: 40 },
     nextQuestId: 'q11_economy',
   },
   {
@@ -119,7 +121,7 @@ export const questsConfig: QuestDef[] = [
       { type: 'build', defId: 'shop_small', count: 2 },
       { type: 'build', defId: 'warehouse', count: 1 },
     ],
-    rewards: { money: 55_000, xp: 45 },
+    rewards: { money: 95_000, xp: 45 },
     nextQuestId: 'q12_leisure',
   },
   {
@@ -132,7 +134,7 @@ export const questsConfig: QuestDef[] = [
       { type: 'build', defId: 'playground', count: 1 },
       { type: 'happiness', amount: 75 },
     ],
-    rewards: { money: 65_000, xp: 50 },
+    rewards: { money: 115_000, xp: 50 },
     nextQuestId: 'q13_fire',
   },
   {
@@ -141,7 +143,7 @@ export const questsConfig: QuestDef[] = [
     descriptionKey: 'quest.q13.desc',
     unlockLevel: 8,
     objectives: [{ type: 'build', defId: 'fire_station', count: 1 }],
-    rewards: { money: 70_000, xp: 55 },
+    rewards: { money: 130_000, xp: 55 },
     nextQuestId: 'q14_density',
   },
   {
@@ -153,7 +155,7 @@ export const questsConfig: QuestDef[] = [
       { type: 'build', defId: 'apartment', count: 1 },
       { type: 'population', amount: 250 },
     ],
-    rewards: { money: 95_000, xp: 70 },
+    rewards: { money: 175_000, xp: 70 },
     nextQuestId: 'q15_metropolis',
   },
   {
@@ -166,6 +168,56 @@ export const questsConfig: QuestDef[] = [
       { type: 'population', amount: 400 },
       { type: 'happiness', amount: 80 },
     ],
-    rewards: { money: 250_000, gold: 50, xp: 100 },
+    rewards: { money: 400_000, gold: 50, xp: 100 },
+    nextQuestId: 'q16_power',
+  },
+  // ---- MVP 2: energy grid ----
+  {
+    id: 'q16_power',
+    titleKey: 'quest.q16.title',
+    descriptionKey: 'quest.q16.desc',
+    unlockLevel: 11,
+    objectives: [
+      { type: 'build', defId: 'power_plant', count: 1 },
+      { type: 'happiness', amount: 70 },
+    ],
+    rewards: { money: 260_000, xp: 90 },
+    nextQuestId: 'q17_grid',
+  },
+  {
+    id: 'q17_grid',
+    titleKey: 'quest.q17.title',
+    descriptionKey: 'quest.q17.desc',
+    unlockLevel: 12,
+    objectives: [
+      { type: 'build', defId: 'wind_farm', count: 1 },
+      { type: 'population', amount: 550 },
+    ],
+    rewards: { money: 340_000, gold: 30, xp: 120 },
+    nextQuestId: 'q18_safety',
+  },
+  // ---- MVP 2: emergency services ----
+  {
+    id: 'q18_safety',
+    titleKey: 'quest.q18.title',
+    descriptionKey: 'quest.q18.desc',
+    unlockLevel: 13,
+    objectives: [
+      { type: 'build', defId: 'police_station', count: 1 },
+      { type: 'happiness', amount: 72 },
+    ],
+    rewards: { money: 380_000, xp: 130 },
+    nextQuestId: 'q19_health',
+  },
+  {
+    id: 'q19_health',
+    titleKey: 'quest.q19.title',
+    descriptionKey: 'quest.q19.desc',
+    unlockLevel: 14,
+    objectives: [
+      { type: 'build', defId: 'hospital', count: 1 },
+      { type: 'population', amount: 700 },
+    ],
+    rewards: { money: 460_000, gold: 40, xp: 150 },
   },
 ];

@@ -1,5 +1,172 @@
 # Patch Notes
 
+## v0.12 — „MVP 2 Teil 4: Fluss-Distrikt"
+
+Die erste **Fern-Expansion**: Am Fluss lässt sich ein eigener **Distrikt**
+gründen — eine zweite Ausbaufläche mit eigenem Zentrum und eigenem Straßennetz,
+fernab der Innenstadt (§8).
+
+### Distrikt gründen
+
+- Klick auf einen gesperrten **Fluss-Sektor** (ab Level 12) bietet die Option
+  **„Fluss-Distrikt gründen"** an. Das große Einmalprojekt schaltet den Sektor
+  als **eigenen Distrikt** frei und pflanzt ein **Distrikt-Zentrum** ans Wasser.
+- Das Zentrum funktioniert wie ein kleines Rathaus: es lagert Waren, schafft ein
+  paar Jobs, hebt die lokale Stimmung — und vor allem **setzt es ein eigenes
+  Straßennetz**. So baut man am Fluss „quasi eine neue Stadt", ohne eine
+  40-Felder-Straße aus der Innenstadt ziehen zu müssen.
+- Angrenzende Sektoren werden anschließend Teil des Fluss-Distrikts (die
+  Distrikt-Zugehörigkeit vererbt sich beim Freischalten).
+
+### Technik
+
+- Reine Wiederverwendung: das Straßennetz wurde schon immer aus **jedem**
+  Distrikt-Zentrum geseedet (`computeRoadNetwork`), die Karte ist eine
+  Sparse-Sektoren-Welt (§8). Neu sind nur ein `district_center`-Gebäude, ein
+  `foundDistrict`-Command und die Option im Sektor-Dialog. Kein Save-Umbau nötig
+  (Distrikte sind bereits im Schema).
+
+### Damit ist der MVP-2-Gameplay-Kern beisammen
+
+Energienetz, Notdienste, Steuer-Regler und die erste Fern-Expansion stehen. Was
+noch offen ist (Cloud-Save/Login, Mobile-Layout, Besichtigungsmodus), hängt an
+Infrastruktur-Entscheidungen und kommt später.
+
+## v0.11 — „MVP 2 Teil 3: Steuer-Regler"
+
+Der Bürgermeister bekommt echte fiskalische Kontrolle: zwei **Steuersätze**, die
+sich direkt auf Einnahmen und Zufriedenheit auswirken. Der klassische SimCity-
+Zielkonflikt — mehr Geld gegen weniger Laune.
+
+### Steuersätze als Regler
+
+- **Wohnsteuer** und **Gewerbesteuer** lassen sich in der Wirtschaftsübersicht
+  zwischen **50 % und 150 %** einstellen (Regler ab Level 6).
+- Höher = mehr Geld sofort, aber **weniger Zufriedenheit** (und damit weniger
+  Zuzug und ein schlechterer Steuer-Faktor). Niedriger = Goodwill statt Geld.
+- Die **Wohnsteuer** spüren die Bürger stark (bis −12 Zufriedenheit bei 150 %),
+  die **Gewerbesteuer** wirkt sanfter (Geschäftsklima, bis −5). So ist die
+  Gewerbesteuer der schonendere Hebel, wenn die Kasse klemmt.
+
+### Technik
+
+- Neues `policy`-Feld im Spielstand (Save-Migration v5 → v6, startet neutral),
+  ein zentraler `setTaxRate`-Command; Einnahmen laufen weiter durch die eine
+  `computeIncome`-Quelle, der Zufriedenheits-Malus wird im Tick verrechnet.
+
+### Nächster MVP-2-Baustein
+
+Die erste **Fern-Expansion ins Fluss-Biom** (Fernstraße + Distrikt).
+
+## v0.10 — „MVP 2 Teil 2: Notdienste" (Polizei & Krankenhaus)
+
+Die Stadt bekommt ein Sicherheitsnetz. Nach dem bewährten **Feuerwehr-Muster**
+(radiusbasierte Deckung) kommen zwei neue Bedürfnisse dazu — ohne Sonderpfade,
+dieselbe Coverage-Mechanik wie bei Freizeit und Feuerwehr.
+
+### Zwei neue Bedürfnisse: Sicherheit & Gesundheit
+
+- **Sicherheit** (ab L13) und **Gesundheit** (ab L14) sind radiusbasierte
+  Deckungs-Bedürfnisse: Wohnhäuser im Einzugsradius sind versorgt, der Rest
+  nicht — unversorgte Viertel drücken die Zufriedenheit.
+
+### Zwei neue Gebäude
+
+- **Polizeiwache** (ab L13, 2×2): Sicherheitsdeckung im Radius 11, Jobs,
+  Unterhalt, Strombedarf. Limit bis max 4.
+- **Krankenhaus** (ab L14, 3×2): Gesundheitsdeckung im Radius 11 — größerer
+  Bau, höhere Betriebs- und Stromkosten als die Wache. Limit bis max 3.
+
+### Progression
+
+- **Level 13 & 14** neu (XP 5.800 / 7.200) mit **Quests „Für Ordnung sorgen"
+  und „Gesunde Stadt"**. Save-Migration v4 → v5 ergänzt die neuen Bedürfnisse
+  in alten Spielständen.
+
+### Nächste MVP-2-Bausteine (geplant)
+
+Steuer-/Mieten-Regler und die erste Fern-Expansion ins Fluss-Biom.
+
+## v0.9 — „MVP 2 startet: Das Stromnetz" (Teil 1)
+
+Erster Baustein von **MVP 2**: die Stadt bekommt ein **Energienetz**. Ab **Level 11**
+verlangen Industrie, Gewerbe und dichte Wohnhäuser Strom — plötzlich ist Energie
+ein neues Bedürfnis, und ohne Kraftwerk sinkt die Zufriedenheit. Genau der
+„Level-up erzeugt das nächste Problem"-Motor (§4).
+
+### Neues Bedürfnis: Energie
+
+- **Energie** ist ein stadtweites Kapazitäts-Bedürfnis (wie Wasser, aber ohne
+  Radius — ein Kraftwerk speist das ganze Netz). Der Bedarf kommt aus den
+  Gebäuden selbst: Sägewerk, Steinbruch, Farm, Bäckerei, Wasserwerk, Markt,
+  Laden, **Bürogebäude (30)**, Feuerwehr, Logistikzentrum, Reihenhaus und
+  **Apartment (20)** ziehen Strom. Schaltet auf Level 11 frei.
+
+### Zwei Kraftwerke mit echtem Trade-off
+
+- **Kohlekraftwerk** (ab L11, 3×3): dichte, verlässliche Leistung (+250 Energie),
+  aber es **verpestet** einen weiten Radius (Ambiente −3) und **frisst Geld als
+  Brennstoff** (2.500/min Unterhalt). Die Standardantwort auf den L11-Engpass —
+  bezahlt in Luftqualität und Cash. Limit gestaffelt bis max 4.
+- **Windpark** (ab L12, 3×3): **sauber** (Ambiente +1), viel günstiger im
+  Betrieb (800/min), liefert aber weniger (+120 Energie) und braucht Platz. Der
+  grüne, flächenhungrige Weg: lieber mehrere statt eines dreckigen Kraftwerks.
+
+### Progression
+
+- **Level 11 & 12** neu (XP-Kurve 3.400 / 4.500), plus **Quests „Licht an" und
+  „Sauberes Netz"**. Alte Spielstände werden migriert (Schema v3 → v4, Energie-
+  Bedürfnis wird ergänzt).
+
+### Nächste MVP-2-Bausteine (geplant)
+
+Notdienste (Polizei/Krankenhaus nach dem Feuerwehr-Muster), Steuer-/Mieten-
+Regler, weitere Level 13–20 und die erste **Fern-Expansion ins Fluss-Biom**.
+
+## v0.8 — „Geld verdient man, Kosten spürt man"
+
+Feintuning nach Spieler-Feedback: **Geld war zu viel, Kosten zu niedrig.** Leitidee
+jetzt: Geld wird über **Herausforderungen (Quests) belohnend verdient** und über
+**spürbar teurere Bauten** wieder ausgegeben — Rohstoffe sind der eigentliche
+Engpass, fließen dafür aber schneller.
+
+### Bau- & Rohstoffkosten deutlich erhöht
+
+- **Geldkosten quer durch alle Gebäude angehoben** (~1,5× früh, bis ~2× spät):
+  z. B. Kleines Haus 6.000 → **9.000**, Markt 20.000 → **30.000**, Laden 30.000 →
+  **46.000**, Lagerhaus 26.000 → **40.000**, Feuerwehr 60.000 → **90.000**,
+  Apartment 90.000 → **145.000**, Bürogebäude 120.000 → **185.000**. Bauen ist
+  wieder eine Entscheidung, kein Rundungsfehler.
+- **Rohstoffkosten (Holz/Stein) teurer** — Material ist jetzt der harte Engpass,
+  nicht das Geld.
+
+### Dafür: schnellere Produktion
+
+- **Sägewerk 32 → 45**, **Steinbruch 26 → 38**, **Farm 30 → 42**, **Bäckerei
+  9 → 14** pro Minute. Teurere Bauten, aber die Rohstoffe kommen schneller rein —
+  wer aktiv einsammelt und verbaut, kommt gut voran.
+
+### Geld über Herausforderungen, nicht AFK
+
+- **Quest-Belohnungen kräftig erhöht** (grob +60 %): z. B. erste Straßen 6.000 →
+  **8.000**, Markt-Quest 35.000 → **60.000**, Feuerwehr 70.000 → **130.000**,
+  Metropole 250.000 → **400.000**. Wer die Herausforderungen aktiv abschließt,
+  finanziert damit die nächste Ausbaustufe — deutlich lohnender als passives
+  Farmen.
+
+### Lagerhaus-Limit erhöht (4 → 10)
+
+- Das **Lagerhaus-Limit steigt auf max 10** (gestaffelt: L6 max 3, L8 max 6,
+  L10 max 10). Pro Lager weiterhin knappe 600 je Ressource + Geld-, Material- und
+  Unterhaltskosten — ein echtes Logistikviertel ist jetzt möglich, bleibt aber
+  eine Investition, kein Spam.
+
+### Nächster Schritt
+
+Danach geht es weiter mit **MVP 2** (Energie & Kraftwerke, Polizei/Krankenhaus
+nach dem Feuerwehr-Muster, Level 11–20, Steuer-/Mieten-Regler, erste
+Fern-Expansion ins Fluss-Biom).
+
 ## v0.7 — „Aktiv statt AFK: Lager, Limits, Arbeit & Logistik"
 
 Balance-Kurskorrektur nach Spieler-Feedback (riesige Stadt, nur 1.450 Einwohner,

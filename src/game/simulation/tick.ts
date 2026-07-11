@@ -133,6 +133,10 @@ export function advance(state: GameState, config: GameConfig, derived: Derived, 
       const cap = config.balancing.ambienceHappinessCap;
       const ambienceDelta = derived.avgAmbience * config.balancing.ambienceHappinessPerPoint;
       happiness += Math.max(-cap, Math.min(cap, ambienceDelta));
+      // Tax policy: rates above neutral cost happiness, below neutral buy it
+      // (§ tax sliders). Residents feel residential tax more than commercial.
+      happiness -= (state.policy.residentialTaxRate - 1) * config.balancing.residentialTaxHappinessPer;
+      happiness -= (state.policy.commercialTaxRate - 1) * config.balancing.commercialTaxHappinessPer;
     }
     for (const buff of state.buffs) {
       if (buff.kind === 'happiness') happiness += buff.amount;

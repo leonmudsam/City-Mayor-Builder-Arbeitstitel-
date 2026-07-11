@@ -33,7 +33,7 @@ describe('placement', () => {
     const { controller } = newController();
     const moneyBefore = controller.state.resources.money;
     controller.placeBuilding('road', 26, 26);
-    expect(controller.state.resources.money).toBe(moneyBefore - 200);
+    expect(controller.state.resources.money).toBe(moneyBefore - 300);
     expect(controller.placeBuilding('road', 26, 26)).toEqual({ ok: false, error: 'occupied' });
   });
 

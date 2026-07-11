@@ -2,7 +2,7 @@
 // TypeScript — it must never import UI, rendering, or DOM code.
 
 export type ResourceId = 'money' | 'wood' | 'stone' | 'food';
-export type NeedId = 'housing' | 'water' | 'food' | 'work' | 'leisure';
+export type NeedId = 'housing' | 'water' | 'food' | 'work' | 'leisure' | 'energy' | 'safety' | 'health';
 export type BuildingCategory =
   | 'roads'
   | 'residential'
@@ -125,6 +125,13 @@ export interface GameState {
   resources: Record<ResourceId, number>;
   gold: { balance: number };
   goldTransactions: GoldTransaction[];
+  /**
+   * Mayor fiscal policy (MVP 2): tax-rate multipliers the player can dial. Above
+   * 1 earns more but costs happiness; below 1 buys goodwill at the cost of
+   * income. `residentialTaxRate` scales residence tax, `commercialTaxRate`
+   * scales commercial + industrial revenue. Neutral = 1.
+   */
+  policy: { residentialTaxRate: number; commercialTaxRate: number };
   world: {
     sectors: Record<SectorId, SectorState>; // sparse: only materialized sectors
     districts: Record<DistrictId, DistrictState>;

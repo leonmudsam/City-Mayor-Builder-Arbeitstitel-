@@ -39,7 +39,7 @@ describe('save/load', () => {
 
     const woodBefore = raw.resources.wood as number;
     const migrated = migrateAndValidate(raw);
-    expect(migrated.schemaVersion).toBe(3);
+    expect(migrated.schemaVersion).toBe(6);
     expect(migrated.resources.wood).toBe(woodBefore + 25);
     expect(migrated.stats.produced.wood).toBe(12);
     expect('buffer' in migrated.buildings[sawmillId]!).toBe(false);
@@ -54,7 +54,35 @@ describe('save/load', () => {
     raw.resources.money = 500;
     /* eslint-enable @typescript-eslint/no-explicit-any */
     const migrated = migrateAndValidate(raw);
-    expect(migrated.schemaVersion).toBe(3);
+    expect(migrated.schemaVersion).toBe(6);
     expect(migrated.resources.money).toBe(50_000); // ×100 rescale
+  });
+
+  it('migrates v3/v4 saves by seeding the new needs (energy, safety, health)', () => {
+    const { controller } = newController();
+    /* eslint-disable @typescript-eslint/no-explicit-any -- crafting a v3 raw save */
+    const raw = JSON.parse(exportSave(controller.state)) as Record<string, any>;
+    raw.schemaVersion = 3;
+    delete raw.citizens.needs.energy; // v3 saves predate the energy grid
+    delete raw.citizens.needs.safety; // and the emergency services
+    delete raw.citizens.needs.health;
+    /* eslint-enable @typescript-eslint/no-explicit-any */
+    const migrated = migrateAndValidate(raw);
+    expect(migrated.schemaVersion).toBe(6);
+    expect(migrated.citizens.needs.energy).toEqual({ supply: 0, demand: 0, fulfillment: 1 });
+    expect(migrated.citizens.needs.safety).toEqual({ supply: 0, demand: 0, fulfillment: 1 });
+    expect(migrated.citizens.needs.health).toEqual({ supply: 0, demand: 0, fulfillment: 1 });
+  });
+
+  it('migrates v5 saves by seeding neutral tax policy', () => {
+    const { controller } = newController();
+    /* eslint-disable @typescript-eslint/no-explicit-any -- crafting a v5 raw save */
+    const raw = JSON.parse(exportSave(controller.state)) as Record<string, any>;
+    raw.schemaVersion = 5;
+    delete raw.policy; // v5 saves predate the tax sliders
+    /* eslint-enable @typescript-eslint/no-explicit-any */
+    const migrated = migrateAndValidate(raw);
+    expect(migrated.schemaVersion).toBe(6);
+    expect(migrated.policy).toEqual({ residentialTaxRate: 1, commercialTaxRate: 1 });
   });
 });

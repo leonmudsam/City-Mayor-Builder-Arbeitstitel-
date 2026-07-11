@@ -97,7 +97,7 @@ describe('relocate special buildings', () => {
     const house = Object.values(controller.state.buildings).find((b) => b.defId === 'mayor_house')!;
     controller.state.resources.money = 5_000;
     expect(controller.moveBuilding(house.id, 28, 27)).toEqual({ ok: true });
-    expect(controller.state.resources.money).toBe(3_000); // 2 000 fee
+    expect(controller.state.resources.money).toBe(2_000); // 3 000 fee
     // Valid target, but now too poor for the fee.
     controller.state.resources.money = 500;
     expect(controller.moveBuilding(house.id, 30, 27)).toEqual({ ok: false, error: 'insufficient' });

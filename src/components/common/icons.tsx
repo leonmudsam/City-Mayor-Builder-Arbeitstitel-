@@ -4,16 +4,19 @@ import {
   Droplets,
   Factory,
   Flower2,
+  HeartPulse,
   Home,
   Landmark,
   Logs,
   Mountain,
   Route,
+  ShieldCheck,
   ShoppingBasket,
   Star,
   Store,
   TreePine,
   Wheat,
+  Zap,
   type LucideIcon,
 } from 'lucide-react';
 import type { BuildingCategory, NeedId, ResourceId } from '../../game/types.ts';
@@ -36,6 +39,9 @@ export const NEED_ICON: Record<NeedId, LucideIcon> = {
   food: Wheat,
   work: BriefcaseBusiness,
   leisure: TreePine,
+  energy: Zap,
+  safety: ShieldCheck,
+  health: HeartPulse,
 };
 
 export const CATEGORY_ICON: Record<BuildingCategory, LucideIcon> = {

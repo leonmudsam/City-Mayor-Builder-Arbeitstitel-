@@ -19,6 +19,7 @@ describe('income breakdown (§5)', () => {
     const { controller } = newController();
     setLevel(controller, 6);
     flattenTerrain(controller);
+    controller.state.resources = { money: 200_000, wood: 500, stone: 500, food: 100 };
     for (let x = 26; x <= 31; x++) controller.placeBuilding('road', x, 26);
     controller.placeBuilding('sawmill', 26, 27); // industrial 600
     controller.placeBuilding('shop_small', 28, 27); // commercial 4000
@@ -70,7 +71,7 @@ describe('logistics & workplaces', () => {
     expect(controller.placeBuilding('depot', 28, 27)).toEqual({ ok: true }); // within radius 6
     controller.update(T0 + 300_000); // depot finishes
     expect(controller.derived.productionBonus[sawmill.id]).toBe(25); // +25 % throughput
-    expect(controller.derived.productionPerMin.wood).toBeCloseTo(32 * 1.25, 5);
+    expect(controller.derived.productionPerMin.wood).toBeCloseTo(45 * 1.25, 5);
   });
 
   it('an office supplies a large block of jobs (§ Arbeitsversorgung)', () => {
@@ -83,6 +84,70 @@ describe('logistics & workplaces', () => {
     expect(controller.placeBuilding('office', 26, 27)).toEqual({ ok: true }); // 4×2, 60 jobs
     controller.update(T0 + 320_000); // office finishes
     expect(controller.derived.capacity.work - before).toBe(60);
+  });
+});
+
+describe('energy grid (MVP 2)', () => {
+  it('a power plant feeds the grid while buildings draw power', () => {
+    const { controller } = newController();
+    setLevel(controller, 11);
+    flattenTerrain(controller);
+    controller.state.resources = { money: 1_000_000, wood: 2_000, stone: 2_000, food: 1_000 };
+    for (let x = 26; x <= 31; x++) controller.placeBuilding('road', x, 26);
+    // A warehouse draws 4 energy; there is no supply until a plant is built.
+    expect(controller.placeBuilding('warehouse', 29, 27)).toEqual({ ok: true });
+    controller.update(T0 + 130_000); // warehouse finishes
+    expect(controller.derived.extraDemand.energy).toBe(4);
+    expect(controller.derived.capacity.energy).toBe(0);
+    // The coal plant powers the whole city-wide grid (capacity need, no radius).
+    expect(controller.placeBuilding('power_plant', 26, 27)).toEqual({ ok: true });
+    controller.update(T0 + 130_000 + 400_000); // plant finishes
+    expect(controller.derived.capacity.energy).toBe(250);
+  });
+});
+
+describe('emergency services (MVP 2)', () => {
+  it('a police station covers the homes within its safety radius', () => {
+    const { controller } = newController();
+    setLevel(controller, 13);
+    flattenTerrain(controller);
+    controller.state.resources = { money: 1_000_000, wood: 2_000, stone: 2_000, food: 1_000 };
+    for (let x = 26; x <= 31; x++) controller.placeBuilding('road', x, 26);
+    controller.placeBuilding('house_small', 26, 27);
+    controller.update(T0 + 25_000); // house finishes
+    expect(controller.derived.needCoverage.safety).toBe(0); // no station yet
+    // A police station within radius 11 of the house covers it.
+    expect(controller.placeBuilding('police_station', 29, 27)).toEqual({ ok: true });
+    controller.update(T0 + 25_000 + 320_000); // station finishes
+    expect(controller.derived.needCoverage.safety).toBe(1);
+  });
+});
+
+describe('tax policy (MVP 2)', () => {
+  it('scales residential income by the rate and clamps to the band', () => {
+    const { controller } = newController();
+    controller.placeBuilding('road', 26, 26);
+    controller.placeBuilding('house_small', 26, 27);
+    controller.update(T0 + 30_000 + 5 * MIN); // citizens move in
+    const base = controller.getIncome().residential;
+    expect(base).toBeGreaterThan(0);
+    // Raising the rate scales income directly (happiness penalty applies next tick).
+    controller.setTaxRate('residential', 1.5);
+    expect(controller.getIncome().residential).toBeCloseTo(base * 1.5, 5);
+    // Out-of-band values clamp to the configured maximum.
+    controller.setTaxRate('residential', 5);
+    expect(controller.state.policy.residentialTaxRate).toBe(1.5);
+  });
+
+  it('lets a tax hike bite happiness over the following ticks', () => {
+    const { controller } = newController();
+    controller.placeBuilding('road', 26, 26);
+    controller.placeBuilding('house_small', 26, 27);
+    controller.update(T0 + 30_000 + 5 * MIN);
+    const before = controller.state.citizens.happiness;
+    controller.setTaxRate('residential', 1.5); // +50 % → −12 happiness
+    controller.update(T0 + 30_000 + 6 * MIN);
+    expect(controller.state.citizens.happiness).toBeLessThan(before);
   });
 });
 

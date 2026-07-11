@@ -4,7 +4,7 @@ import { z } from 'zod';
 // balancing data) and every save game after loading.
 
 const resourceId = z.enum(['money', 'wood', 'stone', 'food']);
-const needId = z.enum(['housing', 'water', 'food', 'work', 'leisure']);
+const needId = z.enum(['housing', 'water', 'food', 'work', 'leisure', 'energy', 'safety', 'health']);
 
 const terrainType = z.enum(['grass', 'forest', 'water', 'river', 'mountain', 'sand', 'fertile']);
 
@@ -117,6 +117,7 @@ export const saveGameSchema = z.object({
   level: z.object({ current: z.number().int().min(1), xp: z.number().nonnegative() }),
   resources: z.record(resourceId, z.number()),
   gold: z.object({ balance: z.number().nonnegative() }),
+  policy: z.object({ residentialTaxRate: z.number().positive(), commercialTaxRate: z.number().positive() }),
   goldTransactions: z.array(
     z.object({ id: z.string(), timestamp: z.number(), amount: z.number(), reason: z.string(), balanceAfter: z.number() }),
   ),
