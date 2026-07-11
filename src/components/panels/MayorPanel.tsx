@@ -22,11 +22,12 @@ export function MayorPanel() {
         <div className="finance-head">
           <Wallet size={15} />
           <span>{t('ui.finance.title')}</span>
-          <span className="finance-total">{t('ui.finance.per_min', { amount: formatMoney(income.total) })}</span>
+          <span className="finance-total">{t('ui.finance.per_min', { amount: formatMoney(income.net) })}</span>
         </div>
         <FinanceRow label={t('ui.finance.residential')} value={income.residential} />
         <FinanceRow label={t('ui.finance.commercial')} value={income.commercial} />
         <FinanceRow label={t('ui.finance.industrial')} value={income.industrial} />
+        <FinanceRow label={t('ui.finance.upkeep')} value={-income.upkeep} />
         <div className="finance-foot muted">{t('ui.finance.employment', { pct: Math.round(income.employment * 100) })}</div>
       </div>
 

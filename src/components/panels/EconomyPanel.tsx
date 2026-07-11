@@ -1,4 +1,4 @@
-import { Briefcase, Building2, Factory, TrendingUp, Wallet, X } from 'lucide-react';
+import { Briefcase, Building2, Factory, TrendingDown, TrendingUp, Wallet, X } from 'lucide-react';
 import { useGame, useUiStore } from '../../state/store.ts';
 import { formatMoney, t } from '../../i18n/index.ts';
 
@@ -29,9 +29,9 @@ export function EconomyPanel() {
         </button>
       </div>
 
-      <div className="economy-total">
-        <span className="economy-total-label">{t('ui.finance.total')}</span>
-        <span className="economy-total-value">{t('ui.finance.per_min', { amount: formatMoney(income.total) })}</span>
+      <div className={`economy-total${income.net < 0 ? ' negative' : ''}`}>
+        <span className="economy-total-label">{t('ui.finance.net')}</span>
+        <span className="economy-total-value">{t('ui.finance.per_min', { amount: formatMoney(income.net) })}</span>
       </div>
 
       <div className="economy-rows">
@@ -49,6 +49,19 @@ export function EconomyPanel() {
             </div>
           </div>
         ))}
+      </div>
+
+      <div className="economy-ledger">
+        <div className="economy-ledger-row">
+          <span>{t('ui.finance.total')}</span>
+          <span className="text-good">+{formatMoney(income.total)}</span>
+        </div>
+        <div className="economy-ledger-row">
+          <span>
+            <TrendingDown size={13} /> {t('ui.finance.upkeep')}
+          </span>
+          <span className="text-bad">−{formatMoney(income.upkeep)}</span>
+        </div>
       </div>
 
       <div className="economy-employment">

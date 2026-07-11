@@ -562,13 +562,9 @@ export class MapRenderer {
       if (def.category === 'roads') {
         this.drawRoad(g, b, roadKeys, dockKeys);
       } else if (def.category === 'decoration') {
-        g.circle(w / 2, h / 2, w / 2 - 4).fill(CATEGORY_COLORS[def.category]);
+        this.drawDecoration(g, def, w, h);
       } else {
         this.drawStructure(g, def, b, w, h);
-        const label = new Text({ text: t(def.nameKey).slice(0, 2), style: labelStyle });
-        label.anchor.set(0.5);
-        label.position.set(w / 2, h / 2);
-        container.addChild(label);
       }
 
       if (b.status === 'constructing' && b.constructionEndsAt !== undefined) {
@@ -632,18 +628,74 @@ export class MapRenderer {
     }
   }
 
-  /** Non-road structure with visible upgrade level (roof band + level pips). */
+  /**
+   * A building drawn as a little building — not a 2-letter code (§ cleaner map).
+   * Category picks the silhouette (greenery / industrial / civic house); the
+   * body carries windows, a door and an upgrade-aware roof so density and level
+   * read at a glance. Same visual language as the build-menu preview.
+   */
   private drawStructure(g: Graphics, def: BuildingDef, b: BuildingInstance, w: number, h: number): void {
     const base = CATEGORY_COLORS[def.category];
-    g.roundRect(2, 2, w - 4, h - 4, 6).fill(base);
-    // Higher levels get a deeper roof band and a darker outline: upgraded
-    // buildings must be recognizable at a glance.
-    const roofH = Math.max(6, h / 4 + b.upgradeLevel * 3);
-    g.roundRect(2, 2, w - 4, roofH, 6).fill({ color: 0xffffff, alpha: 0.18 + b.upgradeLevel * 0.08 });
-    g.roundRect(2, 2, w - 4, h - 4, 6).stroke({ width: 1.5 + b.upgradeLevel * 0.75, color: 0x000000, alpha: 0.25 + b.upgradeLevel * 0.1 });
-    for (let i = 0; i < b.upgradeLevel; i++) {
-      g.roundRect(5 + i * 8, 5, 6, 6, 2).fill(0xffffff).stroke({ width: 1, color: 0x000000, alpha: 0.35 });
+    if (def.category === 'leisure') {
+      this.drawGreenery(g, base, w, h);
+      return;
     }
+
+    // Body + a lighter roof band that deepens with upgrade level.
+    g.roundRect(2, 2, w - 4, h - 4, 6).fill(base);
+    const roofH = Math.max(7, h / 4 + b.upgradeLevel * 3);
+    g.roundRect(2, 2, w - 4, roofH, 6).fill(shade(base, 1.24 + b.upgradeLevel * 0.1));
+    g.rect(2, roofH, w - 4, 1.5).fill({ color: 0x000000, alpha: 0.18 });
+
+    // Windows: grid scales with footprint, so apartments read denser than a
+    // small house without any per-building special-casing.
+    const winColor = shade(base, 0.5);
+    const cols = Math.max(2, Math.round((w - 12) / 11));
+    const rows = Math.max(1, Math.round((h - roofH - 12) / 11));
+    const gx = (w - 8) / cols;
+    const gy = (h - roofH - 8) / Math.max(1, rows);
+    const s = 4;
+    for (let r = 0; r < rows; r++) {
+      for (let c = 0; c < cols; c++) {
+        const wx = 6 + gx * (c + 0.5) - s / 2;
+        const wy = roofH + 4 + gy * (r + 0.5) - s / 2;
+        g.roundRect(wx, wy, s, s, 1).fill({ color: winColor, alpha: 0.85 });
+      }
+    }
+
+    // Ground-floor door, plus an industrial vent for production buildings.
+    g.roundRect(w / 2 - 3, h - 9, 6, 7, 1.5).fill(shade(base, 0.42));
+    if (def.category === 'production') {
+      g.rect(w - 12, 1, 5, roofH + 2).fill(shade(base, 0.6));
+      g.rect(w - 13, 0, 7, 2.5).fill(shade(base, 0.75));
+    }
+
+    g.roundRect(2, 2, w - 4, h - 4, 6).stroke({ width: 1.5 + b.upgradeLevel * 0.6, color: 0x000000, alpha: 0.28 + b.upgradeLevel * 0.08 });
+    for (let i = 0; i < b.upgradeLevel; i++) {
+      g.roundRect(5 + i * 7, 4, 5, 5, 1.5).fill(0xffffff).stroke({ width: 1, color: 0x000000, alpha: 0.35 });
+    }
+  }
+
+  /** Parks & playgrounds: a grassy plot with a couple of trees. */
+  private drawGreenery(g: Graphics, base: number, w: number, h: number): void {
+    g.roundRect(2, 2, w - 4, h - 4, 6).fill(shade(base, 0.82));
+    g.roundRect(2, 2, w - 4, h - 4, 6).stroke({ width: 1.5, color: 0x000000, alpha: 0.2 });
+    const spots = w > TILE * 1.2 ? [[0.32, 0.4], [0.68, 0.62], [0.5, 0.3]] : [[0.5, 0.5]];
+    for (const [fx, fy] of spots) {
+      const cx = (fx ?? 0.5) * w;
+      const cy = (fy ?? 0.5) * h;
+      g.circle(cx, cy + 3, 2).fill(0x6b4a2f);
+      g.circle(cx, cy, Math.min(w, h) * 0.16 + 2).fill(shade(base, 1.05));
+      g.circle(cx - 2, cy + 1, Math.min(w, h) * 0.11).fill(shade(base, 0.85));
+    }
+  }
+
+  /** Decoration: greenery-style dot for trees/flowerbeds, matching the map. */
+  private drawDecoration(g: Graphics, def: BuildingDef, w: number, h: number): void {
+    const base = CATEGORY_COLORS[def.category];
+    g.circle(w / 2, h / 2 + 3, 2).fill(0x6b4a2f);
+    g.circle(w / 2, h / 2, w / 2 - 5).fill(base);
+    g.circle(w / 2 - 2, h / 2 - 1, w / 2 - 8).fill(shade(base, 1.12));
   }
 
   private drawGhost(): void {
@@ -721,13 +773,13 @@ export class MapRenderer {
   }
 }
 
-const labelStyle: TextStyleOptions = {
-  fontFamily: 'system-ui, sans-serif',
-  fontSize: 13,
-  fontWeight: '700',
-  fill: 0xffffff,
-  stroke: { color: 0x000000, width: 3 },
-};
+/** Multiply an RGB hex colour by a factor (roofs lighter, windows darker). */
+function shade(n: number, factor: number): number {
+  const r = Math.min(255, Math.round(((n >> 16) & 0xff) * factor));
+  const g = Math.min(255, Math.round(((n >> 8) & 0xff) * factor));
+  const b = Math.min(255, Math.round((n & 0xff) * factor));
+  return (r << 16) | (g << 8) | b;
+}
 
 const lockStyle: TextStyleOptions = {
   fontFamily: 'system-ui, sans-serif',

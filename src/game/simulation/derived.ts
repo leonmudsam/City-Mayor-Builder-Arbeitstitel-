@@ -43,6 +43,8 @@ export interface Derived {
    * (§5). Residential income is per-capita (see income.ts), so it isn't here.
    */
   revenueBase: { commercial: number; industrial: number };
+  /** Ongoing running cost per minute per resource from active buildings. */
+  upkeep: Record<ResourceId, number>;
 }
 
 interface RadiusSource {
@@ -58,6 +60,7 @@ export function recomputeDerived(state: GameState, config: GameConfig): Derived 
   const productionBonus: Record<string, number> = {};
   const extraDemand: Record<NeedId, number> = { housing: 0, water: 0, food: 0, work: 0, leisure: 0 };
   const revenueBase = { commercial: 0, industrial: 0 };
+  const upkeep: Record<ResourceId, number> = { money: 0, wood: 0, stone: 0, food: 0 };
   let housingUnits = 0;
 
   const coverageSources: Partial<Record<NeedId, RadiusSource[]>> = {};
@@ -96,6 +99,9 @@ export function recomputeDerived(state: GameState, config: GameConfig): Derived 
         }
         case 'revenue':
           revenueBase[eff.category] += eff.perMinute;
+          break;
+        case 'upkeep':
+          upkeep[eff.resource] += eff.perMinute;
           break;
         case 'jobs':
           capacity.work += eff.amount;
@@ -185,5 +191,6 @@ export function recomputeDerived(state: GameState, config: GameConfig): Derived 
     productionPerMin,
     housingUnits,
     revenueBase,
+    upkeep,
   };
 }

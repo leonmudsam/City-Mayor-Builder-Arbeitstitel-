@@ -25,9 +25,9 @@ export const buildingsConfig: BuildingDef[] = [
     canRelocate: true,
     effects: [
       { type: 'jobs', amount: 5 },
-      { type: 'storage', resource: 'wood', amount: 300 },
-      { type: 'storage', resource: 'stone', amount: 300 },
-      { type: 'storage', resource: 'food', amount: 300 },
+      { type: 'storage', resource: 'wood', amount: 1_000 },
+      { type: 'storage', resource: 'stone', amount: 1_000 },
+      { type: 'storage', resource: 'food', amount: 1_000 },
       // Civic presence: a small attractiveness aura for the surrounding blocks
       // (§9), reusing the same ambience → happiness path as parks/zoning.
       { type: 'ambience', amount: 2, radius: 3 },
@@ -61,7 +61,9 @@ export const buildingsConfig: BuildingDef[] = [
     cost: { money: 200 },
     constructionSec: 0,
     xpReward: 1,
-    effects: [],
+    // Road maintenance: tiny per tile, but it scales with sprawl — a gentle
+    // pressure toward compact layouts rather than endless empty avenues.
+    effects: [{ type: 'upkeep', resource: 'money', perMinute: 8 }],
   },
 
   // ---- Wohnen ----
@@ -80,6 +82,9 @@ export const buildingsConfig: BuildingDef[] = [
     effects: [
       { type: 'housing', units: 1, minResidentsPerUnit: 2, maxResidentsPerUnit: 5, ambienceSensitivity: 1.4 },
       { type: 'demand', need: 'water', amount: 4 },
+      // Residential upkeep scales with households, so it tracks population and
+      // gently nets out the per-capita tax without hurting the early game.
+      { type: 'upkeep', resource: 'money', perMinute: 35 },
     ],
     upgrades: [
       {
@@ -89,6 +94,7 @@ export const buildingsConfig: BuildingDef[] = [
         effects: [
           { type: 'housing', units: 2, minResidentsPerUnit: 2, maxResidentsPerUnit: 5, ambienceSensitivity: 1.4 },
           { type: 'demand', need: 'water', amount: 8 },
+          { type: 'upkeep', resource: 'money', perMinute: 70 },
         ],
       },
       {
@@ -98,6 +104,7 @@ export const buildingsConfig: BuildingDef[] = [
         effects: [
           { type: 'housing', units: 3, minResidentsPerUnit: 2, maxResidentsPerUnit: 6, ambienceSensitivity: 1.3 },
           { type: 'demand', need: 'water', amount: 14 },
+          { type: 'upkeep', resource: 'money', perMinute: 105 },
         ],
       },
     ],
@@ -117,6 +124,7 @@ export const buildingsConfig: BuildingDef[] = [
     effects: [
       { type: 'housing', units: 5, minResidentsPerUnit: 2, maxResidentsPerUnit: 4, ambienceSensitivity: 1.0 },
       { type: 'demand', need: 'water', amount: 16 },
+      { type: 'upkeep', resource: 'money', perMinute: 175 },
     ],
   },
   // Apartment — high density, many units, heavy infrastructure demand; without
@@ -134,6 +142,7 @@ export const buildingsConfig: BuildingDef[] = [
     effects: [
       { type: 'housing', units: 16, minResidentsPerUnit: 2, maxResidentsPerUnit: 3, ambienceSensitivity: 1.15 },
       { type: 'demand', need: 'water', amount: 40 },
+      { type: 'upkeep', resource: 'money', perMinute: 560 },
     ],
   },
 
@@ -152,6 +161,7 @@ export const buildingsConfig: BuildingDef[] = [
       { type: 'produce', resource: 'wood', perMinute: 14 },
       { type: 'jobs', amount: 4 },
       { type: 'revenue', category: 'industrial', perMinute: 600 },
+      { type: 'upkeep', resource: 'money', perMinute: 300 },
       { type: 'ambience', amount: -1, radius: 4 },
     ],
     locationBonus: { terrain: 'forest', radius: 3, perTilePct: 5, maxPct: 50 },
@@ -172,6 +182,7 @@ export const buildingsConfig: BuildingDef[] = [
       { type: 'produce', resource: 'stone', perMinute: 11 },
       { type: 'jobs', amount: 6 },
       { type: 'revenue', category: 'industrial', perMinute: 1_000 },
+      { type: 'upkeep', resource: 'money', perMinute: 500 },
       { type: 'ambience', amount: -2, radius: 5 },
     ],
     locationBonus: { terrain: 'mountain', radius: 3, perTilePct: 8, maxPct: 60 },
@@ -191,6 +202,7 @@ export const buildingsConfig: BuildingDef[] = [
       { type: 'produce', resource: 'food', perMinute: 15 },
       { type: 'jobs', amount: 4 },
       { type: 'revenue', category: 'industrial', perMinute: 700 },
+      { type: 'upkeep', resource: 'money', perMinute: 300 },
       { type: 'ambience', amount: -1, radius: 3 },
     ],
     locationBonus: { terrain: 'fertile', radius: 2, perTilePct: 4, maxPct: 40 },
@@ -206,7 +218,10 @@ export const buildingsConfig: BuildingDef[] = [
     cost: { money: 3_500, wood: 5 },
     constructionSec: 15,
     xpReward: 8,
-    effects: [{ type: 'capacity', need: 'water', amount: 60, radius: 7 }],
+    effects: [
+      { type: 'capacity', need: 'water', amount: 60, radius: 7 },
+      { type: 'upkeep', resource: 'money', perMinute: 100 },
+    ],
   },
   {
     id: 'water_pump',
@@ -221,6 +236,7 @@ export const buildingsConfig: BuildingDef[] = [
     effects: [
       { type: 'capacity', need: 'water', amount: 240, radius: 12 },
       { type: 'jobs', amount: 2 },
+      { type: 'upkeep', resource: 'money', perMinute: 1_200 },
     ],
   },
   {
@@ -234,10 +250,13 @@ export const buildingsConfig: BuildingDef[] = [
     constructionSec: 120,
     xpReward: 22,
     effects: [
-      { type: 'storage', resource: 'wood', amount: 200 },
-      { type: 'storage', resource: 'stone', amount: 200 },
-      { type: 'storage', resource: 'food', amount: 200 },
+      // Storage scales with the city through warehouses: one is now worth
+      // building (10× the old cap) so material stops hitting a tiny flat wall.
+      { type: 'storage', resource: 'wood', amount: 2_000 },
+      { type: 'storage', resource: 'stone', amount: 2_000 },
+      { type: 'storage', resource: 'food', amount: 2_000 },
       { type: 'jobs', amount: 2 },
+      { type: 'upkeep', resource: 'money', perMinute: 300 },
     ],
   },
 
@@ -259,6 +278,7 @@ export const buildingsConfig: BuildingDef[] = [
       { type: 'jobs', amount: 6 },
       // Market fees — commercial income that scales with staffing & happiness.
       { type: 'revenue', category: 'commercial', perMinute: 2_000 },
+      { type: 'upkeep', resource: 'money', perMinute: 900 },
     ],
   },
   {
@@ -275,6 +295,7 @@ export const buildingsConfig: BuildingDef[] = [
       { type: 'produce', resource: 'food', perMinute: 9 },
       { type: 'jobs', amount: 4 },
       { type: 'revenue', category: 'industrial', perMinute: 1_200 },
+      { type: 'upkeep', resource: 'money', perMinute: 600 },
     ],
     buildLimit: [{ level: 9, max: 2 }],
   },
@@ -291,6 +312,7 @@ export const buildingsConfig: BuildingDef[] = [
     effects: [
       { type: 'protection', hazard: 'fire', radius: 12 },
       { type: 'jobs', amount: 6 },
+      { type: 'upkeep', resource: 'money', perMinute: 1_500 },
     ],
   },
 
@@ -309,6 +331,7 @@ export const buildingsConfig: BuildingDef[] = [
       // Trade tax — the backbone of commercial income once jobs are staffed.
       { type: 'revenue', category: 'commercial', perMinute: 4_000 },
       { type: 'jobs', amount: 8 },
+      { type: 'upkeep', resource: 'money', perMinute: 1_200 },
     ],
     buildLimit: [{ level: 6, max: 2 }, { level: 9, max: 4 }],
   },
@@ -327,6 +350,7 @@ export const buildingsConfig: BuildingDef[] = [
     effects: [
       { type: 'coverage', need: 'leisure', radius: 8 },
       { type: 'ambience', amount: 2, radius: 6 },
+      { type: 'upkeep', resource: 'money', perMinute: 250 },
     ],
   },
   {
@@ -342,6 +366,7 @@ export const buildingsConfig: BuildingDef[] = [
     effects: [
       { type: 'coverage', need: 'leisure', radius: 5 },
       { type: 'ambience', amount: 1, radius: 4 },
+      { type: 'upkeep', resource: 'money', perMinute: 150 },
     ],
   },
 

@@ -139,9 +139,15 @@ export function advance(state: GameState, config: GameConfig, derived: Derived, 
     }
     state.citizens.happiness = Math.max(0, Math.min(100, happiness));
 
-    // 4. Income (residential tax + commercial + industrial revenue, §5).
+    // 4. Income net of running costs (§5 + money sink). Upkeep keeps large
+    //    cities from drowning in tax; money is floored at 0 so a deficit drains
+    //    the treasury but never goes negative.
     const bal = config.balancing;
-    state.resources.money += computeIncome(state, config, derived).total * dtMin;
+    state.resources.money = Math.max(0, state.resources.money + computeIncome(state, config, derived).net * dtMin);
+    // Material upkeep (rare; money is the default) drains its own stores.
+    for (const res of ['wood', 'stone', 'food'] as const) {
+      if (derived.upkeep[res] > 0) state.resources[res] = Math.max(0, state.resources[res] - derived.upkeep[res] * dtMin);
+    }
 
     // 5. Population flow.
     const housingCap = derived.capacity.housing;

@@ -35,6 +35,13 @@ export type BuildingEffect =
    * later tourism/fees. Residential income stays modeled as per-capita tax.
    */
   | { type: 'revenue'; category: 'commercial' | 'industrial'; perMinute: number }
+  /**
+   * Ongoing running cost a building drains while active (§ money sink). Keeps
+   * income *net*: large cities pay to operate their services and infrastructure
+   * instead of drowning in tax. Per-resource so material upkeep is possible
+   * later; money is the default. Aggregated in the derived layer.
+   */
+  | { type: 'upkeep'; resource: ResourceId; perMinute: number }
   | { type: 'coverage'; need: NeedId; radius: number }
   | { type: 'storage'; resource: ResourceId; amount: number }
   | { type: 'jobs'; amount: number }

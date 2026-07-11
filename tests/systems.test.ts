@@ -25,6 +25,35 @@ describe('income breakdown (§5)', () => {
     controller.update(T0 + 200_000); // both finish construction
     expect(controller.derived.revenueBase).toEqual({ commercial: 4_000, industrial: 600 });
   });
+
+  it('nets building running costs off gross income (money sink)', () => {
+    const { controller } = newController();
+    const upkeepBefore = controller.derived.upkeep.money;
+    controller.placeBuilding('road', 26, 26); // upkeep 8 (active immediately)
+    controller.placeBuilding('house_small', 26, 27); // upkeep 35 + residential tax
+    controller.update(T0 + 30_000 + 5 * MIN); // house finishes + fills
+    const income = controller.getIncome();
+    // The two new buildings add exactly their configured upkeep on top of start.
+    expect(controller.derived.upkeep.money - upkeepBefore).toBeCloseTo(8 + 35, 5);
+    expect(income.upkeep).toBe(controller.derived.upkeep.money);
+    expect(income.net).toBeCloseTo(income.total - income.upkeep, 5);
+    expect(income.total).toBeGreaterThan(income.net); // upkeep genuinely bites
+  });
+
+  it('keeps the early game comfortably net-positive despite upkeep', () => {
+    const { controller } = newController();
+    setLevel(controller, 3);
+    flattenTerrain(controller);
+    for (let x = 26; x <= 30; x++) controller.placeBuilding('road', x, 26);
+    controller.placeBuilding('house_small', 26, 27);
+    controller.placeBuilding('house_small', 28, 27);
+    controller.placeBuilding('well', 30, 27);
+    controller.placeBuilding('sawmill', 26, 29);
+    controller.update(T0 + 60_000 + 6 * MIN); // everything builds + fills
+    // A starter town's tax + industry must clearly outrun its running costs,
+    // or the upkeep sink would strangle the early game.
+    expect(controller.getIncome().net).toBeGreaterThan(0);
+  });
 });
 
 describe('housing model (§6)', () => {

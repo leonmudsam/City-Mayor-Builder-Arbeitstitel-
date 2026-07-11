@@ -1,5 +1,50 @@
 # Patch Notes
 
+## v0.6 — „Endgame-Balance & saubere Karte"
+
+Nach einer durchgespielten Nacht (Level 10, 7,3 Mio. Geld, Lager randvoll)
+gezielt die Endgame-Schwächen adressiert — plus ein Karten-Look, der endlich
+nach Stadt statt nach Tabelle aussieht.
+
+### Karte: Gebäude als Glyphen statt Kürzel
+
+- Der Renderer zeichnete Gebäude als abgeschnittene 2-Buchstaben-Namen
+  („St", „Ap", „Re"). Jetzt echte Gebäude-Glyphen: Häuser mit Dach, Fenster-
+  Raster und Tür (Fensterdichte skaliert mit der Grundfläche, Apartments wirken
+  dichter), Produktion mit Schlot, Freizeit als Grünfläche mit Bäumen. Upgrade-
+  Stufe bleibt an tieferem Dach + Pips ablesbar. Rein visuell.
+
+### Lager skaliert mit der Stadt
+
+- Holz/Stein/Essen liefen bei ~2.300 gegen eine harte Wand, Produktion verpuffte.
+  Rathaus-Lager 300 → **1.000** je Ressource, Lagerhaus 200 → **2.000** je
+  Ressource. Ein Lagerhaus lohnt sich jetzt wirklich, und die Obergrenze wächst
+  mit der Stadt statt bei 2.300 zu ersticken.
+
+### Unterhaltskosten: Einkommen wird netto (Geld-Sink)
+
+- Große Städte ertranken in Geld (+221k/min, kein Ausgabeziel). Neu: ein
+  generischer **`upkeep`-Effekt** — Gebäude kosten im Betrieb laufend Geld.
+  Einkommen ist damit **netto = Einnahmen − Unterhalt**.
+- Unterhalt liegt v. a. auf **Betriebs-Infrastruktur** (Läden, Märkte, Produktion,
+  Wasserwerk, Feuerwehr, Lagerhaus, Parks) und skaliert bei Wohngebäuden mit der
+  **Haushaltszahl** — er wächst also mit der Stadt, ohne das frühe Spiel zu
+  erdrücken (Straßen kosten minimal pro Feld → sanfter Druck zu kompakten
+  Layouts).
+- **UI:** Kopfleisten-Geld zeigt jetzt das **Netto**-Einkommen (rot bei Defizit);
+  Wirtschaftspanel und Geld-Popover schlüsseln Einnahmen → Unterhalt → Netto auf.
+- *Technisch:* Aggregiert im derived-Layer (`upkeep`), verrechnet in der einen
+  `computeIncome`-Quelle; der Tick bucht `netto × dt` und floored Geld bei 0.
+- *Hinweis:* Erster Balancing-Durchlauf mit runden Werten — die exakte Netto-
+  Quote lässt sich später an echten Spielständen feinjustieren (alle Werte in
+  `buildings.config`).
+
+### Der eigentliche Endgame-Fix bleibt Content
+
+- Level 10 ist die Content-Decke (bewusster Cliffhanger). Der nächste Schritt
+  ist MVP-2-Inhalt (Level 11+, Fluss-Distrikt, Notdienste, Energie) — dann
+  bekommt das Geld wieder echte Ausgabeziele.
+
 ## v0.5 — „UI/UX-Überarbeitung: modernes City-Builder-Gefühl"
 
 Ein durchgehender Oberflächen-Pass in Richtung eines hochwertigen, modernen

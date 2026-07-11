@@ -27,9 +27,9 @@ describe('simulation tick', () => {
     controller.update(T0 + 31_000 + 5 * MIN);
     expect(controller.state.resources.wood).toBeCloseTo(woodAfterBuild + 70, 0);
     expect(controller.state.stats.produced.wood).toBeCloseTo(70, 0);
-    // 8 hours offline → storage cap (town hall: 300 wood), not 4000+.
+    // 8 hours offline → storage cap (town hall: 1000 wood), not 4000+.
     controller.update(T0 + 8 * 60 * MIN);
-    expect(controller.state.resources.wood).toBe(300);
+    expect(controller.state.resources.wood).toBe(1_000);
   });
 
   it('applies the terrain location bonus to production', () => {
