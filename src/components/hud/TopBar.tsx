@@ -1,8 +1,13 @@
-import { Award, Coins, Droplets, Logs, Mountain, Star, Wheat } from 'lucide-react';
+import { Award, Droplets } from 'lucide-react';
 import { useGame } from '../../state/store.ts';
 import { xpForNextLevel } from '../../game/progression/levels.ts';
-import { t } from '../../i18n/index.ts';
+import { formatMoney, t } from '../../i18n/index.ts';
+import { GoldIcon, ResourceIcon } from '../common/icons.tsx';
+import { ResourceBadge } from './ResourceBadge.tsx';
+import { ResourceDetailPopover } from './ResourceDetailPopover.tsx';
 
+// Status only (§11): level + resource badges, no actions. Each material badge
+// opens a detail popover; the layout is a thin composition over ResourceBadge.
 export function TopBar() {
   const game = useGame();
   const { state, derived } = game;
@@ -13,6 +18,7 @@ export function TopBar() {
   const xpProgress = nextXp === undefined ? 1 : Math.min(1, (state.level.xp - prevXp) / (nextXp - prevXp));
   const waterNeed = state.citizens.needs.water;
   const waterPct = state.level.current >= 3 ? Math.round(waterNeed.fulfillment * 100) : undefined;
+  const income = game.getIncome().total;
 
   return (
     <header className="topbar">
@@ -24,50 +30,50 @@ export function TopBar() {
         </div>
       </div>
       <div className="topbar-resources">
-        <Stat icon={<Coins size={15} />} label={rateLabel(t('resource.money'), derived.productionPerMin.money)} value={fmt(res.money)} />
-        <Stat
-          icon={<Logs size={15} />}
-          label={rateLabel(t('resource.wood'), derived.productionPerMin.wood)}
+        <ResourceBadge
+          icon={<ResourceIcon id="money" />}
+          value={formatMoney(res.money)}
+          sub={income > 0 ? `+${formatMoney(income)}` : undefined}
+          accent="var(--res-money)"
+          detail={<ResourceDetailPopover id="money" />}
+        />
+        <ResourceBadge
+          icon={<ResourceIcon id="wood" />}
           value={`${fmt(res.wood)}/${fmt(caps.wood)}`}
           warn={caps.wood > 0 && res.wood >= caps.wood}
+          accent="var(--res-wood)"
+          detail={<ResourceDetailPopover id="wood" />}
         />
-        <Stat
-          icon={<Mountain size={15} />}
-          label={rateLabel(t('resource.stone'), derived.productionPerMin.stone)}
+        <ResourceBadge
+          icon={<ResourceIcon id="stone" />}
           value={`${fmt(res.stone)}/${fmt(caps.stone)}`}
           warn={caps.stone > 0 && res.stone >= caps.stone}
+          accent="var(--res-stone)"
+          detail={<ResourceDetailPopover id="stone" />}
         />
-        <Stat
-          icon={<Wheat size={15} />}
-          label={rateLabel(t('resource.food'), derived.productionPerMin.food)}
+        <ResourceBadge
+          icon={<ResourceIcon id="food" />}
           value={`${fmt(res.food)}/${fmt(caps.food)}`}
           warn={caps.food > 0 && res.food >= caps.food}
+          accent="var(--res-food)"
+          detail={<ResourceDetailPopover id="food" />}
         />
         {waterPct !== undefined && (
-          <Stat icon={<Droplets size={15} />} label={t('need.water')} value={`${waterPct}%`} warn={waterPct < 100} />
+          <ResourceBadge
+            icon={<Droplets size={15} />}
+            value={`${waterPct}%`}
+            warn={waterPct < 100}
+            accent="var(--res-water)"
+          />
         )}
         {game.config.features.goldSystem && (
-          <Stat icon={<Star size={15} />} label={t('resource.gold')} value={fmt(state.gold.balance)} />
+          <ResourceBadge icon={<GoldIcon size={15} />} value={fmt(state.gold.balance)} accent="var(--res-gold)" />
         )}
       </div>
     </header>
   );
 }
 
-function Stat({ icon, label, value, warn }: { icon: React.ReactNode; label: string; value: string; warn?: boolean }) {
-  return (
-    <div className={`stat${warn ? ' stat-warn' : ''}`} title={label}>
-      {icon}
-      <span>{value}</span>
-    </div>
-  );
-}
-
 function fmt(n: number): string {
   return Math.floor(n).toLocaleString('de-DE');
-}
-
-/** Tooltip text: resource name + current production rate (storage is automatic). */
-function rateLabel(name: string, perMin: number): string {
-  return perMin > 0 ? `${name} — +${perMin % 1 === 0 ? perMin : perMin.toFixed(1)}/min` : name;
 }

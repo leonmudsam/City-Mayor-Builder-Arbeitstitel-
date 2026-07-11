@@ -3,6 +3,7 @@ import {
   BriefcaseBusiness,
   Building2,
   Clock,
+  Coins,
   Flame,
   Home,
   Leaf,
@@ -19,13 +20,24 @@ import { useState } from 'react';
 import { useGame, useUiStore } from '../../state/store.ts';
 import { effectiveEffects } from '../../game/buildings/effects.ts';
 import type { BuildingEffect } from '../../game/config/types.ts';
-import { formatDuration, t } from '../../i18n/index.ts';
+import { ActionBubble } from '../common/ActionBubble.tsx';
+import { ConfirmModal } from '../common/ConfirmModal.tsx';
+import { formatDuration, formatMoney, t } from '../../i18n/index.ts';
+
+/** Money costs use the compact format; materials stay plain integers. */
+function costLabel(cost: Partial<Record<string, number>>): string {
+  return Object.entries(cost)
+    .map(([res, amount]) => `${res === 'money' ? formatMoney(amount ?? 0) : amount} ${t(`resource.${res}`)}`)
+    .join(', ');
+}
 
 /**
- * Centered building dialog: the important facts in one clear, readable place
- * instead of a small side panel (§6 of the UX pass).
+ * A building's info sheet that floats over the map rather than covering it
+ * (§3): the map stays visible and the camera has already centred the building
+ * (renderer focus). Actions are round bubbles (§4); demolish routes through the
+ * shared ConfirmModal (§9). All gameplay stays in the controller.
  */
-export function BuildingPanel() {
+export function FloatingBuildingSheet() {
   const game = useGame();
   const { selectedBuildingId, selectBuilding, startMoving, pushToast } = useUiStore();
   const [confirmDemolish, setConfirmDemolish] = useState(false);
@@ -40,17 +52,19 @@ export function BuildingPanel() {
   const bonusPct = game.derived.productionBonus[b.id] ?? 0;
   const ambience = game.derived.ambience[b.id];
   const now = game.state.meta.lastSimTime;
-  const refundLabel = Object.entries(game.getDemolishRefund(b.id))
-    .map(([res, amount]) => `${amount} ${t(`resource.${res}`)}`)
-    .join(', ');
+  const refund = game.getDemolishRefund(b.id);
+  const refundLabel = costLabel(refund);
+  const canRelocate = game.config.features.moveBuildings || def.canRelocate === true;
+  const relocateAffordable = !def.relocationCost || game.canAffordCost(def.relocationCost);
+  const upgradeAffordable = nextUpgrade ? game.canAffordCost(nextUpgrade.cost) : false;
   const close = () => selectBuilding(undefined);
 
   return (
-    <div className="dialog-backdrop" onClick={close}>
-      <div className="dialog building-dialog" onClick={(e) => e.stopPropagation()}>
-        <div className="panel-head">
+    <>
+      <div className="floating-sheet" onClick={(e) => e.stopPropagation()}>
+        <div className="floating-sheet-head">
           <h3>
-            <Building2 size={18} />
+            <Building2 size={17} />
             {t(def.nameKey)}
             {maxLevel > 0 && (
               <span className="level-pips" title={`${t('ui.building_level')} ${b.upgradeLevel + 1}/${maxLevel + 1}`}>
@@ -102,62 +116,51 @@ export function BuildingPanel() {
           )}
         </ul>
 
-        <div className="dialog-buttons dialog-buttons-stack">
-          {game.config.features.moveBuildings ? (
-            <button className="btn-secondary" onClick={() => startMoving(b.id)}>
-              <Move size={16} />
-              {t('ui.move')}
-            </button>
-          ) : (
-            !def.unique && <p className="dialog-hint">{t('ui.move.disabled')}</p>
-          )}
-
+        <div className="action-bubbles">
           {nextUpgrade && b.status === 'active' && (
-            <button
-              className="btn-primary"
-              disabled={!game.canAffordCost(nextUpgrade.cost)}
+            <ActionBubble
+              icon={<ArrowUp size={18} />}
+              label={`${t('ui.upgrade')} · ${costLabel(nextUpgrade.cost)}`}
+              tone="primary"
+              disabled={!upgradeAffordable}
               onClick={() => {
                 const result = game.upgradeBuilding(b.id);
                 if (!result.ok) pushToast(t(`error.${result.error}`), 'error');
               }}
-            >
-              <ArrowUp size={16} />
-              {t('ui.upgrade')} (
-              {Object.entries(nextUpgrade.cost)
-                .map(([res, amount]) => `${amount} ${t(`resource.${res}`)}`)
-                .join(', ')}
-              )
-            </button>
+            />
           )}
-
-          {!def.unique &&
-            (confirmDemolish ? (
-              <div className="confirm-row">
-                <span>{t('ui.demolish.confirm')}</span>
-                {refundLabel && <span className="refund-hint">{t('ui.demolish.refund', { resources: refundLabel })}</span>}
-                <button
-                  className="btn-danger"
-                  onClick={() => {
-                    game.demolishBuilding(b.id);
-                    if (refundLabel) pushToast(t('ui.demolish.refunded', { resources: refundLabel }), 'success');
-                    close();
-                  }}
-                >
-                  {t('ui.demolish')}
-                </button>
-                <button className="btn-secondary" onClick={() => setConfirmDemolish(false)}>
-                  {t('ui.cancel')}
-                </button>
-              </div>
-            ) : (
-              <button className="btn-danger" onClick={() => setConfirmDemolish(true)}>
-                <Trash2 size={16} />
-                {t('ui.demolish')}
-              </button>
-            ))}
+          {canRelocate && (
+            <ActionBubble
+              icon={<Move size={18} />}
+              label={def.canRelocate ? `${t('ui.relocate')}${def.relocationCost ? ` · ${costLabel(def.relocationCost)}` : ''}` : t('ui.move')}
+              disabled={!relocateAffordable}
+              onClick={() => startMoving(b.id)}
+            />
+          )}
+          {!def.unique && (
+            <ActionBubble icon={<Trash2 size={18} />} label={t('ui.demolish')} tone="danger" onClick={() => setConfirmDemolish(true)} />
+          )}
         </div>
+        {!canRelocate && !def.unique && <p className="dialog-hint">{t('ui.move.disabled')}</p>}
       </div>
-    </div>
+
+      {confirmDemolish && (
+        <ConfirmModal
+          title={t('ui.demolish')}
+          message={t('ui.demolish.confirm')}
+          danger
+          confirmLabel={t('ui.demolish')}
+          detail={refundLabel ? t('ui.demolish.refund', { resources: refundLabel }) : undefined}
+          onConfirm={() => {
+            game.demolishBuilding(b.id);
+            if (refundLabel) pushToast(t('ui.demolish.refunded', { resources: refundLabel }), 'success');
+            setConfirmDemolish(false);
+            close();
+          }}
+          onCancel={() => setConfirmDemolish(false)}
+        />
+      )}
+    </>
   );
 }
 
@@ -165,6 +168,10 @@ function effectIcon(eff: BuildingEffect) {
   switch (eff.type) {
     case 'produce':
       return <TrendingUp size={15} />;
+    case 'housing':
+      return <Home size={15} />;
+    case 'revenue':
+      return <Coins size={15} />;
     case 'capacity':
       return eff.need === 'housing' ? <Home size={15} /> : <PackageOpen size={15} />;
     case 'coverage':
@@ -190,6 +197,10 @@ function describeEffect(eff: BuildingEffect, bonusPct: number): string | undefin
       const rate = eff.perMinute * (1 + bonusPct / 100);
       return t('ui.effect.produce', { rate: rate % 1 === 0 ? rate : rate.toFixed(1), resource: t(`resource.${eff.resource}`) });
     }
+    case 'housing':
+      return `${t('ui.effect.housing', { units: eff.units, residents: eff.units * eff.maxResidentsPerUnit })} (${t('ui.effect.housing_units', { min: eff.minResidentsPerUnit, max: eff.maxResidentsPerUnit })})`;
+    case 'revenue':
+      return t('ui.effect.revenue', { amount: formatMoney(eff.perMinute), category: t(`ui.revenue.${eff.category}`) });
     case 'capacity':
       return eff.radius !== undefined
         ? t('ui.effect.capacity_radius', { amount: eff.amount, need: t(`need.${eff.need}`), radius: eff.radius })
@@ -203,10 +214,10 @@ function describeEffect(eff: BuildingEffect, bonusPct: number): string | undefin
     case 'distribution':
       return t('ui.effect.distribution', { need: t(`need.${eff.need}`), radius: eff.radius });
     case 'demand':
-      return undefined; // demand is infrastructure load, not a headline effect
+      return undefined;
     case 'protection':
       return t('ui.effect.protection', { radius: eff.radius });
     case 'ambience':
-      return undefined; // shown via the aggregated "Umgebung" line
+      return undefined;
   }
 }

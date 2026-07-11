@@ -68,14 +68,14 @@ describe('simulation tick', () => {
   it('refunds a share of the invested cost when demolishing', () => {
     const { controller } = newController();
     controller.placeBuilding('road', 26, 26);
-    controller.placeBuilding('house_small', 26, 27); // cost: 50 money, 15 wood
+    controller.placeBuilding('house_small', 26, 27); // cost: 6 000 money, 15 wood
     const house = Object.values(controller.state.buildings).find((b) => b.defId === 'house_small')!;
     const moneyBefore = controller.state.resources.money;
     const woodBefore = controller.state.resources.wood;
-    // 25 % refund, floored per resource: 12 money, 3 wood.
-    expect(controller.getDemolishRefund(house.id)).toEqual({ money: 12, wood: 3 });
+    // 25 % refund, floored per resource: 1 500 money, 3 wood.
+    expect(controller.getDemolishRefund(house.id)).toEqual({ money: 1_500, wood: 3 });
     expect(controller.demolishBuilding(house.id)).toEqual({ ok: true });
-    expect(controller.state.resources.money).toBe(moneyBefore + 12);
+    expect(controller.state.resources.money).toBe(moneyBefore + 1_500);
     expect(controller.state.resources.wood).toBe(woodBefore + 3);
   });
 
@@ -88,8 +88,9 @@ describe('simulation tick', () => {
     const before = controller.state.citizens.happiness;
     expect(controller.derived.avgAmbience).toBe(0);
     // A tree next to the house (ambience +1, radius 3) — a pure ambience source.
+    // Small houses weigh their surroundings more (sensitivity 1.4, §7).
     expect(controller.placeBuilding('deco_tree', 28, 27)).toEqual({ ok: true });
-    expect(controller.derived.avgAmbience).toBe(1);
+    expect(controller.derived.avgAmbience).toBeCloseTo(1.4, 5);
     controller.update(T0 + 30_000 + 6 * MIN); // happiness recomputed with ambience
     expect(controller.state.citizens.happiness).toBeGreaterThan(before);
   });
@@ -130,8 +131,8 @@ describe('simulation tick', () => {
     controller.update(T0 + 19_000); // house still under construction (20s)
     expect(controller.state.citizens.population).toBe(0);
     controller.update(T0 + 30_000 + 10 * MIN);
-    // Housing cap 6, growth 2/min → capped at 6.
-    expect(controller.state.citizens.population).toBe(6);
+    // Small house = 1 unit × 5 residents → cap 5; growth fills then stops (§6).
+    expect(controller.state.citizens.population).toBe(5);
   });
 
   it('drops happiness when water is missing at level 3+', () => {

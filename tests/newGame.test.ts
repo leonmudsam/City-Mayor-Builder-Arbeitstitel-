@@ -21,7 +21,7 @@ describe('new game', () => {
 
   it('starts with configured resources and no population', () => {
     const { controller } = newController();
-    expect(controller.state.resources.money).toBe(500);
+    expect(controller.state.resources.money).toBe(45_000);
     expect(controller.state.citizens.population).toBe(0);
   });
 });

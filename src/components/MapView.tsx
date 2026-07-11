@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { AlertTriangle, CheckCircle2, MapPin, Move, Sparkles } from 'lucide-react';
+import { AlertTriangle, CheckCircle2, Move, Sparkles } from 'lucide-react';
 import { MapRenderer, type HoverInfo } from '../renderer/MapRenderer.ts';
 import { getController, useUiStore } from '../state/store.ts';
 import { t } from '../i18n/index.ts';
@@ -8,14 +8,13 @@ export function MapView() {
   const hostRef = useRef<HTMLDivElement>(null);
   const rendererRef = useRef<MapRenderer>(undefined);
   const [hoverInfo, setHoverInfo] = useState<HoverInfo | undefined>(undefined);
-  const [showUnlock, setShowUnlock] = useState(false);
+  const [coverage, setCoverage] = useState<{ label: string; underCapacity: boolean } | undefined>(undefined);
 
   useEffect(() => {
     const host = hostRef.current;
     if (!host) return;
     const controller = getController();
     const ui = useUiStore.getState();
-    let unlockTimer: ReturnType<typeof setTimeout> | undefined;
 
     const renderer = new MapRenderer(controller, {
       onSelectBuilding: (id) => useUiStore.getState().selectBuilding(id),
@@ -35,10 +34,13 @@ export function MapView() {
       },
       onHoverInfo: (info) => setHoverInfo(info),
       onSectorUnlocked: () => {
-        setShowUnlock(true);
-        if (unlockTimer) clearTimeout(unlockTimer);
-        unlockTimer = setTimeout(() => setShowUnlock(false), 2800);
+        useUiStore.getState().pushEvent({
+          kind: 'sectorUnlocked',
+          titleKey: 'event.sector.title',
+          bodyKey: 'event.sector.body',
+        });
       },
+      onCoverageInfo: (info) => setCoverage(info),
       onPlace: (defId, x, y) => {
         const result = controller.placeBuilding(defId, x, y);
         if (!result.ok) {
@@ -49,6 +51,14 @@ export function MapView() {
         const def = controller.config.buildings.get(defId);
         if (def && def.category !== 'roads' && def.category !== 'decoration') {
           useUiStore.getState().stopPlacing();
+        }
+      },
+      // Drag-painting a road: silent on overlap so a swipe doesn't spam toasts,
+      // but a real blocker (funds, locked sector) still surfaces once.
+      onDragPlace: (defId, x, y) => {
+        const result = controller.placeBuilding(defId, x, y);
+        if (!result.ok && result.error !== 'occupied') {
+          ui.pushToast(placementErrorText(defId, result.error), 'error');
         }
       },
     });
@@ -74,7 +84,6 @@ export function MapView() {
 
     return () => {
       window.removeEventListener('keydown', onKey);
-      if (unlockTimer) clearTimeout(unlockTimer);
       unsubscribe();
       renderer.destroy();
       rendererRef.current = undefined;
@@ -88,15 +97,7 @@ export function MapView() {
   return (
     <div className="map-host" ref={hostRef}>
       {active && <PlacementBanner info={hoverInfo} moving={moving !== undefined} />}
-      {showUnlock && (
-        <div className="event-popup">
-          <MapPin size={22} />
-          <div>
-            <strong>{t('ui.sector.unlocked_title')}</strong>
-            <span>{t('ui.sector.unlocked_desc')}</span>
-          </div>
-        </div>
-      )}
+      {coverage && !active && <CoverageLegend info={coverage} />}
     </div>
   );
 }
@@ -109,6 +110,25 @@ function placementErrorText(defId: string, error: string): string {
   const building = t(controller.config.buildings.get(defId)?.nameKey ?? '');
   if (limit?.nextLevel !== undefined) return t('ui.limit.reached_next', { building, level: limit.nextLevel });
   return t('ui.limit.reached_max', { building });
+}
+
+/** Legend for the coverage overlay: what each home color means (§1). */
+function CoverageLegend({ info }: { info: { label: string; underCapacity: boolean } }) {
+  const states = ['supplied', 'redundant', 'partial', 'unsupplied'] as const;
+  return (
+    <div className="coverage-legend">
+      <div className="coverage-legend-head">{t('ui.coverage.legend', { label: info.label })}</div>
+      <div className="coverage-legend-items">
+        {states.map((s) => (
+          <span key={s} className="coverage-legend-item">
+            <span className={`coverage-swatch coverage-${s}`} />
+            {t(`ui.coverage.${s}`)}
+          </span>
+        ))}
+      </div>
+      {info.underCapacity && <div className="coverage-legend-warn">{t('ui.coverage.undercapacity', { label: info.label })}</div>}
+    </div>
+  );
 }
 
 /**

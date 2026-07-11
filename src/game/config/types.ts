@@ -20,6 +20,21 @@ export type BuildingEffect =
   | { type: 'produce'; resource: ResourceId; perMinute: number; inputsPerMinute?: Partial<Record<ResourceId, number>> }
   /** With `radius`, the capacity only reaches housing within that range (wells). */
   | { type: 'capacity'; need: NeedId; amount: number; radius?: number }
+  /**
+   * Residential housing broken into households (§6/§7). Resident capacity is
+   * `units × maxResidentsPerUnit`; `min…max` describe the believable household
+   * size (shown in the UI). `ambienceSensitivity` (default 1) scales how much
+   * this home's neighborhood quality shifts happiness — suburbs (small houses)
+   * react more strongly to green space and industry than dense blocks do.
+   */
+  | { type: 'housing'; units: number; minResidentsPerUnit: number; maxResidentsPerUnit: number; ambienceSensitivity?: number }
+  /**
+   * Ongoing municipal income a building generates, split into legible sources
+   * (§5). Commercial/industrial revenue scales with staffing (filled jobs) and
+   * happiness in the tick — the generic hook for shops, markets, industry and
+   * later tourism/fees. Residential income stays modeled as per-capita tax.
+   */
+  | { type: 'revenue'; category: 'commercial' | 'industrial'; perMinute: number }
   | { type: 'coverage'; need: NeedId; radius: number }
   | { type: 'storage'; resource: ResourceId; amount: number }
   | { type: 'jobs'; amount: number }
@@ -84,6 +99,21 @@ export interface BuildingDef {
   buildLimit?: { level: number; max: number }[];
   /** Only one instance allowed (town hall, mayor house). */
   unique?: boolean;
+  /**
+   * Whether the building can be torn down. Default true. Central/unique
+   * buildings (town hall, mayor house, later district centers) set this false
+   * so the city's anchor can never be lost — but they must then be relocatable
+   * (see `canRelocate`) so a misplacement isn't permanent (§2).
+   */
+  canDemolish?: boolean;
+  /**
+   * Whether the building may be relocated via an explicit action in the
+   * building sheet, independent of the global `moveBuildings` flag. Intended
+   * for non-demolishable specials. Placement rules are re-checked on drop.
+   */
+  canRelocate?: boolean;
+  /** Optional fee charged when relocating a `canRelocate` building. */
+  relocationCost?: Partial<Record<ResourceId, number>>;
   /** Cannot be built from the menu (pre-placed buildings). */
   buildable?: boolean;
   biomeRequirement?: TerrainType[];
@@ -164,11 +194,17 @@ export interface BiomeDef {
 // ---- Balancing ------------------------------------------------------------
 
 export interface BalancingConfig {
-  /** Money per citizen per minute at neutral happiness. */
+  /** Residential income (property/residence tax) per citizen per minute. */
   taxPerCapitaPerMin: number;
-  /** Happiness → tax multiplier range. */
+  /** Happiness → income multiplier range (applies to every income source). */
   taxFactorMin: number;
   taxFactorMax: number;
+  /**
+   * Share of the population that forms the labor force. Commercial/industrial
+   * income scales with staffing: `min(1, laborForce / jobs)`. Also the
+   * reference the work need uses so "filled jobs" is one consistent notion.
+   */
+  laborParticipation: number;
   /** Citizens moving in per minute when there is free housing & happiness ≥ threshold. */
   growthPerMin: number;
   declinePerMin: number;

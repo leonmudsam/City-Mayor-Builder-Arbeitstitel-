@@ -20,6 +20,7 @@ import {
   COLOR_LOCKED_OVERLAY,
   COLOR_SELECTION,
   COLOR_SIDEWALK,
+  COVERAGE_COLORS,
   RADIUS_COLORS,
   TERRAIN_COLORS,
 } from './colors.ts';
@@ -41,6 +42,8 @@ export interface RendererCallbacks {
   onSelectBuilding(id: string | undefined): void;
   onClickLockedSector(id: string): void;
   onPlace(defId: string, x: number, y: number): void;
+  /** Drag-painting a road across tiles — placement failures stay silent (§7). */
+  onDragPlace(defId: string, x: number, y: number): void;
   onCancelPlacement(): void;
   /** Hold gesture picked up a building — UI enters move mode. */
   onRequestMove(id: string): void;
@@ -50,6 +53,8 @@ export interface RendererCallbacks {
   onHoverInfo(info: HoverInfo | undefined): void;
   /** A sector just went from locked → unlocked (central "new area" popup). */
   onSectorUnlocked(id: string): void;
+  /** Coverage overlay is active (or cleared) — UI shows/hides the legend (§1). */
+  onCoverageInfo(info: { label: string; underCapacity: boolean } | undefined): void;
 }
 
 /** Short-lived visual effect (demolish dust, sector-unlock flash). */
@@ -73,6 +78,7 @@ export class MapRenderer {
   private buildingLayer = new Container();
   private fxLayer = new Container();
   private overlayLayer = new Container();
+  private coverageLayer = new Graphics();
   private ghost = new Graphics();
   private ghostRadius = new Graphics();
   private selectionBox = new Graphics();
@@ -87,7 +93,11 @@ export class MapRenderer {
   private hoverTile: { x: number; y: number } | undefined;
   private selectedId: string | undefined;
   private lastHoverKey = '';
+  private coverageKey = '';
+  private hasCoverage = false;
   private destroyed = false;
+  /** Target for the world container while easing the camera onto a building (§13). */
+  private focusTarget: { x: number; y: number } | undefined;
 
   constructor(
     private controller: GameController,
@@ -102,7 +112,7 @@ export class MapRenderer {
     }
     host.appendChild(this.app.canvas);
     this.world.addChild(this.terrainLayer, this.buildingLayer, this.fxLayer, this.overlayLayer);
-    this.overlayLayer.addChild(this.ghostRadius, this.selectionBox, this.ghost);
+    this.overlayLayer.addChild(this.coverageLayer, this.ghostRadius, this.selectionBox, this.ghost);
     this.app.stage.addChild(this.world);
 
     // Center the camera on the town hall.
@@ -137,6 +147,20 @@ export class MapRenderer {
 
   setSelected(id: string | undefined): void {
     this.selectedId = id;
+    if (id) this.focusBuilding(id);
+  }
+
+  /** Ease the camera so the selected building sits centred on screen (§13). */
+  private focusBuilding(id: string): void {
+    const b = this.controller.state.buildings[id];
+    const def = b && this.controller.config.buildings.get(b.defId);
+    if (!b || !def) return;
+    const scale = this.world.scale.x;
+    const centerPx = { x: (b.x + def.size.w / 2) * TILE, y: (b.y + def.size.h / 2) * TILE };
+    this.focusTarget = {
+      x: this.app.screen.width / 2 - centerPx.x * scale,
+      y: this.app.screen.height / 2 - centerPx.y * scale,
+    };
   }
 
   private clearGhost(): void {
@@ -156,6 +180,7 @@ export class MapRenderer {
     let moved = false;
     let last = { x: 0, y: 0 };
     let holdTimer: ReturnType<typeof setTimeout> | undefined;
+    let paintedKey = '';
 
     const cancelHold = (): void => {
       if (holdTimer !== undefined) clearTimeout(holdTimer);
@@ -165,6 +190,8 @@ export class MapRenderer {
     canvas.addEventListener('pointerdown', (e) => {
       dragging = true;
       moved = false;
+      paintedKey = '';
+      this.focusTarget = undefined; // any manual interaction cancels the camera ease
       last = { x: e.clientX, y: e.clientY };
       // Press-and-hold on a building picks it up for moving (only when the
       // move feature is enabled — off in MVP 1, §5).
@@ -191,10 +218,19 @@ export class MapRenderer {
         moved = true;
         cancelHold();
       }
-      // While carrying a building the pointer steers the ghost, not the camera.
-      if (moved && !this.movingId) {
-        this.world.position.x += dx;
-        this.world.position.y += dy;
+      if (moved) {
+        if (this.placingDefId && this.isPaintableRoad(this.placingDefId)) {
+          // Drag to draw a run of road (§7): each newly entered tile is placed.
+          const key = `${tile.x}:${tile.y}`;
+          if (key !== paintedKey) {
+            paintedKey = key;
+            this.callbacks.onDragPlace(this.placingDefId, tile.x, tile.y);
+          }
+        } else if (!this.movingId) {
+          // While carrying a building the pointer steers the ghost, not the camera.
+          this.world.position.x += dx;
+          this.world.position.y += dy;
+        }
       }
       last = { x: e.clientX, y: e.clientY };
     });
@@ -228,6 +264,7 @@ export class MapRenderer {
       'wheel',
       (e) => {
         e.preventDefault();
+        this.focusTarget = undefined;
         const factor = e.deltaY < 0 ? 1.15 : 1 / 1.15;
         const newScale = Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, this.world.scale.x * factor));
         const worldX = (e.offsetX - this.world.position.x) / this.world.scale.x;
@@ -249,6 +286,12 @@ export class MapRenderer {
   /** Center the footprint under the cursor. */
   private snapTopLeft(def: BuildingDef, tileX: number, tileY: number): { x: number; y: number } {
     return { x: tileX - Math.floor(def.size.w / 2), y: tileY - Math.floor(def.size.h / 2) };
+  }
+
+  /** A 1×1 road is the only building you draw by dragging (§7). */
+  private isPaintableRoad(defId: string): boolean {
+    const def = this.controller.config.buildings.get(defId);
+    return Boolean(def && def.category === 'roads' && def.size.w === 1 && def.size.h === 1);
   }
 
   private buildingAt(x: number, y: number): string | undefined {
@@ -282,6 +325,7 @@ export class MapRenderer {
   // ---- Rendering --------------------------------------------------------------
 
   private frame(): void {
+    this.animateFocus();
     this.cullSectors();
     if (this.controller.version !== this.lastVersion) {
       this.lastVersion = this.controller.version;
@@ -290,7 +334,72 @@ export class MapRenderer {
     }
     this.updateFx();
     this.drawGhost();
+    this.drawCoverage();
     this.drawSelection();
+  }
+
+  /**
+   * Generic coverage overlay (§1): when a supply building is selected, show
+   * every source of that type, their combined reach, and each home tinted by
+   * how well it's served (supplied / partial / redundant / unsupplied). Pure
+   * overlay data comes from the game layer; this only paints it. Recomputed
+   * only when the selection or world version changes (not per frame).
+   */
+  private drawCoverage(): void {
+    const active = this.selectedId && !this.placingDefId && !this.movingId;
+    const key = active ? `${this.selectedId}|${this.controller.version}` : '';
+    if (key === this.coverageKey) return;
+    this.coverageKey = key;
+    this.coverageLayer.clear();
+
+    const overlay = active ? this.controller.getCoverageOverlay(this.selectedId!) : undefined;
+    this.hasCoverage = Boolean(overlay);
+    if (!overlay) {
+      this.callbacks.onCoverageInfo(undefined);
+      return;
+    }
+    const groupColor = RADIUS_COLORS[overlay.colorKey] ?? COLOR_SELECTION;
+    const g = this.coverageLayer;
+
+    // Combined reach of every source (low alpha so overlaps stay readable).
+    for (const s of overlay.sources) {
+      const cx = (s.x + s.w / 2) * TILE;
+      const cy = (s.y + s.h / 2) * TILE;
+      const half = s.radius * TILE;
+      g.roundRect(cx - half, cy - half, half * 2, half * 2, 10).fill({ color: groupColor, alpha: 0.06 });
+    }
+    for (const s of overlay.sources) {
+      const cx = (s.x + s.w / 2) * TILE;
+      const cy = (s.y + s.h / 2) * TILE;
+      const half = s.radius * TILE;
+      g.roundRect(cx - half, cy - half, half * 2, half * 2, 10).stroke({ width: s.selected ? 2.5 : 1.5, color: groupColor, alpha: s.selected ? 0.85 : 0.4 });
+      // Source footprint marker.
+      g.roundRect(s.x * TILE + 2, s.y * TILE + 2, s.w * TILE - 4, s.h * TILE - 4, 5)
+        .stroke({ width: s.selected ? 3 : 2, color: COVERAGE_COLORS.source, alpha: s.selected ? 1 : 0.6 });
+    }
+    // Consumers: a clear status dot + border, no map-wide flood of color.
+    for (const c of overlay.consumers) {
+      const color = COVERAGE_COLORS[c.state];
+      g.roundRect(c.x * TILE + 2, c.y * TILE + 2, c.w * TILE - 4, c.h * TILE - 4, 5).stroke({ width: 2, color, alpha: 0.9 });
+      const dotX = (c.x + c.w / 2) * TILE;
+      const dotY = (c.y + c.h / 2) * TILE;
+      g.circle(dotX, dotY, 5).fill({ color, alpha: 0.95 }).stroke({ width: 1.5, color: 0x10151c, alpha: 0.6 });
+    }
+    this.callbacks.onCoverageInfo({ label: t(overlay.labelKey), underCapacity: overlay.underCapacity });
+  }
+
+  /** Smoothly move the world container toward the current focus target. */
+  private animateFocus(): void {
+    const target = this.focusTarget;
+    if (!target) return;
+    const dx = target.x - this.world.position.x;
+    const dy = target.y - this.world.position.y;
+    if (Math.abs(dx) + Math.abs(dy) < 0.6) {
+      this.world.position.set(target.x, target.y);
+      this.focusTarget = undefined;
+      return;
+    }
+    this.world.position.set(this.world.position.x + dx * 0.18, this.world.position.y + dy * 0.18);
   }
 
   /** Advance and retire short-lived effects (demolish dust, unlock flash). */
@@ -606,8 +715,9 @@ export class MapRenderer {
     this.selectionBox
       .roundRect(b.x * TILE - 2, b.y * TILE - 2, def.size.w * TILE + 4, def.size.h * TILE + 4, 6)
       .stroke({ width: 2.5, color: COLOR_SELECTION, alpha: 0.9 });
-    // Show what the building reaches (well radius, park coverage, fire protection).
-    this.drawEffectRadii(this.selectionBox, def, b.x, b.y, b.upgradeLevel);
+    // The coverage overlay already shows a supply building's reach in full; for
+    // everything else, fall back to the simple radius outlines.
+    if (!this.hasCoverage) this.drawEffectRadii(this.selectionBox, def, b.x, b.y, b.upgradeLevel);
   }
 }
 

@@ -1,5 +1,159 @@
 # Patch Notes
 
+## v0.5 — „UI/UX-Überarbeitung: modernes City-Builder-Gefühl"
+
+Ein durchgehender Oberflächen-Pass in Richtung eines hochwertigen, modernen
+Aufbau-Spiels. Die Spielmechanik bleibt unverändert — neu sind Darstellung,
+Interaktion und ein Baukasten wiederverwendbarer UI-Bausteine. Keine Emojis,
+durchgängig SVG-Icons; die Spiellogik bleibt strikt von React/Pixi getrennt.
+
+### Wiederverwendbare Komponenten-Basis (§15)
+
+Neu als eigenständige, kombinierbare Bausteine — nicht als Einmal-Widgets:
+`Popover`, `Modal`, `ConfirmModal`, `EventModal`, `ResourceBadge`,
+`ResourceDetailPopover`, `ActionBubble`, `BuildingPreview`, `FloatingBuildingSheet`,
+`EconomyPanel`, `CityStatusPanel` sowie ein zentrales Icon-Modul
+(`common/icons.tsx`). Ressourcen-, Bedürfnis- und Kategorie-Icons haben jetzt
+**eine** Quelle der Wahrheit — ein neues Icon ist eine Zeile, keine Suche durch
+die Komponenten.
+
+### Kopfleiste: Ressourcen-Badges mit Detail-Popover (§2, §12)
+
+- Jede Ressource ist ein **anklickbares Badge** mit Farbakzent; ein Klick öffnet
+  ein **Detail-Popover** (Bestand vs. Lagerkapazität als Balken, Produktion pro
+  Minute, kurze Erklärung „woher kommt das?").
+- Das **Geld-Badge** zeigt das Netto-Einkommen und verlinkt direkt in die
+  Wirtschaftsübersicht.
+
+### Gebäude-Interaktion: schwebendes Sheet + Aktions-Bubbles (§3, §4, §13)
+
+- Das Gebäude-Panel ist jetzt ein **schwebendes Sheet über der Karte** statt
+  eines abdunkelnden Vollbild-Dialogs — die Stadt bleibt sichtbar.
+- Beim Anklicken **zentriert die Kamera sanft** auf das Gebäude (weiche
+  Ease-Animation; jede manuelle Geste bricht sie ab).
+- Aktionen (Upgrade, Verschieben/Umsetzen, Abriss) sind **runde Aktions-Bubbles**
+  im Tonfall der Aktion; Abriss läuft über den gemeinsamen `ConfirmModal`.
+
+### Visuelles Baumenü mit Mini-Vorschau (§5, §12)
+
+- Jede Gebäudekarte zeigt eine **programmatische Mini-Vorschau** (Gebäude-Körper
+  mit Fenstern, Straßen als Fahrbahn, Grün als Laub) — dieselbe Bildsprache wie
+  auf der Karte, ganz ohne Assets, gestochen scharf in jeder Größe.
+
+### Stadt-Status: umsetzbare Hinweise (§10)
+
+- Neues **Stadt-Status-Panel**: zuerst **anklickbare Alarme** (Bedürfnis niedrig,
+  Lager voll, Quest-Belohnung wartet) — jeder Alarm führt direkt zur Lösung
+  (ins Baumenü mit vorgewähltem Gebäude bzw. ins passende Panel) —, darunter die
+  vollständige Bedürfnis-Aufschlüsselung mit Balken.
+
+### Wirtschaftspanel (§11)
+
+- Eigenes **Wirtschaftspanel** mit Einnahmen-Split (Wohnen/Gewerbe/Produktion)
+  als Balken, Gesamtsumme und Beschäftigungsgrad. Liest ausschließlich die
+  bestehende `computeIncome`-Quelle — keine Zahl wird im UI nachgerechnet.
+
+### Vereinheitlichtes Popup-System (§9)
+
+- **Toast** (flüchtig) · **EventModal** (bestätigungspflichtige Momente wie
+  Level-Up und neuer Sektor, datengetrieben aus einer UI-Event-Queue) ·
+  **ConfirmModal** (destruktive Aktionen). Alle bauen auf einer gemeinsamen
+  `Modal`-Hülle auf.
+
+### Karten-Interaktion (§7, §13)
+
+- **Straßen per Ziehen bauen:** Mit gedrückter Maustaste über die Karte fahren
+  legt einen ganzen Straßenzug; Überlappungen bleiben stumm, echte Blocker
+  (Geld, gesperrter Sektor) melden sich einmalig.
+- **Kamerafokus** beim Auswählen (siehe oben).
+
+### Bewusst als nächste Schritte offen
+
+Karten-verankerte Aktions-Blasen, die ein Gebäude beim Verschieben der Karte
+mitverfolgen, echte Gebäude-Sprites und der Besichtigungsmodus bleiben spätere
+Ausbaustufen — die Komponenten-Basis ist darauf ausgelegt.
+
+## v0.4 — „Wirtschaft, Wohnraum & Versorgung"
+
+Ein zusammenhängender System-Pass: glaubwürdige Geldgrößen mit mehreren
+Einnahmequellen, ein echtes Wohn-/Bevölkerungsmodell, ein generisches
+Versorgungs-Overlay und verschiebbare Spezialgebäude. Alle Werte liegen in
+Configs; die Spiellogik bleibt frei von React/Pixi.
+
+### Wirtschaft auf glaubwürdiger Größenordnung (§3–§5)
+
+- **Geld läuft jetzt auf Stadt-Maßstab** statt zweistelliger Spielgeld-Beträge:
+  kleines Haus 6.000, Reihenhaus 22.000, Apartment 90.000, Markt 20.000,
+  Wasserpumpe 40.000, Sektor-Freischaltung ab ~80.000. Startkapital 45.000.
+- **Materialien (Holz/Stein/Essen) bleiben kleinskalig** — dadurch sind sie ein
+  *eigener* Engpass neben Geld: Geld kauft den Bauplatz, Material und Versorgung
+  begrenzen, *was* du baust. Geld blockiert nicht mehr jede Aktion (§3).
+- **Mehrere Einnahmequellen statt nur Miete** (§5), als generischer `revenue`-
+  Effekt: **Wohnen** (Grundsteuer pro Kopf, zufriedenheitsabhängig), **Gewerbe**
+  (Läden/Markt, skaliert mit besetzten Arbeitsplätzen) und **Produktion**
+  (Industrieabgaben). Neue Quellen (Tourismus, Transport) sind reine Config.
+- **Neues Finanz-/Wirtschaftspanel** im Bürgermeister-Tab zeigt Einnahmen pro
+  Minute nach Quelle + Beschäftigungsgrad — „woher das Geld kommt" auf einen
+  Blick. In der Kopfleiste steht das Netto-Einkommen pro Minute am Geldwert.
+- **Zahlenformat** `formatMoney`: 12.500 · 250.000 · 1,2 Mio. · 1,2 Mrd.
+- *Technisch:* `economy/income.ts` (`computeIncome`) ist die einzige Quelle der
+  Wahrheit — Tick und UI rechnen identisch.
+
+### Echtes Wohn- & Bevölkerungsmodell (§6/§7)
+
+- Wohngebäude bestehen jetzt aus **Wohnungen × Bewohner pro Wohnung**
+  (generischer `housing`-Effekt) statt einer einzelnen Zahl:
+  - **Kleines Haus** – 1 Wohnung, bis 5 Bewohner: Vorstadt, hohe Wohnqualität,
+    reagiert stark auf Grün & Industrie in der Nähe.
+  - **Reihenhaus** – 5 Wohnungen (bis 20 Bewohner): dichter, höhere Versorgungs-
+    und Wassernachfrage.
+  - **Apartment** – 16 Wohnungen (bis 48 Bewohner): hohe Verdichtung, braucht
+    Infrastruktur & Parks.
+  - Haus-Upgrades erhöhen Wohnungen und Bewohner sichtbar.
+- Einwohnerzahl ergibt sich aus **tatsächlicher Belegung**: mehr Wohnraum füllt
+  sich nur nach und nach und nur bei guter Versorgung/Zufriedenheit. Die
+  Kopfzeile zeigt „Einwohner / Kapazität" + Wohnungszahl.
+- **Haustyp-Profile** wirken spürbar über `ambienceSensitivity` (Vorstadt
+  gewichtet Umgebungsqualität stärker) und unterschiedlichen Wasserbedarf.
+- Wasserbedarf kommt jetzt **vollständig aus den Häusern** (skaliert mit Typ &
+  Ausbaustufe), nicht mehr aus einer pauschalen Pro-Kopf-Zahl.
+
+### Generisches Versorgungs-Overlay (§1)
+
+- **Ein System für alle Versorgungsarten** (`buildings/coverage.ts`): Klick auf
+  ein Versorgungsgebäude zeigt **alle Gebäude desselben Typs** samt Radien und
+  markiert jedes Wohngebäude nach Zustand — *versorgt*, *mehrfach versorgt*,
+  *unterversorgt* (Kapazität reicht nicht) oder *nicht versorgt*. Das
+  ausgewählte Quellgebäude ist hervorgehoben.
+- Funktioniert ohne Sonderlogik für Wasser, Freizeit, Essen-Verteilung und
+  Brandschutz — und ist damit für Polizei/Gesundheit/Bildung/Umwelt/ÖPNV
+  vorbereitet (nur neue Config nötig).
+- Halbtransparente Flächen + Status-Punkte über den Gebäuden + **Legende** unten
+  links; Überlappungen bleiben lesbar.
+
+### Verschiebbare Spezialgebäude (§2)
+
+- Normale Gebäude bleiben **nach dem Bau unverschiebbar** (abreißen & neu bauen).
+- **Nicht abreißbare Spezialgebäude** (Rathaus, Bürgermeisterhaus) sind dafür
+  über eine eigene Aktion im Gebäude-Sheet **verschiebbar** — Fehlplatzierungen
+  beschädigen den Spielstand nicht mehr dauerhaft. Platzierungsregeln
+  (Straße, Untergrund, freier Platz) werden erneut geprüft; optionale Gebühr
+  (`relocationCost`) per Config. Steuerung über `canDemolish`/`canRelocate`.
+
+### Migration
+
+- Save-Schema **v2 → v3**: gespeichertes Geld wird ×100 skaliert, damit alte
+  Spielstände ihren relativen Wohlstand behalten. Wohn-/Einkommensmodell ist
+  config-abgeleitet und greift automatisch.
+
+### Für später vorbereitet
+
+Generischer `revenue`-Effekt (weitere Einnahmearten), generisches
+Coverage-System (weitere Versorgungsbedürfnisse), `housing`-Modell (Hochhäuser
+mit hoher Verdichtung), `canRelocate` (Distrikt-Zentren).
+
+---
+
 ## v0.3 — „Stadtplanung mit Konsequenzen"
 
 Großer Balancing- und Planungs-Pass: Produktionsgebäude sind jetzt wertvoll

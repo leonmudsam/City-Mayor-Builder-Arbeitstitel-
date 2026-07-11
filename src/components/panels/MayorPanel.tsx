@@ -1,6 +1,6 @@
-import { Crown, MessageCircleWarning, MessageSquareHeart, Info } from 'lucide-react';
+import { Crown, MessageCircleWarning, MessageSquareHeart, Info, Wallet } from 'lucide-react';
 import { useGame, useUiStore } from '../../state/store.ts';
-import { formatDuration, t } from '../../i18n/index.ts';
+import { formatDuration, formatMoney, t } from '../../i18n/index.ts';
 
 export function MayorPanel() {
   const game = useGame();
@@ -8,6 +8,7 @@ export function MayorPanel() {
   const { state } = game;
   const now = state.meta.lastSimTime;
   const hasHouse = state.mayor.houseLevel >= 1;
+  const income = game.getIncome();
 
   return (
     <aside className="panel side-panel mayor-panel">
@@ -15,6 +16,18 @@ export function MayorPanel() {
         <h3>
           <Crown size={17} /> {t('ui.mayor')}
         </h3>
+      </div>
+
+      <div className="finance-box">
+        <div className="finance-head">
+          <Wallet size={15} />
+          <span>{t('ui.finance.title')}</span>
+          <span className="finance-total">{t('ui.finance.per_min', { amount: formatMoney(income.total) })}</span>
+        </div>
+        <FinanceRow label={t('ui.finance.residential')} value={income.residential} />
+        <FinanceRow label={t('ui.finance.commercial')} value={income.commercial} />
+        <FinanceRow label={t('ui.finance.industrial')} value={income.industrial} />
+        <div className="finance-foot muted">{t('ui.finance.employment', { pct: Math.round(income.employment * 100) })}</div>
       </div>
 
       {!hasHouse && <p className="muted">{t('ui.mayor.locked')}</p>}
@@ -61,7 +74,7 @@ export function MayorPanel() {
         </div>
       )}
 
-      <div className="message-feed">
+      <div className="message-feed message-feed-mayor">
         {state.mayor.messages.length === 0 && <p className="muted">{t('ui.no_messages')}</p>}
         {state.mayor.messages.slice(0, 12).map((msg) => (
           <div key={msg.id} className={`message message-${msg.kind}`}>
@@ -71,5 +84,14 @@ export function MayorPanel() {
         ))}
       </div>
     </aside>
+  );
+}
+
+function FinanceRow({ label, value }: { label: string; value: number }) {
+  return (
+    <div className="finance-row">
+      <span>{label}</span>
+      <span className="finance-value">{t('ui.finance.per_min', { amount: formatMoney(value) })}</span>
+    </div>
   );
 }

@@ -15,6 +15,13 @@
   --bad: #e35d5d;
   --radius: 10px;
   --shadow: 0 6px 24px rgba(0, 0, 0, 0.45);
+  /* Per-resource accent colours (§12) — shared by HUD badges and previews. */
+  --res-money: #e8a33d;
+  --res-wood: #b07a43;
+  --res-stone: #9aa1ab;
+  --res-food: #d9a441;
+  --res-water: #4a90cf;
+  --res-gold: #ffd54f;
 }
 
 * { margin: 0; box-sizing: border-box; }
@@ -138,13 +145,19 @@ body {
 .build-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 10px; overflow-y: auto; padding-bottom: 2px; }
 .build-card {
   text-align: left; background: var(--surface-2); border: 1px solid var(--border);
-  border-radius: 10px; padding: 11px 12px; display: flex; flex-direction: column; gap: 6px;
+  border-radius: 10px; padding: 10px; display: flex; gap: 11px;
 }
 .build-card:not(.disabled):hover { border-color: var(--primary); transform: translateY(-1px); transition: transform 0.1s; }
 .build-card.locked { opacity: 0.6; }
-.build-card-top { display: flex; align-items: baseline; justify-content: space-between; gap: 6px; }
+.build-card-media { position: relative; flex-shrink: 0; }
+.build-card-media .bp { display: block; border-radius: 8px; }
+.build-card-body { display: flex; flex-direction: column; gap: 5px; min-width: 0; flex: 1; }
+.bp-ground { fill: rgba(0, 0, 0, 0.28); }
 .build-card-name { font-weight: 700; font-size: 13.5px; }
-.build-card-size { font-size: 11px; color: var(--text-muted); }
+.build-card-size {
+  position: absolute; right: 3px; bottom: 3px; font-size: 10px; font-weight: 600;
+  color: var(--text); background: rgba(0, 0, 0, 0.5); border-radius: 5px; padding: 0 4px;
+}
 .build-card-info { display: flex; flex-wrap: wrap; gap: 5px; }
 .chip {
   display: inline-flex; align-items: center; gap: 4px; padding: 2px 7px; border-radius: 6px;
@@ -257,3 +270,185 @@ body {
 }
 
 .version { margin-top: auto; font-size: 11px; }
+
+/* ---- Income sub-label on the money stat (§5) ---- */
+.stat-sub { color: var(--good); font-size: 11px; font-weight: 600; }
+.bar-stat-cap { color: var(--text-muted); font-weight: 500; }
+
+/* ---- Finance box in the mayor panel (§5/§11) ---- */
+.finance-box {
+  background: var(--surface-2); border: 1px solid var(--border); border-radius: var(--radius);
+  padding: 10px 12px; margin-bottom: 12px;
+}
+.finance-head { display: flex; align-items: center; gap: 7px; font-weight: 700; font-size: 13.5px; }
+.finance-head svg { color: var(--primary); }
+.finance-total { margin-left: auto; color: var(--good); font-variant-numeric: tabular-nums; }
+.finance-row { display: flex; justify-content: space-between; font-size: 12.5px; color: var(--text-muted); margin-top: 5px; }
+.finance-value { color: var(--text); font-variant-numeric: tabular-nums; }
+.finance-foot { margin-top: 7px; font-size: 11.5px; }
+.message-feed-mayor { margin-top: 4px; }
+
+/* ---- Coverage overlay legend (§1) ---- */
+.coverage-legend {
+  position: absolute; left: 16px; bottom: 16px; z-index: 7;
+  background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
+  padding: 10px 13px; box-shadow: var(--shadow); max-width: 260px;
+  animation: event-pop 200ms ease-out;
+}
+.coverage-legend-head { font-weight: 700; font-size: 13px; margin-bottom: 7px; }
+.coverage-legend-items { display: flex; flex-wrap: wrap; gap: 6px 12px; }
+.coverage-legend-item { display: flex; align-items: center; gap: 5px; font-size: 12px; color: var(--text-muted); }
+.coverage-swatch { width: 11px; height: 11px; border-radius: 50%; border: 1.5px solid rgba(0, 0, 0, 0.35); }
+.coverage-supplied { background: #4caf50; }
+.coverage-partial { background: #f0c020; }
+.coverage-redundant { background: #4a90cf; }
+.coverage-unsupplied { background: #e53935; }
+.coverage-legend-warn { margin-top: 8px; font-size: 12px; color: var(--warn); font-weight: 600; }
+
+/* ===================================================================
+   Phase 2 — UI/UX overhaul: badges, popovers, sheets, modals, panels
+   =================================================================== */
+
+/* ---- Resource badges (HUD) ---- */
+.popover-wrap { position: relative; display: inline-flex; }
+.res-badge {
+  display: inline-flex; align-items: center; gap: 6px; padding: 5px 10px; border-radius: 999px;
+  background: var(--surface-2); border: 1px solid var(--border); font-size: 13.5px; font-weight: 600;
+  font-variant-numeric: tabular-nums; color: var(--text); line-height: 1;
+}
+.res-badge-icon { display: inline-flex; color: var(--badge-accent, var(--text-muted)); }
+.res-badge-sub { color: var(--good); font-size: 11px; font-weight: 700; }
+.res-badge-warn { border-color: var(--warn); }
+.res-badge-warn .res-badge-icon, .res-badge-warn .res-badge-value { color: var(--warn); }
+.res-badge-btn { cursor: pointer; transition: border-color 0.12s, background 0.12s; }
+.res-badge-btn:hover { border-color: var(--badge-accent, var(--primary)); }
+.res-badge-btn.active { border-color: var(--badge-accent, var(--primary)); background: var(--surface); }
+
+.popover {
+  position: absolute; top: calc(100% + 8px); z-index: 30; min-width: 224px;
+  background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
+  box-shadow: var(--shadow); padding: 12px;
+}
+.popover-start { left: 0; }
+.popover-end { right: 0; }
+.popover::before {
+  content: ''; position: absolute; top: -5px; left: 18px; width: 10px; height: 10px;
+  background: var(--surface); border-left: 1px solid var(--border); border-top: 1px solid var(--border);
+  transform: rotate(45deg);
+}
+.res-detail-head { display: flex; align-items: center; gap: 7px; font-weight: 700; font-size: 13.5px; }
+.res-detail-head svg { color: var(--text-muted); }
+.res-detail-stock { margin-left: auto; font-variant-numeric: tabular-nums; }
+.res-detail-bar { height: 6px; border-radius: 3px; background: var(--surface-2); overflow: hidden; margin: 9px 0 4px; }
+.res-detail-bar-fill { height: 100%; background: var(--primary); }
+.res-detail-bar-fill.full { background: var(--warn); }
+.res-detail-rows { display: flex; flex-direction: column; gap: 3px; margin-top: 8px; }
+.res-detail-row { display: flex; justify-content: space-between; font-size: 12.5px; color: var(--text-muted); }
+.res-detail-row.strong { color: var(--text); font-weight: 700; border-top: 1px solid var(--border); margin-top: 3px; padding-top: 5px; }
+.res-detail-value { font-variant-numeric: tabular-nums; color: var(--good); }
+.res-detail-note { font-size: 11.5px; color: var(--text-muted); margin-top: 9px; line-height: 1.4; }
+.res-detail-link { margin-top: 8px; }
+
+/* ---- Shared modal shell (event / confirm) ---- */
+.modal { width: 380px; max-width: calc(100vw - 32px); }
+.modal-body { font-size: 13.5px; line-height: 1.5; color: var(--text); }
+.modal-body p { color: var(--text-muted); }
+.modal-footer { display: flex; gap: 8px; margin-top: 16px; }
+.modal-footer > * { flex: 1; }
+.modal-detail {
+  margin-top: 10px; padding: 8px 10px; border-radius: 8px; background: var(--surface-2);
+  font-size: 12.5px; color: var(--text-muted);
+}
+.modal-primary { border-top: 3px solid var(--primary); }
+.modal-good { border-top: 3px solid var(--good); }
+.modal-bad { border-top: 3px solid var(--bad); }
+.event-modal-body { display: flex; align-items: center; gap: 16px; }
+.event-modal-glyph {
+  flex-shrink: 0; width: 68px; height: 68px; border-radius: 16px; display: grid; place-items: center;
+}
+.event-glyph-primary { background: rgba(232, 163, 61, 0.16); color: var(--primary); }
+.event-glyph-good { background: rgba(88, 196, 112, 0.16); color: var(--good); }
+.event-glyph-bad { background: rgba(227, 93, 93, 0.16); color: var(--bad); }
+
+/* ---- Floating building sheet (attached to the map) ---- */
+.floating-sheet {
+  position: absolute; left: 50%; bottom: 18px; transform: translateX(-50%); z-index: 7;
+  width: 340px; max-width: calc(100vw - 24px); background: var(--surface);
+  border: 1px solid var(--border); border-radius: 14px; box-shadow: var(--shadow); padding: 14px 16px;
+  animation: sheet-in 0.16s ease-out;
+}
+@keyframes sheet-in { from { opacity: 0; transform: translate(-50%, 8px); } to { opacity: 1; transform: translate(-50%, 0); } }
+.floating-sheet-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
+.floating-sheet-head h3 { font-size: 15px; display: flex; align-items: center; gap: 7px; }
+
+/* ---- Action bubbles (round actions) ---- */
+.action-bubbles { display: flex; gap: 14px; justify-content: center; margin-top: 12px; }
+.action-bubble { display: flex; flex-direction: column; align-items: center; gap: 5px; width: 72px; }
+.action-bubble-ring {
+  width: 46px; height: 46px; border-radius: 50%; display: grid; place-items: center;
+  background: var(--surface-2); border: 1px solid var(--border); transition: transform 0.1s, border-color 0.1s;
+}
+.action-bubble:not(:disabled):hover .action-bubble-ring { transform: translateY(-2px); border-color: var(--primary); }
+.action-bubble-label { font-size: 11px; color: var(--text-muted); text-align: center; line-height: 1.25; }
+.action-bubble-primary .action-bubble-ring { background: var(--primary); color: var(--primary-text); border-color: transparent; }
+.action-bubble-danger .action-bubble-ring { color: var(--bad); }
+.action-bubble-danger:not(:disabled):hover .action-bubble-ring { border-color: var(--bad); }
+
+/* ---- Economy panel ---- */
+.economy-total {
+  display: flex; justify-content: space-between; align-items: baseline; padding: 10px 12px;
+  background: var(--surface-2); border-radius: 10px; margin-bottom: 4px;
+}
+.economy-total-label { font-size: 12.5px; color: var(--text-muted); }
+.economy-total-value { font-size: 18px; font-weight: 700; color: var(--good); font-variant-numeric: tabular-nums; }
+.economy-rows { display: flex; flex-direction: column; gap: 10px; }
+.economy-row-head { display: flex; justify-content: space-between; font-size: 13px; margin-bottom: 4px; }
+.economy-row-name { display: flex; align-items: center; gap: 6px; }
+.economy-row-name svg { color: var(--text-muted); }
+.economy-row-value { font-variant-numeric: tabular-nums; font-weight: 600; }
+.economy-bar { height: 8px; border-radius: 4px; background: var(--surface-2); overflow: hidden; }
+.economy-bar-fill { height: 100%; border-radius: 4px; }
+.economy-residential { background: #5fa8d3; }
+.economy-commercial { background: #6fc276; }
+.economy-industrial { background: #e0a03a; }
+.economy-employment {
+  display: flex; align-items: center; gap: 7px; font-size: 13px; font-weight: 600;
+  padding: 8px 0; border-top: 1px solid var(--border);
+}
+.economy-employment svg { color: var(--text-muted); }
+.economy-note { line-height: 1.4; }
+
+/* ---- City status panel ---- */
+.status-happiness {
+  display: flex; justify-content: space-between; align-items: baseline; padding: 8px 12px;
+  background: var(--surface-2); border-radius: 10px;
+}
+.status-happiness strong { font-size: 17px; }
+.status-alerts { display: flex; flex-direction: column; gap: 7px; }
+.status-ok { display: flex; align-items: center; gap: 8px; font-size: 12.5px; color: var(--good); padding: 6px 2px; }
+.status-alert {
+  display: flex; align-items: center; gap: 8px; padding: 8px 10px; border-radius: 9px;
+  background: var(--surface-2); border-left: 3px solid var(--border); font-size: 12.5px;
+}
+.status-alert-bad { border-left-color: var(--bad); }
+.status-alert-bad svg { color: var(--bad); }
+.status-alert-warn { border-left-color: var(--warn); }
+.status-alert-warn svg { color: var(--warn); }
+.status-alert-info { border-left-color: var(--primary); }
+.status-alert-info svg { color: var(--primary); }
+.status-alert-text { flex: 1; line-height: 1.35; }
+.status-alert-action {
+  display: inline-flex; align-items: center; gap: 3px; flex-shrink: 0; padding: 4px 8px; border-radius: 7px;
+  background: var(--surface); border: 1px solid var(--border); font-size: 11.5px; font-weight: 600; color: var(--text);
+}
+.status-alert-action:hover { border-color: var(--primary); color: var(--primary); }
+.status-needs h4 { font-size: 12px; text-transform: uppercase; letter-spacing: 0.04em; color: var(--text-muted); margin-bottom: 8px; }
+.status-need { display: flex; align-items: center; gap: 9px; margin-bottom: 8px; }
+.status-need-name { display: flex; align-items: center; gap: 6px; width: 96px; flex-shrink: 0; font-size: 12.5px; }
+.status-need-name svg { color: var(--text-muted); }
+.status-need-bar { flex: 1; height: 7px; border-radius: 4px; background: var(--surface-2); overflow: hidden; }
+.status-need-fill { height: 100%; border-radius: 4px; }
+.status-need-fill.good { background: var(--good); }
+.status-need-fill.warn { background: var(--warn); }
+.status-need-fill.bad { background: var(--bad); }
+.status-need-pct { width: 38px; text-align: right; font-size: 12px; font-variant-numeric: tabular-nums; }

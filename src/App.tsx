@@ -10,13 +10,15 @@ import { MapView } from './components/MapView.tsx';
 import { TopBar } from './components/hud/TopBar.tsx';
 import { BottomBar } from './components/hud/BottomBar.tsx';
 import { BuildMenu } from './components/panels/BuildMenu.tsx';
-import { BuildingPanel } from './components/panels/BuildingPanel.tsx';
+import { FloatingBuildingSheet } from './components/panels/FloatingBuildingSheet.tsx';
 import { QuestPanel } from './components/panels/QuestPanel.tsx';
 import { MayorPanel } from './components/panels/MayorPanel.tsx';
-import { HappinessPanel } from './components/panels/HappinessPanel.tsx';
+import { CityStatusPanel } from './components/panels/CityStatusPanel.tsx';
+import { EconomyPanel } from './components/panels/EconomyPanel.tsx';
 import { SectorDialog } from './components/panels/SectorDialog.tsx';
 import { SettingsPanel } from './components/panels/SettingsPanel.tsx';
 import { Toasts } from './components/common/Toasts.tsx';
+import { EventModal } from './components/common/EventModal.tsx';
 import { t } from './i18n/index.ts';
 
 const adapter = new LocalStorageSaveAdapter();
@@ -49,7 +51,13 @@ export function App() {
         controller.update(Date.now()); // offline catch-up
         controller.subscribe((event) => {
           if (event.type === 'levelUp') {
-            useUiStore.getState().pushToast(t('message.level_up', { level: controller!.state.level.current }), 'success');
+            const level = controller!.state.level.current;
+            useUiStore.getState().pushEvent({
+              kind: 'levelUp',
+              titleKey: 'event.level_up.title',
+              bodyKey: 'event.level_up.body',
+              params: { level },
+            });
             save();
           }
         });
@@ -82,6 +90,9 @@ export function App() {
 
 function GameScreen() {
   const openPanel = useUiStore((s) => s.openPanel);
+  const events = useUiStore((s) => s.events);
+  const dismissEvent = useUiStore((s) => s.dismissEvent);
+  const currentEvent = events[0];
 
   const handleImport = (json: string): boolean => {
     try {
@@ -104,14 +115,16 @@ function GameScreen() {
         <MapView />
         {openPanel === 'quests' && <QuestPanel />}
         {openPanel === 'mayor' && <MayorPanel />}
-        {openPanel === 'happiness' && <HappinessPanel />}
+        {openPanel === 'status' && <CityStatusPanel />}
+        {openPanel === 'economy' && <EconomyPanel />}
         {openPanel === 'settings' && <SettingsPanel onImport={handleImport} onReset={handleReset} />}
-        <BuildingPanel />
+        <FloatingBuildingSheet />
         <SectorDialog />
         {openPanel === 'build' && <BuildMenu />}
       </main>
       <BottomBar />
       <Toasts />
+      {currentEvent && <EventModal event={currentEvent} onClose={() => dismissEvent(currentEvent.id)} />}
     </div>
   );
 }

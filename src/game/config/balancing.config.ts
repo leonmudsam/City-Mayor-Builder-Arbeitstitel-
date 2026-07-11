@@ -1,19 +1,26 @@
 import type { BalancingConfig, FeaturesConfig } from './types.ts';
 
 export const balancingConfig: BalancingConfig = {
-  // Taxes are deliberately modest and strongly happiness-coupled: money should
-  // reward a well-run city, not accumulate while idling (§ AFK reduction).
-  taxPerCapitaPerMin: 0.3,
-  taxFactorMin: 0.35,
+  // Income runs on a believable municipal scale (§4/§5). Residential tax stays
+  // happiness-coupled so a well-run city earns more; commercial & industrial
+  // revenue (in buildings.config) add legible extra streams. Money is generous
+  // enough to keep building regularly (§3) — the real pacing comes from
+  // materials, build limits, supply radii and space, not from waiting for cash.
+  taxPerCapitaPerMin: 90,
+  taxFactorMin: 0.4,
   taxFactorMax: 1.5,
-  growthPerMin: 2,
-  declinePerMin: 1,
+  // Half the population works; commercial/industrial income scales with how
+  // many jobs that labor force actually fills.
+  laborParticipation: 0.5,
+  growthPerMin: 4,
+  declinePerMin: 2,
   growthHappinessThreshold: 60,
   declineHappinessThreshold: 40,
   foodWithoutDistributionCap: 0.3,
-  startResources: { money: 500, wood: 60, stone: 0, food: 40 },
+  startResources: { money: 45_000, wood: 60, stone: 0, food: 40 },
   startGold: 0,
-  sectorCost: { base: 400, distanceFactor: 1.6, countFactor: 0.25 },
+  // Expansion is a genuine "special project" sink now, not a rounding error.
+  sectorCost: { base: 80_000, distanceFactor: 1.6, countFactor: 0.25 },
   fireChancePerBuildingPerMin: 0.002,
   fireDurationSec: 30 * 60,
   fireDurationProtectedSec: 5 * 60,

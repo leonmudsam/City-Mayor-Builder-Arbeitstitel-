@@ -7,7 +7,9 @@ import { updateQuests, objectiveTarget } from '../simulation/quests.ts';
 import { validatePlacement, type PlacementError } from '../buildings/placement.ts';
 import { demolishRefund } from '../buildings/effects.ts';
 import { buildLimitAt, countOf, nextLimitLevel } from '../buildings/limits.ts';
+import { coverageOverlay, type CoverageOverlay } from '../buildings/coverage.ts';
 import { canAfford, grantGold, grantResources, spendCost, spendGold } from '../economy/economyService.ts';
+import { computeIncome, type IncomeBreakdown } from '../economy/income.ts';
 import { addXp } from '../progression/levels.ts';
 import {
   isSectorAdjacentToUnlocked,
@@ -121,7 +123,9 @@ export class GameController {
     const b = this.state.buildings[buildingId];
     if (!b) return fail('not_found');
     const def = this.config.buildings.get(b.defId);
-    if (!def || def.unique) return fail('invalid'); // town hall & mayor house are permanent
+    // Central buildings can't be torn down (canDemolish:false) — they relocate
+    // instead (§2). `unique` implies the same protection.
+    if (!def || def.canDemolish === false || def.unique) return fail('invalid');
     for (let dy = 0; dy < def.size.h; dy++) {
       for (let dx = 0; dx < def.size.w; dx++) {
         const tile = tileAt(this.state, b.x + dx, b.y + dy);
@@ -142,7 +146,7 @@ export class GameController {
   getDemolishRefund(buildingId: string): Partial<Record<ResourceId, number>> {
     const b = this.state.buildings[buildingId];
     const def = b && this.config.buildings.get(b.defId);
-    if (!b || !def || def.unique) return {};
+    if (!b || !def || def.canDemolish === false || def.unique) return {};
     return demolishRefund(def, b.upgradeLevel, this.config.balancing.demolishRefundFactor);
   }
 
@@ -163,21 +167,31 @@ export class GameController {
   }
 
   /**
-   * Relocate an existing building (free): city redesign should never be
-   * punished. Unique buildings (town hall) may move too — only demolish is
-   * blocked for them.
+   * Relocate an existing building. Two paths lead here (§2/§5):
+   *  - the global `moveBuildings` dev flag (off in MVP 1), which lets *anything*
+   *    move for free, and
+   *  - a per-building `canRelocate` flag (town hall, mayor house), which lets a
+   *    non-demolishable special be repositioned via its sheet, charging the
+   *    optional `relocationCost`.
+   * Placement rules are always re-validated against the target.
    */
   moveBuilding(buildingId: string, x: number, y: number): CommandResult {
-    if (!this.config.features.moveBuildings) return fail('feature_disabled');
     const b = this.state.buildings[buildingId];
     if (!b) return fail('not_found');
     const def = this.config.buildings.get(b.defId);
     if (!def) return fail('not_found');
+    const viaFeature = this.config.features.moveBuildings;
+    if (!viaFeature && def.canRelocate !== true) return fail('feature_disabled');
     if (b.x === x && b.y === y) return ok;
     const placementError = validatePlacement(this.state, this.config, this.derived, def, x, y, {
       ignoreBuildingId: buildingId,
     });
     if (placementError) return fail(placementError);
+    // Relocation fee (only on the canRelocate path — the dev flag stays free).
+    if (!viaFeature && def.relocationCost) {
+      const spend = spendCost(this.state, def.relocationCost, `relocate_${def.id}`);
+      if (!spend.ok) return fail('insufficient');
+    }
     for (let dy = 0; dy < def.size.h; dy++) {
       for (let dx = 0; dx < def.size.w; dx++) {
         const tile = tileAt(this.state, b.x + dx, b.y + dy);
@@ -317,5 +331,18 @@ export class GameController {
   getSectorCost(id: SectorId): number {
     const { sx, sy } = parseSectorId(id);
     return sectorUnlockCost(this.state, this.config, sx, sy);
+  }
+
+  /** Current per-minute income split by source, for the finance UI (§5). */
+  getIncome(): IncomeBreakdown {
+    return computeIncome(this.state, this.config, this.derived);
+  }
+
+  /**
+   * Generic coverage overlay for a selected supply building (§1) — undefined if
+   * the building projects no radius coverage.
+   */
+  getCoverageOverlay(buildingId: string): CoverageOverlay | undefined {
+    return coverageOverlay(this.state, this.config, this.derived, buildingId);
   }
 }
