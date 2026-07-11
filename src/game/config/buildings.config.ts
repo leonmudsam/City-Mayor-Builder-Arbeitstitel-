@@ -25,9 +25,9 @@ export const buildingsConfig: BuildingDef[] = [
     canRelocate: true,
     effects: [
       { type: 'jobs', amount: 5 },
-      { type: 'storage', resource: 'wood', amount: 1_000 },
-      { type: 'storage', resource: 'stone', amount: 1_000 },
-      { type: 'storage', resource: 'food', amount: 1_000 },
+      { type: 'storage', resource: 'wood', amount: 400 },
+      { type: 'storage', resource: 'stone', amount: 400 },
+      { type: 'storage', resource: 'food', amount: 400 },
       // Civic presence: a small attractiveness aura for the surrounding blocks
       // (§9), reusing the same ambience → happiness path as parks/zoning.
       { type: 'ambience', amount: 2, radius: 3 },
@@ -158,7 +158,7 @@ export const buildingsConfig: BuildingDef[] = [
     constructionSec: 30,
     xpReward: 12,
     effects: [
-      { type: 'produce', resource: 'wood', perMinute: 14 },
+      { type: 'produce', resource: 'wood', perMinute: 32 },
       { type: 'jobs', amount: 4 },
       { type: 'revenue', category: 'industrial', perMinute: 600 },
       { type: 'upkeep', resource: 'money', perMinute: 300 },
@@ -179,7 +179,7 @@ export const buildingsConfig: BuildingDef[] = [
     constructionSec: 90,
     xpReward: 18,
     effects: [
-      { type: 'produce', resource: 'stone', perMinute: 11 },
+      { type: 'produce', resource: 'stone', perMinute: 26 },
       { type: 'jobs', amount: 6 },
       { type: 'revenue', category: 'industrial', perMinute: 1_000 },
       { type: 'upkeep', resource: 'money', perMinute: 500 },
@@ -199,7 +199,7 @@ export const buildingsConfig: BuildingDef[] = [
     constructionSec: 60,
     xpReward: 15,
     effects: [
-      { type: 'produce', resource: 'food', perMinute: 15 },
+      { type: 'produce', resource: 'food', perMinute: 30 },
       { type: 'jobs', amount: 4 },
       { type: 'revenue', category: 'industrial', perMinute: 700 },
       { type: 'upkeep', resource: 'money', perMinute: 300 },
@@ -238,6 +238,7 @@ export const buildingsConfig: BuildingDef[] = [
       { type: 'jobs', amount: 2 },
       { type: 'upkeep', resource: 'money', perMinute: 1_200 },
     ],
+    buildLimit: [{ level: 7, max: 1 }, { level: 9, max: 2 }, { level: 10, max: 3 }],
   },
   {
     id: 'warehouse',
@@ -250,14 +251,38 @@ export const buildingsConfig: BuildingDef[] = [
     constructionSec: 120,
     xpReward: 22,
     effects: [
-      // Storage scales with the city through warehouses: one is now worth
-      // building (10× the old cap) so material stops hitting a tiny flat wall.
-      { type: 'storage', resource: 'wood', amount: 2_000 },
-      { type: 'storage', resource: 'stone', amount: 2_000 },
-      { type: 'storage', resource: 'food', amount: 2_000 },
+      // Deliberately modest storage, and capped in number (below): the goal is
+      // active play — production runs hot, storage stays tight, so you come back
+      // to spend rather than AFK-hoard. Spamming warehouses to a huge buffer is
+      // no longer possible.
+      { type: 'storage', resource: 'wood', amount: 600 },
+      { type: 'storage', resource: 'stone', amount: 600 },
+      { type: 'storage', resource: 'food', amount: 600 },
       { type: 'jobs', amount: 2 },
       { type: 'upkeep', resource: 'money', perMinute: 300 },
     ],
+    buildLimit: [{ level: 6, max: 2 }, { level: 8, max: 3 }, { level: 10, max: 4 }],
+  },
+  // Logistics depot — the first real supply chain (§1). Lifts the output of
+  // every production building it reaches, so clustering sawmills/quarries/farms
+  // around a depot is a deliberate planning play. Big, costly, jobs + upkeep,
+  // and strictly limited so it rewards placement, not spam.
+  {
+    id: 'depot',
+    category: 'production',
+    nameKey: 'building.depot',
+    size: { w: 3, h: 3 },
+    requiresRoad: true,
+    unlockLevel: 7,
+    cost: { money: 70_000, wood: 60, stone: 80 },
+    constructionSec: 240,
+    xpReward: 35,
+    effects: [
+      { type: 'logistics', boostPct: 25, radius: 6 },
+      { type: 'jobs', amount: 8 },
+      { type: 'upkeep', resource: 'money', perMinute: 1_500 },
+    ],
+    buildLimit: [{ level: 7, max: 1 }, { level: 9, max: 2 }, { level: 10, max: 3 }],
   },
 
   // ---- Versorgung ----
@@ -280,6 +305,7 @@ export const buildingsConfig: BuildingDef[] = [
       { type: 'revenue', category: 'commercial', perMinute: 2_000 },
       { type: 'upkeep', resource: 'money', perMinute: 900 },
     ],
+    buildLimit: [{ level: 5, max: 2 }, { level: 8, max: 3 }, { level: 10, max: 4 }],
   },
   {
     id: 'bakery',
@@ -314,6 +340,7 @@ export const buildingsConfig: BuildingDef[] = [
       { type: 'jobs', amount: 6 },
       { type: 'upkeep', resource: 'money', perMinute: 1_500 },
     ],
+    buildLimit: [{ level: 8, max: 2 }, { level: 10, max: 3 }],
   },
 
   // ---- Wirtschaft ----
@@ -334,6 +361,26 @@ export const buildingsConfig: BuildingDef[] = [
       { type: 'upkeep', resource: 'money', perMinute: 1_200 },
     ],
     buildLimit: [{ level: 6, max: 2 }, { level: 9, max: 4 }],
+  },
+  // Office block — the city's main employer (§ Arbeitsversorgung). A big 4×2
+  // footprint packed with jobs, so a residential city must zone real workplaces
+  // instead of endless houses; its commercial revenue scales with staffing.
+  {
+    id: 'office',
+    category: 'economy',
+    nameKey: 'building.office',
+    size: { w: 4, h: 2 },
+    requiresRoad: true,
+    unlockLevel: 8,
+    cost: { money: 120_000, wood: 80, stone: 120 },
+    constructionSec: 300,
+    xpReward: 50,
+    effects: [
+      { type: 'jobs', amount: 60 },
+      { type: 'revenue', category: 'commercial', perMinute: 6_000 },
+      { type: 'upkeep', resource: 'money', perMinute: 2_000 },
+    ],
+    buildLimit: [{ level: 8, max: 2 }, { level: 9, max: 3 }, { level: 10, max: 5 }],
   },
 
   // ---- Freizeit ----

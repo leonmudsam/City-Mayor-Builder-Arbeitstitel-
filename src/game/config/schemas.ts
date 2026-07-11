@@ -25,6 +25,7 @@ const buildingEffect = z.discriminatedUnion('type', [
   }),
   z.object({ type: z.literal('revenue'), category: z.enum(['commercial', 'industrial']), perMinute: z.number().positive() }),
   z.object({ type: z.literal('upkeep'), resource: resourceId, perMinute: z.number().positive() }),
+  z.object({ type: z.literal('logistics'), boostPct: z.number().positive(), radius: z.number().positive() }),
   z.object({ type: z.literal('coverage'), need: needId, radius: z.number().positive() }),
   z.object({ type: z.literal('storage'), resource: resourceId, amount: z.number().positive() }),
   z.object({ type: z.literal('jobs'), amount: z.number().positive() }),

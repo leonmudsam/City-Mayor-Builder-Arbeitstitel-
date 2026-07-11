@@ -21,15 +21,17 @@ describe('simulation tick', () => {
     setLevel(controller, 2);
     flattenTerrain(controller); // no location bonus in this test
     controller.placeBuilding('road', 26, 26);
-    controller.placeBuilding('sawmill', 26, 27); // 14 wood/min
-    const woodAfterBuild = controller.state.resources.wood;
+    controller.placeBuilding('sawmill', 26, 27); // 32 wood/min
     controller.update(T0 + 31_000); // construction (30s) done
+    const woodAfterBuild = controller.state.resources.wood;
+    const producedBefore = controller.state.stats.produced.wood;
     controller.update(T0 + 31_000 + 5 * MIN);
-    expect(controller.state.resources.wood).toBeCloseTo(woodAfterBuild + 70, 0);
-    expect(controller.state.stats.produced.wood).toBeCloseTo(70, 0);
-    // 8 hours offline → storage cap (town hall: 1000 wood), not 4000+.
+    expect(controller.state.resources.wood).toBeCloseTo(woodAfterBuild + 160, 0);
+    expect(controller.state.stats.produced.wood - producedBefore).toBeCloseTo(160, 0);
+    // 8 hours offline → tight storage cap (town hall: 400 wood): production runs
+    // hot but storage stays small, so AFK hoarding is capped fast (§ active play).
     controller.update(T0 + 8 * 60 * MIN);
-    expect(controller.state.resources.wood).toBe(1_000);
+    expect(controller.state.resources.wood).toBe(400);
   });
 
   it('applies the terrain location bonus to production', () => {
@@ -41,11 +43,11 @@ describe('simulation tick', () => {
     // 4 forest tiles in radius 3 → +20 % (5 %/tile).
     paintTerrain(controller, [[30, 27], [30, 28], [23, 29], [24, 30]], 'forest');
     const sawmill = Object.values(controller.state.buildings).find((b) => b.defId === 'sawmill');
-    const woodAfterBuild = controller.state.resources.wood;
     controller.update(T0 + 31_000); // construction done → bonus becomes active
     expect(controller.derived.productionBonus[sawmill!.id]).toBe(20);
-    controller.update(T0 + 31_000 + 5 * MIN); // 14/min × 1.2 × 5 min = 84
-    expect(controller.state.resources.wood).toBeCloseTo(woodAfterBuild + 84, 0);
+    const woodAfterBuild = controller.state.resources.wood;
+    controller.update(T0 + 31_000 + 5 * MIN); // 32/min × 1.2 × 5 min = 192
+    expect(controller.state.resources.wood).toBeCloseTo(woodAfterBuild + 192, 0);
   });
 
   it('only counts water supply for housing inside a well radius', () => {

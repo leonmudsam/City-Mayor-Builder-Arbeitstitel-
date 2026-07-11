@@ -1,5 +1,55 @@
 # Patch Notes
 
+## v0.7 — „Aktiv statt AFK: Lager, Limits, Arbeit & Logistik"
+
+Balance-Kurskorrektur nach Spieler-Feedback (riesige Stadt, nur 1.450 Einwohner,
++251k/min, Lager spammbar, Arbeit bei 23 %). Leitbild jetzt klar wie SimCity/CoC:
+**aktiv spielen wird belohnt, AFK-Farmen + Gebäude-Spam nicht.**
+
+### Karten-Lesbarkeit zurückgestellt
+
+- Gebäude wieder mit **2-Buchstaben-Kürzeln** (bessere Übersicht im Prototyp).
+  Echte Gebäude-Modelle kommen mit der späteren 2.5D/3D-Ansicht.
+
+### Lager umgedreht: knapp statt spammbar
+
+- **Kleinere Caps, höhere Produktion:** Rathaus-Lager 1.000 → **400**, Lagerhaus
+  2.000 → **600** je Ressource; Sägewerk 14 → **32**, Steinbruch 11 → **26**,
+  Farm 15 → **30** pro Minute.
+- **Lagerhaus jetzt limitiert** (max 4). Man kann sich kein 39.000-Puffer mehr
+  zusammenspammen — Produktion läuft heiß, das Lager bleibt knapp, also lohnt es
+  sich, zurückzukommen und die Rohstoffe zu **verbauen** statt sie zu horten.
+
+### Mehr Grenzen gegen Spam
+
+- Bau-Limits neu/erweitert: **Markt** (max 4), **Wasserwerk** (max 3),
+  **Feuerwehr** (max 3), **Lagerhaus** (max 4), **Logistikzentrum** (max 3),
+  **Bürogebäude** (max 5) — jeweils mit Level gestaffelt.
+
+### Arbeitsplätze: Bürogebäude (4×2)
+
+- Neues **Bürogebäude** (großes 4×2-Grundstück, 60 Arbeitsplätze, Gewerbeerlös,
+  Unterhalt), ab Level 8. Löst den Arbeits-Engpass: eine reine Wohnstadt muss
+  jetzt echte Arbeitgeber ansiedeln, nicht nur Häuser stapeln.
+
+### Geld an eine ausbalancierte Stadt gekoppelt
+
+- **Wohnsteuer 90 → 40 pro Kopf.** Rohe Einwohnerzahl druckt kein Geld mehr;
+  der Ertrag kommt zunehmend aus **Gewerbe & Produktion**, die mit *besetzten*
+  Arbeitsplätzen skalieren. Eine gut gezonte, beschäftigte Stadt verdient
+  deutlich mehr als eine Häuserwand — Geld belohnt gute Planung, nicht AFK-Wachstum.
+
+### Erste echte Logistik/Lieferkette (§1)
+
+- Neues **Logistikzentrum** (3×3, ab Level 7): hebt den **Produktions-Ausstoß
+  aller Produktionsgebäude im Radius um +25 %**. Läuft über denselben
+  Produktions-Bonus-Pfad wie der Geländebonus — ein gut platziertes Depot bei den
+  Sägewerken/Steinbrüchen/Farmen ist eine echte Planungsentscheidung. Limitiert
+  (max 3), mit Jobs + Unterhalt.
+- *Technisch:* generischer `logistics`-Effekt; Produzenten werden im derived-Layer
+  in einem zweiten Pass aufgelöst, damit ein Depot Producer unabhängig von der
+  Iterationsreihenfolge boostet. Kein Tick-Umbau nötig.
+
 ## v0.6 — „Endgame-Balance & saubere Karte"
 
 Nach einer durchgespielten Nacht (Level 10, 7,3 Mio. Geld, Lager randvoll)

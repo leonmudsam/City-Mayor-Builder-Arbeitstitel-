@@ -42,6 +42,13 @@ export type BuildingEffect =
    * later; money is the default. Aggregated in the derived layer.
    */
   | { type: 'upkeep'; resource: ResourceId; perMinute: number }
+  /**
+   * Logistics/transport hub: lifts the output of every production building
+   * within `radius` by `boostPct` percent (first real supply chain, §1). Reuses
+   * the same production-bonus path as terrain, so a well-placed depot near the
+   * sawmills/quarries/farms is a genuine planning decision, not decoration.
+   */
+  | { type: 'logistics'; boostPct: number; radius: number }
   | { type: 'coverage'; need: NeedId; radius: number }
   | { type: 'storage'; resource: ResourceId; amount: number }
   | { type: 'jobs'; amount: number }

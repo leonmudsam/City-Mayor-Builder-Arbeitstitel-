@@ -68,6 +68,10 @@ export function recomputeDerived(state: GameState, config: GameConfig): Derived 
   const ambienceSources: { cx: number; cy: number; radius: number; amount: number }[] = [];
   const fireStations: RadiusSource[] = [];
   const residential: { id: string; cx: number; cy: number; housing: number; sensitivity: number }[] = [];
+  // Producers are resolved in a second pass so logistics hubs boost them
+  // regardless of iteration order (the depot may sit anywhere in the map).
+  const logisticsSources: { cx: number; cy: number; radius: number; boostPct: number }[] = [];
+  const producers: { id: string; resource: ResourceId; perMinute: number; cx: number; cy: number; terrainBonus: number }[] = [];
 
   const addCoverageSource = (need: NeedId, source: RadiusSource): void => {
     (coverageSources[need] ??= []).push(source);
@@ -103,6 +107,9 @@ export function recomputeDerived(state: GameState, config: GameConfig): Derived 
         case 'upkeep':
           upkeep[eff.resource] += eff.perMinute;
           break;
+        case 'logistics':
+          logisticsSources.push({ cx, cy, radius: eff.radius, boostPct: eff.boostPct });
+          break;
         case 'jobs':
           capacity.work += eff.amount;
           break;
@@ -121,15 +128,24 @@ export function recomputeDerived(state: GameState, config: GameConfig): Derived 
         case 'ambience':
           ambienceSources.push({ cx, cy, radius: eff.radius, amount: eff.amount });
           break;
-        case 'produce': {
-          const bonus = locationBonusPct(state, def, b.x, b.y);
-          if (bonus > 0) productionBonus[b.id] = bonus;
-          productionPerMin[eff.resource] += eff.perMinute * (1 + bonus / 100);
+        case 'produce':
+          producers.push({ id: b.id, resource: eff.resource, perMinute: eff.perMinute, cx, cy, terrainBonus: locationBonusPct(state, def, b.x, b.y) });
           break;
-        }
       }
     }
     if (housingHere > 0) residential.push({ id: b.id, cx, cy, housing: housingHere, sensitivity: sensitivityHere });
+  }
+
+  // Second pass: production output = base × (terrain bonus + logistics boost).
+  // A depot in range lifts every producer it reaches; the tick reads the same
+  // productionBonus per building, so no tick change is needed.
+  for (const p of producers) {
+    let bonus = p.terrainBonus;
+    for (const s of logisticsSources) {
+      if (chebyshev(p.cx, p.cy, s.cx, s.cy) <= s.radius) bonus += s.boostPct;
+    }
+    if (bonus > 0) productionBonus[p.id] = bonus;
+    productionPerMin[p.resource] += p.perMinute * (1 + bonus / 100);
   }
 
   // Housing-weighted coverage per radius-served need + ambience per home.

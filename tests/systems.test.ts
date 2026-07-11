@@ -56,6 +56,36 @@ describe('income breakdown (§5)', () => {
   });
 });
 
+describe('logistics & workplaces', () => {
+  it('a depot boosts the output of production buildings in range (§1 supply chain)', () => {
+    const { controller } = newController();
+    setLevel(controller, 7);
+    flattenTerrain(controller); // isolate the logistics boost from terrain bonus
+    controller.state.resources = { money: 500_000, wood: 1_000, stone: 1_000, food: 1_000 };
+    for (let x = 26; x <= 31; x++) controller.placeBuilding('road', x, 26);
+    expect(controller.placeBuilding('sawmill', 26, 27)).toEqual({ ok: true });
+    const sawmill = Object.values(controller.state.buildings).find((b) => b.defId === 'sawmill')!;
+    controller.update(T0 + 40_000); // sawmill active, no depot yet
+    expect(controller.derived.productionBonus[sawmill.id] ?? 0).toBe(0);
+    expect(controller.placeBuilding('depot', 28, 27)).toEqual({ ok: true }); // within radius 6
+    controller.update(T0 + 300_000); // depot finishes
+    expect(controller.derived.productionBonus[sawmill.id]).toBe(25); // +25 % throughput
+    expect(controller.derived.productionPerMin.wood).toBeCloseTo(32 * 1.25, 5);
+  });
+
+  it('an office supplies a large block of jobs (§ Arbeitsversorgung)', () => {
+    const { controller } = newController();
+    setLevel(controller, 8);
+    flattenTerrain(controller);
+    controller.state.resources = { money: 500_000, wood: 1_000, stone: 1_000, food: 1_000 };
+    for (let x = 26; x <= 31; x++) controller.placeBuilding('road', x, 26);
+    const before = controller.derived.capacity.work;
+    expect(controller.placeBuilding('office', 26, 27)).toEqual({ ok: true }); // 4×2, 60 jobs
+    controller.update(T0 + 320_000); // office finishes
+    expect(controller.derived.capacity.work - before).toBe(60);
+  });
+});
+
 describe('housing model (§6)', () => {
   it('derives resident capacity from units × max residents per unit', () => {
     const { controller } = newController();
