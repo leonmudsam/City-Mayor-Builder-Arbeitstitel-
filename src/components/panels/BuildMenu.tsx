@@ -152,6 +152,12 @@ function effectSummary(def: BuildingDef): string {
       case 'ambience':
         if (eff.amount > 0) parts.push(`${t('ui.ambience')} +${eff.amount}`);
         break;
+      case 'logistics':
+        parts.push(t('ui.effect.logistics', { boost: eff.boostPct, radius: eff.radius }));
+        break;
+      case 'upkeep':
+        parts.push(t('ui.effect.upkeep', { amount: formatMoney(eff.perMinute) }));
+        break;
       case 'demand':
         break;
     }

@@ -12,7 +12,9 @@ import {
   ShieldCheck,
   Sparkles,
   Trash2,
+  TrendingDown,
   TrendingUp,
+  Truck,
   Warehouse,
   X,
 } from 'lucide-react';
@@ -186,6 +188,10 @@ function effectIcon(eff: BuildingEffect) {
       return <ShieldCheck size={15} />;
     case 'ambience':
       return <Leaf size={15} />;
+    case 'logistics':
+      return <Truck size={15} />;
+    case 'upkeep':
+      return <TrendingDown size={15} />;
     case 'demand':
       return null;
   }
@@ -219,5 +225,9 @@ function describeEffect(eff: BuildingEffect, bonusPct: number): string | undefin
       return t('ui.effect.protection', { radius: eff.radius });
     case 'ambience':
       return undefined;
+    case 'logistics':
+      return t('ui.effect.logistics', { boost: eff.boostPct, radius: eff.radius });
+    case 'upkeep':
+      return t('ui.effect.upkeep', { amount: formatMoney(eff.perMinute) });
   }
 }

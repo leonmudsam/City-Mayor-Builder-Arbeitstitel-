@@ -1,12 +1,13 @@
 import type { BalancingConfig, FeaturesConfig } from './types.ts';
 
 export const balancingConfig: BalancingConfig = {
-  // Income runs on a believable municipal scale (§4/§5). Residential tax stays
-  // happiness-coupled so a well-run city earns more; commercial & industrial
-  // revenue (in buildings.config) add legible extra streams. Money is generous
-  // enough to keep building regularly (§3) — the real pacing comes from
-  // materials, build limits, supply radii and space, not from waiting for cash.
-  taxPerCapitaPerMin: 90,
+  // Income runs on a believable municipal scale (§4/§5). Residential tax is
+  // deliberately modest so raw population no longer prints money on its own; the
+  // upside comes from commercial & industrial revenue, which scale with *filled*
+  // jobs (offices, shops, industry). A balanced, employed city earns far more
+  // than a wall of houses — money rewards good zoning, not AFK growth. Real
+  // pacing still comes from materials, build limits, supply radii and space.
+  taxPerCapitaPerMin: 40,
   taxFactorMin: 0.4,
   taxFactorMax: 1.5,
   // Half the population works; commercial/industrial income scales with how
