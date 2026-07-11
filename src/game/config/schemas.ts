@@ -117,6 +117,7 @@ export const saveGameSchema = z.object({
   level: z.object({ current: z.number().int().min(1), xp: z.number().nonnegative() }),
   resources: z.record(resourceId, z.number()),
   gold: z.object({ balance: z.number().nonnegative() }),
+  policy: z.object({ residentialTaxRate: z.number().positive(), commercialTaxRate: z.number().positive() }),
   goldTransactions: z.array(
     z.object({ id: z.string(), timestamp: z.number(), amount: z.number(), reason: z.string(), balanceAfter: z.number() }),
   ),

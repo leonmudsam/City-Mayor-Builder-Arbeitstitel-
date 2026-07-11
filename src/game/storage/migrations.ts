@@ -69,6 +69,12 @@ const migrations: Record<number, Migration> = {
     needs.health ??= { supply: 0, demand: 0, fulfillment: 1 };
     return { ...raw, schemaVersion: 5, citizens: { ...citizens, needs } };
   },
+  // v5 → v6: mayor tax policy (§ tax sliders). Old saves start at neutral rates.
+  5: (raw) => ({
+    ...raw,
+    schemaVersion: 6,
+    policy: (raw.policy as unknown) ?? { residentialTaxRate: 1, commercialTaxRate: 1 },
+  }),
 };
 
 /** Money rescale applied when upgrading v2 saves to the v3 economy. */

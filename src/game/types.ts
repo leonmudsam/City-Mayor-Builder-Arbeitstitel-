@@ -125,6 +125,13 @@ export interface GameState {
   resources: Record<ResourceId, number>;
   gold: { balance: number };
   goldTransactions: GoldTransaction[];
+  /**
+   * Mayor fiscal policy (MVP 2): tax-rate multipliers the player can dial. Above
+   * 1 earns more but costs happiness; below 1 buys goodwill at the cost of
+   * income. `residentialTaxRate` scales residence tax, `commercialTaxRate`
+   * scales commercial + industrial revenue. Neutral = 1.
+   */
+  policy: { residentialTaxRate: number; commercialTaxRate: number };
   world: {
     sectors: Record<SectorId, SectorState>; // sparse: only materialized sectors
     districts: Record<DistrictId, DistrictState>;

@@ -40,9 +40,13 @@ export function computeIncome(state: GameState, config: GameConfig, derived: Der
   const laborForce = pop * bal.laborParticipation;
   const employment = jobs > 0 ? Math.max(0, Math.min(1, laborForce / jobs)) : 0;
 
-  const residential = pop * bal.taxPerCapitaPerMin * factor;
-  const commercial = derived.revenueBase.commercial * employment * factor;
-  const industrial = derived.revenueBase.industrial * employment * factor;
+  // Mayor tax policy scales each source; the happiness cost of a high rate is
+  // applied in the tick (so it feeds back into `factor` next tick).
+  const resRate = state.policy.residentialTaxRate;
+  const busRate = state.policy.commercialTaxRate;
+  const residential = pop * bal.taxPerCapitaPerMin * factor * resRate;
+  const commercial = derived.revenueBase.commercial * employment * factor * busRate;
+  const industrial = derived.revenueBase.industrial * employment * factor * busRate;
   const total = residential + commercial + industrial;
   const upkeep = derived.upkeep.money;
   return { residential, commercial, industrial, total, upkeep, net: total - upkeep, employment };

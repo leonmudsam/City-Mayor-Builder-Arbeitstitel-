@@ -4,7 +4,7 @@ import type { GameState } from './types.ts';
 import { sectorId } from './types.ts';
 import { materializeSector, tileAt } from './map/world.ts';
 
-export const SCHEMA_VERSION = 5;
+export const SCHEMA_VERSION = 6;
 
 export function createNewGame(config: GameConfig, cityName: string, now: number): GameState {
   const state: GameState = {
@@ -15,6 +15,7 @@ export function createNewGame(config: GameConfig, cityName: string, now: number)
     resources: { ...config.balancing.startResources },
     gold: { balance: config.balancing.startGold },
     goldTransactions: [],
+    policy: { residentialTaxRate: 1, commercialTaxRate: 1 },
     world: { sectors: {}, districts: {} },
     buildings: {},
     citizens: {

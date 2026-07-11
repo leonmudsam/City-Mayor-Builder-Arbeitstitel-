@@ -250,6 +250,13 @@ export interface BalancingConfig {
    * happiness from sticking at 100 % as the city grows (§3).
    */
   needExpectationPerLevel: number;
+  /** Lower/upper bound the mayor can set a tax rate to (§ tax sliders). */
+  taxRateMin: number;
+  taxRateMax: number;
+  /** Happiness lost per +1.0 of residential tax rate above neutral (residents feel it most). */
+  residentialTaxHappinessPer: number;
+  /** Happiness lost per +1.0 of commercial tax rate above neutral (softer: business climate). */
+  commercialTaxHappinessPer: number;
 }
 
 export interface FeaturesConfig {

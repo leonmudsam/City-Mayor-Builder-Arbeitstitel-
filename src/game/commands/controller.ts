@@ -310,6 +310,21 @@ export class GameController {
     return ok;
   }
 
+  /**
+   * Set a mayor tax rate (§ tax sliders). Clamped to the configured band; the
+   * value only affects income and the happiness penalty (both per-tick), so no
+   * derived recompute is needed — a plain notify refreshes the UI.
+   */
+  setTaxRate(kind: 'residential' | 'commercial', rate: number): CommandResult {
+    if (!Number.isFinite(rate)) return fail('invalid');
+    const { taxRateMin, taxRateMax } = this.config.balancing;
+    const clamped = Math.max(taxRateMin, Math.min(taxRateMax, rate));
+    if (kind === 'residential') this.state.policy.residentialTaxRate = clamped;
+    else this.state.policy.commercialTaxRate = clamped;
+    this.notify({ type: 'change' });
+    return ok;
+  }
+
   // ---- Read helpers for the UI (no mutation) ------------------------------
 
   canAffordCost(cost: Partial<Record<ResourceId, number>>): boolean {

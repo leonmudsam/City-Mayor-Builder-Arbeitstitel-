@@ -1,4 +1,4 @@
-import { Briefcase, Building2, Factory, TrendingDown, TrendingUp, Wallet, X } from 'lucide-react';
+import { Briefcase, Building2, Factory, SlidersHorizontal, TrendingDown, TrendingUp, Wallet, X } from 'lucide-react';
 import { useGame, useUiStore } from '../../state/store.ts';
 import { formatMoney, t } from '../../i18n/index.ts';
 
@@ -17,6 +17,14 @@ export function EconomyPanel() {
     { key: 'commercial', icon: <TrendingUp size={15} />, value: income.commercial },
     { key: 'industrial', icon: <Factory size={15} />, value: income.industrial },
   ] as const;
+
+  // Tax sliders unlock once the commercial economy exists (§ tax sliders, MVP 2).
+  const { taxRateMin, taxRateMax } = game.config.balancing;
+  const showTax = game.state.level.current >= 6;
+  const taxSliders = [
+    { kind: 'residential' as const, rate: game.state.policy.residentialTaxRate },
+    { kind: 'commercial' as const, rate: game.state.policy.commercialTaxRate },
+  ];
 
   return (
     <aside className="panel side-panel economy-panel">
@@ -68,6 +76,33 @@ export function EconomyPanel() {
         <Briefcase size={15} />
         <span>{t('ui.finance.employment', { pct: Math.round(income.employment * 100) })}</span>
       </div>
+
+      {showTax && (
+        <div className="economy-tax">
+          <div className="economy-tax-head">
+            <SlidersHorizontal size={15} /> {t('ui.tax.title')}
+          </div>
+          {taxSliders.map(({ kind, rate }) => (
+            <div key={kind} className="economy-tax-row">
+              <div className="economy-tax-label">
+                <span>{t(`ui.tax.${kind}`)}</span>
+                <span className="economy-tax-value">{Math.round(rate * 100)}%</span>
+              </div>
+              <input
+                type="range"
+                min={Math.round(taxRateMin * 100)}
+                max={Math.round(taxRateMax * 100)}
+                step={5}
+                value={Math.round(rate * 100)}
+                onChange={(e) => game.setTaxRate(kind, Number(e.target.value) / 100)}
+                aria-label={t(`ui.tax.${kind}`)}
+              />
+            </div>
+          ))}
+          <p className="muted economy-tax-note">{t('ui.tax.note')}</p>
+        </div>
+      )}
+
       <p className="muted economy-note">{t('ui.economy.note')}</p>
     </aside>
   );

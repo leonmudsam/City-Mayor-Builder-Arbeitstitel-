@@ -418,6 +418,16 @@ body {
 .economy-employment svg { color: var(--text-muted); }
 .economy-note { line-height: 1.4; }
 
+/* ---- Tax sliders (§ tax sliders) ---- */
+.economy-tax { display: flex; flex-direction: column; gap: 10px; padding: 10px 0; border-top: 1px solid var(--border); }
+.economy-tax-head { display: flex; align-items: center; gap: 7px; font-size: 13px; font-weight: 700; }
+.economy-tax-head svg { color: var(--text-muted); }
+.economy-tax-row { display: flex; flex-direction: column; gap: 4px; }
+.economy-tax-label { display: flex; justify-content: space-between; font-size: 12.5px; }
+.economy-tax-value { font-weight: 700; font-variant-numeric: tabular-nums; }
+.economy-tax-row input[type='range'] { width: 100%; accent-color: var(--primary); cursor: pointer; }
+.economy-tax-note { line-height: 1.4; }
+
 /* ---- City status panel ---- */
 .status-happiness {
   display: flex; justify-content: space-between; align-items: baseline; padding: 8px 12px;

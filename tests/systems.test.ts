@@ -123,6 +123,34 @@ describe('emergency services (MVP 2)', () => {
   });
 });
 
+describe('tax policy (MVP 2)', () => {
+  it('scales residential income by the rate and clamps to the band', () => {
+    const { controller } = newController();
+    controller.placeBuilding('road', 26, 26);
+    controller.placeBuilding('house_small', 26, 27);
+    controller.update(T0 + 30_000 + 5 * MIN); // citizens move in
+    const base = controller.getIncome().residential;
+    expect(base).toBeGreaterThan(0);
+    // Raising the rate scales income directly (happiness penalty applies next tick).
+    controller.setTaxRate('residential', 1.5);
+    expect(controller.getIncome().residential).toBeCloseTo(base * 1.5, 5);
+    // Out-of-band values clamp to the configured maximum.
+    controller.setTaxRate('residential', 5);
+    expect(controller.state.policy.residentialTaxRate).toBe(1.5);
+  });
+
+  it('lets a tax hike bite happiness over the following ticks', () => {
+    const { controller } = newController();
+    controller.placeBuilding('road', 26, 26);
+    controller.placeBuilding('house_small', 26, 27);
+    controller.update(T0 + 30_000 + 5 * MIN);
+    const before = controller.state.citizens.happiness;
+    controller.setTaxRate('residential', 1.5); // +50 % → −12 happiness
+    controller.update(T0 + 30_000 + 6 * MIN);
+    expect(controller.state.citizens.happiness).toBeLessThan(before);
+  });
+});
+
 describe('housing model (§6)', () => {
   it('derives resident capacity from units × max residents per unit', () => {
     const { controller } = newController();

@@ -1,5 +1,31 @@
 # Patch Notes
 
+## v0.11 — „MVP 2 Teil 3: Steuer-Regler"
+
+Der Bürgermeister bekommt echte fiskalische Kontrolle: zwei **Steuersätze**, die
+sich direkt auf Einnahmen und Zufriedenheit auswirken. Der klassische SimCity-
+Zielkonflikt — mehr Geld gegen weniger Laune.
+
+### Steuersätze als Regler
+
+- **Wohnsteuer** und **Gewerbesteuer** lassen sich in der Wirtschaftsübersicht
+  zwischen **50 % und 150 %** einstellen (Regler ab Level 6).
+- Höher = mehr Geld sofort, aber **weniger Zufriedenheit** (und damit weniger
+  Zuzug und ein schlechterer Steuer-Faktor). Niedriger = Goodwill statt Geld.
+- Die **Wohnsteuer** spüren die Bürger stark (bis −12 Zufriedenheit bei 150 %),
+  die **Gewerbesteuer** wirkt sanfter (Geschäftsklima, bis −5). So ist die
+  Gewerbesteuer der schonendere Hebel, wenn die Kasse klemmt.
+
+### Technik
+
+- Neues `policy`-Feld im Spielstand (Save-Migration v5 → v6, startet neutral),
+  ein zentraler `setTaxRate`-Command; Einnahmen laufen weiter durch die eine
+  `computeIncome`-Quelle, der Zufriedenheits-Malus wird im Tick verrechnet.
+
+### Nächster MVP-2-Baustein
+
+Die erste **Fern-Expansion ins Fluss-Biom** (Fernstraße + Distrikt).
+
 ## v0.10 — „MVP 2 Teil 2: Notdienste" (Polizei & Krankenhaus)
 
 Die Stadt bekommt ein Sicherheitsnetz. Nach dem bewährten **Feuerwehr-Muster**
