@@ -5,7 +5,7 @@ describe('config', () => {
   it('loads and validates all static configs', () => {
     const config = loadConfig();
     expect(config.buildingList.length).toBeGreaterThanOrEqual(18);
-    expect(config.levels.length).toBe(10);
+    expect(config.levels.length).toBe(12);
     expect(config.questList.length).toBeGreaterThanOrEqual(15);
     expect(config.mayorActions.length).toBe(3);
   });

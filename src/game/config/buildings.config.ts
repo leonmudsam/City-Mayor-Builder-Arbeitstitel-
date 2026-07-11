@@ -124,6 +124,7 @@ export const buildingsConfig: BuildingDef[] = [
     effects: [
       { type: 'housing', units: 5, minResidentsPerUnit: 2, maxResidentsPerUnit: 4, ambienceSensitivity: 1.0 },
       { type: 'demand', need: 'water', amount: 16 },
+      { type: 'demand', need: 'energy', amount: 6 },
       { type: 'upkeep', resource: 'money', perMinute: 175 },
     ],
   },
@@ -142,6 +143,7 @@ export const buildingsConfig: BuildingDef[] = [
     effects: [
       { type: 'housing', units: 16, minResidentsPerUnit: 2, maxResidentsPerUnit: 3, ambienceSensitivity: 1.15 },
       { type: 'demand', need: 'water', amount: 40 },
+      { type: 'demand', need: 'energy', amount: 20 },
       { type: 'upkeep', resource: 'money', perMinute: 560 },
     ],
   },
@@ -162,6 +164,7 @@ export const buildingsConfig: BuildingDef[] = [
       { type: 'jobs', amount: 4 },
       { type: 'revenue', category: 'industrial', perMinute: 600 },
       { type: 'upkeep', resource: 'money', perMinute: 300 },
+      { type: 'demand', need: 'energy', amount: 8 },
       { type: 'ambience', amount: -1, radius: 4 },
     ],
     locationBonus: { terrain: 'forest', radius: 3, perTilePct: 5, maxPct: 50 },
@@ -183,6 +186,7 @@ export const buildingsConfig: BuildingDef[] = [
       { type: 'jobs', amount: 6 },
       { type: 'revenue', category: 'industrial', perMinute: 1_000 },
       { type: 'upkeep', resource: 'money', perMinute: 500 },
+      { type: 'demand', need: 'energy', amount: 12 },
       { type: 'ambience', amount: -2, radius: 5 },
     ],
     locationBonus: { terrain: 'mountain', radius: 3, perTilePct: 8, maxPct: 60 },
@@ -203,6 +207,7 @@ export const buildingsConfig: BuildingDef[] = [
       { type: 'jobs', amount: 4 },
       { type: 'revenue', category: 'industrial', perMinute: 700 },
       { type: 'upkeep', resource: 'money', perMinute: 300 },
+      { type: 'demand', need: 'energy', amount: 5 },
       { type: 'ambience', amount: -1, radius: 3 },
     ],
     locationBonus: { terrain: 'fertile', radius: 2, perTilePct: 4, maxPct: 40 },
@@ -237,6 +242,7 @@ export const buildingsConfig: BuildingDef[] = [
       { type: 'capacity', need: 'water', amount: 240, radius: 12 },
       { type: 'jobs', amount: 2 },
       { type: 'upkeep', resource: 'money', perMinute: 1_200 },
+      { type: 'demand', need: 'energy', amount: 18 },
     ],
     buildLimit: [{ level: 7, max: 1 }, { level: 9, max: 2 }, { level: 10, max: 3 }],
   },
@@ -260,6 +266,7 @@ export const buildingsConfig: BuildingDef[] = [
       { type: 'storage', resource: 'food', amount: 600 },
       { type: 'jobs', amount: 2 },
       { type: 'upkeep', resource: 'money', perMinute: 300 },
+      { type: 'demand', need: 'energy', amount: 4 },
     ],
     // Storage stays modest per building, but with pricier materials and faster
     // production the ceiling is now raised generously (max 10) so a committed,
@@ -285,6 +292,7 @@ export const buildingsConfig: BuildingDef[] = [
       { type: 'logistics', boostPct: 25, radius: 6 },
       { type: 'jobs', amount: 8 },
       { type: 'upkeep', resource: 'money', perMinute: 1_500 },
+      { type: 'demand', need: 'energy', amount: 12 },
     ],
     buildLimit: [{ level: 7, max: 1 }, { level: 9, max: 2 }, { level: 10, max: 3 }],
   },
@@ -308,6 +316,7 @@ export const buildingsConfig: BuildingDef[] = [
       // Market fees — commercial income that scales with staffing & happiness.
       { type: 'revenue', category: 'commercial', perMinute: 2_000 },
       { type: 'upkeep', resource: 'money', perMinute: 900 },
+      { type: 'demand', need: 'energy', amount: 8 },
     ],
     buildLimit: [{ level: 5, max: 2 }, { level: 8, max: 3 }, { level: 10, max: 4 }],
   },
@@ -326,6 +335,7 @@ export const buildingsConfig: BuildingDef[] = [
       { type: 'jobs', amount: 4 },
       { type: 'revenue', category: 'industrial', perMinute: 1_200 },
       { type: 'upkeep', resource: 'money', perMinute: 600 },
+      { type: 'demand', need: 'energy', amount: 8 },
     ],
     buildLimit: [{ level: 9, max: 2 }],
   },
@@ -343,6 +353,7 @@ export const buildingsConfig: BuildingDef[] = [
       { type: 'protection', hazard: 'fire', radius: 12 },
       { type: 'jobs', amount: 6 },
       { type: 'upkeep', resource: 'money', perMinute: 1_500 },
+      { type: 'demand', need: 'energy', amount: 8 },
     ],
     buildLimit: [{ level: 8, max: 2 }, { level: 10, max: 3 }],
   },
@@ -363,6 +374,7 @@ export const buildingsConfig: BuildingDef[] = [
       { type: 'revenue', category: 'commercial', perMinute: 4_000 },
       { type: 'jobs', amount: 8 },
       { type: 'upkeep', resource: 'money', perMinute: 1_200 },
+      { type: 'demand', need: 'energy', amount: 12 },
     ],
     buildLimit: [{ level: 6, max: 2 }, { level: 9, max: 4 }],
   },
@@ -383,8 +395,53 @@ export const buildingsConfig: BuildingDef[] = [
       { type: 'jobs', amount: 60 },
       { type: 'revenue', category: 'commercial', perMinute: 6_000 },
       { type: 'upkeep', resource: 'money', perMinute: 2_000 },
+      { type: 'demand', need: 'energy', amount: 30 },
     ],
     buildLimit: [{ level: 8, max: 2 }, { level: 9, max: 3 }, { level: 10, max: 5 }],
+  },
+
+  // ---- Infrastruktur / Energie (MVP 2) ----
+  // Coal plant — dense, reliable power for the whole grid, but it pollutes a
+  // wide radius (ambience −) and burns money as fuel (high upkeep). The default
+  // answer to the L11 energy crunch; you pay for it in air quality and cash.
+  {
+    id: 'power_plant',
+    category: 'infrastructure',
+    nameKey: 'building.power_plant',
+    size: { w: 3, h: 3 },
+    requiresRoad: true,
+    unlockLevel: 11,
+    cost: { money: 160_000, wood: 60, stone: 200 },
+    constructionSec: 360,
+    xpReward: 55,
+    effects: [
+      { type: 'capacity', need: 'energy', amount: 250 },
+      { type: 'jobs', amount: 10 },
+      { type: 'upkeep', resource: 'money', perMinute: 2_500 },
+      { type: 'ambience', amount: -3, radius: 6 },
+    ],
+    buildLimit: [{ level: 11, max: 2 }, { level: 13, max: 3 }, { level: 15, max: 4 }],
+  },
+  // Wind farm — clean power: no pollution (mild positive ambience), far cheaper
+  // to run, but each turbine field yields less than a coal plant and eats space.
+  // The greener, land-hungry path: build several instead of one dirty plant.
+  {
+    id: 'wind_farm',
+    category: 'infrastructure',
+    nameKey: 'building.wind_farm',
+    size: { w: 3, h: 3 },
+    requiresRoad: true,
+    unlockLevel: 12,
+    cost: { money: 120_000, wood: 40, stone: 120 },
+    constructionSec: 300,
+    xpReward: 45,
+    effects: [
+      { type: 'capacity', need: 'energy', amount: 120 },
+      { type: 'jobs', amount: 3 },
+      { type: 'upkeep', resource: 'money', perMinute: 800 },
+      { type: 'ambience', amount: 1, radius: 4 },
+    ],
+    buildLimit: [{ level: 12, max: 3 }, { level: 14, max: 5 }],
   },
 
   // ---- Freizeit ----

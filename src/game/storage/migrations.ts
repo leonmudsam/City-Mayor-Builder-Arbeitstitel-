@@ -51,6 +51,15 @@ const migrations: Record<number, Migration> = {
     if (typeof resources.money === 'number') resources.money = Math.round(resources.money * MONEY_SCALE_V3);
     return { ...raw, schemaVersion: 3, resources };
   },
+  // v3 → v4: energy grid (MVP 2). The new `energy` need is seeded on old saves
+  // so the citizens state stays complete; it only starts biting once the city
+  // reaches its unlock level and buildings draw power.
+  3: (raw) => {
+    const citizens = { ...(raw.citizens as Record<string, unknown>) };
+    const needs = { ...((citizens.needs as Record<string, unknown>) ?? {}) };
+    needs.energy ??= { supply: 0, demand: 0, fulfillment: 1 };
+    return { ...raw, schemaVersion: 4, citizens: { ...citizens, needs } };
+  },
 };
 
 /** Money rescale applied when upgrading v2 saves to the v3 economy. */

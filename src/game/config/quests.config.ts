@@ -169,5 +169,30 @@ export const questsConfig: QuestDef[] = [
       { type: 'happiness', amount: 80 },
     ],
     rewards: { money: 400_000, gold: 50, xp: 100 },
+    nextQuestId: 'q16_power',
+  },
+  // ---- MVP 2: energy grid ----
+  {
+    id: 'q16_power',
+    titleKey: 'quest.q16.title',
+    descriptionKey: 'quest.q16.desc',
+    unlockLevel: 11,
+    objectives: [
+      { type: 'build', defId: 'power_plant', count: 1 },
+      { type: 'happiness', amount: 70 },
+    ],
+    rewards: { money: 260_000, xp: 90 },
+    nextQuestId: 'q17_grid',
+  },
+  {
+    id: 'q17_grid',
+    titleKey: 'quest.q17.title',
+    descriptionKey: 'quest.q17.desc',
+    unlockLevel: 12,
+    objectives: [
+      { type: 'build', defId: 'wind_farm', count: 1 },
+      { type: 'population', amount: 550 },
+    ],
+    rewards: { money: 340_000, gold: 30, xp: 120 },
   },
 ];

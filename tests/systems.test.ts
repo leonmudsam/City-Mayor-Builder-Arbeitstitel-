@@ -87,6 +87,25 @@ describe('logistics & workplaces', () => {
   });
 });
 
+describe('energy grid (MVP 2)', () => {
+  it('a power plant feeds the grid while buildings draw power', () => {
+    const { controller } = newController();
+    setLevel(controller, 11);
+    flattenTerrain(controller);
+    controller.state.resources = { money: 1_000_000, wood: 2_000, stone: 2_000, food: 1_000 };
+    for (let x = 26; x <= 31; x++) controller.placeBuilding('road', x, 26);
+    // A warehouse draws 4 energy; there is no supply until a plant is built.
+    expect(controller.placeBuilding('warehouse', 29, 27)).toEqual({ ok: true });
+    controller.update(T0 + 130_000); // warehouse finishes
+    expect(controller.derived.extraDemand.energy).toBe(4);
+    expect(controller.derived.capacity.energy).toBe(0);
+    // The coal plant powers the whole city-wide grid (capacity need, no radius).
+    expect(controller.placeBuilding('power_plant', 26, 27)).toEqual({ ok: true });
+    controller.update(T0 + 130_000 + 400_000); // plant finishes
+    expect(controller.derived.capacity.energy).toBe(250);
+  });
+});
+
 describe('housing model (§6)', () => {
   it('derives resident capacity from units × max residents per unit', () => {
     const { controller } = newController();

@@ -1,5 +1,41 @@
 # Patch Notes
 
+## v0.9 — „MVP 2 startet: Das Stromnetz" (Teil 1)
+
+Erster Baustein von **MVP 2**: die Stadt bekommt ein **Energienetz**. Ab **Level 11**
+verlangen Industrie, Gewerbe und dichte Wohnhäuser Strom — plötzlich ist Energie
+ein neues Bedürfnis, und ohne Kraftwerk sinkt die Zufriedenheit. Genau der
+„Level-up erzeugt das nächste Problem"-Motor (§4).
+
+### Neues Bedürfnis: Energie
+
+- **Energie** ist ein stadtweites Kapazitäts-Bedürfnis (wie Wasser, aber ohne
+  Radius — ein Kraftwerk speist das ganze Netz). Der Bedarf kommt aus den
+  Gebäuden selbst: Sägewerk, Steinbruch, Farm, Bäckerei, Wasserwerk, Markt,
+  Laden, **Bürogebäude (30)**, Feuerwehr, Logistikzentrum, Reihenhaus und
+  **Apartment (20)** ziehen Strom. Schaltet auf Level 11 frei.
+
+### Zwei Kraftwerke mit echtem Trade-off
+
+- **Kohlekraftwerk** (ab L11, 3×3): dichte, verlässliche Leistung (+250 Energie),
+  aber es **verpestet** einen weiten Radius (Ambiente −3) und **frisst Geld als
+  Brennstoff** (2.500/min Unterhalt). Die Standardantwort auf den L11-Engpass —
+  bezahlt in Luftqualität und Cash. Limit gestaffelt bis max 4.
+- **Windpark** (ab L12, 3×3): **sauber** (Ambiente +1), viel günstiger im
+  Betrieb (800/min), liefert aber weniger (+120 Energie) und braucht Platz. Der
+  grüne, flächenhungrige Weg: lieber mehrere statt eines dreckigen Kraftwerks.
+
+### Progression
+
+- **Level 11 & 12** neu (XP-Kurve 3.400 / 4.500), plus **Quests „Licht an" und
+  „Sauberes Netz"**. Alte Spielstände werden migriert (Schema v3 → v4, Energie-
+  Bedürfnis wird ergänzt).
+
+### Nächste MVP-2-Bausteine (geplant)
+
+Notdienste (Polizei/Krankenhaus nach dem Feuerwehr-Muster), Steuer-/Mieten-
+Regler, weitere Level 13–20 und die erste **Fern-Expansion ins Fluss-Biom**.
+
 ## v0.8 — „Geld verdient man, Kosten spürt man"
 
 Feintuning nach Spieler-Feedback: **Geld war zu viel, Kosten zu niedrig.** Leitidee

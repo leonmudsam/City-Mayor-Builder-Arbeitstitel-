@@ -12,4 +12,10 @@ export const needsConfig: NeedDef[] = [
   { id: 'food', nameKey: 'need.food', unlockLevel: 4, weight: 25, kind: 'consumption', demandPerCapita: 0.05 },
   { id: 'work', nameKey: 'need.work', unlockLevel: 6, weight: 15, kind: 'capacity', demandPerCapita: 0.5 },
   { id: 'leisure', nameKey: 'need.leisure', unlockLevel: 7, weight: 15, kind: 'coverage', demandPerCapita: 1 },
+  // Energy (MVP 2): a city-wide capacity need with no radius — power plants feed
+  // the whole grid. Demand comes entirely from the buildings themselves (their
+  // `demand` effect: industry, services, dense housing draw power), so it scales
+  // with what you build, not with raw population. Activating at L11 is the new
+  // "level-up problem" motor (§4): the grid suddenly needs a plant.
+  { id: 'energy', nameKey: 'need.energy', unlockLevel: 11, weight: 12, kind: 'capacity', demandPerCapita: 0 },
 ];
