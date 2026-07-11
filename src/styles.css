@@ -452,3 +452,10 @@ body {
 .status-need-fill.warn { background: var(--warn); }
 .status-need-fill.bad { background: var(--bad); }
 .status-need-pct { width: 38px; text-align: right; font-size: 12px; font-variant-numeric: tabular-nums; }
+
+/* ---- Economy ledger (gross → upkeep → net) ---- */
+.economy-total.negative .economy-total-value { color: var(--bad); }
+.economy-ledger { display: flex; flex-direction: column; gap: 4px; padding: 8px 0; border-top: 1px solid var(--border); }
+.economy-ledger-row { display: flex; justify-content: space-between; font-size: 12.5px; font-variant-numeric: tabular-nums; }
+.economy-ledger-row span:first-child { display: inline-flex; align-items: center; gap: 5px; color: var(--text-muted); }
+.res-badge-warn .res-badge-sub { color: var(--warn); }

@@ -32,7 +32,8 @@ export function ResourceDetailPopover({ id }: { id: ResourceId }) {
           <DetailRow label={t('ui.finance.residential')} value={`+${formatMoney(income.residential)}`} />
           <DetailRow label={t('ui.finance.commercial')} value={`+${formatMoney(income.commercial)}`} />
           <DetailRow label={t('ui.finance.industrial')} value={`+${formatMoney(income.industrial)}`} />
-          <DetailRow label={t('ui.finance.total')} value={`+${formatMoney(income.total)}`} strong />
+          <DetailRow label={t('ui.finance.upkeep')} value={`−${formatMoney(income.upkeep)}`} negative />
+          <DetailRow label={t('ui.finance.net')} value={`${income.net >= 0 ? '+' : '−'}${formatMoney(Math.abs(income.net))}`} strong />
         </div>
         <p className="res-detail-note">{t('ui.resource.note.money')}</p>
         <button className="btn-link res-detail-link" onClick={() => setPanel('economy')}>
@@ -68,11 +69,11 @@ export function ResourceDetailPopover({ id }: { id: ResourceId }) {
   );
 }
 
-function DetailRow({ label, value, strong }: { label: string; value: string; strong?: boolean }) {
+function DetailRow({ label, value, strong, negative }: { label: string; value: string; strong?: boolean; negative?: boolean }) {
   return (
     <div className={`res-detail-row${strong ? ' strong' : ''}`}>
       <span>{label}</span>
-      <span className="res-detail-value">{value}</span>
+      <span className={`res-detail-value${negative ? ' text-bad' : ''}`}>{value}</span>
     </div>
   );
 }

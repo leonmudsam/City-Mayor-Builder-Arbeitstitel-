@@ -18,7 +18,7 @@ export function TopBar() {
   const xpProgress = nextXp === undefined ? 1 : Math.min(1, (state.level.xp - prevXp) / (nextXp - prevXp));
   const waterNeed = state.citizens.needs.water;
   const waterPct = state.level.current >= 3 ? Math.round(waterNeed.fulfillment * 100) : undefined;
-  const income = game.getIncome().total;
+  const income = game.getIncome().net;
 
   return (
     <header className="topbar">
@@ -33,7 +33,8 @@ export function TopBar() {
         <ResourceBadge
           icon={<ResourceIcon id="money" />}
           value={formatMoney(res.money)}
-          sub={income > 0 ? `+${formatMoney(income)}` : undefined}
+          sub={income === 0 ? undefined : income > 0 ? `+${formatMoney(income)}` : `−${formatMoney(-income)}`}
+          warn={income < 0}
           accent="var(--res-money)"
           detail={<ResourceDetailPopover id="money" />}
         />
