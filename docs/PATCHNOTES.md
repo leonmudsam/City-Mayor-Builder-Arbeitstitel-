@@ -1,5 +1,37 @@
 # Patch Notes
 
+## v0.12 — „MVP 2 Teil 4: Fluss-Distrikt"
+
+Die erste **Fern-Expansion**: Am Fluss lässt sich ein eigener **Distrikt**
+gründen — eine zweite Ausbaufläche mit eigenem Zentrum und eigenem Straßennetz,
+fernab der Innenstadt (§8).
+
+### Distrikt gründen
+
+- Klick auf einen gesperrten **Fluss-Sektor** (ab Level 12) bietet die Option
+  **„Fluss-Distrikt gründen"** an. Das große Einmalprojekt schaltet den Sektor
+  als **eigenen Distrikt** frei und pflanzt ein **Distrikt-Zentrum** ans Wasser.
+- Das Zentrum funktioniert wie ein kleines Rathaus: es lagert Waren, schafft ein
+  paar Jobs, hebt die lokale Stimmung — und vor allem **setzt es ein eigenes
+  Straßennetz**. So baut man am Fluss „quasi eine neue Stadt", ohne eine
+  40-Felder-Straße aus der Innenstadt ziehen zu müssen.
+- Angrenzende Sektoren werden anschließend Teil des Fluss-Distrikts (die
+  Distrikt-Zugehörigkeit vererbt sich beim Freischalten).
+
+### Technik
+
+- Reine Wiederverwendung: das Straßennetz wurde schon immer aus **jedem**
+  Distrikt-Zentrum geseedet (`computeRoadNetwork`), die Karte ist eine
+  Sparse-Sektoren-Welt (§8). Neu sind nur ein `district_center`-Gebäude, ein
+  `foundDistrict`-Command und die Option im Sektor-Dialog. Kein Save-Umbau nötig
+  (Distrikte sind bereits im Schema).
+
+### Damit ist der MVP-2-Gameplay-Kern beisammen
+
+Energienetz, Notdienste, Steuer-Regler und die erste Fern-Expansion stehen. Was
+noch offen ist (Cloud-Save/Login, Mobile-Layout, Besichtigungsmodus), hängt an
+Infrastruktur-Entscheidungen und kommt später.
+
 ## v0.11 — „MVP 2 Teil 3: Steuer-Regler"
 
 Der Bürgermeister bekommt echte fiskalische Kontrolle: zwei **Steuersätze**, die

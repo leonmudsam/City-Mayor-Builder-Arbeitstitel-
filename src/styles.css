@@ -209,6 +209,10 @@ body {
 .dialog-buttons { display: flex; gap: 8px; margin-top: 14px; }
 .dialog-buttons > * { flex: 1; }
 .sector-price { font-weight: 700; margin-top: 8px; }
+.sector-district { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--border); }
+.sector-district-head { display: flex; align-items: center; gap: 7px; font-weight: 700; }
+.sector-district-head svg { color: var(--primary); }
+.btn-district { margin-top: 10px; width: 100%; }
 
 /* Building dialog: bigger, centered, readable (§6 UX). */
 .building-dialog { width: 440px; max-width: calc(100vw - 40px); max-height: 80vh; overflow-y: auto; }

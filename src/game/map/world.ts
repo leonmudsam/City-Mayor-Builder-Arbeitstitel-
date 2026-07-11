@@ -73,6 +73,56 @@ export function isTerrainBuildable(t: TileState): boolean {
   return !UNBUILDABLE.has(t.terrain);
 }
 
+/** True if any tile in the sector has the given terrain (biome detection). */
+export function sectorHasTerrain(sector: SectorState, terrain: TileState['terrain']): boolean {
+  return sector.tiles.some((t) => t.terrain === terrain);
+}
+
+/**
+ * Find a buildable `size × size` block inside a sector for a district centre,
+ * preferring a spot on the riverfront (a river tile within Chebyshev 3). Returns
+ * the world-tile top-left corner, or undefined if the sector has no room. Used
+ * by the found-district project so the centre lands sensibly by the water (§8).
+ */
+export function findDistrictCenterSpot(
+  sector: SectorState,
+  size: number,
+): { x: number; y: number } | undefined {
+  const ox = sector.sx * SECTOR_SIZE;
+  const oy = sector.sy * SECTOR_SIZE;
+  const at = (lx: number, ly: number): TileState => sector.tiles[ly * SECTOR_SIZE + lx]!;
+  const blockOk = (lx: number, ly: number): boolean => {
+    for (let dy = 0; dy < size; dy++) {
+      for (let dx = 0; dx < size; dx++) {
+        const t = at(lx + dx, ly + dy);
+        if (!isTerrainBuildable(t) || t.buildingId !== undefined) return false;
+      }
+    }
+    return true;
+  };
+  const nearRiver = (lx: number, ly: number): boolean => {
+    const cx = lx + (size - 1) / 2;
+    const cy = ly + (size - 1) / 2;
+    for (let y = 0; y < SECTOR_SIZE; y++) {
+      for (let x = 0; x < SECTOR_SIZE; x++) {
+        if (at(x, y).terrain !== 'river') continue;
+        if (Math.max(Math.abs(x - cx), Math.abs(y - cy)) <= size + 1) return true;
+      }
+    }
+    return false;
+  };
+  let fallback: { x: number; y: number } | undefined;
+  for (let ly = 0; ly <= SECTOR_SIZE - size; ly++) {
+    for (let lx = 0; lx <= SECTOR_SIZE - size; lx++) {
+      if (!blockOk(lx, ly)) continue;
+      const spot = { x: ox + lx, y: oy + ly };
+      if (nearRiver(lx, ly)) return spot;
+      fallback ??= spot;
+    }
+  }
+  return fallback;
+}
+
 /**
  * Road connectivity: flood fill over road tiles, seeded by roads orthogonally
  * adjacent to the town hall (or a district center). Returns the set of

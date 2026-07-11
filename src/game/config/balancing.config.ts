@@ -49,6 +49,11 @@ export const balancingConfig: BalancingConfig = {
   taxRateMax: 1.5,
   residentialTaxHappinessPer: 24,
   commercialTaxHappinessPer: 10,
+  // Fern-Expansion (MVP 2): founding the river district is a genuine "special
+  // project" — a big one-off cost that plants a district centre in the river
+  // biome and opens a second, self-connected build area (§8).
+  districtUnlockLevel: 12,
+  districtFoundCost: { money: 300_000, wood: 150, stone: 250 },
 };
 
 // Feature flags: the test shop and gold system are wired in as the LAST

@@ -1,14 +1,17 @@
-import { Lock, X } from 'lucide-react';
+import { Lock, Waves, X } from 'lucide-react';
 import { useGame, useUiStore } from '../../state/store.ts';
 import { formatMoney, t } from '../../i18n/index.ts';
 
 export function SectorDialog() {
   const game = useGame();
-  const { sectorDialog, openSectorDialog, pushToast } = useUiStore();
+  const { sectorDialog, openSectorDialog, pushToast, selectBuilding } = useUiStore();
   if (!sectorDialog) return null;
   const cost = game.getSectorCost(sectorDialog);
   const levelOk = game.state.level.current >= 5;
   const affordable = game.canAffordCost({ money: cost });
+  // River district: only offered on a locked river-biome sector at the right level.
+  const district = game.canFoundDistrict(sectorDialog);
+  const districtAffordable = game.canAffordCost(district.cost);
 
   return (
     <div className="dialog-backdrop" onClick={() => openSectorDialog(undefined)}>
@@ -45,6 +48,36 @@ export function SectorDialog() {
             {t('ui.unlock')}
           </button>
         </div>
+
+        {district.eligible && (
+          <div className="sector-district">
+            <p className="sector-district-head">
+              <Waves size={15} /> {t('ui.district.title')}
+            </p>
+            <p className="muted">{t('ui.district.desc')}</p>
+            <p className="sector-price">
+              {t('ui.cost')}: {formatMoney(district.cost.money ?? 0)} {t('resource.money')}
+              {district.cost.wood ? ` · ${district.cost.wood} ${t('resource.wood')}` : ''}
+              {district.cost.stone ? ` · ${district.cost.stone} ${t('resource.stone')}` : ''}
+            </p>
+            <button
+              className="btn-primary btn-district"
+              disabled={!districtAffordable}
+              onClick={() => {
+                const result = game.foundDistrict(sectorDialog);
+                if (result.ok) {
+                  openSectorDialog(undefined);
+                  selectBuilding(game.state.world.districts['river']?.centerBuildingId);
+                  pushToast(t('ui.district.founded'), 'success');
+                } else {
+                  pushToast(t(`error.${result.error}`) ?? t('error.generic'), 'error');
+                }
+              }}
+            >
+              {t('ui.district.found')}
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );

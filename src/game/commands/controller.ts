@@ -1,6 +1,6 @@
 import type { GameConfig } from '../config/index.ts';
 import type { GameState, ResourceId, SectorId } from '../types.ts';
-import { parseSectorId } from '../types.ts';
+import { parseSectorId, sectorId } from '../types.ts';
 import { recomputeDerived, type Derived } from '../simulation/derived.ts';
 import { advance } from '../simulation/tick.ts';
 import { updateQuests, objectiveTarget } from '../simulation/quests.ts';
@@ -12,9 +12,11 @@ import { canAfford, grantGold, grantResources, spendCost, spendGold } from '../e
 import { computeIncome, type IncomeBreakdown } from '../economy/income.ts';
 import { addXp } from '../progression/levels.ts';
 import {
+  findDistrictCenterSpot,
   isSectorAdjacentToUnlocked,
   materializeNeighbors,
   materializeSector,
+  sectorHasTerrain,
   sectorUnlockCost,
   tileAt,
 } from '../map/world.ts';
@@ -220,9 +222,55 @@ export class GameController {
     const spend = spendCost(this.state, { money: cost }, 'unlock_sector');
     if (!spend.ok) return fail('insufficient');
     sector.status = 'unlocked';
+    // Join the district of an adjacent unlocked sector, so a far quarter (the
+    // river district) grows coherently instead of everything reading as 'main'.
+    for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]] as const) {
+      const n = this.state.world.sectors[sectorId(sx + dx, sy + dy)];
+      if (n?.status === 'unlocked' && n.districtId !== 'main') { sector.districtId = n.districtId; break; }
+    }
     this.state.stats.sectorsUnlocked += 1;
     materializeNeighbors(this.state, sx, sy);
     addXp(this.state, this.config, this.derived, 30);
+    this.afterStructuralChange();
+    return ok;
+  }
+
+  /**
+   * Found the river district — the first far expansion (§8). A one-off project
+   * that plants a district centre in a locked river-biome sector: it unlocks the
+   * sector as a new district and seeds a fresh road network there, so the river
+   * quarter is a self-contained build area, not a 40-tile road from downtown.
+   */
+  foundDistrict(id: SectorId): CommandResult {
+    const bal = this.config.balancing;
+    if (this.state.level.current < bal.districtUnlockLevel) return fail('locked');
+    const { sx, sy } = parseSectorId(id);
+    const sector = this.state.world.sectors[id] ?? materializeSector(this.state, sx, sy);
+    if (sector.status === 'unlocked') return fail('invalid');
+    if (!sectorHasTerrain(sector, 'river')) return fail('invalid'); // must be the river biome
+    if (Object.values(this.state.world.districts).some((d) => d.id === 'river')) return fail('invalid'); // one for now
+    const centerDef = this.config.buildings.get('district_center');
+    if (!centerDef) return fail('not_found');
+    const spot = findDistrictCenterSpot(sector, centerDef.size.w);
+    if (!spot) return fail('terrain');
+    const spend = spendCost(this.state, bal.districtFoundCost, 'found_district');
+    if (!spend.ok) return fail('insufficient');
+
+    sector.status = 'unlocked';
+    sector.districtId = 'river';
+    this.state.stats.sectorsUnlocked += 1;
+    materializeNeighbors(this.state, sx, sy);
+    // Plant the centre active at once, so it stores goods and seeds roads now.
+    const centerId = newId(this.state, 'b');
+    this.state.buildings[centerId] = { id: centerId, defId: 'district_center', x: spot.x, y: spot.y, upgradeLevel: 0, status: 'active' };
+    for (let dy = 0; dy < centerDef.size.h; dy++) {
+      for (let dx = 0; dx < centerDef.size.w; dx++) {
+        const tile = tileAt(this.state, spot.x + dx, spot.y + dy);
+        if (tile) tile.buildingId = centerId;
+      }
+    }
+    this.state.world.districts['river'] = { id: 'river', nameKey: 'district.river', centerBuildingId: centerId };
+    addXp(this.state, this.config, this.derived, 120);
     this.afterStructuralChange();
     return ok;
   }
@@ -346,6 +394,23 @@ export class GameController {
   getSectorCost(id: SectorId): number {
     const { sx, sy } = parseSectorId(id);
     return sectorUnlockCost(this.state, this.config, sx, sy);
+  }
+
+  /**
+   * Whether a locked sector can be turned into the river district (§8), plus the
+   * project cost — drives the "found district" option in the sector dialog.
+   */
+  canFoundDistrict(id: SectorId): { eligible: boolean; cost: Partial<Record<ResourceId, number>> } {
+    const bal = this.config.balancing;
+    const sector = this.state.world.sectors[id];
+    const def = this.config.buildings.get('district_center');
+    const hasRiverDistrict = Object.values(this.state.world.districts).some((d) => d.id === 'river');
+    const eligible =
+      this.state.level.current >= bal.districtUnlockLevel &&
+      !!sector && sector.status === 'locked' && !!def &&
+      sectorHasTerrain(sector, 'river') && !hasRiverDistrict &&
+      findDistrictCenterSpot(sector, def.size.w) !== undefined;
+    return { eligible, cost: bal.districtFoundCost };
   }
 
   /** Current per-minute income split by source, for the finance UI (§5). */

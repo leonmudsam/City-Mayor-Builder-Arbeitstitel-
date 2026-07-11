@@ -257,6 +257,10 @@ export interface BalancingConfig {
   residentialTaxHappinessPer: number;
   /** Happiness lost per +1.0 of commercial tax rate above neutral (softer: business climate). */
   commercialTaxHappinessPer: number;
+  /** Level at which the first far expansion (river district) becomes possible. */
+  districtUnlockLevel: number;
+  /** One-off cost to found a district (the "Fernstraße/Distrikt" project, §8). */
+  districtFoundCost: Partial<Record<ResourceId, number>>;
 }
 
 export interface FeaturesConfig {

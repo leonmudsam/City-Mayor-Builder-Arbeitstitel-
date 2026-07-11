@@ -50,6 +50,33 @@ export const buildingsConfig: BuildingDef[] = [
     effects: [],
   },
 
+  // District centre (MVP 2): the anchor of a far district, planted by the
+  // "found district" project (not buildable from the menu). Like a small town
+  // hall — it stores goods, employs a few, lifts the local mood and, crucially,
+  // seeds its own road network so the river quarter connects without a 40-tile
+  // road back to the main city (§8).
+  {
+    id: 'district_center',
+    category: 'government',
+    nameKey: 'building.district_center',
+    size: { w: 3, h: 3 },
+    requiresRoad: false,
+    unlockLevel: 12,
+    cost: {},
+    constructionSec: 0,
+    xpReward: 0,
+    buildable: false,
+    canDemolish: false,
+    canRelocate: false,
+    effects: [
+      { type: 'jobs', amount: 5 },
+      { type: 'storage', resource: 'wood', amount: 300 },
+      { type: 'storage', resource: 'stone', amount: 300 },
+      { type: 'storage', resource: 'food', amount: 300 },
+      { type: 'ambience', amount: 2, radius: 3 },
+    ],
+  },
+
   // ---- Straßen ----
   {
     id: 'road',
