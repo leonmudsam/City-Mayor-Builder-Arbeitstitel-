@@ -4,11 +4,13 @@ import {
   Droplets,
   Factory,
   Flower2,
+  HeartPulse,
   Home,
   Landmark,
   Logs,
   Mountain,
   Route,
+  ShieldCheck,
   ShoppingBasket,
   Star,
   Store,
@@ -38,6 +40,8 @@ export const NEED_ICON: Record<NeedId, LucideIcon> = {
   work: BriefcaseBusiness,
   leisure: TreePine,
   energy: Zap,
+  safety: ShieldCheck,
+  health: HeartPulse,
 };
 
 export const CATEGORY_ICON: Record<BuildingCategory, LucideIcon> = {

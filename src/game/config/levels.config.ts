@@ -20,4 +20,8 @@ export const levelsConfig: LevelDef[] = [
   // next problem and its answer" motor (§4).
   { level: 11, xpRequired: 3400, unlocks: ['power_plant'], rewards: { money: 320_000, gold: 30 } },
   { level: 12, xpRequired: 4500, unlocks: ['wind_farm'], rewards: { money: 400_000 } },
+  // L13/L14: emergency services activate (needs.config safety L13, health L14),
+  // each with its building unlocking in the same level — same motor as energy.
+  { level: 13, xpRequired: 5800, unlocks: ['police_station'], rewards: { money: 460_000, gold: 30 } },
+  { level: 14, xpRequired: 7200, unlocks: ['hospital'], rewards: { money: 540_000 } },
 ];

@@ -1,5 +1,34 @@
 # Patch Notes
 
+## v0.10 — „MVP 2 Teil 2: Notdienste" (Polizei & Krankenhaus)
+
+Die Stadt bekommt ein Sicherheitsnetz. Nach dem bewährten **Feuerwehr-Muster**
+(radiusbasierte Deckung) kommen zwei neue Bedürfnisse dazu — ohne Sonderpfade,
+dieselbe Coverage-Mechanik wie bei Freizeit und Feuerwehr.
+
+### Zwei neue Bedürfnisse: Sicherheit & Gesundheit
+
+- **Sicherheit** (ab L13) und **Gesundheit** (ab L14) sind radiusbasierte
+  Deckungs-Bedürfnisse: Wohnhäuser im Einzugsradius sind versorgt, der Rest
+  nicht — unversorgte Viertel drücken die Zufriedenheit.
+
+### Zwei neue Gebäude
+
+- **Polizeiwache** (ab L13, 2×2): Sicherheitsdeckung im Radius 11, Jobs,
+  Unterhalt, Strombedarf. Limit bis max 4.
+- **Krankenhaus** (ab L14, 3×2): Gesundheitsdeckung im Radius 11 — größerer
+  Bau, höhere Betriebs- und Stromkosten als die Wache. Limit bis max 3.
+
+### Progression
+
+- **Level 13 & 14** neu (XP 5.800 / 7.200) mit **Quests „Für Ordnung sorgen"
+  und „Gesunde Stadt"**. Save-Migration v4 → v5 ergänzt die neuen Bedürfnisse
+  in alten Spielständen.
+
+### Nächste MVP-2-Bausteine (geplant)
+
+Steuer-/Mieten-Regler und die erste Fern-Expansion ins Fluss-Biom.
+
 ## v0.9 — „MVP 2 startet: Das Stromnetz" (Teil 1)
 
 Erster Baustein von **MVP 2**: die Stadt bekommt ein **Energienetz**. Ab **Level 11**

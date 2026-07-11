@@ -4,7 +4,7 @@ import { z } from 'zod';
 // balancing data) and every save game after loading.
 
 const resourceId = z.enum(['money', 'wood', 'stone', 'food']);
-const needId = z.enum(['housing', 'water', 'food', 'work', 'leisure', 'energy']);
+const needId = z.enum(['housing', 'water', 'food', 'work', 'leisure', 'energy', 'safety', 'health']);
 
 const terrainType = z.enum(['grass', 'forest', 'water', 'river', 'mountain', 'sand', 'fertile']);
 

@@ -55,10 +55,10 @@ interface RadiusSource {
 
 export function recomputeDerived(state: GameState, config: GameConfig): Derived {
   const storageCaps: Record<ResourceId, number> = { money: Number.POSITIVE_INFINITY, wood: 0, stone: 0, food: 0 };
-  const capacity: Record<NeedId, number> = { housing: 0, water: 0, food: 0, work: 0, leisure: 0, energy: 0 };
+  const capacity: Record<NeedId, number> = { housing: 0, water: 0, food: 0, work: 0, leisure: 0, energy: 0, safety: 0, health: 0 };
   const productionPerMin: Record<ResourceId, number> = { money: 0, wood: 0, stone: 0, food: 0 };
   const productionBonus: Record<string, number> = {};
-  const extraDemand: Record<NeedId, number> = { housing: 0, water: 0, food: 0, work: 0, leisure: 0, energy: 0 };
+  const extraDemand: Record<NeedId, number> = { housing: 0, water: 0, food: 0, work: 0, leisure: 0, energy: 0, safety: 0, health: 0 };
   const revenueBase = { commercial: 0, industrial: 0 };
   const upkeep: Record<ResourceId, number> = { money: 0, wood: 0, stone: 0, food: 0 };
   let housingUnits = 0;
@@ -153,8 +153,8 @@ export function recomputeDerived(state: GameState, config: GameConfig): Derived 
   for (const need of config.needs) {
     if (need.kind === 'coverage') coverageSources[need.id] ??= [];
   }
-  const needCoverage: Record<NeedId, number> = { housing: 1, water: 1, food: 1, work: 1, leisure: 1, energy: 1 };
-  const distributionCoverage: Record<NeedId, number> = { housing: 0, water: 0, food: 0, work: 0, leisure: 0, energy: 0 };
+  const needCoverage: Record<NeedId, number> = { housing: 1, water: 1, food: 1, work: 1, leisure: 1, energy: 1, safety: 1, health: 1 };
+  const distributionCoverage: Record<NeedId, number> = { housing: 0, water: 0, food: 0, work: 0, leisure: 0, energy: 0, safety: 0, health: 0 };
   const totalHousing = residential.reduce((sum, r) => sum + r.housing, 0);
   const ambience: Record<string, number> = {};
   // Housing-weighted share of homes reached by any of a need's radius sources.

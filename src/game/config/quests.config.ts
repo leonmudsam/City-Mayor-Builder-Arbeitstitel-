@@ -194,5 +194,30 @@ export const questsConfig: QuestDef[] = [
       { type: 'population', amount: 550 },
     ],
     rewards: { money: 340_000, gold: 30, xp: 120 },
+    nextQuestId: 'q18_safety',
+  },
+  // ---- MVP 2: emergency services ----
+  {
+    id: 'q18_safety',
+    titleKey: 'quest.q18.title',
+    descriptionKey: 'quest.q18.desc',
+    unlockLevel: 13,
+    objectives: [
+      { type: 'build', defId: 'police_station', count: 1 },
+      { type: 'happiness', amount: 72 },
+    ],
+    rewards: { money: 380_000, xp: 130 },
+    nextQuestId: 'q19_health',
+  },
+  {
+    id: 'q19_health',
+    titleKey: 'quest.q19.title',
+    descriptionKey: 'quest.q19.desc',
+    unlockLevel: 14,
+    objectives: [
+      { type: 'build', defId: 'hospital', count: 1 },
+      { type: 'population', amount: 700 },
+    ],
+    rewards: { money: 460_000, gold: 40, xp: 150 },
   },
 ];

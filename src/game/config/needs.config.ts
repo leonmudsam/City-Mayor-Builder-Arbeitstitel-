@@ -18,4 +18,10 @@ export const needsConfig: NeedDef[] = [
   // with what you build, not with raw population. Activating at L11 is the new
   // "level-up problem" motor (§4): the grid suddenly needs a plant.
   { id: 'energy', nameKey: 'need.energy', unlockLevel: 11, weight: 12, kind: 'capacity', demandPerCapita: 0 },
+  // Emergency services (MVP 2): radius-based coverage needs, exactly like leisure
+  // — a police station / hospital covers the homes in its range. Reuses the fire
+  // station's coverage machinery, no special-case code (§ "Feuerwehr-Muster auf
+  // Polizei/Krankenhaus übertragen").
+  { id: 'safety', nameKey: 'need.safety', unlockLevel: 13, weight: 12, kind: 'coverage', demandPerCapita: 1 },
+  { id: 'health', nameKey: 'need.health', unlockLevel: 14, weight: 12, kind: 'coverage', demandPerCapita: 1 },
 ];

@@ -106,6 +106,23 @@ describe('energy grid (MVP 2)', () => {
   });
 });
 
+describe('emergency services (MVP 2)', () => {
+  it('a police station covers the homes within its safety radius', () => {
+    const { controller } = newController();
+    setLevel(controller, 13);
+    flattenTerrain(controller);
+    controller.state.resources = { money: 1_000_000, wood: 2_000, stone: 2_000, food: 1_000 };
+    for (let x = 26; x <= 31; x++) controller.placeBuilding('road', x, 26);
+    controller.placeBuilding('house_small', 26, 27);
+    controller.update(T0 + 25_000); // house finishes
+    expect(controller.derived.needCoverage.safety).toBe(0); // no station yet
+    // A police station within radius 11 of the house covers it.
+    expect(controller.placeBuilding('police_station', 29, 27)).toEqual({ ok: true });
+    controller.update(T0 + 25_000 + 320_000); // station finishes
+    expect(controller.derived.needCoverage.safety).toBe(1);
+  });
+});
+
 describe('housing model (§6)', () => {
   it('derives resident capacity from units × max residents per unit', () => {
     const { controller } = newController();

@@ -60,6 +60,15 @@ const migrations: Record<number, Migration> = {
     needs.energy ??= { supply: 0, demand: 0, fulfillment: 1 };
     return { ...raw, schemaVersion: 4, citizens: { ...citizens, needs } };
   },
+  // v4 → v5: emergency services (MVP 2). Seed the safety & health coverage needs
+  // so old saves stay complete; they only bite once the city reaches their level.
+  4: (raw) => {
+    const citizens = { ...(raw.citizens as Record<string, unknown>) };
+    const needs = { ...((citizens.needs as Record<string, unknown>) ?? {}) };
+    needs.safety ??= { supply: 0, demand: 0, fulfillment: 1 };
+    needs.health ??= { supply: 0, demand: 0, fulfillment: 1 };
+    return { ...raw, schemaVersion: 5, citizens: { ...citizens, needs } };
+  },
 };
 
 /** Money rescale applied when upgrading v2 saves to the v3 economy. */

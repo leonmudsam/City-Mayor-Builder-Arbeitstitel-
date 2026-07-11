@@ -4,7 +4,7 @@ import type { GameState } from './types.ts';
 import { sectorId } from './types.ts';
 import { materializeSector, tileAt } from './map/world.ts';
 
-export const SCHEMA_VERSION = 4;
+export const SCHEMA_VERSION = 5;
 
 export function createNewGame(config: GameConfig, cityName: string, now: number): GameState {
   const state: GameState = {
@@ -27,6 +27,8 @@ export function createNewGame(config: GameConfig, cityName: string, now: number)
         work: { supply: 0, demand: 0, fulfillment: 1 },
         leisure: { supply: 0, demand: 0, fulfillment: 1 },
         energy: { supply: 0, demand: 0, fulfillment: 1 },
+        safety: { supply: 0, demand: 0, fulfillment: 1 },
+        health: { supply: 0, demand: 0, fulfillment: 1 },
       },
     },
     mayor: { houseLevel: 0, reputation: 50, actionCooldowns: {}, messages: [] },

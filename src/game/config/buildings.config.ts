@@ -357,6 +357,47 @@ export const buildingsConfig: BuildingDef[] = [
     ],
     buildLimit: [{ level: 8, max: 2 }, { level: 10, max: 3 }],
   },
+  // Police station (MVP 2): safety coverage for the homes in range — the same
+  // radius-coverage machinery as the fire station, one need over. Low safety
+  // drags happiness down, so a growing city must police its neighborhoods.
+  {
+    id: 'police_station',
+    category: 'services',
+    nameKey: 'building.police_station',
+    size: { w: 2, h: 2 },
+    requiresRoad: true,
+    unlockLevel: 13,
+    cost: { money: 95_000, wood: 60, stone: 100 },
+    constructionSec: 300,
+    xpReward: 42,
+    effects: [
+      { type: 'coverage', need: 'safety', radius: 11 },
+      { type: 'jobs', amount: 8 },
+      { type: 'upkeep', resource: 'money', perMinute: 1_600 },
+      { type: 'demand', need: 'energy', amount: 8 },
+    ],
+    buildLimit: [{ level: 13, max: 2 }, { level: 15, max: 4 }],
+  },
+  // Hospital (MVP 2): health coverage. Bigger footprint, heavier running costs
+  // and power draw than the police station — the city's health safety net.
+  {
+    id: 'hospital',
+    category: 'services',
+    nameKey: 'building.hospital',
+    size: { w: 3, h: 2 },
+    requiresRoad: true,
+    unlockLevel: 14,
+    cost: { money: 140_000, wood: 80, stone: 140 },
+    constructionSec: 420,
+    xpReward: 52,
+    effects: [
+      { type: 'coverage', need: 'health', radius: 11 },
+      { type: 'jobs', amount: 16 },
+      { type: 'upkeep', resource: 'money', perMinute: 2_400 },
+      { type: 'demand', need: 'energy', amount: 15 },
+    ],
+    buildLimit: [{ level: 14, max: 2 }, { level: 15, max: 3 }],
+  },
 
   // ---- Wirtschaft ----
   {
