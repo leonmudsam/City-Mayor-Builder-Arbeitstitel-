@@ -1,5 +1,46 @@
 # Patch Notes
 
+## v0.14 — „MVP 2: Die erste echte Lieferkette (Trinkwasser)"
+
+Die erste durchgehende **Produktions- und Versorgungskette**: aus Flusswasser
+wird ein echtes, gelagertes **Trinkwasser-Produkt**, das transportiert, gelagert
+und im Supermarkt an die Bürger verteilt wird (Items 2–4).
+
+### Neue Ressource & Bedürfnis: Trinkwasser
+
+- **Trinkwasser** ist eine echte, lagerbare Ressource (kein Hintergrund-Wert) —
+  klar getrennt von der Wasser-*Infrastruktur* (Brunnen/Wasserwerk).
+- **Neues Bedürfnis „Trinkwasser"** (ab L12): ein Konsum-Bedürfnis wie Essen,
+  das aus dem verteilten Produkt gedeckt wird. Läuft über denselben generischen
+  Konsum-Pfad — der Tick wurde dafür auf beliebige Ressourcen verallgemeinert
+  (`consumesResource`), kein Sonderfall.
+
+### Die Kette: Fluss → Werk → Lager/Supermarkt → Bürger
+
+- **Wasseraufbereitung** (3×2, ab L11): muss **direkt an einem Fluss** stehen
+  (neue generische `adjacentTerrain`-Regel). Produziert 40 Trinkwasser/min in
+  einen eigenen Puffer, mit Jobs, Unterhalt und Strombedarf; profitiert wie jeder
+  Produzent vom Logistikzentrum.
+- **Lagerhaus** puffert jetzt auch Trinkwasser (die „Lager"-Stufe der Kette).
+- **Supermarkt** (3×2, ab L12): der stärkere Nachfolger des Markts — verteilt
+  **Essen UND Trinkwasser** an Wohnhäuser im Radius, lagert Trinkwasser und zeigt
+  seinen belieferten Bereich über das generische Deckungs-Overlay.
+
+### Sichtbarkeit
+
+- Klick auf ein Verteilgebäude zeigt (über das bestehende Deckungs-Overlay)
+  **welche Wohnhäuser versorgt sind und welche nicht**.
+- **Trinkwasser-Anzeige im HUD**, sobald die Kette existiert (Lager vorhanden).
+- Straßenanbindung bleibt Voraussetzung — ohne Anschluss keine Lieferung.
+
+### Technik & generische Vorbereitung
+
+- Reine Wiederverwendung: `produce`/`storage`/`distribution`/Konsum-Bedürfnis
+  bilden die Kette; das Effekt-System hat den `inputsPerMinute`-Hook für spätere
+  mehrstufige Ketten bereits. Save-Migration v6 → v7 ergänzt Ressource/Bedürfnis/
+  Statistik. **Ausblick:** animierte Transport-Linien auf der Karte und
+  Problem-Marker folgen im nächsten Schritt.
+
 ## v0.13 — „MVP 2: Balance & Rollen"
 
 Ein Balancing-Pass, der Gebäude glaubwürdigere Größen und Rollen gibt und Sprawl

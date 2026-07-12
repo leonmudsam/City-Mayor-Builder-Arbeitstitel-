@@ -3,8 +3,8 @@ import { z } from 'zod';
 // Zod schemas validate the static configs at startup (fail fast on broken
 // balancing data) and every save game after loading.
 
-const resourceId = z.enum(['money', 'wood', 'stone', 'food']);
-const needId = z.enum(['housing', 'water', 'food', 'work', 'leisure', 'energy', 'safety', 'health']);
+const resourceId = z.enum(['money', 'wood', 'stone', 'food', 'freshwater']);
+const needId = z.enum(['housing', 'water', 'food', 'work', 'leisure', 'energy', 'safety', 'health', 'freshwater']);
 
 const terrainType = z.enum(['grass', 'forest', 'water', 'river', 'mountain', 'sand', 'fertile']);
 
@@ -59,6 +59,7 @@ export const buildingDefSchema = z.object({
   relocationCost: z.record(resourceId, z.number().nonnegative()).optional(),
   buildable: z.boolean().optional(),
   biomeRequirement: z.array(z.string()).optional(),
+  adjacentTerrain: z.string().optional(),
 });
 
 export const levelDefSchema = z.object({

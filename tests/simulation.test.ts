@@ -117,7 +117,7 @@ describe('simulation tick', () => {
   it('feeds only homes a market reaches (food distribution coverage)', () => {
     const { controller } = newController();
     setLevel(controller, 5);
-    controller.state.resources = { money: 200_000, wood: 500, stone: 500, food: 100 };
+    controller.state.resources = { money: 200_000, wood: 500, stone: 500, food: 100, freshwater: 0 };
     for (let x = 26; x <= 31; x++) controller.placeBuilding('road', x, 26);
     controller.placeBuilding('house_small', 26, 27);
     controller.update(T0 + 25_000); // house finishes construction
@@ -125,6 +125,28 @@ describe('simulation tick', () => {
     controller.placeBuilding('market', 30, 27); // center within radius 9 of the house
     controller.update(T0 + 25_000 + 95_000); // market finishes construction
     expect(controller.derived.distributionCoverage.food).toBe(1);
+  });
+
+  it('runs the drinking-water chain: riverside waterworks → supermarket → homes', () => {
+    const { controller } = newController();
+    setLevel(controller, 12);
+    flattenTerrain(controller);
+    controller.state.resources = { money: 2_000_000, wood: 2_000, stone: 2_000, food: 2_000, freshwater: 0 };
+    for (let x = 21; x <= 31; x++) controller.placeBuilding('road', x, 26);
+    paintTerrain(controller, [[21, 28]], 'river'); // a river tile beside the waterworks
+
+    // A waterworks must border the river: away from it, placement is refused.
+    expect(controller.placeBuilding('waterworks', 27, 27)).toEqual({ ok: false, error: 'needs_water' });
+    // At the riverfront it builds and starts making the freshwater product.
+    expect(controller.placeBuilding('waterworks', 22, 27)).toEqual({ ok: true });
+    controller.placeBuilding('house_small', 25, 27);
+    expect(controller.placeBuilding('supermarket', 27, 27)).toEqual({ ok: true }); // distributes freshwater, r10
+
+    controller.update(T0 + 30 * MIN); // build + produce + distribute
+    expect(controller.derived.productionPerMin.freshwater).toBeGreaterThan(0); // waterworks producing
+    expect(controller.state.resources.freshwater).toBeGreaterThan(0); // the product accumulates in storage
+    expect(controller.derived.distributionCoverage.freshwater).toBe(1); // supermarket reaches the home
+    expect(controller.state.citizens.needs.freshwater.fulfillment).toBeGreaterThan(0.5); // citizens supplied
   });
 
   it('grows population when housing exists and happiness is high', () => {

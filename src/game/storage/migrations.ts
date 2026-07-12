@@ -75,6 +75,19 @@ const migrations: Record<number, Migration> = {
     schemaVersion: 6,
     policy: (raw.policy as unknown) ?? { residentialTaxRate: 1, commercialTaxRate: 1 },
   }),
+  // v6 → v7: drinking-water supply chain. Seed the freshwater resource, need and
+  // produced-stat so old saves stay complete; the chain only matters from L12.
+  6: (raw) => {
+    const resources = { ...(raw.resources as Record<string, number>) };
+    resources.freshwater ??= 0;
+    const citizens = { ...(raw.citizens as Record<string, unknown>) };
+    const needs = { ...((citizens.needs as Record<string, unknown>) ?? {}) };
+    needs.freshwater ??= { supply: 0, demand: 0, fulfillment: 1 };
+    const stats = { ...(raw.stats as Record<string, unknown>) };
+    const produced = { ...((stats.produced as Record<string, number>) ?? {}) };
+    produced.freshwater ??= 0;
+    return { ...raw, schemaVersion: 7, resources, citizens: { ...citizens, needs }, stats: { ...stats, produced } };
+  },
 };
 
 /** Money rescale applied when upgrading v2 saves to the v3 economy. */

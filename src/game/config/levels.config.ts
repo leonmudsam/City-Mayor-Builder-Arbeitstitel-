@@ -18,8 +18,8 @@ export const levelsConfig: LevelDef[] = [
   // L11: the energy grid activates (needs.config energy unlockLevel 11) and the
   // coal plant unlocks in the same breath — the classic "level-up creates the
   // next problem and its answer" motor (§4).
-  { level: 11, xpRequired: 3400, unlocks: ['power_plant'], rewards: { money: 320_000, gold: 30 } },
-  { level: 12, xpRequired: 4500, unlocks: ['wind_farm', 'residential_tower'], rewards: { money: 400_000 } },
+  { level: 11, xpRequired: 3400, unlocks: ['power_plant', 'waterworks'], rewards: { money: 320_000, gold: 30 } },
+  { level: 12, xpRequired: 4500, unlocks: ['wind_farm', 'residential_tower', 'supermarket'], rewards: { money: 400_000 } },
   // L13/L14: emergency services activate (needs.config safety L13, health L14),
   // each with its building unlocking in the same level — same motor as energy.
   { level: 13, xpRequired: 5800, unlocks: ['police_station'], rewards: { money: 460_000, gold: 30 } },

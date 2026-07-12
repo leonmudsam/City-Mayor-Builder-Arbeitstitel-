@@ -20,7 +20,7 @@ export const balancingConfig: BalancingConfig = {
   growthHappinessThreshold: 60,
   declineHappinessThreshold: 40,
   foodWithoutDistributionCap: 0.3,
-  startResources: { money: 45_000, wood: 60, stone: 0, food: 40 },
+  startResources: { money: 45_000, wood: 60, stone: 0, food: 40, freshwater: 0 },
   startGold: 0,
   // Expansion is a genuine "special project" sink — and now a real brake on
   // sprawl (§7): each new sector costs more (distance) and every sector you own

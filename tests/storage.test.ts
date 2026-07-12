@@ -39,7 +39,7 @@ describe('save/load', () => {
 
     const woodBefore = raw.resources.wood as number;
     const migrated = migrateAndValidate(raw);
-    expect(migrated.schemaVersion).toBe(6);
+    expect(migrated.schemaVersion).toBe(7);
     expect(migrated.resources.wood).toBe(woodBefore + 25);
     expect(migrated.stats.produced.wood).toBe(12);
     expect('buffer' in migrated.buildings[sawmillId]!).toBe(false);
@@ -54,7 +54,7 @@ describe('save/load', () => {
     raw.resources.money = 500;
     /* eslint-enable @typescript-eslint/no-explicit-any */
     const migrated = migrateAndValidate(raw);
-    expect(migrated.schemaVersion).toBe(6);
+    expect(migrated.schemaVersion).toBe(7);
     expect(migrated.resources.money).toBe(50_000); // ×100 rescale
   });
 
@@ -68,7 +68,7 @@ describe('save/load', () => {
     delete raw.citizens.needs.health;
     /* eslint-enable @typescript-eslint/no-explicit-any */
     const migrated = migrateAndValidate(raw);
-    expect(migrated.schemaVersion).toBe(6);
+    expect(migrated.schemaVersion).toBe(7);
     expect(migrated.citizens.needs.energy).toEqual({ supply: 0, demand: 0, fulfillment: 1 });
     expect(migrated.citizens.needs.safety).toEqual({ supply: 0, demand: 0, fulfillment: 1 });
     expect(migrated.citizens.needs.health).toEqual({ supply: 0, demand: 0, fulfillment: 1 });
@@ -82,7 +82,23 @@ describe('save/load', () => {
     delete raw.policy; // v5 saves predate the tax sliders
     /* eslint-enable @typescript-eslint/no-explicit-any */
     const migrated = migrateAndValidate(raw);
-    expect(migrated.schemaVersion).toBe(6);
+    expect(migrated.schemaVersion).toBe(7);
     expect(migrated.policy).toEqual({ residentialTaxRate: 1, commercialTaxRate: 1 });
+  });
+
+  it('migrates v6 saves by seeding the freshwater supply chain', () => {
+    const { controller } = newController();
+    /* eslint-disable @typescript-eslint/no-explicit-any -- crafting a v6 raw save */
+    const raw = JSON.parse(exportSave(controller.state)) as Record<string, any>;
+    raw.schemaVersion = 6;
+    delete raw.resources.freshwater; // v6 saves predate drinking water
+    delete raw.citizens.needs.freshwater;
+    delete raw.stats.produced.freshwater;
+    /* eslint-enable @typescript-eslint/no-explicit-any */
+    const migrated = migrateAndValidate(raw);
+    expect(migrated.schemaVersion).toBe(7);
+    expect(migrated.resources.freshwater).toBe(0);
+    expect(migrated.citizens.needs.freshwater).toEqual({ supply: 0, demand: 0, fulfillment: 1 });
+    expect(migrated.stats.produced.freshwater).toBe(0);
   });
 });

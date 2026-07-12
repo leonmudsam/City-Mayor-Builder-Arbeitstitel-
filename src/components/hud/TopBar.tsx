@@ -59,6 +59,14 @@ export function TopBar() {
           accent="var(--res-food)"
           detail={<ResourceDetailPopover id="food" />}
         />
+        {caps.freshwater > 0 && (
+          <ResourceBadge
+            icon={<ResourceIcon id="freshwater" />}
+            value={`${fmt(res.freshwater)}/${fmt(caps.freshwater)}`}
+            warn={res.freshwater >= caps.freshwater}
+            accent="var(--res-water)"
+          />
+        )}
         {waterPct !== undefined && (
           <ResourceBadge
             icon={<Droplets size={15} />}
