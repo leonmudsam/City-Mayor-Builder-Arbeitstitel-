@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { newController, setLevel, T0 } from './helpers.ts';
+import { newController, setLevel, flattenTerrain, T0 } from './helpers.ts';
 
 const MIN = 60_000;
 
@@ -59,5 +59,44 @@ describe('long-term balancing (v0.15)', () => {
     const office = controller.config.buildings.get('office')!;
     const house = controller.config.buildings.get('house_small')!;
     expect(office.xpReward).toBeGreaterThan(house.xpReward * 20);
+  });
+});
+
+// Big-city scaling (v0.16): services gate by radius AND capacity, and dense
+// housing carries realistic populations.
+describe('big-city scaling (v0.16)', () => {
+  it('limits a service by capacity, not just radius, in a metropolis (§2)', () => {
+    const { controller } = newController();
+    setLevel(controller, 14);
+    flattenTerrain(controller);
+    controller.state.resources = { money: 5_000_000, wood: 5_000, stone: 5_000, food: 5_000, freshwater: 0 };
+    for (let x = 26; x <= 33; x++) controller.placeBuilding('road', x, 26);
+    controller.placeBuilding('house_small', 26, 27);
+    expect(controller.placeBuilding('police_station', 29, 27)).toEqual({ ok: true });
+    controller.update(T0 + 25_000 + 380_000); // house + station finish
+    expect(controller.derived.coverageCapacity.safety).toBe(8_000);
+    // A small population sits well inside the served capacity → fully covered.
+    expect(controller.state.citizens.needs.safety.fulfillment).toBeGreaterThan(0.9);
+    // Simulate a metropolis: far more residents than one station can serve.
+    controller.state.citizens.population = 20_000;
+    controller.update(T0 + 25_000 + 380_000 + 1_000);
+    // Radius still reaches every home, but capacity (8 000) can't serve 20 000,
+    // so safety is only partially fulfilled — reach isn't the bottleneck, capacity is.
+    const fulfillment = controller.state.citizens.needs.safety.fulfillment;
+    expect(fulfillment).toBeGreaterThan(0.3);
+    expect(fulfillment).toBeLessThan(0.6);
+  });
+
+  it('houses realistic populations from dense buildings (§3/§4)', () => {
+    const { controller } = newController();
+    setLevel(controller, 12);
+    flattenTerrain(controller);
+    controller.state.resources = { money: 5_000_000, wood: 5_000, stone: 5_000, food: 5_000, freshwater: 0 };
+    for (let x = 22; x <= 33; x++) controller.placeBuilding('road', x, 26);
+    // One apartment now houses hundreds; one tower, ~1 800 — a real city scale.
+    expect(controller.placeBuilding('apartment', 22, 27)).toEqual({ ok: true });
+    expect(controller.placeBuilding('residential_tower', 26, 27)).toEqual({ ok: true });
+    controller.update(T0 + 20 * MIN); // both finish
+    expect(controller.derived.capacity.housing).toBeGreaterThanOrEqual(2_000);
   });
 });

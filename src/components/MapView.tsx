@@ -8,7 +8,7 @@ export function MapView() {
   const hostRef = useRef<HTMLDivElement>(null);
   const rendererRef = useRef<MapRenderer>(undefined);
   const [hoverInfo, setHoverInfo] = useState<HoverInfo | undefined>(undefined);
-  const [coverage, setCoverage] = useState<{ label: string; underCapacity: boolean } | undefined>(undefined);
+  const [coverage, setCoverage] = useState<{ label: string; underCapacity: boolean; capacity?: { servable: number; used: number } } | undefined>(undefined);
 
   useEffect(() => {
     const host = hostRef.current;
@@ -113,11 +113,17 @@ function placementErrorText(defId: string, error: string): string {
 }
 
 /** Legend for the coverage overlay: what each home color means (§1). */
-function CoverageLegend({ info }: { info: { label: string; underCapacity: boolean } }) {
+function CoverageLegend({ info }: { info: { label: string; underCapacity: boolean; capacity?: { servable: number; used: number } } }) {
   const states = ['supplied', 'redundant', 'partial', 'unsupplied'] as const;
+  const fmt = (n: number) => Math.round(n).toLocaleString('de-DE');
   return (
     <div className="coverage-legend">
       <div className="coverage-legend-head">{t('ui.coverage.legend', { label: info.label })}</div>
+      {info.capacity && (
+        <div className={`coverage-legend-cap${info.underCapacity ? ' over' : ''}`}>
+          {t('ui.coverage.capacity', { used: fmt(info.capacity.used), servable: fmt(info.capacity.servable) })}
+        </div>
+      )}
       <div className="coverage-legend-items">
         {states.map((s) => (
           <span key={s} className="coverage-legend-item">

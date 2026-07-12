@@ -49,7 +49,16 @@ export type BuildingEffect =
    * sawmills/quarries/farms is a genuine planning decision, not decoration.
    */
   | { type: 'logistics'; boostPct: number; radius: number }
-  | { type: 'coverage'; need: NeedId; radius: number }
+  /**
+   * Radius-based service coverage (leisure/safety/health). `radius` is the
+   * reach; the optional `capacity` is how many *residents* the building can
+   * effectively serve within that reach (§ radius vs. capacity). Without it the
+   * coverage is unlimited within range (parks). With it, a big city that grows
+   * past the served capacity gets only partial fulfillment even inside the
+   * radius — so late-game services scale by capacity/upgrades, not by spamming
+   * ever more identical buildings. Aggregated per need in the derived layer.
+   */
+  | { type: 'coverage'; need: NeedId; radius: number; capacity?: number }
   | { type: 'storage'; resource: ResourceId; amount: number }
   | { type: 'jobs'; amount: number }
   /**

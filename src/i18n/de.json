@@ -240,6 +240,7 @@
   "ui.coverage.unsupplied": "nicht versorgt",
   "ui.coverage.source": "Versorgungsgebäude",
   "ui.coverage.undercapacity": "Die Gesamtkapazität reicht nicht für alle — baue mehr {label}.",
+  "ui.coverage.capacity": "Auslastung: {used}/{servable} Einwohner",
   "ui.objective.build": "{building} bauen",
   "ui.objective.resource": "{amount} {resource} besitzen",
   "ui.objective.produce": "{amount} {resource} produzieren",
