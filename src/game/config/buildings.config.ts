@@ -149,10 +149,10 @@ export const buildingsConfig: BuildingDef[] = [
     constructionSec: 120,
     xpReward: 20,
     effects: [
-      { type: 'housing', units: 5, minResidentsPerUnit: 2, maxResidentsPerUnit: 4, ambienceSensitivity: 1.0 },
-      { type: 'demand', need: 'water', amount: 16 },
-      { type: 'demand', need: 'energy', amount: 6 },
-      { type: 'upkeep', resource: 'money', perMinute: 175 },
+      { type: 'housing', units: 6, minResidentsPerUnit: 3, maxResidentsPerUnit: 4, ambienceSensitivity: 1.0 },
+      { type: 'demand', need: 'water', amount: 20 },
+      { type: 'demand', need: 'energy', amount: 8 },
+      { type: 'upkeep', resource: 'money', perMinute: 200 },
     ],
   },
   // Apartment — high density, many units, heavy infrastructure demand; without
@@ -164,14 +164,35 @@ export const buildingsConfig: BuildingDef[] = [
     size: { w: 2, h: 3 },
     requiresRoad: true,
     unlockLevel: 9,
-    cost: { money: 145_000, wood: 150, stone: 210 },
+    cost: { money: 170_000, wood: 160, stone: 230 },
     constructionSec: 360,
     xpReward: 45,
     effects: [
-      { type: 'housing', units: 16, minResidentsPerUnit: 2, maxResidentsPerUnit: 3, ambienceSensitivity: 1.15 },
-      { type: 'demand', need: 'water', amount: 40 },
-      { type: 'demand', need: 'energy', amount: 20 },
-      { type: 'upkeep', resource: 'money', perMinute: 560 },
+      { type: 'housing', units: 24, minResidentsPerUnit: 3, maxResidentsPerUnit: 4, ambienceSensitivity: 1.15 },
+      { type: 'demand', need: 'water', amount: 60 },
+      { type: 'demand', need: 'energy', amount: 40 },
+      { type: 'upkeep', resource: 'money', perMinute: 900 },
+    ],
+  },
+  // Residential tower — the density endgame (MVP 2): a 3×3 high-rise housing
+  // hundreds, so a city can actually staff its office towers. Heavy on water,
+  // power and upkeep, and its residents care about their surroundings — a tower
+  // without parks nearby is a grim place to live (§6, believable populations).
+  {
+    id: 'residential_tower',
+    category: 'residential',
+    nameKey: 'building.residential_tower',
+    size: { w: 3, h: 3 },
+    requiresRoad: true,
+    unlockLevel: 12,
+    cost: { money: 420_000, wood: 200, stone: 420 },
+    constructionSec: 480,
+    xpReward: 70,
+    effects: [
+      { type: 'housing', units: 60, minResidentsPerUnit: 3, maxResidentsPerUnit: 5, ambienceSensitivity: 1.25 },
+      { type: 'demand', need: 'water', amount: 150 },
+      { type: 'demand', need: 'energy', amount: 90 },
+      { type: 'upkeep', resource: 'money', perMinute: 2_400 },
     ],
   },
 
@@ -271,7 +292,7 @@ export const buildingsConfig: BuildingDef[] = [
       { type: 'upkeep', resource: 'money', perMinute: 1_200 },
       { type: 'demand', need: 'energy', amount: 18 },
     ],
-    buildLimit: [{ level: 7, max: 1 }, { level: 9, max: 2 }, { level: 10, max: 3 }],
+    buildLimit: [{ level: 7, max: 2 }, { level: 9, max: 3 }, { level: 11, max: 5 }],
   },
   {
     id: 'warehouse',
@@ -291,6 +312,9 @@ export const buildingsConfig: BuildingDef[] = [
       { type: 'storage', resource: 'wood', amount: 600 },
       { type: 'storage', resource: 'stone', amount: 600 },
       { type: 'storage', resource: 'food', amount: 600 },
+      // Warehouses also buffer the freshwater product — the "Lager" step of the
+      // supply chain (§3).
+      { type: 'storage', resource: 'freshwater', amount: 600 },
       { type: 'jobs', amount: 2 },
       { type: 'upkeep', resource: 'money', perMinute: 300 },
       { type: 'demand', need: 'energy', amount: 4 },
@@ -323,6 +347,33 @@ export const buildingsConfig: BuildingDef[] = [
     ],
     buildLimit: [{ level: 7, max: 1 }, { level: 9, max: 2 }, { level: 10, max: 3 }],
   },
+  // Waterworks (MVP 2 supply chain, §3): a riverside plant that turns river
+  // access into a real, stored `freshwater` product — the start of a delivery
+  // chain (waterworks → warehouse/supermarket → homes), not just background
+  // infrastructure. Must border a river tile (adjacentTerrain), holds its own
+  // buffer, and its output is boosted by nearby logistics depots like any
+  // producer.
+  {
+    id: 'waterworks',
+    category: 'production',
+    nameKey: 'building.waterworks',
+    size: { w: 3, h: 2 },
+    requiresRoad: true,
+    unlockLevel: 11,
+    cost: { money: 90_000, wood: 40, stone: 120 },
+    constructionSec: 240,
+    xpReward: 40,
+    adjacentTerrain: 'river',
+    effects: [
+      { type: 'produce', resource: 'freshwater', perMinute: 40 },
+      { type: 'storage', resource: 'freshwater', amount: 800 },
+      { type: 'jobs', amount: 6 },
+      { type: 'revenue', category: 'industrial', perMinute: 900 },
+      { type: 'upkeep', resource: 'money', perMinute: 700 },
+      { type: 'demand', need: 'energy', amount: 20 },
+    ],
+    buildLimit: [{ level: 11, max: 2 }, { level: 13, max: 3 }, { level: 15, max: 5 }],
+  },
 
   // ---- Versorgung ----
   {
@@ -346,6 +397,32 @@ export const buildingsConfig: BuildingDef[] = [
       { type: 'demand', need: 'energy', amount: 8 },
     ],
     buildLimit: [{ level: 5, max: 2 }, { level: 8, max: 3 }, { level: 10, max: 4 }],
+  },
+  // Supermarket (MVP 2, §4): the market's bigger successor — it distributes BOTH
+  // food and the freshwater product to nearby homes, so it's a real end-of-chain
+  // node, not just an abstract radius. It buffers freshwater it receives, shows
+  // its delivered area via the generic coverage overlay, and covers a wider
+  // radius than the basic market. Place it near dense housing.
+  {
+    id: 'supermarket',
+    category: 'services',
+    nameKey: 'building.supermarket',
+    size: { w: 3, h: 2 },
+    requiresRoad: true,
+    unlockLevel: 12,
+    cost: { money: 80_000, wood: 60, stone: 40 },
+    constructionSec: 180,
+    xpReward: 34,
+    effects: [
+      { type: 'distribution', need: 'food', radius: 10 },
+      { type: 'distribution', need: 'freshwater', radius: 10 },
+      { type: 'storage', resource: 'freshwater', amount: 400 },
+      { type: 'jobs', amount: 12 },
+      { type: 'revenue', category: 'commercial', perMinute: 3_500 },
+      { type: 'upkeep', resource: 'money', perMinute: 1_100 },
+      { type: 'demand', need: 'energy', amount: 12 },
+    ],
+    buildLimit: [{ level: 12, max: 2 }, { level: 14, max: 4 }],
   },
   {
     id: 'bakery',
@@ -456,16 +533,20 @@ export const buildingsConfig: BuildingDef[] = [
     size: { w: 4, h: 2 },
     requiresRoad: true,
     unlockLevel: 8,
-    cost: { money: 185_000, wood: 120, stone: 180 },
-    constructionSec: 300,
-    xpReward: 50,
+    cost: { money: 400_000, wood: 160, stone: 320 },
+    constructionSec: 420,
+    xpReward: 90,
+    // A true downtown employer (§5): 400 jobs in a compact 4×2 tower, so dense
+    // districts can host real workforces and "job-centre planning" matters. Its
+    // commercial revenue scales with *filled* jobs — an office without residents
+    // to staff it earns little, which self-balances the huge job count.
     effects: [
-      { type: 'jobs', amount: 60 },
-      { type: 'revenue', category: 'commercial', perMinute: 6_000 },
-      { type: 'upkeep', resource: 'money', perMinute: 2_000 },
-      { type: 'demand', need: 'energy', amount: 30 },
+      { type: 'jobs', amount: 400 },
+      { type: 'revenue', category: 'commercial', perMinute: 18_000 },
+      { type: 'upkeep', resource: 'money', perMinute: 6_000 },
+      { type: 'demand', need: 'energy', amount: 120 },
     ],
-    buildLimit: [{ level: 8, max: 2 }, { level: 9, max: 3 }, { level: 10, max: 5 }],
+    buildLimit: [{ level: 8, max: 1 }, { level: 10, max: 2 }, { level: 12, max: 4 }],
   },
 
   // ---- Infrastruktur / Energie (MVP 2) ----

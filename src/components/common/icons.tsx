@@ -4,6 +4,7 @@ import {
   Droplets,
   Factory,
   Flower2,
+  GlassWater,
   HeartPulse,
   Home,
   Landmark,
@@ -31,6 +32,7 @@ export const RESOURCE_ICON: Record<ResourceId, LucideIcon> = {
   wood: Logs,
   stone: Mountain,
   food: Wheat,
+  freshwater: GlassWater,
 };
 
 export const NEED_ICON: Record<NeedId, LucideIcon> = {
@@ -42,6 +44,7 @@ export const NEED_ICON: Record<NeedId, LucideIcon> = {
   energy: Zap,
   safety: ShieldCheck,
   health: HeartPulse,
+  freshwater: GlassWater,
 };
 
 export const CATEGORY_ICON: Record<BuildingCategory, LucideIcon> = {

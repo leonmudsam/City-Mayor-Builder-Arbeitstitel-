@@ -54,7 +54,8 @@ interface GroupMeta {
 
 function groupMeta(group: CoverageGroup): GroupMeta {
   if (group.kind === 'hazard') return { labelKey: 'ui.coverage.fire', colorKey: 'protection' };
-  const colorKey = group.need === 'water' ? 'water' : group.need === 'food' ? 'food' : 'leisure';
+  const colorKey =
+    group.need === 'water' || group.need === 'freshwater' ? 'water' : group.need === 'food' ? 'food' : 'leisure';
   return { labelKey: `need.${group.need}`, colorKey };
 }
 

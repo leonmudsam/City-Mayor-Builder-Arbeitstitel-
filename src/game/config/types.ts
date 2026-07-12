@@ -131,6 +131,12 @@ export interface BuildingDef {
   /** Cannot be built from the menu (pre-placed buildings). */
   buildable?: boolean;
   biomeRequirement?: TerrainType[];
+  /**
+   * Placement requires a tile of this terrain orthogonally/diagonally adjacent
+   * to the footprint (e.g. the riverside waterworks needs 'river' next to it).
+   * Generic riverfront/coast rule — no per-building special-casing.
+   */
+  adjacentTerrain?: TerrainType;
 }
 
 // ---- Resources & needs ----------------------------------------------------
@@ -150,6 +156,12 @@ export interface NeedDef {
   kind: 'capacity' | 'coverage' | 'consumption';
   /** demand = population × demandPerCapita (capacity/consumption kinds). */
   demandPerCapita: number;
+  /**
+   * For `consumption` needs: the stored resource citizens eat/drink each tick
+   * (food → 'food', drinking water → 'freshwater'). Lets several consumable
+   * supply chains share one generic consumption path. Defaults to 'food'.
+   */
+  consumesResource?: ResourceId;
 }
 
 // ---- Progression ----------------------------------------------------------

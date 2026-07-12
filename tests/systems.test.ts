@@ -19,7 +19,7 @@ describe('income breakdown (§5)', () => {
     const { controller } = newController();
     setLevel(controller, 6);
     flattenTerrain(controller);
-    controller.state.resources = { money: 200_000, wood: 500, stone: 500, food: 100 };
+    controller.state.resources = { money: 200_000, wood: 500, stone: 500, food: 100, freshwater: 0 };
     for (let x = 26; x <= 31; x++) controller.placeBuilding('road', x, 26);
     controller.placeBuilding('sawmill', 26, 27); // industrial 600
     controller.placeBuilding('shop_small', 28, 27); // commercial 4000
@@ -62,7 +62,7 @@ describe('logistics & workplaces', () => {
     const { controller } = newController();
     setLevel(controller, 7);
     flattenTerrain(controller); // isolate the logistics boost from terrain bonus
-    controller.state.resources = { money: 500_000, wood: 1_000, stone: 1_000, food: 1_000 };
+    controller.state.resources = { money: 500_000, wood: 1_000, stone: 1_000, food: 1_000, freshwater: 0 };
     for (let x = 26; x <= 31; x++) controller.placeBuilding('road', x, 26);
     expect(controller.placeBuilding('sawmill', 26, 27)).toEqual({ ok: true });
     const sawmill = Object.values(controller.state.buildings).find((b) => b.defId === 'sawmill')!;
@@ -78,12 +78,12 @@ describe('logistics & workplaces', () => {
     const { controller } = newController();
     setLevel(controller, 8);
     flattenTerrain(controller);
-    controller.state.resources = { money: 500_000, wood: 1_000, stone: 1_000, food: 1_000 };
+    controller.state.resources = { money: 500_000, wood: 1_000, stone: 1_000, food: 1_000, freshwater: 0 };
     for (let x = 26; x <= 31; x++) controller.placeBuilding('road', x, 26);
     const before = controller.derived.capacity.work;
-    expect(controller.placeBuilding('office', 26, 27)).toEqual({ ok: true }); // 4×2, 60 jobs
-    controller.update(T0 + 320_000); // office finishes
-    expect(controller.derived.capacity.work - before).toBe(60);
+    expect(controller.placeBuilding('office', 26, 27)).toEqual({ ok: true }); // 4×2, 400 jobs
+    controller.update(T0 + 440_000); // office finishes
+    expect(controller.derived.capacity.work - before).toBe(400);
   });
 });
 
@@ -92,7 +92,7 @@ describe('energy grid (MVP 2)', () => {
     const { controller } = newController();
     setLevel(controller, 11);
     flattenTerrain(controller);
-    controller.state.resources = { money: 1_000_000, wood: 2_000, stone: 2_000, food: 1_000 };
+    controller.state.resources = { money: 1_000_000, wood: 2_000, stone: 2_000, food: 1_000, freshwater: 0 };
     for (let x = 26; x <= 31; x++) controller.placeBuilding('road', x, 26);
     // A warehouse draws 4 energy; there is no supply until a plant is built.
     expect(controller.placeBuilding('warehouse', 29, 27)).toEqual({ ok: true });
@@ -111,7 +111,7 @@ describe('emergency services (MVP 2)', () => {
     const { controller } = newController();
     setLevel(controller, 13);
     flattenTerrain(controller);
-    controller.state.resources = { money: 1_000_000, wood: 2_000, stone: 2_000, food: 1_000 };
+    controller.state.resources = { money: 1_000_000, wood: 2_000, stone: 2_000, food: 1_000, freshwater: 0 };
     for (let x = 26; x <= 31; x++) controller.placeBuilding('road', x, 26);
     controller.placeBuilding('house_small', 26, 27);
     controller.update(T0 + 25_000); // house finishes
@@ -156,14 +156,14 @@ describe('housing model (§6)', () => {
     const { controller } = newController();
     setLevel(controller, 9);
     flattenTerrain(controller);
-    controller.state.resources = { money: 500_000, wood: 1_000, stone: 1_000, food: 1_000 };
+    controller.state.resources = { money: 500_000, wood: 1_000, stone: 1_000, food: 1_000, freshwater: 0 };
     for (let x = 26; x <= 33; x++) controller.placeBuilding('road', x, 26);
     controller.placeBuilding('house_small', 26, 27); // 1 unit × 5
-    controller.placeBuilding('house_row', 28, 27); // 5 units × 4 = 20
-    controller.placeBuilding('apartment', 30, 27); // 16 units × 3 = 48
+    controller.placeBuilding('house_row', 28, 27); // 6 units × 4 = 24
+    controller.placeBuilding('apartment', 30, 27); // 24 units × 4 = 96
     controller.update(T0 + 400_000); // all finish
-    expect(controller.derived.capacity.housing).toBe(5 + 20 + 48);
-    expect(controller.derived.housingUnits).toBe(1 + 5 + 16);
+    expect(controller.derived.capacity.housing).toBe(5 + 24 + 96);
+    expect(controller.derived.housingUnits).toBe(1 + 6 + 24);
   });
 });
 

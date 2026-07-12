@@ -14,7 +14,8 @@ export type PlacementError =
   | 'sector_locked'
   | 'terrain'
   | 'occupied'
-  | 'needs_road';
+  | 'needs_road'
+  | 'needs_water';
 
 export interface PlacementOptions {
   /** Set when relocating an existing building: its own tiles don't block,
@@ -55,7 +56,19 @@ export function validatePlacement(
 
   if (def.requiresRoad && !touchesConnectedRoad(derived, def, x, y)) return 'needs_road';
   if (def.category === 'roads' && !roadWouldConnect(state, config, derived, x, y)) return 'needs_road';
+  if (def.adjacentTerrain && !touchesTerrain(state, def, x, y, def.adjacentTerrain)) return 'needs_water';
   return undefined;
+}
+
+/** A tile of `terrain` borders the footprint (riverfront/coast rule). */
+function touchesTerrain(state: GameState, def: BuildingDef, x: number, y: number, terrain: string): boolean {
+  for (let dy = -1; dy <= def.size.h; dy++) {
+    for (let dx = -1; dx <= def.size.w; dx++) {
+      if (dx >= 0 && dx < def.size.w && dy >= 0 && dy < def.size.h) continue; // skip footprint interior
+      if (tileAt(state, x + dx, y + dy)?.terrain === terrain) return true;
+    }
+  }
+  return false;
 }
 
 /** Any tile orthogonally adjacent to the footprint is a connected road. */

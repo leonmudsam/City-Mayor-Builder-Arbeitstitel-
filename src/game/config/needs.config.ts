@@ -9,7 +9,7 @@ export const needsConfig: NeedDef[] = [
   // flat per-head number (§3/§7). demandPerCapita 0 avoids double-counting.
   { id: 'water', nameKey: 'need.water', unlockLevel: 3, weight: 25, kind: 'capacity', demandPerCapita: 0 },
   // consumption: demandPerCapita is units per citizen per MINUTE.
-  { id: 'food', nameKey: 'need.food', unlockLevel: 4, weight: 25, kind: 'consumption', demandPerCapita: 0.05 },
+  { id: 'food', nameKey: 'need.food', unlockLevel: 4, weight: 25, kind: 'consumption', demandPerCapita: 0.05, consumesResource: 'food' },
   { id: 'work', nameKey: 'need.work', unlockLevel: 6, weight: 15, kind: 'capacity', demandPerCapita: 0.5 },
   { id: 'leisure', nameKey: 'need.leisure', unlockLevel: 7, weight: 15, kind: 'coverage', demandPerCapita: 1 },
   // Energy (MVP 2): a city-wide capacity need with no radius — power plants feed
@@ -24,4 +24,8 @@ export const needsConfig: NeedDef[] = [
   // Polizei/Krankenhaus übertragen").
   { id: 'safety', nameKey: 'need.safety', unlockLevel: 13, weight: 12, kind: 'coverage', demandPerCapita: 1 },
   { id: 'health', nameKey: 'need.health', unlockLevel: 14, weight: 12, kind: 'coverage', demandPerCapita: 1 },
+  // Drinking water (MVP 2 supply chain): a consumption need like food, fed from
+  // the `freshwater` product a riverside waterworks makes and a supermarket
+  // distributes. Same generic consumption path — no bespoke code.
+  { id: 'freshwater', nameKey: 'need.freshwater', unlockLevel: 12, weight: 12, kind: 'consumption', demandPerCapita: 0.04, consumesResource: 'freshwater' },
 ];

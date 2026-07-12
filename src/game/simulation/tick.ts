@@ -109,17 +109,19 @@ export function advance(state: GameState, config: GameConfig, derived: Derived, 
         ns.demand = 1;
         ns.fulfillment = pop <= 0 ? 1 : derived.needCoverage[need.id];
       } else {
-        // consumption (food): eat from storage, fulfillment = fed share.
+        // consumption (food, drinking water …): eat/drink from the stored
+        // product, fulfillment = supplied share. One generic path per resource.
+        const resource = need.consumesResource ?? 'food';
         const required = (pop * need.demandPerCapita + extra) * expectation * dtMin;
-        const available = Math.min(state.resources.food, required);
-        state.resources.food -= available;
+        const available = Math.min(state.resources[resource], required);
+        state.resources[resource] -= available;
         let fulfillment = required <= 0 ? 1 : available / required;
-        // Only the housing share a market reaches gets full distribution; the
-        // rest is capped (no logistics) — so market placement matters (§8).
+        // Only the housing share a distributor (market/supermarket) reaches gets
+        // full delivery; the rest is capped (no logistics) — placement matters (§8).
         const coverage = derived.distributionCoverage[need.id];
         const distCap = coverage + (1 - coverage) * config.balancing.foodWithoutDistributionCap;
         fulfillment = Math.min(fulfillment, distCap);
-        ns.supply = state.resources.food;
+        ns.supply = state.resources[resource];
         ns.demand = (pop * need.demandPerCapita + extra) * expectation;
         ns.fulfillment = fulfillment;
       }

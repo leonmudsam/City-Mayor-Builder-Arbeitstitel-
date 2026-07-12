@@ -29,7 +29,7 @@ describe('sector expansion (open-end world)', () => {
   it('founds the river district: a self-connected build area at the water (§8)', () => {
     const { controller } = newController();
     setLevel(controller, 12);
-    controller.state.resources = { money: 2_000_000, wood: 2_000, stone: 2_000, food: 1_000 };
+    controller.state.resources = { money: 2_000_000, wood: 2_000, stone: 2_000, food: 1_000, freshwater: 0 };
     const river = sectorId(3, 1); // eastern sector — the river runs through it
     expect(controller.canFoundDistrict(river).eligible).toBe(true);
     expect(controller.foundDistrict(river)).toEqual({ ok: true });
