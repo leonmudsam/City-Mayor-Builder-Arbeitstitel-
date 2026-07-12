@@ -45,6 +45,12 @@ export interface CoverageOverlay {
   consumers: CoverageConsumerView[];
   /** City-wide supply < demand → in-range homes read as only "partial". */
   underCapacity: boolean;
+  /**
+   * For capacitated services (police/hospital): residents served vs. residents
+   * in range, so the UI can show "Auslastung 12.000/8.000" and tell the player
+   * whether reach or capacity is the bottleneck. Absent for uncapped coverage.
+   */
+  capacity?: { servable: number; used: number };
 }
 
 interface GroupMeta {
@@ -112,12 +118,25 @@ export function coverageOverlay(state: GameState, config: GameConfig, derived: D
     }
   }
 
-  // Under capacity only makes sense for capacity needs (water): compare the
-  // aggregate supply against current demand.
+  // Under capacity compares aggregate supply against demand. Two flavours:
+  //  - capacity needs (water/energy): derived.capacity is the supply pool.
+  //  - coverage needs (police/hospital): coverageCapacity is the served-resident
+  //    pool, compared against the residents currently in range.
   let underCapacity = false;
+  let capacity: { servable: number; used: number } | undefined;
   if (group.kind === 'need') {
+    const need = config.needs.find((n) => n.id === group.need);
     const ns = state.citizens.needs[group.need];
-    if (ns && ns.demand > 0) underCapacity = derived.capacity[group.need] < ns.demand;
+    if (need && ns) {
+      if (need.kind === 'coverage' && derived.coverageCapacity[group.need] > 0) {
+        const servable = derived.coverageCapacity[group.need];
+        const used = Math.round(state.citizens.population * derived.needCoverage[group.need]);
+        underCapacity = servable < used;
+        capacity = { servable, used };
+      } else if (need.kind !== 'coverage' && ns.demand > 0) {
+        underCapacity = derived.capacity[group.need] < ns.demand;
+      }
+    }
   }
 
   for (const b of Object.values(state.buildings)) {
@@ -134,5 +153,5 @@ export function coverageOverlay(state: GameState, config: GameConfig, derived: D
     consumers.push({ x: b.x, y: b.y, w: def.size.w, h: def.size.h, state: cstate });
   }
 
-  return { group, labelKey: meta.labelKey, colorKey: meta.colorKey, sources, consumers, underCapacity };
+  return { group, labelKey: meta.labelKey, colorKey: meta.colorKey, sources, consumers, underCapacity, ...(capacity ? { capacity } : {}) };
 }

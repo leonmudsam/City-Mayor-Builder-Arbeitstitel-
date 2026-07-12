@@ -317,6 +317,8 @@ body {
 .coverage-redundant { background: #4a90cf; }
 .coverage-unsupplied { background: #e53935; }
 .coverage-legend-warn { margin-top: 8px; font-size: 12px; color: var(--warn); font-weight: 600; }
+.coverage-legend-cap { margin: -2px 0 7px; font-size: 12px; color: var(--text-muted); font-weight: 600; }
+.coverage-legend-cap.over { color: var(--warn); }
 
 /* ===================================================================
    Phase 2 — UI/UX overhaul: badges, popovers, sheets, modals, panels

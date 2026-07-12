@@ -81,9 +81,9 @@ describe('logistics & workplaces', () => {
     controller.state.resources = { money: 1_200_000, wood: 1_000, stone: 1_000, food: 1_000, freshwater: 0 };
     for (let x = 26; x <= 31; x++) controller.placeBuilding('road', x, 26);
     const before = controller.derived.capacity.work;
-    expect(controller.placeBuilding('office', 26, 27)).toEqual({ ok: true }); // 4×2, 400 jobs
+    expect(controller.placeBuilding('office', 26, 27)).toEqual({ ok: true }); // 4×2, 2000 jobs
     controller.update(T0 + 560_000); // office finishes (540s construction)
-    expect(controller.derived.capacity.work - before).toBe(400);
+    expect(controller.derived.capacity.work - before).toBe(2_000);
   });
 });
 
@@ -102,7 +102,7 @@ describe('energy grid (MVP 2)', () => {
     // The coal plant powers the whole city-wide grid (capacity need, no radius).
     expect(controller.placeBuilding('power_plant', 26, 27)).toEqual({ ok: true });
     controller.update(T0 + 130_000 + 500_000); // plant finishes (480s construction)
-    expect(controller.derived.capacity.energy).toBe(250);
+    expect(controller.derived.capacity.energy).toBe(3_500);
   });
 });
 
@@ -158,12 +158,12 @@ describe('housing model (§6)', () => {
     flattenTerrain(controller);
     controller.state.resources = { money: 500_000, wood: 1_000, stone: 1_000, food: 1_000, freshwater: 0 };
     for (let x = 26; x <= 33; x++) controller.placeBuilding('road', x, 26);
-    controller.placeBuilding('house_small', 26, 27); // 1 unit × 5
-    controller.placeBuilding('house_row', 28, 27); // 6 units × 4 = 24
-    controller.placeBuilding('apartment', 30, 27); // 24 units × 4 = 96
+    controller.placeBuilding('house_small', 26, 27); // 1 unit × 5 = 5
+    controller.placeBuilding('house_row', 28, 27); // 12 units × 4 = 48
+    controller.placeBuilding('apartment', 30, 27); // 90 units × 4 = 360
     controller.update(T0 + 400_000); // all finish
-    expect(controller.derived.capacity.housing).toBe(5 + 24 + 96);
-    expect(controller.derived.housingUnits).toBe(1 + 6 + 24);
+    expect(controller.derived.capacity.housing).toBe(5 + 48 + 360);
+    expect(controller.derived.housingUnits).toBe(1 + 12 + 90);
   });
 });
 

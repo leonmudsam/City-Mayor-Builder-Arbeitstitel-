@@ -54,7 +54,7 @@ export interface RendererCallbacks {
   /** A sector just went from locked → unlocked (central "new area" popup). */
   onSectorUnlocked(id: string): void;
   /** Coverage overlay is active (or cleared) — UI shows/hides the legend (§1). */
-  onCoverageInfo(info: { label: string; underCapacity: boolean } | undefined): void;
+  onCoverageInfo(info: { label: string; underCapacity: boolean; capacity?: { servable: number; used: number } } | undefined): void;
 }
 
 /** Short-lived visual effect (demolish dust, sector-unlock flash). */
@@ -385,7 +385,11 @@ export class MapRenderer {
       const dotY = (c.y + c.h / 2) * TILE;
       g.circle(dotX, dotY, 5).fill({ color, alpha: 0.95 }).stroke({ width: 1.5, color: 0x10151c, alpha: 0.6 });
     }
-    this.callbacks.onCoverageInfo({ label: t(overlay.labelKey), underCapacity: overlay.underCapacity });
+    this.callbacks.onCoverageInfo({
+      label: t(overlay.labelKey),
+      underCapacity: overlay.underCapacity,
+      ...(overlay.capacity ? { capacity: overlay.capacity } : {}),
+    });
   }
 
   /** Smoothly move the world container toward the current focus target. */

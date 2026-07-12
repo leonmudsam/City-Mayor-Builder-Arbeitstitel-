@@ -105,9 +105,17 @@ export function advance(state: GameState, config: GameConfig, derived: Derived, 
         const base = ns.demand <= 0 ? 1 : Math.min(1, ns.supply / ns.demand);
         ns.fulfillment = ns.demand <= 0 ? 1 : base * derived.needCoverage[need.id];
       } else if (need.kind === 'coverage') {
-        ns.supply = derived.needCoverage[need.id];
-        ns.demand = 1;
-        ns.fulfillment = pop <= 0 ? 1 : derived.needCoverage[need.id];
+        // Radius reaches a share of homes; a capacitated service (police,
+        // hospital) additionally only serves so many residents, so a big city
+        // that outgrows the served capacity gets only partial coverage even in
+        // range (§ radius vs. capacity). Uncapped sources (parks) → radius only.
+        const cov = derived.needCoverage[need.id];
+        const servable = derived.coverageCapacity[need.id];
+        const coveredPop = pop * cov;
+        const capFactor = servable > 0 && coveredPop > 0 ? Math.min(1, servable / coveredPop) : 1;
+        ns.supply = servable > 0 ? servable : pop;
+        ns.demand = pop;
+        ns.fulfillment = pop <= 0 ? 1 : cov * capFactor;
       } else {
         // consumption (food, drinking water …): eat/drink from the stored
         // product, fulfillment = supplied share. One generic path per resource.

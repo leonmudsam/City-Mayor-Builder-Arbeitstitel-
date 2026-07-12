@@ -149,10 +149,12 @@ export const buildingsConfig: BuildingDef[] = [
     constructionSec: 120,
     xpReward: 8,
     effects: [
-      { type: 'housing', units: 6, minResidentsPerUnit: 3, maxResidentsPerUnit: 4, ambienceSensitivity: 1.0 },
-      { type: 'demand', need: 'water', amount: 20 },
-      { type: 'demand', need: 'energy', amount: 8 },
-      { type: 'upkeep', resource: 'money', perMinute: 200 },
+      // Believable populations for a real city (§3/§6): a terraced row is a dozen
+      // households, not six. Water/power demand scale with the residents.
+      { type: 'housing', units: 12, minResidentsPerUnit: 3, maxResidentsPerUnit: 4, ambienceSensitivity: 1.0 },
+      { type: 'demand', need: 'water', amount: 34 },
+      { type: 'demand', need: 'energy', amount: 16 },
+      { type: 'upkeep', resource: 'money', perMinute: 260 },
     ],
   },
   // Apartment — high density, many units, heavy infrastructure demand; without
@@ -168,10 +170,12 @@ export const buildingsConfig: BuildingDef[] = [
     constructionSec: 360,
     xpReward: 22,
     effects: [
-      { type: 'housing', units: 24, minResidentsPerUnit: 3, maxResidentsPerUnit: 4, ambienceSensitivity: 1.15 },
-      { type: 'demand', need: 'water', amount: 60 },
-      { type: 'demand', need: 'energy', amount: 40 },
-      { type: 'upkeep', resource: 'money', perMinute: 900 },
+      // A real apartment block: ~90 households (§3/§6). This — and the tower — is
+      // where a big city's population actually comes from; supply scales to match.
+      { type: 'housing', units: 90, minResidentsPerUnit: 3, maxResidentsPerUnit: 4, ambienceSensitivity: 1.15 },
+      { type: 'demand', need: 'water', amount: 210 },
+      { type: 'demand', need: 'energy', amount: 140 },
+      { type: 'upkeep', resource: 'money', perMinute: 2_600 },
     ],
   },
   // Residential tower — the density endgame (MVP 2): a 3×3 high-rise housing
@@ -189,10 +193,12 @@ export const buildingsConfig: BuildingDef[] = [
     constructionSec: 600,
     xpReward: 35,
     effects: [
-      { type: 'housing', units: 60, minResidentsPerUnit: 3, maxResidentsPerUnit: 5, ambienceSensitivity: 1.25 },
-      { type: 'demand', need: 'water', amount: 150 },
-      { type: 'demand', need: 'energy', amount: 90 },
-      { type: 'upkeep', resource: 'money', perMinute: 2_400 },
+      // A high-rise: ~360 apartments housing ~1 800 people (§3/§6). The density
+      // endgame — one tower replaces a whole neighbourhood of houses.
+      { type: 'housing', units: 360, minResidentsPerUnit: 3, maxResidentsPerUnit: 5, ambienceSensitivity: 1.25 },
+      { type: 'demand', need: 'water', amount: 900 },
+      { type: 'demand', need: 'energy', amount: 560 },
+      { type: 'upkeep', resource: 'money', perMinute: 7_200 },
     ],
   },
 
@@ -251,15 +257,17 @@ export const buildingsConfig: BuildingDef[] = [
     constructionSec: 60,
     xpReward: 20,
     effects: [
-      { type: 'produce', resource: 'food', perMinute: 42 },
-      { type: 'jobs', amount: 4 },
+      // Food output scales for a real city (§ supply must keep up): a handful of
+      // farms feed thousands rather than dozens.
+      { type: 'produce', resource: 'food', perMinute: 220 },
+      { type: 'jobs', amount: 12 },
       { type: 'revenue', category: 'industrial', perMinute: 700 },
-      { type: 'upkeep', resource: 'money', perMinute: 300 },
-      { type: 'demand', need: 'energy', amount: 5 },
+      { type: 'upkeep', resource: 'money', perMinute: 500 },
+      { type: 'demand', need: 'energy', amount: 10 },
       { type: 'ambience', amount: -1, radius: 3 },
     ],
     locationBonus: { terrain: 'fertile', radius: 2, perTilePct: 4, maxPct: 40 },
-    buildLimit: [{ level: 4, max: 2 }, { level: 6, max: 3 }, { level: 9, max: 5 }],
+    buildLimit: [{ level: 4, max: 2 }, { level: 6, max: 3 }, { level: 9, max: 5 }, { level: 12, max: 8 }],
   },
   {
     id: 'well',
@@ -271,8 +279,10 @@ export const buildingsConfig: BuildingDef[] = [
     cost: { money: 6_500, wood: 10 },
     constructionSec: 15,
     xpReward: 12,
+    // A neighbourhood well: cheap early water with a real, but local, reach.
+    canRelocate: true,
     effects: [
-      { type: 'capacity', need: 'water', amount: 60, radius: 7 },
+      { type: 'capacity', need: 'water', amount: 200, radius: 9 },
       { type: 'upkeep', resource: 'money', perMinute: 100 },
     ],
   },
@@ -286,13 +296,18 @@ export const buildingsConfig: BuildingDef[] = [
     cost: { money: 130_000, stone: 150 },
     constructionSec: 180,
     xpReward: 50,
+    // City-scale waterworks: a wide reach AND a big capacity pool, so a handful
+    // serve a whole district instead of one pump per block (§ radius + capacity).
+    // Relocatable so growing cities can re-plan their water grid.
+    canRelocate: true,
+    relocationCost: { money: 15_000 },
     effects: [
-      { type: 'capacity', need: 'water', amount: 240, radius: 12 },
-      { type: 'jobs', amount: 2 },
-      { type: 'upkeep', resource: 'money', perMinute: 1_200 },
-      { type: 'demand', need: 'energy', amount: 18 },
+      { type: 'capacity', need: 'water', amount: 3_000, radius: 18 },
+      { type: 'jobs', amount: 6 },
+      { type: 'upkeep', resource: 'money', perMinute: 1_600 },
+      { type: 'demand', need: 'energy', amount: 30 },
     ],
-    buildLimit: [{ level: 7, max: 2 }, { level: 9, max: 3 }, { level: 11, max: 5 }],
+    buildLimit: [{ level: 7, max: 2 }, { level: 9, max: 3 }, { level: 11, max: 5 }, { level: 13, max: 8 }],
   },
   {
     id: 'warehouse',
@@ -314,12 +329,15 @@ export const buildingsConfig: BuildingDef[] = [
       // active play — production runs hot, storage stays tight, so you come back
       // to spend rather than AFK-hoard. Spamming warehouses to a huge buffer is
       // no longer possible.
-      { type: 'storage', resource: 'wood', amount: 600 },
-      { type: 'storage', resource: 'stone', amount: 600 },
-      { type: 'storage', resource: 'food', amount: 600 },
+      // Build materials stay tight (active play), but the consumption goods a big
+      // population eats/drinks (food, drinking water) get a real buffer so a large
+      // city can actually store enough between production and consumption (§ scale).
+      { type: 'storage', resource: 'wood', amount: 800 },
+      { type: 'storage', resource: 'stone', amount: 800 },
+      { type: 'storage', resource: 'food', amount: 3_000 },
       // Warehouses also buffer the freshwater product — the "Lager" step of the
       // supply chain (§3).
-      { type: 'storage', resource: 'freshwater', amount: 600 },
+      { type: 'storage', resource: 'freshwater', amount: 3_000 },
       { type: 'jobs', amount: 2 },
       { type: 'upkeep', resource: 'money', perMinute: 300 },
       { type: 'demand', need: 'energy', amount: 4 },
@@ -369,13 +387,17 @@ export const buildingsConfig: BuildingDef[] = [
     constructionSec: 240,
     xpReward: 65,
     adjacentTerrain: 'river',
+    // Relocatable so the water grid can be re-planned as the city grows.
+    canRelocate: true,
+    relocationCost: { money: 25_000 },
     effects: [
-      { type: 'produce', resource: 'freshwater', perMinute: 40 },
-      { type: 'storage', resource: 'freshwater', amount: 800 },
-      { type: 'jobs', amount: 6 },
+      // City-scale drinking-water output for thousands of residents.
+      { type: 'produce', resource: 'freshwater', perMinute: 400 },
+      { type: 'storage', resource: 'freshwater', amount: 6_000 },
+      { type: 'jobs', amount: 10 },
       { type: 'revenue', category: 'industrial', perMinute: 900 },
-      { type: 'upkeep', resource: 'money', perMinute: 700 },
-      { type: 'demand', need: 'energy', amount: 20 },
+      { type: 'upkeep', resource: 'money', perMinute: 1_100 },
+      { type: 'demand', need: 'energy', amount: 30 },
     ],
     buildLimit: [{ level: 11, max: 2 }, { level: 13, max: 3 }, { level: 15, max: 5 }],
   },
@@ -391,11 +413,14 @@ export const buildingsConfig: BuildingDef[] = [
     cost: { money: 55_000, wood: 90 },
     constructionSec: 90,
     xpReward: 45,
+    // Relocatable service: reorganise supply as the city reshapes (§5).
+    canRelocate: true,
+    relocationCost: { money: 8_000 },
     effects: [
       // Food only reaches homes within range (§8): place the market among the
-      // houses it feeds, not off in a corner.
-      { type: 'distribution', need: 'food', radius: 9 },
-      { type: 'jobs', amount: 6 },
+      // houses it feeds. Wider reach so it serves a real neighbourhood, not a block.
+      { type: 'distribution', need: 'food', radius: 14 },
+      { type: 'jobs', amount: 20 },
       // Market fees — commercial income that scales with staffing & happiness.
       { type: 'revenue', category: 'commercial', perMinute: 2_000 },
       { type: 'upkeep', resource: 'money', perMinute: 900 },
@@ -418,11 +443,14 @@ export const buildingsConfig: BuildingDef[] = [
     cost: { money: 340_000, wood: 120, stone: 180 },
     constructionSec: 300,
     xpReward: 80,
+    canRelocate: true,
+    relocationCost: { money: 30_000 },
     effects: [
-      { type: 'distribution', need: 'food', radius: 10 },
-      { type: 'distribution', need: 'freshwater', radius: 10 },
-      { type: 'storage', resource: 'freshwater', amount: 400 },
-      { type: 'jobs', amount: 12 },
+      // Wide, city-scale reach for both food and drinking water.
+      { type: 'distribution', need: 'food', radius: 16 },
+      { type: 'distribution', need: 'freshwater', radius: 16 },
+      { type: 'storage', resource: 'freshwater', amount: 3_000 },
+      { type: 'jobs', amount: 60 },
       { type: 'revenue', category: 'commercial', perMinute: 3_500 },
       { type: 'upkeep', resource: 'money', perMinute: 1_100 },
       { type: 'demand', need: 'energy', amount: 12 },
@@ -440,13 +468,13 @@ export const buildingsConfig: BuildingDef[] = [
     constructionSec: 240,
     xpReward: 40,
     effects: [
-      { type: 'produce', resource: 'food', perMinute: 14 },
-      { type: 'jobs', amount: 4 },
+      { type: 'produce', resource: 'food', perMinute: 90 },
+      { type: 'jobs', amount: 12 },
       { type: 'revenue', category: 'industrial', perMinute: 1_200 },
-      { type: 'upkeep', resource: 'money', perMinute: 600 },
+      { type: 'upkeep', resource: 'money', perMinute: 700 },
       { type: 'demand', need: 'energy', amount: 8 },
     ],
-    buildLimit: [{ level: 9, max: 2 }],
+    buildLimit: [{ level: 9, max: 2 }, { level: 12, max: 4 }],
   },
   {
     id: 'fire_station',
@@ -458,13 +486,17 @@ export const buildingsConfig: BuildingDef[] = [
     cost: { money: 240_000, wood: 120, stone: 180 },
     constructionSec: 360,
     xpReward: 85,
+    // Wider response area so one station protects a real district, and
+    // relocatable to re-plan coverage as the city grows (§1/§5).
+    canRelocate: true,
+    relocationCost: { money: 20_000 },
     effects: [
-      { type: 'protection', hazard: 'fire', radius: 12 },
-      { type: 'jobs', amount: 6 },
-      { type: 'upkeep', resource: 'money', perMinute: 1_500 },
-      { type: 'demand', need: 'energy', amount: 8 },
+      { type: 'protection', hazard: 'fire', radius: 18 },
+      { type: 'jobs', amount: 16 },
+      { type: 'upkeep', resource: 'money', perMinute: 1_600 },
+      { type: 'demand', need: 'energy', amount: 10 },
     ],
-    buildLimit: [{ level: 8, max: 2 }, { level: 10, max: 3 }],
+    buildLimit: [{ level: 8, max: 2 }, { level: 10, max: 3 }, { level: 13, max: 5 }],
   },
   // Police station (MVP 2): safety coverage for the homes in range — the same
   // radius-coverage machinery as the fire station, one need over. Low safety
@@ -479,11 +511,16 @@ export const buildingsConfig: BuildingDef[] = [
     cost: { money: 520_000, wood: 100, stone: 260 },
     constructionSec: 360,
     xpReward: 95,
+    // Radius AND capacity (§2): a wide beat, but each station only polices so
+    // many residents well — past that, in-range homes read as under-served, so a
+    // metropolis needs a few stations, not one per block. Relocatable (§5).
+    canRelocate: true,
+    relocationCost: { money: 40_000 },
     effects: [
-      { type: 'coverage', need: 'safety', radius: 11 },
-      { type: 'jobs', amount: 8 },
-      { type: 'upkeep', resource: 'money', perMinute: 1_600 },
-      { type: 'demand', need: 'energy', amount: 8 },
+      { type: 'coverage', need: 'safety', radius: 16, capacity: 8_000 },
+      { type: 'jobs', amount: 30 },
+      { type: 'upkeep', resource: 'money', perMinute: 1_800 },
+      { type: 'demand', need: 'energy', amount: 12 },
     ],
     buildLimit: [{ level: 13, max: 2 }, { level: 15, max: 4 }],
   },
@@ -499,11 +536,15 @@ export const buildingsConfig: BuildingDef[] = [
     cost: { money: 2_200_000, wood: 200, stone: 500 },
     constructionSec: 600,
     xpReward: 140,
+    // A large hospital serves a wide area and a big population (radius + capacity,
+    // §2) — the health backbone of a metropolis. Relocatable (§5).
+    canRelocate: true,
+    relocationCost: { money: 120_000 },
     effects: [
-      { type: 'coverage', need: 'health', radius: 11 },
-      { type: 'jobs', amount: 16 },
-      { type: 'upkeep', resource: 'money', perMinute: 2_400 },
-      { type: 'demand', need: 'energy', amount: 15 },
+      { type: 'coverage', need: 'health', radius: 18, capacity: 15_000 },
+      { type: 'jobs', amount: 80 },
+      { type: 'upkeep', resource: 'money', perMinute: 3_000 },
+      { type: 'demand', need: 'energy', amount: 25 },
     ],
     buildLimit: [{ level: 14, max: 2 }, { level: 15, max: 3 }],
   },
@@ -522,11 +563,11 @@ export const buildingsConfig: BuildingDef[] = [
     effects: [
       // Trade tax — the backbone of commercial income once jobs are staffed.
       { type: 'revenue', category: 'commercial', perMinute: 4_000 },
-      { type: 'jobs', amount: 8 },
-      { type: 'upkeep', resource: 'money', perMinute: 1_200 },
+      { type: 'jobs', amount: 40 },
+      { type: 'upkeep', resource: 'money', perMinute: 1_400 },
       { type: 'demand', need: 'energy', amount: 12 },
     ],
-    buildLimit: [{ level: 6, max: 2 }, { level: 9, max: 4 }],
+    buildLimit: [{ level: 6, max: 2 }, { level: 9, max: 4 }, { level: 12, max: 8 }],
   },
   // Office block — the city's main employer (§ Arbeitsversorgung). A big 4×2
   // footprint packed with jobs, so a residential city must zone real workplaces
@@ -541,17 +582,17 @@ export const buildingsConfig: BuildingDef[] = [
     cost: { money: 850_000, wood: 260, stone: 480 },
     constructionSec: 540,
     xpReward: 200,
-    // A true downtown employer (§5): 400 jobs in a compact 4×2 tower, so dense
-    // districts can host real workforces and "job-centre planning" matters. Its
-    // commercial revenue scales with *filled* jobs — an office without residents
-    // to staff it earns little, which self-balances the huge job count.
+    // A true downtown employer (§5/§ big-city jobs): ~2 000 jobs in a compact 4×2
+    // tower, so dense residential towers can actually be staffed and "job-centre
+    // planning" matters at metropolis scale. Commercial revenue scales with
+    // *filled* jobs, so an office without residents to staff it earns little.
     effects: [
-      { type: 'jobs', amount: 400 },
+      { type: 'jobs', amount: 2_000 },
       { type: 'revenue', category: 'commercial', perMinute: 18_000 },
       { type: 'upkeep', resource: 'money', perMinute: 6_000 },
       { type: 'demand', need: 'energy', amount: 120 },
     ],
-    buildLimit: [{ level: 8, max: 1 }, { level: 10, max: 2 }, { level: 12, max: 4 }],
+    buildLimit: [{ level: 8, max: 1 }, { level: 10, max: 2 }, { level: 12, max: 4 }, { level: 14, max: 7 }],
   },
 
   // ---- Infrastruktur / Energie (MVP 2) ----
@@ -569,12 +610,13 @@ export const buildingsConfig: BuildingDef[] = [
     constructionSec: 480,
     xpReward: 120,
     effects: [
-      { type: 'capacity', need: 'energy', amount: 250 },
-      { type: 'jobs', amount: 10 },
-      { type: 'upkeep', resource: 'money', perMinute: 2_500 },
+      // Grid-scale output: a few plants power a metropolis (§ supply keeps up).
+      { type: 'capacity', need: 'energy', amount: 3_500 },
+      { type: 'jobs', amount: 20 },
+      { type: 'upkeep', resource: 'money', perMinute: 3_000 },
       { type: 'ambience', amount: -3, radius: 6 },
     ],
-    buildLimit: [{ level: 11, max: 2 }, { level: 13, max: 3 }, { level: 15, max: 4 }],
+    buildLimit: [{ level: 11, max: 2 }, { level: 13, max: 3 }, { level: 15, max: 5 }],
   },
   // Wind farm — clean power: no pollution (mild positive ambience), far cheaper
   // to run, but each turbine field yields less than a coal plant and eats space.
@@ -590,12 +632,12 @@ export const buildingsConfig: BuildingDef[] = [
     constructionSec: 300,
     xpReward: 75,
     effects: [
-      { type: 'capacity', need: 'energy', amount: 120 },
-      { type: 'jobs', amount: 3 },
-      { type: 'upkeep', resource: 'money', perMinute: 800 },
+      { type: 'capacity', need: 'energy', amount: 1_500 },
+      { type: 'jobs', amount: 6 },
+      { type: 'upkeep', resource: 'money', perMinute: 900 },
       { type: 'ambience', amount: 1, radius: 4 },
     ],
-    buildLimit: [{ level: 12, max: 3 }, { level: 14, max: 5 }],
+    buildLimit: [{ level: 12, max: 3 }, { level: 14, max: 6 }],
   },
 
   // ---- Freizeit ----
@@ -610,7 +652,7 @@ export const buildingsConfig: BuildingDef[] = [
     constructionSec: 60,
     xpReward: 25,
     effects: [
-      { type: 'coverage', need: 'leisure', radius: 8 },
+      { type: 'coverage', need: 'leisure', radius: 11 },
       { type: 'ambience', amount: 2, radius: 6 },
       { type: 'upkeep', resource: 'money', perMinute: 250 },
     ],
@@ -626,7 +668,7 @@ export const buildingsConfig: BuildingDef[] = [
     constructionSec: 40,
     xpReward: 12,
     effects: [
-      { type: 'coverage', need: 'leisure', radius: 5 },
+      { type: 'coverage', need: 'leisure', radius: 7 },
       { type: 'ambience', amount: 1, radius: 4 },
       { type: 'upkeep', resource: 'money', perMinute: 150 },
     ],

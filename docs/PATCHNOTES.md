@@ -1,5 +1,86 @@
 # Patch Notes
 
+## v0.16 — „Großstadt-Skalierung: Reichweiten, Kapazität & echte Bevölkerung"
+
+Die Stadt wächst — jetzt skalieren die Systeme mit. Servicegebäude bekommen
+realistische Einzugsgebiete, Wohngebäude glaubwürdige Einwohnerzahlen, und ein
+neues, generisches **Radius-vs-Kapazität**-Modell sorgt dafür, dass große Städte
+nicht mit Mini-Radien geflutet werden — Planung bleibt trotzdem wichtig. Alles
+in den Configs, kein neues Parallelsystem.
+
+### Radius vs. Kapazität — neues generisches Modell (Items 1, 2)
+
+- Der bestehende `coverage`-Effekt hat jetzt ein optionales Feld **`capacity`**
+  (versorgbare Einwohner). Ein Servicegebäude deckt einen **Radius** ab *und*
+  versorgt nur bis zu einer **Kapazität** gut. Wächst die Stadt über die
+  Kapazität hinaus, sinkt die Deckung auch im Radius — man braucht ein paar
+  starke Stationen, nicht eine pro Block. Ohne `capacity` (Parks) bleibt es
+  reine Radius-Deckung. Ein Feld, kein Sonderfall — gilt automatisch für alle
+  Coverage-Bedürfnisse.
+- Umgesetzt im `derived`-Layer (`coverageCapacity` pro Bedürfnis) und im Tick
+  (Deckung = Radius-Anteil × min(1, Kapazität/versorgte Einwohner)).
+
+### Realistischere Reichweiten & Kapazitäten (Items 1, 7)
+
+- **Feuerwehr** Radius 12 → **18**; **Polizei** 11 → **16** (+ Kapazität 8.000
+  Einw.); **Krankenhaus** 11 → **18** (+ Kapazität 15.000 Einw.).
+- **Markt** Radius 9 → **14**, **Supermarkt** 10 → **16**.
+- **Brunnen** Radius 7 → **9**, Kapazität 60 → **200**; **Wasserpumpe** Radius
+  12 → **18**, Kapazität 240 → **3.000**.
+- **Kraftwerk** 250 → **3.500**, **Windpark** 120 → **1.500** Energie.
+- **Wasseraufbereitung** 40 → **400** Trinkwasser/min, Puffer 800 → 6.000.
+- **Park** Radius 8 → 11, **Spielplatz** 5 → 7.
+- Höhere Bau-Limits im Late-Game (Farm, Pumpe, Feuerwehr, Büro, Laden u. a.),
+  damit eine Großstadt genug Kernservices bauen kann.
+
+### Realistische Einwohner-/Wohnkapazitäten (Items 3, 4)
+
+- Wohngebäude tragen jetzt echte Stadt-Bevölkerung, über **Haushalte pro
+  Gebäude** (nicht absurd große Haushalte):
+  - Reihenhaus 24 → **48** Einw. (12 Haushalte)
+  - Apartment 96 → **360** Einw. (90 Haushalte)
+  - Wohnturm 300 → **1.800** Einw. (360 Haushalte)
+  - Kleines Haus bleibt bewusst klein (Vorstadt, ~5).
+- Damit erreicht eine ausgebaute Stadt glaubwürdig **~10× so viele** Bürger
+  (Größenordnung 30.000+ statt ~3.000).
+- **Versorgung zieht mit:** Wasser-/Energiebedarf der Wohngebäude, Farm-Output
+  (42 → **220**/min), Bäckerei (14 → **90**), Trinkwasser, Lager-Puffer für
+  Konsumgüter (Essen/Trinkwasser 600 → **3.000**) und **Arbeitsplätze**
+  (Büro 400 → **2.000**, Laden 8 → 40, Markt/Supermarkt hoch) skalieren
+  gemeinsam, damit das Verhältnis stimmt. Essensbedarf pro Kopf 0,05 → **0,03**.
+
+### Verschiebbare Servicegebäude (Item 5)
+
+- Zentrale Versorgungs-/Servicegebäude sind jetzt **verschiebbar** (über das
+  bestehende Relocate-System im Gebäude-Sheet, mit Platzierungs-Neuprüfung und
+  Umzugsgebühr): **Brunnen, Wasserpumpe, Wasseraufbereitung, Markt, Supermarkt,
+  Feuerwehr, Polizei, Krankenhaus**. Normale Wohn-/Produktionsgebäude bleiben
+  bewusst nicht verschiebbar (Abriss & Neubau).
+- Gebühren pro Typ konfigurierbar (`relocationCost`), z. B. Krankenhaus 120.000.
+
+### Bessere Reichweiten-/Kapazitäts-Darstellung (Item 6)
+
+- Die Coverage-Legende zeigt bei kapazitätsbegrenzten Diensten jetzt die
+  **Auslastung „X/Y Einwohner"** und färbt sie rot bei Überlastung — man sieht
+  sofort, ob **Reichweite oder Kapazität** das Problem ist. In-Range-Häuser
+  erscheinen bei Überlastung als „unterversorgt".
+
+### Configs & Dateien
+
+- `buildings.config.ts` (Radien, Kapazitäten, Wohn-/Bedarfs-/Job-/Produktions-
+  werte, Relocate-Flags), `needs.config.ts` (Essensbedarf), `config/types.ts` +
+  `schemas.ts` (`coverage.capacity`), `simulation/derived.ts` + `tick.ts`
+  (Kapazitätsmodell), `buildings/coverage.ts` + `renderer/MapRenderer.ts` +
+  `components/MapView.tsx` + i18n + CSS (Auslastungs-Anzeige). Keine
+  Save-Migration nötig — Werte liegen in Configs, Bestände rechnen robust neu.
+
+### Empfohlene weitere Skalierungs-Tests
+
+- Reife Großstadt (30.000+): Happiness-Landung 70–90 %, Wasser/Energie/Essen im
+  Gleichgewicht mit wenigen Kern-Services; Auslastungs-Overlay bei Polizei/
+  Krankenhaus prüfen; Einkommen vs. Unterhalt bei großer Bevölkerung
+  gegenrechnen (ggf. `taxPerCapitaPerMin` später nachjustieren).
+
 ## v0.15 — „Langzeit-Balancing: echte Investitionen & langsamere Progression"
 
 Ein zusammenhängender Balancing-Pass (keine isolierten Zahlenänderungen): Preise,

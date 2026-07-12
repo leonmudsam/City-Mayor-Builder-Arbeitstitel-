@@ -8,8 +8,10 @@ export const needsConfig: NeedDef[] = [
   // effect), so it scales with house type & upgrade level rather than with a
   // flat per-head number (§3/§7). demandPerCapita 0 avoids double-counting.
   { id: 'water', nameKey: 'need.water', unlockLevel: 3, weight: 25, kind: 'capacity', demandPerCapita: 0 },
-  // consumption: demandPerCapita is units per citizen per MINUTE.
-  { id: 'food', nameKey: 'need.food', unlockLevel: 4, weight: 25, kind: 'consumption', demandPerCapita: 0.05, consumesResource: 'food' },
+  // consumption: demandPerCapita is units per citizen per MINUTE. Tuned down for
+  // big-city scale so a handful of (now far higher-output) farms feed thousands
+  // rather than dozens — supply keeps up with population (§ big-city scaling).
+  { id: 'food', nameKey: 'need.food', unlockLevel: 4, weight: 25, kind: 'consumption', demandPerCapita: 0.03, consumesResource: 'food' },
   { id: 'work', nameKey: 'need.work', unlockLevel: 6, weight: 15, kind: 'capacity', demandPerCapita: 0.5 },
   { id: 'leisure', nameKey: 'need.leisure', unlockLevel: 7, weight: 15, kind: 'coverage', demandPerCapita: 1 },
   // Energy (MVP 2): a city-wide capacity need with no radius — power plants feed

@@ -18,6 +18,13 @@ export interface Derived {
    * (water via wells, leisure via parks). Needs without radius sources are 1.
    */
   needCoverage: Record<NeedId, number>;
+  /**
+   * Servable residents summed across a coverage need's capacitated sources
+   * (police/hospital). 0 = the need's sources are uncapped (parks) — coverage is
+   * limited by radius alone. Lets a coverage need be gated by both reach *and*
+   * capacity without any per-service special-casing (§ radius vs. capacity).
+   */
+  coverageCapacity: Record<NeedId, number>;
   /** Extra demand per need from buildings themselves (homes' water, §3/§4). */
   extraDemand: Record<NeedId, number>;
   /**
@@ -59,6 +66,7 @@ export function recomputeDerived(state: GameState, config: GameConfig): Derived 
   const productionPerMin: Record<ResourceId, number> = { money: 0, wood: 0, stone: 0, food: 0, freshwater: 0 };
   const productionBonus: Record<string, number> = {};
   const extraDemand: Record<NeedId, number> = { housing: 0, water: 0, food: 0, work: 0, leisure: 0, energy: 0, safety: 0, health: 0, freshwater: 0 };
+  const coverageCapacity: Record<NeedId, number> = { housing: 0, water: 0, food: 0, work: 0, leisure: 0, energy: 0, safety: 0, health: 0, freshwater: 0 };
   const revenueBase = { commercial: 0, industrial: 0 };
   const upkeep: Record<ResourceId, number> = { money: 0, wood: 0, stone: 0, food: 0, freshwater: 0 };
   let housingUnits = 0;
@@ -115,6 +123,7 @@ export function recomputeDerived(state: GameState, config: GameConfig): Derived 
           break;
         case 'coverage':
           addCoverageSource(eff.need, { cx, cy, radius: eff.radius });
+          if (eff.capacity) coverageCapacity[eff.need] += eff.capacity;
           break;
         case 'demand':
           extraDemand[eff.need] += eff.amount;
@@ -197,6 +206,7 @@ export function recomputeDerived(state: GameState, config: GameConfig): Derived 
     storageCaps,
     capacity,
     needCoverage,
+    coverageCapacity,
     extraDemand,
     distributionCoverage,
     fireProtected,
