@@ -60,6 +60,14 @@ export const balancingConfig: BalancingConfig = {
   // biome and opens a second, self-connected build area (§8).
   districtUnlockLevel: 12,
   districtFoundCost: { money: 300_000, wood: 150, stone: 250 },
+  // Long-term progression (v0.15): from L4 up, buildings become real
+  // investments. A building costing at least this much money reads as a
+  // "Großprojekt" in the UI — it gets an investment framing and, when you can't
+  // afford it, a helpful income hint instead of a bare "too little money". The
+  // recommended net income shown is the money cost divided by the payback
+  // window below (advisory only, no simulation effect).
+  majorProjectMoneyThreshold: 300_000,
+  majorProjectPaybackMinutes: 20,
 };
 
 // Feature flags: the test shop and gold system are wired in as the LAST

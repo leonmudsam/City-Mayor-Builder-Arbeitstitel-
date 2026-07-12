@@ -78,11 +78,11 @@ describe('logistics & workplaces', () => {
     const { controller } = newController();
     setLevel(controller, 8);
     flattenTerrain(controller);
-    controller.state.resources = { money: 500_000, wood: 1_000, stone: 1_000, food: 1_000, freshwater: 0 };
+    controller.state.resources = { money: 1_200_000, wood: 1_000, stone: 1_000, food: 1_000, freshwater: 0 };
     for (let x = 26; x <= 31; x++) controller.placeBuilding('road', x, 26);
     const before = controller.derived.capacity.work;
     expect(controller.placeBuilding('office', 26, 27)).toEqual({ ok: true }); // 4×2, 400 jobs
-    controller.update(T0 + 440_000); // office finishes
+    controller.update(T0 + 560_000); // office finishes (540s construction)
     expect(controller.derived.capacity.work - before).toBe(400);
   });
 });
@@ -101,7 +101,7 @@ describe('energy grid (MVP 2)', () => {
     expect(controller.derived.capacity.energy).toBe(0);
     // The coal plant powers the whole city-wide grid (capacity need, no radius).
     expect(controller.placeBuilding('power_plant', 26, 27)).toEqual({ ok: true });
-    controller.update(T0 + 130_000 + 400_000); // plant finishes
+    controller.update(T0 + 130_000 + 500_000); // plant finishes (480s construction)
     expect(controller.derived.capacity.energy).toBe(250);
   });
 });
@@ -118,7 +118,7 @@ describe('emergency services (MVP 2)', () => {
     expect(controller.derived.needCoverage.safety).toBe(0); // no station yet
     // A police station within radius 11 of the house covers it.
     expect(controller.placeBuilding('police_station', 29, 27)).toEqual({ ok: true });
-    controller.update(T0 + 25_000 + 320_000); // station finishes
+    controller.update(T0 + 25_000 + 380_000); // station finishes (360s construction)
     expect(controller.derived.needCoverage.safety).toBe(1);
   });
 });

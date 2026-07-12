@@ -23,6 +23,25 @@ export function investedCost(def: BuildingDef, upgradeLevel: number): Partial<Re
   return total;
 }
 
+/**
+ * Effective build cost of the *next* copy of a building (§7 anti-spam). With
+ * `costScaling` set, each already-built copy multiplies the whole cost by that
+ * factor: `baseCost × factor^existingCount`, rounded per resource. Without it,
+ * the flat `def.cost` is returned. This is the single source of truth used by
+ * both the placement command and the build-menu display, so the price shown is
+ * exactly the price charged. The escalation premium is intentionally not
+ * refunded on demolition (refund stays on the base cost).
+ */
+export function effectiveBuildCost(def: BuildingDef, existingCount: number): Partial<Record<ResourceId, number>> {
+  if (!def.costScaling || def.costScaling <= 1 || existingCount <= 0) return def.cost;
+  const mult = Math.pow(def.costScaling, existingCount);
+  const scaled: Partial<Record<ResourceId, number>> = {};
+  for (const [res, amount] of Object.entries(def.cost)) {
+    scaled[res as ResourceId] = Math.round((amount ?? 0) * mult);
+  }
+  return scaled;
+}
+
 /** Resources returned when demolishing, floored per resource. */
 export function demolishRefund(
   def: BuildingDef,

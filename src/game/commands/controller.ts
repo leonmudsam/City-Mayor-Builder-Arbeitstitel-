@@ -5,7 +5,7 @@ import { recomputeDerived, type Derived } from '../simulation/derived.ts';
 import { advance } from '../simulation/tick.ts';
 import { updateQuests, objectiveTarget } from '../simulation/quests.ts';
 import { validatePlacement, type PlacementError } from '../buildings/placement.ts';
-import { demolishRefund } from '../buildings/effects.ts';
+import { demolishRefund, effectiveBuildCost } from '../buildings/effects.ts';
 import { buildLimitAt, countOf, nextLimitLevel } from '../buildings/limits.ts';
 import { coverageOverlay, type CoverageOverlay } from '../buildings/coverage.ts';
 import { canAfford, grantGold, grantResources, spendCost, spendGold } from '../economy/economyService.ts';
@@ -91,7 +91,10 @@ export class GameController {
     if (!def) return fail('not_found');
     const placementError = validatePlacement(this.state, this.config, this.derived, def, x, y);
     if (placementError) return fail(placementError);
-    const spend = spendCost(this.state, def.cost, `build_${defId}`);
+    // Escalating cost for anti-spam utilities (warehouses, §7): the price of the
+    // next copy rises with how many already exist.
+    const cost = effectiveBuildCost(def, countOf(this.state, defId));
+    const spend = spendCost(this.state, cost, `build_${defId}`);
     if (!spend.ok) return fail('insufficient');
 
     const id = newId(this.state, 'b');
@@ -377,6 +380,33 @@ export class GameController {
 
   canAffordCost(cost: Partial<Record<ResourceId, number>>): boolean {
     return canAfford(this.state, cost);
+  }
+
+  /**
+   * The money+material cost the next copy of a building would actually charge
+   * right now, accounting for escalating `costScaling` (§7). The build menu uses
+   * this so the shown price matches the charged price.
+   */
+  getBuildCost(defId: string): Partial<Record<ResourceId, number>> {
+    const def = this.config.buildings.get(defId);
+    if (!def) return {};
+    return effectiveBuildCost(def, countOf(this.state, defId));
+  }
+
+  /**
+   * Whether a building reads as a "Großprojekt" (major project) — a big money
+   * investment that the UI frames specially and, when unaffordable, explains
+   * with an income hint rather than a bare shortfall (§ realistic prices).
+   */
+  isMajorProject(defId: string): boolean {
+    const cost = this.getBuildCost(defId);
+    return (cost.money ?? 0) >= this.config.balancing.majorProjectMoneyThreshold;
+  }
+
+  /** Recommended steady net income for a major project (cost ÷ payback window). */
+  recommendedIncomeFor(defId: string): number {
+    const money = this.getBuildCost(defId).money ?? 0;
+    return Math.round(money / this.config.balancing.majorProjectPaybackMinutes);
   }
 
   /**

@@ -137,6 +137,16 @@ export interface BuildingDef {
    * Generic riverfront/coast rule — no per-building special-casing.
    */
   adjacentTerrain?: TerrainType;
+  /**
+   * Escalating cost per copy already built (§ anti-spam, e.g. warehouses). When
+   * set (>1), the effective build cost of the next copy is `baseCost × factor^n`
+   * where `n` is how many already exist — so mass-building the same utility gets
+   * progressively pricier and storage/logistics become a deliberate investment
+   * rather than a cheap spam. Generic and config-only; absent → flat cost.
+   * The escalation premium is a congestion surcharge and is not refunded on
+   * demolition (refund stays on the base cost).
+   */
+  costScaling?: number;
 }
 
 // ---- Resources & needs ----------------------------------------------------
@@ -273,6 +283,19 @@ export interface BalancingConfig {
   districtUnlockLevel: number;
   /** One-off cost to found a district (the "Fernstraße/Distrikt" project, §8). */
   districtFoundCost: Partial<Record<ResourceId, number>>;
+  /**
+   * Money cost at/above which a building counts as a "Großprojekt" (major
+   * project) in the UI — it gets an investment framing and, when unaffordable,
+   * a helpful income hint ("more revenue needed: X/min now, ~Y/min recommended")
+   * instead of a bare "too little money" (§ realistic prices / long-term goals).
+   */
+  majorProjectMoneyThreshold: number;
+  /**
+   * Rough guideline for the income hint: a major project should be affordable
+   * from steady income within this many minutes, so the recommended net income
+   * shown is `cost / this`. Purely advisory UI text, no simulation effect.
+   */
+  majorProjectPaybackMinutes: number;
 }
 
 export interface FeaturesConfig {

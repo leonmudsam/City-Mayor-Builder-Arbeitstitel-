@@ -13,7 +13,7 @@ describe('simulation tick', () => {
     const xpBefore = controller.state.level.xp;
     controller.update(T0 + 21_000);
     expect(house?.status).toBe('active');
-    expect(controller.state.level.xp).toBe(xpBefore + 10);
+    expect(controller.state.level.xp).toBe(xpBefore + 5);
   });
 
   it('produces directly into storage and stops at the storage cap (offline catch-up)', () => {
