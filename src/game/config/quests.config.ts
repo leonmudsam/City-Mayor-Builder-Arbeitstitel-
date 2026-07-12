@@ -13,7 +13,7 @@ export const questsConfig: QuestDef[] = [
     descriptionKey: 'quest.q01.desc',
     unlockLevel: 1,
     objectives: [{ type: 'build', defId: 'road', count: 5 }],
-    rewards: { money: 8_000, xp: 5 },
+    rewards: { money: 8_000, xp: 12 },
     nextQuestId: 'q02_houses',
   },
   {
@@ -22,7 +22,7 @@ export const questsConfig: QuestDef[] = [
     descriptionKey: 'quest.q02.desc',
     unlockLevel: 1,
     objectives: [{ type: 'build', defId: 'house_small', count: 2 }],
-    rewards: { money: 16_000, xp: 10 },
+    rewards: { money: 16_000, xp: 18 },
     nextQuestId: 'q03_sawmill',
   },
   {
@@ -34,7 +34,7 @@ export const questsConfig: QuestDef[] = [
       { type: 'build', defId: 'sawmill', count: 1 },
       { type: 'produce', resource: 'wood', amount: 30 },
     ],
-    rewards: { money: 22_000, xp: 15 },
+    rewards: { money: 24_000, xp: 25 },
     nextQuestId: 'q04_water',
   },
   {
@@ -43,7 +43,7 @@ export const questsConfig: QuestDef[] = [
     descriptionKey: 'quest.q04.desc',
     unlockLevel: 3,
     objectives: [{ type: 'build', defId: 'well', count: 2 }],
-    rewards: { money: 22_000, xp: 15 },
+    rewards: { money: 24_000, xp: 25 },
     nextQuestId: 'q05_mayor',
   },
   {
@@ -55,7 +55,7 @@ export const questsConfig: QuestDef[] = [
       { type: 'build', defId: 'mayor_house', count: 1 },
       { type: 'mayorAction', actionId: 'speech', count: 1 },
     ],
-    rewards: { money: 32_000, xp: 20 },
+    rewards: { money: 36_000, xp: 35 },
     nextQuestId: 'q06_food',
   },
   {
@@ -67,7 +67,7 @@ export const questsConfig: QuestDef[] = [
       { type: 'build', defId: 'farm', count: 1 },
       { type: 'produce', resource: 'food', amount: 50 },
     ],
-    rewards: { money: 32_000, xp: 20 },
+    rewards: { money: 36_000, xp: 32 },
     nextQuestId: 'q07_stone',
   },
   {
@@ -79,7 +79,7 @@ export const questsConfig: QuestDef[] = [
       { type: 'build', defId: 'quarry', count: 1 },
       { type: 'produce', resource: 'stone', amount: 40 },
     ],
-    rewards: { money: 40_000, xp: 25 },
+    rewards: { money: 45_000, xp: 45 },
     nextQuestId: 'q08_market',
   },
   {
@@ -91,7 +91,7 @@ export const questsConfig: QuestDef[] = [
       { type: 'build', defId: 'market', count: 1 },
       { type: 'happiness', amount: 70 },
     ],
-    rewards: { money: 60_000, xp: 30 },
+    rewards: { money: 70_000, xp: 60 },
     nextQuestId: 'q09_expand',
   },
   {
@@ -100,7 +100,7 @@ export const questsConfig: QuestDef[] = [
     descriptionKey: 'quest.q09.desc',
     unlockLevel: 5,
     objectives: [{ type: 'sectors', count: 2 }],
-    rewards: { money: 80_000, xp: 40 },
+    rewards: { money: 95_000, xp: 75 },
     nextQuestId: 'q10_growth',
   },
   {
@@ -121,7 +121,7 @@ export const questsConfig: QuestDef[] = [
       { type: 'build', defId: 'shop_small', count: 2 },
       { type: 'build', defId: 'warehouse', count: 1 },
     ],
-    rewards: { money: 95_000, xp: 45 },
+    rewards: { money: 130_000, xp: 95 },
     nextQuestId: 'q12_leisure',
   },
   {
@@ -134,7 +134,7 @@ export const questsConfig: QuestDef[] = [
       { type: 'build', defId: 'playground', count: 1 },
       { type: 'happiness', amount: 75 },
     ],
-    rewards: { money: 115_000, xp: 50 },
+    rewards: { money: 160_000, xp: 120 },
     nextQuestId: 'q13_fire',
   },
   {
@@ -143,7 +143,7 @@ export const questsConfig: QuestDef[] = [
     descriptionKey: 'quest.q13.desc',
     unlockLevel: 8,
     objectives: [{ type: 'build', defId: 'fire_station', count: 1 }],
-    rewards: { money: 130_000, xp: 55 },
+    rewards: { money: 190_000, xp: 140 },
     nextQuestId: 'q14_density',
   },
   {
@@ -155,7 +155,7 @@ export const questsConfig: QuestDef[] = [
       { type: 'build', defId: 'apartment', count: 1 },
       { type: 'population', amount: 250 },
     ],
-    rewards: { money: 175_000, xp: 70 },
+    rewards: { money: 280_000, xp: 190 },
     nextQuestId: 'q15_metropolis',
   },
   {
@@ -168,7 +168,7 @@ export const questsConfig: QuestDef[] = [
       { type: 'population', amount: 400 },
       { type: 'happiness', amount: 80 },
     ],
-    rewards: { money: 400_000, gold: 50, xp: 100 },
+    rewards: { money: 550_000, gold: 50, xp: 340 },
     nextQuestId: 'q16_power',
   },
   // ---- MVP 2: energy grid ----
@@ -181,7 +181,7 @@ export const questsConfig: QuestDef[] = [
       { type: 'build', defId: 'power_plant', count: 1 },
       { type: 'happiness', amount: 70 },
     ],
-    rewards: { money: 260_000, xp: 90 },
+    rewards: { money: 380_000, xp: 260 },
     nextQuestId: 'q17_grid',
   },
   {
@@ -193,7 +193,7 @@ export const questsConfig: QuestDef[] = [
       { type: 'build', defId: 'wind_farm', count: 1 },
       { type: 'population', amount: 550 },
     ],
-    rewards: { money: 340_000, gold: 30, xp: 120 },
+    rewards: { money: 520_000, gold: 30, xp: 360 },
     nextQuestId: 'q18_safety',
   },
   // ---- MVP 2: emergency services ----
@@ -206,7 +206,7 @@ export const questsConfig: QuestDef[] = [
       { type: 'build', defId: 'police_station', count: 1 },
       { type: 'happiness', amount: 72 },
     ],
-    rewards: { money: 380_000, xp: 130 },
+    rewards: { money: 650_000, xp: 430 },
     nextQuestId: 'q19_health',
   },
   {
@@ -218,6 +218,6 @@ export const questsConfig: QuestDef[] = [
       { type: 'build', defId: 'hospital', count: 1 },
       { type: 'population', amount: 700 },
     ],
-    rewards: { money: 460_000, gold: 40, xp: 150 },
+    rewards: { money: 850_000, gold: 40, xp: 560 },
   },
 ];

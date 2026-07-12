@@ -1,5 +1,83 @@
 # Patch Notes
 
+## v0.15 — „Langzeit-Balancing: echte Investitionen & langsamere Progression"
+
+Ein zusammenhängender Balancing-Pass (keine isolierten Zahlenänderungen): Preise,
+XP-Kurve, Belohnungen und Limits wurden **gemeinsam** neu abgestimmt. Ziel: Level
+1–3 bleiben schnell und verständlich, ab Level 4 wird die Stadtentwicklung zu
+einer echten Langzeitplanung mit glaubwürdigen Kosten. Alles bleibt in den
+Configs — kein neuer Balancing-Code, bestehende Systeme wurden weiterverwendet.
+
+### Realistischere Gebäudepreise nach Level & Typ (Items 1, 2, 9)
+
+- **Level 1–3 bleiben günstig** (Straße 300, Kleines Haus 9.000, Sägewerk 11.000,
+  Brunnen 6.500) — der Einstieg bleibt flüssig.
+- **Ab Level 4 steigen die Kosten spürbar:** Farm 14k→28k, Steinbruch 22k→45k,
+  Markt 30k→55k, Reihenhaus 34k→60k, Laden 46k→85k, Wasserpumpe 60k→130k,
+  Logistikzentrum 105k→190k.
+- **Große öffentliche Gebäude sind jetzt echte Stadtinvestitionen:** Feuerwehr
+  90k→240k, Polizeiwache 95k→**520k**, Supermarkt 80k→340k, Kraftwerk 160k→480k,
+  Windpark 120k→360k, Wasseraufbereitung 90k→260k, Bürokomplex 400k→**850k**,
+  Wohnturm 420k→**900k**, **Krankenhaus 140k→2,2 Mio.**
+- Große Gebäude haben zusätzlich **längere Bauzeiten** (Krankenhaus/Wohnturm 10
+  min, Büro 9 min, Kraftwerk 8 min) — Investitionscharakter statt Impulskauf.
+- Materialkosten (Holz/Stein) ziehen mit, damit Produktion & Fläche mitzählen.
+
+### Level-Fortschritt deutlich verlangsamt (Item 3)
+
+- Neue XP-Kurve: **L10 jetzt ~4.400 XP** (vorher 2.500), **L14 ~16.800**. L1–3
+  gehen weiter schnell, danach kostet jedes Level deutlich mehr — Level-Ups
+  fühlen sich wie Meilensteine an und späte Level spannen über mehrere Sessions.
+
+### Anti-Spam für Bürgergebäude (Item 4)
+
+- **Wohngebäude geben viel weniger XP:** Kleines Haus 10→5, Reihenhaus 20→8,
+  Apartment 45→22, Wohnturm 70→35. Eine Häuserwand levelt **nicht** mehr hoch.
+- Dafür geben **Meilensteine, Versorgung und Großprojekte deutlich mehr XP:**
+  Markt 20→45, Supermarkt 34→80, Feuerwehr 40→85, Polizei 42→95, Krankenhaus
+  52→**140**, Büro 90→**200**, Kraftwerk 55→120, Wasserpumpe 28→50.
+- **Quest-XP stark erhöht** (die „Qualitäts"-Progression): Meilenstein-Quests
+  geben jetzt bis zu 560 XP statt 150 — aktives Spiel treibt das Leveln, nicht
+  Masse. XP ist jetzt Qualität, nicht Quantität.
+
+### Lagerhaus-Spam verhindert (Item 7) — neuer generischer Mechanismus
+
+- Lagerhaus-Basispreis 40k→85k **und** neues generisches `costScaling`: **jedes
+  weitere Lagerhaus kostet 40 % mehr** als das vorige (85k → 119k → 167k …).
+  Lagerkapazität ist damit eine bewusste Investition statt billiger Massenbau.
+  Der Mechanismus ist config-only und später auf jedes Gebäude anwendbar.
+- Das Baukarten-UI zeigt den **tatsächlich nächsten Preis** und „Jedes weitere
+  kostet mehr".
+
+### Einnahmen & Progression verbunden (Items 5, 10)
+
+- Level-Up- und Quest-Geldbelohnungen steigen mit (L10-Reward 250k→500k, L14
+  1,8 Mio.), damit die höheren Preise nicht frustrieren — Großprojekte bleiben
+  ein Sparziel, aber erreichbar über Steuern, Gewerbe und Quests.
+
+### UI für große Zahlen, Limits & Großprojekte (Item 11)
+
+- Große Werte werden weiterhin kompakt formatiert (15.000, 1,2 Mio.).
+- **Großprojekt-Kennzeichnung:** teure Gebäude tragen ein „Großprojekt"-Label.
+  Kann man sie sich (noch) nicht leisten, erklärt die Karte **hilfreich** statt
+  bloß „zu wenig Geld": „Mehr Einnahmen nötig. Aktuell X/min, empfohlen ~Y/min.
+  Baue mehr Firmen-/Bürogebäude oder erhöhe deine Steuern."
+- Bau-Limits zeigen weiterhin klar „x/max gebaut · mehr ab Level N".
+
+### Balancing-Tests (Item 12)
+
+- Neue Test-Suite `balancing.test.ts` sichert die Kernaussagen ab: früher
+  Einstieg bezahlbar, Wohn-Spam levelt nicht, Lagerhaus wird teurer,
+  Großprojekt-Erkennung + Einkommens-Empfehlung, XP-Qualität > Quantität.
+- Kompatibilität: Kosten/XP liegen in Configs (nicht im Save) — **keine
+  Save-Migration nötig**; bestehende Spielstände behalten ihr Level (Level wird
+  nie gesenkt).
+
+### Empfohlene nächste Balancing-Tests
+
+- L4–6-Spielgefühl live prüfen (planen ohne Frust), Einkommens-Kurve gegen die
+  neuen Preise messen, Krankenhaus-Sparzeit bei gut gebauter Wirtschaft prüfen.
+
 ## v0.14 — „MVP 2: Die erste echte Lieferkette (Trinkwasser)"
 
 Die erste durchgehende **Produktions- und Versorgungskette**: aus Flusswasser

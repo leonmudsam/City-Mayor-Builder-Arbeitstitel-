@@ -58,22 +58,37 @@ export function BuildMenu() {
 
 function BuildCard({ def, locked, onPick }: { def: BuildingDef; locked: boolean; onPick: () => void }) {
   const game = useGame();
-  const affordable = game.canAffordCost(def.cost);
+  // The price actually charged for the next copy (escalating costs, §7).
+  const cost = game.getBuildCost(def.id);
+  const affordable = game.canAffordCost(cost);
   const uniqueBuilt = def.unique && Object.values(game.state.buildings).some((b) => b.defId === def.id);
   const limit = game.getBuildLimit(def.id);
   const limitReached = limit ? limit.count >= limit.max : false;
   const disabled = locked || !affordable || Boolean(uniqueBuilt) || limitReached;
+  // Big public buildings / infrastructure read as investments, not impulse buys.
+  const major = game.isMajorProject(def.id);
+  // When a major project is merely unaffordable, explain how to get there
+  // instead of a bare "too little money" (§11): show current vs. recommended
+  // steady net income.
+  const scaled = def.costScaling !== undefined && limit !== undefined && limit.count > 0;
 
   return (
-    <button className={`build-card${disabled ? ' disabled' : ''}${locked ? ' locked' : ''}`} onClick={onPick} disabled={disabled}>
+    <button
+      className={`build-card${disabled ? ' disabled' : ''}${locked ? ' locked' : ''}${major ? ' major' : ''}`}
+      onClick={onPick}
+      disabled={disabled}
+    >
       <div className="build-card-media">
         <BuildingPreview category={def.category} size={def.size} />
         <span className="build-card-size">{def.size.w}×{def.size.h}</span>
       </div>
       <div className="build-card-body">
-        <div className="build-card-name">{t(def.nameKey)}</div>
+        <div className="build-card-name">
+          {t(def.nameKey)}
+          {major && <span className="build-card-tag">{t('ui.major_project')}</span>}
+        </div>
         <div className="build-card-info">
-          {Object.entries(def.cost).map(([res, amount]) => (
+          {Object.entries(cost).map(([res, amount]) => (
             <span
               key={res}
               className={`chip${game.state.resources[res as ResourceId] < (amount ?? 0) ? ' cost-missing' : ''}`}
@@ -90,6 +105,7 @@ function BuildCard({ def, locked, onPick }: { def: BuildingDef; locked: boolean;
           )}
         </div>
         <div className="build-card-effect">{effectSummary(def)}</div>
+        {scaled && <div className="build-card-scaled">{t('ui.cost_scaled')}</div>}
         {def.locationBonus && (
           <div className="build-card-bonus">
             <Sparkles size={12} />
@@ -106,6 +122,14 @@ function BuildCard({ def, locked, onPick }: { def: BuildingDef; locked: boolean;
           <div className={`build-card-limit${limitReached ? ' reached' : ''}`}>
             {t('ui.limit.count', { count: limit.count, max: limit.max })}
             {limitReached && limit.nextLevel !== undefined && ` · ${t('ui.limit.more_at', { level: limit.nextLevel })}`}
+          </div>
+        )}
+        {!locked && !affordable && !limitReached && !uniqueBuilt && major && (
+          <div className="build-card-invest">
+            {t('ui.major_project_hint', {
+              current: formatMoney(game.getIncome().net),
+              recommended: formatMoney(game.recommendedIncomeFor(def.id)),
+            })}
           </div>
         )}
         {uniqueBuilt && <div className="build-card-lock">{t('error.unique_exists')}</div>}
