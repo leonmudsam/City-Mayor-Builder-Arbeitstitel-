@@ -83,6 +83,20 @@ export interface BuildingUpgradeDef {
   constructionSec: number;
   effects: BuildingEffect[];
   xpReward: number;
+  /**
+   * City level required to start this upgrade (§ level-coupled upgrades). Absent
+   * → available as soon as the previous stage is built. This is the "level cap"
+   * on densification: a building can only climb to the tier its city has earned,
+   * so the centre keeps improving as the city grows instead of maxing out at
+   * level 1. Reuses the same level gate as building unlocks — no parallel system.
+   */
+  unlockLevel?: number;
+  /**
+   * Optional display name for this upgrade stage ("Stadthaus", "Hochhaus"). Lets
+   * the same building read as a visibly different structure per tier in the UI
+   * (§ visual/prestige development). Falls back to the base name + level.
+   */
+  nameKey?: string;
 }
 
 /**

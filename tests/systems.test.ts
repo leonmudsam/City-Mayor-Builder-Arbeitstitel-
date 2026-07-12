@@ -167,6 +167,45 @@ describe('housing model (§6)', () => {
   });
 });
 
+describe('building upgrades (v0.17)', () => {
+  it('gates densification upgrades behind city level and grows capacity on the same tile', () => {
+    const { controller } = newController();
+    setLevel(controller, 6);
+    flattenTerrain(controller);
+    controller.state.resources = { money: 3_000_000, wood: 3_000, stone: 3_000, food: 1_000, freshwater: 0 };
+    for (let x = 24; x <= 30; x++) controller.placeBuilding('road', x, 26);
+    expect(controller.placeBuilding('house_row', 24, 27)).toEqual({ ok: true });
+    controller.update(T0 + 130_000); // row finishes (120s)
+    const row = Object.values(controller.state.buildings).find((b) => b.defId === 'house_row')!;
+    expect(controller.derived.capacity.housing).toBe(48); // 12 units × 4
+
+    // Tier 1 needs level 8 — at level 6 it is visible but locked (§ level cap).
+    const info6 = controller.getUpgradeInfo(row.id);
+    expect(info6.lockedUntilLevel).toBe(8);
+    expect(controller.upgradeBuilding(row.id)).toEqual({ ok: false, error: 'locked' });
+
+    // Reach the level → the upgrade opens and adds households without a new tile.
+    setLevel(controller, 8);
+    expect(controller.getUpgradeInfo(row.id).lockedUntilLevel).toBeUndefined();
+    expect(controller.upgradeBuilding(row.id)).toEqual({ ok: true });
+    controller.update(T0 + 130_000 + 260_000); // upgrade construction (240s)
+    expect(controller.derived.capacity.housing).toBe(72); // 18 units × 4, same footprint
+  });
+
+  it('lets the town hall be upgraded into a prestige centre (bigger central store)', () => {
+    const { controller } = newController();
+    const townHall = controller.state.buildings['b_townhall']!;
+    const before = controller.derived.storageCaps.wood;
+    setLevel(controller, 5);
+    controller.state.resources.money = 500_000;
+    controller.state.resources.wood = 500;
+    controller.state.resources.stone = 500;
+    expect(controller.upgradeBuilding(townHall.id)).toEqual({ ok: true });
+    controller.update(T0 + 200_000); // prestige rebuild (180s)
+    expect(controller.derived.storageCaps.wood).toBeGreaterThan(before); // 400 → 700
+  });
+});
+
 describe('generic coverage overlay (§1)', () => {
   it('tags homes as supplied, redundant or unsupplied around water sources', () => {
     const { controller } = newController();

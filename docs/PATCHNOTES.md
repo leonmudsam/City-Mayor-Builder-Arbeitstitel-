@@ -1,5 +1,72 @@
 # Patch Notes
 
+## v0.17 — „Ausbaupfade & begrenzte Welt: das Zentrum wächst in die Höhe"
+
+Wachstum passiert ab jetzt nicht mehr nur durch Ausbreitung, sondern durch
+**Verdichtung**: Gebäude lassen sich über viele Stufen ausbauen, das Zentrum
+entwickelt sich sichtbar in die Höhe, und die Welt ist von Anfang an als
+**große, begrenzte Karte mit allen Biomen** sichtbar. Alles über die bestehenden
+generischen Systeme (Effekte, Level-Gate, Coverage) — keine Parallel-Logik.
+
+### Viele neue Ausbaustufen — Verdichten schlägt Zubauen (Items 1–4, 6, 7)
+
+- **Wohngebäude** bekommen echte Ausbaupfade auf demselben Grundstück:
+  - **Kleines Haus** → Haus → Doppelhaus → **Stadthaus** (1 → 4 Haushalte)
+  - **Reihenhaus** → erweitert → **Wohnzeile** (12 → 26 Haushalte)
+  - **Apartmenthaus** → groß → **Wohnkomplex** (90 → 200 Haushalte)
+  - **Wohnturm** → **Hochhaus** → **Wolkenkratzer** (360 → 720 Haushalte,
+    ~3.600 Einwohner auf einem Turm)
+- Ausbauen ist **pro Fläche wertvoller als neu bauen**: ein aufgestockter Turm
+  bringt mehr Einwohner pro Tile als ein zweiter Turm auf neuer Fläche — der
+  eigentliche Langzeit-Motor, wenn der Platz knapp wird.
+- **Generische Ausbaustufen auch für Dienste & Wirtschaft** (alles über die
+  vorhandenen Effekte — Reichweite, Kapazität, Jobs, Lager): Brunnen, Wasserwerk,
+  Markt, Park, Bürogebäude, Lagerhaus, Feuerwehr, Polizei, Krankenhaus.
+- **Kostenkurven fürs Late-Game**: höhere Stufen kosten Millionen und bleiben
+  echte Sparziele; alle Werte in der Config.
+
+### Ausbau ist an das Level gekoppelt (Item 3)
+
+- Jede Ausbaustufe kann ein **`unlockLevel`** haben (neues, optionales
+  Config-Feld). Ein Gebäude steigt nur so hoch, wie es die Stadt „verdient" hat —
+  die Verdichtung bleibt über die gesamte Progression ein Ziel statt sofort
+  ausgereizt. Gleiches Level-Gate wie bei Gebäude-Freischaltungen, kein neues
+  System. Das Bau-Panel zeigt gesperrte Stufen als **„Ausbau ab Level X"** an.
+
+### Sichtbare Zentrums-Entwicklung & Prestige (Items 1, 8, 12)
+
+- Ausgebaute Gebäude **sehen entwickelter aus**: mit jeder Stufe wachsen ein
+  längerer Schlagschatten (Höhe von oben), ein zurückgesetzter „Turmkern" und
+  die Stufen-Pips — das Zentrum verdichtet sich sichtbar zur Skyline.
+- Das **Rathaus** ist jetzt selbst ausbaubar (Rathaus → Großes Rathaus →
+  **Prachtrathaus**): mehr Verwaltungs-Jobs, größerer Zentral-Speicher und eine
+  breitere Ansehens-Aura — ein Prestige-Meilenstein für die Gründungsstadt.
+- Ausgebaute Gebäude tragen im Info-Panel ihren **Stufen-Namen**
+  („Wolkenkratzer" statt „Wohnturm").
+
+### Konzeptwechsel: große, aber begrenzte Welt (Items 9–11)
+
+- Die Karte ist keine unendliche Open-End-Fläche mehr, sondern ein **großes,
+  endliches Spielbrett** (`worldBounds` in der Config). **Alle Biome sind ab der
+  ersten Minute sichtbar** (gesperrt/abgedunkelt) — Wald, Gebirge, Fluss,
+  **Meeresküste** im fernen Osten und Ebenen sind von Anfang an als Ziele da.
+- Sektoren bleiben **freischaltbar** wie bisher; nur jenseits der Weltgrenze
+  existiert nichts mehr und lässt sich nichts freischalten (harte Kante statt
+  endlosem Nachwachsen).
+- **Speicherstand-Migration v7 → v8**: alte (Open-End-)Spielstände werden auf
+  das begrenzte Brett gehoben — fehlende Sektoren im Weltrahmen werden ergänzt,
+  bereits freigeschaltete/bebaute Sektoren bleiben unangetastet.
+
+### Technik
+
+- `BuildingUpgradeDef` um `unlockLevel` + `nameKey` erweitert (Typen + Zod).
+- `controller.upgradeBuilding` prüft das Level; neuer `getUpgradeInfo`-Helfer als
+  einzige Quelle für die Ausbau-UI (nächste Stufe, Level-Sperre, Bezahlbarkeit).
+- `world.ts`: `isSectorInBounds`/`allWorldSectors`; Grenzen in
+  `materializeSector`/`-Neighbors`, `unlockSector`, `foundDistrict`.
+- Neue Tests: Level-Gate & Kapazitätswachstum beim Ausbau, Rathaus-Prestige,
+  harte Weltkante, v7→v8-Migration. **77 Tests grün**, Lint + Build sauber.
+
 ## v0.16 — „Großstadt-Skalierung: Reichweiten, Kapazität & echte Bevölkerung"
 
 Die Stadt wächst — jetzt skalieren die Systeme mit. Servicegebäude bekommen

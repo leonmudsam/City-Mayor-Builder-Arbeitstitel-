@@ -49,8 +49,8 @@ export function FloatingBuildingSheet() {
   if (!b || !def) return null;
 
   const effects = effectiveEffects(def, b.upgradeLevel);
-  const nextUpgrade = def.upgrades?.[b.upgradeLevel];
-  const maxLevel = def.upgrades ? def.upgrades.length : 0;
+  const upgrade = game.getUpgradeInfo(b.id);
+  const maxLevel = upgrade.maxStage;
   const bonusPct = game.derived.productionBonus[b.id] ?? 0;
   const ambience = game.derived.ambience[b.id];
   const now = game.state.meta.lastSimTime;
@@ -58,7 +58,9 @@ export function FloatingBuildingSheet() {
   const refundLabel = costLabel(refund);
   const canRelocate = game.config.features.moveBuildings || def.canRelocate === true;
   const relocateAffordable = !def.relocationCost || game.canAffordCost(def.relocationCost);
-  const upgradeAffordable = nextUpgrade ? game.canAffordCost(nextUpgrade.cost) : false;
+  // A building that has been upgraded reads by its stage name (§ prestige/visual
+  // development): "Wolkenkratzer", not "Wohnturm".
+  const stageNameKey = b.upgradeLevel > 0 ? (def.upgrades?.[b.upgradeLevel - 1]?.nameKey ?? def.nameKey) : def.nameKey;
   const close = () => selectBuilding(undefined);
 
   return (
@@ -67,7 +69,7 @@ export function FloatingBuildingSheet() {
         <div className="floating-sheet-head">
           <h3>
             <Building2 size={17} />
-            {t(def.nameKey)}
+            {t(stageNameKey)}
             {maxLevel > 0 && (
               <span className="level-pips" title={`${t('ui.building_level')} ${b.upgradeLevel + 1}/${maxLevel + 1}`}>
                 {Array.from({ length: maxLevel + 1 }, (_, i) => (
@@ -119,17 +121,28 @@ export function FloatingBuildingSheet() {
         </ul>
 
         <div className="action-bubbles">
-          {nextUpgrade && b.status === 'active' && (
-            <ActionBubble
-              icon={<ArrowUp size={18} />}
-              label={`${t('ui.upgrade')} · ${costLabel(nextUpgrade.cost)}`}
-              tone="primary"
-              disabled={!upgradeAffordable}
-              onClick={() => {
-                const result = game.upgradeBuilding(b.id);
-                if (!result.ok) pushToast(t(`error.${result.error}`), 'error');
-              }}
-            />
+          {upgrade.next && b.status === 'active' && (
+            upgrade.lockedUntilLevel !== undefined ? (
+              // The stage exists but the city is too low a level (§ level-coupled
+              // densification): show why, don't just hide it.
+              <ActionBubble
+                icon={<ArrowUp size={18} />}
+                label={t('ui.upgrade_locked', { level: upgrade.lockedUntilLevel })}
+                disabled
+                onClick={() => {}}
+              />
+            ) : (
+              <ActionBubble
+                icon={<ArrowUp size={18} />}
+                label={`${upgrade.next.nameKey ? t('ui.upgrade_to', { name: t(upgrade.next.nameKey) }) : t('ui.upgrade')} · ${costLabel(upgrade.next.cost)}`}
+                tone="primary"
+                disabled={!upgrade.affordable}
+                onClick={() => {
+                  const result = game.upgradeBuilding(b.id);
+                  if (!result.ok) pushToast(t(`error.${result.error}`), 'error');
+                }}
+              />
+            )
           )}
           {canRelocate && (
             <ActionBubble

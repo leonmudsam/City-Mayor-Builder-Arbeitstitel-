@@ -9,6 +9,16 @@ export const SECTOR_SIZE = 16;
 export const startRegionConfig = {
   /** Sector-grid extents of the initially materialized region. */
   sectors: { minSx: 0, minSy: 0, maxSx: 3, maxSy: 3 },
+  /**
+   * Hard edges of the world (§ bounded world). Unlike the open-end model, the
+   * map is a large but *finite* board: every sector inside these bounds exists
+   * and is visible from the first minute (locked/dimmed until unlocked), so all
+   * biomes — forest, mountains, river, coast, plains — are on show as goals from
+   * the start, and nothing can be unlocked beyond the edge. The bounds are wider
+   * than the hand-designed start region: the extra eastern columns hold the coast
+   * and the southern row more plains, giving room for every biome to read.
+   */
+  worldBounds: { minSx: 0, minSy: 0, maxSx: 5, maxSy: 4 },
   startSector: { sx: 1, sy: 1 },
   townHall: { x: 23, y: 23 }, // world tile coords (3×3 footprint)
   /** Pre-placed road tiles below the town hall so the tutorial has an anchor. */
@@ -36,6 +46,12 @@ export const lakeConfig = { cx: 10, cy: 42, rx: 4.2, ry: 3.2 };
  * so expansion beyond the start region keeps a coherent landscape (open end).
  */
 export function terrainAt(x: number, y: number): TerrainType {
+  // Eastern sea: the far-east coast biome (§ bounded world, all biomes on show).
+  // A sandy beach gives way to open water at the world's east edge — the seaside
+  // district goal (harbour/beach in a later MVP).
+  if (x >= 85) return 'water';
+  if (x >= 81) return 'sand';
+
   // River: vertical band around x = 57 with a gentle meander.
   const riverCenter = 57 + Math.round(Math.sin(y / 9) * 2);
   if (x >= riverCenter - 1 && x <= riverCenter + 1) return 'river';
@@ -46,9 +62,12 @@ export function terrainAt(x: number, y: number): TerrainType {
   if (lakeDist <= 1) return 'water';
   if (lakeDist <= 1.35) return 'sand';
 
-  // Mountain ridge on the western edge (quarry location bonus target).
+  // Mountains on the western edge (quarry location bonus target), widened into a
+  // visible alpine wall along the far-west column so the mountain biome reads as
+  // a real region from the start (§ all biomes visible).
   const ridgeDist = Math.hypot((x - 3) / 3.2, (y - 28) / 6.5);
   if (ridgeDist <= 1 && tileHash(x * 3, y * 5) > 0.15) return 'mountain';
+  if (x <= 2 && tileHash(x * 5, y * 7) > 0.35) return 'mountain';
 
   // Forest: northern band, thinning toward the south.
   if (y < 12 && tileHash(x, y) > 0.15) return 'forest';

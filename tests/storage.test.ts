@@ -39,7 +39,7 @@ describe('save/load', () => {
 
     const woodBefore = raw.resources.wood as number;
     const migrated = migrateAndValidate(raw);
-    expect(migrated.schemaVersion).toBe(7);
+    expect(migrated.schemaVersion).toBe(8);
     expect(migrated.resources.wood).toBe(woodBefore + 25);
     expect(migrated.stats.produced.wood).toBe(12);
     expect('buffer' in migrated.buildings[sawmillId]!).toBe(false);
@@ -54,7 +54,7 @@ describe('save/load', () => {
     raw.resources.money = 500;
     /* eslint-enable @typescript-eslint/no-explicit-any */
     const migrated = migrateAndValidate(raw);
-    expect(migrated.schemaVersion).toBe(7);
+    expect(migrated.schemaVersion).toBe(8);
     expect(migrated.resources.money).toBe(50_000); // ×100 rescale
   });
 
@@ -68,7 +68,7 @@ describe('save/load', () => {
     delete raw.citizens.needs.health;
     /* eslint-enable @typescript-eslint/no-explicit-any */
     const migrated = migrateAndValidate(raw);
-    expect(migrated.schemaVersion).toBe(7);
+    expect(migrated.schemaVersion).toBe(8);
     expect(migrated.citizens.needs.energy).toEqual({ supply: 0, demand: 0, fulfillment: 1 });
     expect(migrated.citizens.needs.safety).toEqual({ supply: 0, demand: 0, fulfillment: 1 });
     expect(migrated.citizens.needs.health).toEqual({ supply: 0, demand: 0, fulfillment: 1 });
@@ -82,7 +82,7 @@ describe('save/load', () => {
     delete raw.policy; // v5 saves predate the tax sliders
     /* eslint-enable @typescript-eslint/no-explicit-any */
     const migrated = migrateAndValidate(raw);
-    expect(migrated.schemaVersion).toBe(7);
+    expect(migrated.schemaVersion).toBe(8);
     expect(migrated.policy).toEqual({ residentialTaxRate: 1, commercialTaxRate: 1 });
   });
 
@@ -96,9 +96,31 @@ describe('save/load', () => {
     delete raw.stats.produced.freshwater;
     /* eslint-enable @typescript-eslint/no-explicit-any */
     const migrated = migrateAndValidate(raw);
-    expect(migrated.schemaVersion).toBe(7);
+    expect(migrated.schemaVersion).toBe(8);
     expect(migrated.resources.freshwater).toBe(0);
     expect(migrated.citizens.needs.freshwater).toEqual({ supply: 0, demand: 0, fulfillment: 1 });
     expect(migrated.stats.produced.freshwater).toBe(0);
+  });
+
+  it('migrates v7 saves by filling in the bounded world (all biomes visible)', () => {
+    const { controller } = newController();
+    /* eslint-disable @typescript-eslint/no-explicit-any -- crafting a sparse v7 raw save */
+    const raw = JSON.parse(exportSave(controller.state)) as Record<string, any>;
+    raw.schemaVersion = 7;
+    // A v7 (open-end) save only ever materialized what the player explored: keep
+    // just the start sector, drop the rest so migration must re-fill the board.
+    raw.world.sectors = { '1:1': raw.world.sectors['1:1'] };
+    const startBuildings = raw.world.sectors['1:1'].tiles.filter((t: any) => t.buildingId).length;
+    /* eslint-enable @typescript-eslint/no-explicit-any */
+    const migrated = migrateAndValidate(raw);
+    expect(migrated.schemaVersion).toBe(8);
+    // Every in-bounds sector (6×5) now exists and is visible from the start…
+    expect(Object.keys(migrated.world.sectors).length).toBe(30);
+    // …the start sector is preserved (still unlocked, still holds its buildings)…
+    expect(migrated.world.sectors['1:1']!.status).toBe('unlocked');
+    expect(migrated.world.sectors['1:1']!.tiles.filter((t) => t.buildingId).length).toBe(startBuildings);
+    // …the rest are locked, and far biomes (the eastern sea) are on show.
+    expect(migrated.world.sectors['0:0']!.status).toBe('locked');
+    expect(migrated.world.sectors['5:2']!.tiles.some((t) => t.terrain === 'water')).toBe(true);
   });
 });

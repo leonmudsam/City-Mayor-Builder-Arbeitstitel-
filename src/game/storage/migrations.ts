@@ -1,6 +1,6 @@
 import { SCHEMA_VERSION } from '../newGame.ts';
 import { saveGameSchema } from '../config/schemas.ts';
-import { SECTOR_SIZE, terrainAt } from '../config/startRegion.config.ts';
+import { SECTOR_SIZE, startRegionConfig, terrainAt } from '../config/startRegion.config.ts';
 import type { SaveGame } from '../types.ts';
 
 type Migration = (raw: Record<string, unknown>) => Record<string, unknown>;
@@ -87,6 +87,30 @@ const migrations: Record<number, Migration> = {
     const produced = { ...((stats.produced as Record<string, number>) ?? {}) };
     produced.freshwater ??= 0;
     return { ...raw, schemaVersion: 7, resources, citizens: { ...citizens, needs }, stats: { ...stats, produced } };
+  },
+  // v7 → v8: the world became a large but *bounded* board (§ bounded world). Fill
+  // in every in-bounds sector an old (open-end) save never materialized, as
+  // locked/visible, so all biomes now show from the start. Existing sectors —
+  // including anything the player already unlocked or built beyond the new bounds
+  // — are kept untouched; only missing in-bounds sectors are added.
+  7: (raw) => {
+    const world = { ...(raw.world as { sectors: Record<string, unknown>; districts: unknown }) };
+    const sectors = { ...(world.sectors as Record<string, unknown>) };
+    const { minSx, minSy, maxSx, maxSy } = startRegionConfig.worldBounds;
+    for (let sy = minSy; sy <= maxSy; sy++) {
+      for (let sx = minSx; sx <= maxSx; sx++) {
+        const id = `${sx}:${sy}`;
+        if (sectors[id]) continue;
+        const tiles: { terrain: string }[] = [];
+        for (let ly = 0; ly < SECTOR_SIZE; ly++) {
+          for (let lx = 0; lx < SECTOR_SIZE; lx++) {
+            tiles.push({ terrain: terrainAt(sx * SECTOR_SIZE + lx, sy * SECTOR_SIZE + ly) });
+          }
+        }
+        sectors[id] = { id, sx, sy, districtId: 'main', status: 'locked', tiles };
+      }
+    }
+    return { ...raw, schemaVersion: 8, world: { ...world, sectors } };
   },
 };
 

@@ -3,12 +3,16 @@ import { newController } from './helpers.ts';
 import { sectorId } from '../src/game/types.ts';
 
 describe('new game', () => {
-  it('materializes the 4×4 start region with one unlocked sector', () => {
+  it('materializes the whole bounded world with one unlocked sector', () => {
     const { controller } = newController();
     const sectors = Object.values(controller.state.world.sectors);
-    expect(sectors.length).toBe(16);
+    // The finite board (6×5 sectors) is fully materialized and visible from the
+    // start (§ bounded world), with only the start sector unlocked.
+    expect(sectors.length).toBe(30);
     expect(sectors.filter((s) => s.status === 'unlocked').length).toBe(1);
     expect(controller.state.world.sectors[sectorId(1, 1)]?.status).toBe('unlocked');
+    // Far biomes are on show as goals: the eastern coast has open water.
+    expect(controller.state.world.sectors[sectorId(5, 2)]?.tiles.some((t) => t.terrain === 'water')).toBe(true);
   });
 
   it('pre-places the town hall as district center with connected roads', () => {

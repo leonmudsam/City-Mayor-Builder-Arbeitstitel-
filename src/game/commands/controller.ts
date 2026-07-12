@@ -1,4 +1,5 @@
 import type { GameConfig } from '../config/index.ts';
+import type { BuildingUpgradeDef } from '../config/types.ts';
 import type { GameState, ResourceId, SectorId } from '../types.ts';
 import { parseSectorId, sectorId } from '../types.ts';
 import { recomputeDerived, type Derived } from '../simulation/derived.ts';
@@ -14,6 +15,7 @@ import { addXp } from '../progression/levels.ts';
 import {
   findDistrictCenterSpot,
   isSectorAdjacentToUnlocked,
+  isSectorInBounds,
   materializeNeighbors,
   materializeSector,
   sectorHasTerrain,
@@ -162,6 +164,9 @@ export class GameController {
     if (!def?.upgrades || b.status !== 'active') return fail('invalid');
     const next = def.upgrades[b.upgradeLevel];
     if (!next) return fail('invalid');
+    // Level-coupled densification (§ upgrades tied to level): a building only
+    // climbs to the tier its city has earned.
+    if (next.unlockLevel && this.state.level.current < next.unlockLevel) return fail('locked');
     const spend = spendCost(this.state, next.cost, `upgrade_${b.defId}`);
     if (!spend.ok) return fail('insufficient');
     b.upgradeLevel += 1;
@@ -169,6 +174,35 @@ export class GameController {
     b.constructionEndsAt = this.state.meta.lastSimTime + next.constructionSec * 1000;
     this.afterStructuralChange();
     return ok;
+  }
+
+  /**
+   * The next upgrade stage of a building and why it is (not) available — the
+   * single source the sheet uses so the "why can't I upgrade" messaging matches
+   * the command exactly (§ helpful UI). `lockedUntilLevel` is set when the stage
+   * exists but the city is too low a level; `affordable` reflects current funds.
+   */
+  getUpgradeInfo(buildingId: string): {
+    next?: BuildingUpgradeDef;
+    stage: number;
+    maxStage: number;
+    lockedUntilLevel?: number;
+    affordable: boolean;
+  } {
+    const b = this.state.buildings[buildingId];
+    const def = b && this.config.buildings.get(b.defId);
+    if (!b || !def) return { stage: 0, maxStage: 0, affordable: false };
+    const maxStage = def.upgrades?.length ?? 0;
+    const next = def.upgrades?.[b.upgradeLevel];
+    if (!next) return { stage: b.upgradeLevel, maxStage, affordable: false };
+    const locked = next.unlockLevel && this.state.level.current < next.unlockLevel;
+    return {
+      next,
+      stage: b.upgradeLevel,
+      maxStage,
+      ...(locked ? { lockedUntilLevel: next.unlockLevel } : {}),
+      affordable: canAfford(this.state, next.cost),
+    };
   }
 
   /**
@@ -218,6 +252,7 @@ export class GameController {
   unlockSector(id: SectorId): CommandResult {
     if (this.state.level.current < 5) return fail('locked'); // expansion unlocks at level 5 (§7)
     const { sx, sy } = parseSectorId(id);
+    if (!isSectorInBounds(sx, sy)) return fail('invalid'); // no unlocking past the world edge
     const sector = this.state.world.sectors[id] ?? materializeSector(this.state, sx, sy);
     if (sector.status === 'unlocked') return fail('invalid');
     if (!isSectorAdjacentToUnlocked(this.state, sx, sy)) return fail('invalid');
@@ -248,6 +283,7 @@ export class GameController {
     const bal = this.config.balancing;
     if (this.state.level.current < bal.districtUnlockLevel) return fail('locked');
     const { sx, sy } = parseSectorId(id);
+    if (!isSectorInBounds(sx, sy)) return fail('invalid'); // no district past the world edge
     const sector = this.state.world.sectors[id] ?? materializeSector(this.state, sx, sy);
     if (sector.status === 'unlocked') return fail('invalid');
     if (!sectorHasTerrain(sector, 'river')) return fail('invalid'); // must be the river biome
