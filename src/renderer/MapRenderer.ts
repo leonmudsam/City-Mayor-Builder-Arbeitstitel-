@@ -638,16 +638,36 @@ export class MapRenderer {
     }
   }
 
-  /** Non-road structure with visible upgrade level (roof band + level pips). */
+  /**
+   * Non-road structure with a visible upgrade stage (§ visual center growth). As
+   * a building climbs stages it looks taller and more developed: a deepening
+   * drop shadow fakes height top-down, a setback "core" reads as a rising tower,
+   * and a row of pips counts the stage. The centre visibly densifies over time.
+   */
   private drawStructure(g: Graphics, def: BuildingDef, b: BuildingInstance, w: number, h: number): void {
     const base = CATEGORY_COLORS[def.category];
+    const lvl = b.upgradeLevel;
+    // A taller building casts a longer shadow — the cheap way to a skyline read
+    // in a top-down view. The offset grows with each stage.
+    if (lvl > 0) {
+      const off = 1.5 + lvl * 1.75;
+      g.roundRect(2 + off, 2 + off, w - 4, h - 4, 6).fill({ color: 0x000000, alpha: 0.22 });
+    }
     g.roundRect(2, 2, w - 4, h - 4, 6).fill(base);
-    // Higher levels get a deeper roof band and a darker outline: upgraded
-    // buildings must be recognizable at a glance.
-    const roofH = Math.max(6, h / 4 + b.upgradeLevel * 3);
-    g.roundRect(2, 2, w - 4, roofH, 6).fill({ color: 0xffffff, alpha: 0.18 + b.upgradeLevel * 0.08 });
-    g.roundRect(2, 2, w - 4, h - 4, 6).stroke({ width: 1.5 + b.upgradeLevel * 0.75, color: 0x000000, alpha: 0.25 + b.upgradeLevel * 0.1 });
-    for (let i = 0; i < b.upgradeLevel; i++) {
+    // Higher levels get a deeper roof band and a darker outline.
+    const roofH = Math.max(6, h / 4 + lvl * 3);
+    g.roundRect(2, 2, w - 4, roofH, 6).fill({ color: 0xffffff, alpha: 0.18 + lvl * 0.08 });
+    // A rising, set-back core: each stage adds a brighter inner block, so an
+    // upgraded tower reads as height stacked toward its centre.
+    for (let s = 1; s <= lvl; s++) {
+      const inset = 2 + s * (Math.min(w, h) / (lvl + 3));
+      const iw = w - 2 * inset;
+      const ih = h - 2 * inset;
+      if (iw < 4 || ih < 4) break;
+      g.roundRect(inset, inset, iw, ih, 4).fill({ color: 0xffffff, alpha: 0.1 + s * 0.05 });
+    }
+    g.roundRect(2, 2, w - 4, h - 4, 6).stroke({ width: 1.5 + lvl * 0.75, color: 0x000000, alpha: 0.25 + lvl * 0.1 });
+    for (let i = 0; i < lvl; i++) {
       g.roundRect(5 + i * 8, 5, 6, 6, 2).fill(0xffffff).stroke({ width: 1, color: 0x000000, alpha: 0.35 });
     }
   }

@@ -9,6 +9,26 @@ export function worldToSector(x: number, y: number): { sx: number; sy: number } 
   return { sx: Math.floor(x / SECTOR_SIZE), sy: Math.floor(y / SECTOR_SIZE) };
 }
 
+/**
+ * Whether a sector lies inside the finite world (§ bounded world). The map is a
+ * large but hard-edged board: sectors outside these bounds are never
+ * materialized, never rendered and can never be unlocked — there is no open end.
+ */
+export function isSectorInBounds(sx: number, sy: number): boolean {
+  const { minSx, minSy, maxSx, maxSy } = startRegionConfig.worldBounds;
+  return sx >= minSx && sx <= maxSx && sy >= minSy && sy <= maxSy;
+}
+
+/** All in-bounds sector coordinates (§ bounded world, used to fill the board). */
+export function allWorldSectors(): { sx: number; sy: number }[] {
+  const { minSx, minSy, maxSx, maxSy } = startRegionConfig.worldBounds;
+  const out: { sx: number; sy: number }[] = [];
+  for (let sy = minSy; sy <= maxSy; sy++) {
+    for (let sx = minSx; sx <= maxSx; sx++) out.push({ sx, sy });
+  }
+  return out;
+}
+
 export function tileAt(state: GameState, x: number, y: number): TileState | undefined {
   const { sx, sy } = worldToSector(x, y);
   const sector = state.world.sectors[sectorId(sx, sy)];
@@ -23,7 +43,13 @@ export function sectorOfTile(state: GameState, x: number, y: number): SectorStat
   return state.world.sectors[sectorId(sx, sy)];
 }
 
-/** Creates (locked) sector data from the world terrain function — open end. */
+/**
+ * Creates (locked) sector data from the world terrain function. Sectors outside
+ * the world bounds are never created — the board is finite (§ bounded world).
+ * Callers that might reach the edge must guard with `isSectorInBounds`; this
+ * still returns a (transient) sector for an out-of-bounds request so internal
+ * lookups stay total, but it is not stored.
+ */
 export function materializeSector(state: GameState, sx: number, sy: number): SectorState {
   const id = sectorId(sx, sy);
   const existing = state.world.sectors[id];
@@ -35,15 +61,16 @@ export function materializeSector(state: GameState, sx: number, sy: number): Sec
     }
   }
   const sector: SectorState = { id, sx, sy, districtId: 'main', status: 'locked', tiles };
-  state.world.sectors[id] = sector;
+  // Only in-bounds sectors are persisted; the edge is hard (§ bounded world).
+  if (isSectorInBounds(sx, sy)) state.world.sectors[id] = sector;
   return sector;
 }
 
-/** Ensure all 8 neighbors of an unlocked sector exist (visible locked ring). */
+/** Ensure the 8 in-bounds neighbors of a sector exist (visible locked ring). */
 export function materializeNeighbors(state: GameState, sx: number, sy: number): void {
   for (let dy = -1; dy <= 1; dy++) {
     for (let dx = -1; dx <= 1; dx++) {
-      if (dx !== 0 || dy !== 0) materializeSector(state, sx + dx, sy + dy);
+      if ((dx !== 0 || dy !== 0) && isSectorInBounds(sx + dx, sy + dy)) materializeSector(state, sx + dx, sy + dy);
     }
   }
 }

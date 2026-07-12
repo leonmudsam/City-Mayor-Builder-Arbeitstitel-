@@ -47,7 +47,7 @@ export const buildingDefSchema = z.object({
   xpReward: z.number().nonnegative(),
   effects: z.array(buildingEffect),
   upgrades: z
-    .array(z.object({ cost: z.record(resourceId, z.number().nonnegative()), constructionSec: z.number().nonnegative(), effects: z.array(buildingEffect), xpReward: z.number().nonnegative() }))
+    .array(z.object({ cost: z.record(resourceId, z.number().nonnegative()), constructionSec: z.number().nonnegative(), effects: z.array(buildingEffect), xpReward: z.number().nonnegative(), unlockLevel: z.number().int().min(1).optional(), nameKey: z.string().optional() }))
     .optional(),
   locationBonus: z
     .object({ terrain: terrainType, radius: z.number().positive(), perTilePct: z.number().positive(), maxPct: z.number().positive() })

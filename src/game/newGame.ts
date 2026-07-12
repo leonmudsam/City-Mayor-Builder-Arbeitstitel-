@@ -2,9 +2,9 @@ import type { GameConfig } from './config/index.ts';
 import { startRegionConfig } from './config/startRegion.config.ts';
 import type { GameState } from './types.ts';
 import { sectorId } from './types.ts';
-import { materializeSector, tileAt } from './map/world.ts';
+import { allWorldSectors, materializeSector, tileAt } from './map/world.ts';
 
-export const SCHEMA_VERSION = 7;
+export const SCHEMA_VERSION = 8;
 
 export function createNewGame(config: GameConfig, cityName: string, now: number): GameState {
   const state: GameState = {
@@ -41,13 +41,11 @@ export function createNewGame(config: GameConfig, cityName: string, now: number)
     nextId: 0,
   };
 
-  // Materialize the hand-designed start region (§8).
-  const { minSx, minSy, maxSx, maxSy } = startRegionConfig.sectors;
-  for (let sy = minSy; sy <= maxSy; sy++) {
-    for (let sx = minSx; sx <= maxSx; sx++) {
-      materializeSector(state, sx, sy);
-    }
-  }
+  // Materialize the whole finite world up front (§ bounded world): every sector
+  // inside the bounds exists and is visible (locked/dimmed) from the first
+  // minute, so all biomes are on show as goals. Only the start sector is
+  // unlocked. The board is large but hard-edged — there is no open end.
+  for (const { sx, sy } of allWorldSectors()) materializeSector(state, sx, sy);
   const start = startRegionConfig.startSector;
   const startSector = state.world.sectors[sectorId(start.sx, start.sy)];
   if (startSector) startSector.status = 'unlocked';

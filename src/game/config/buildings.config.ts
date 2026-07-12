@@ -32,6 +32,54 @@ export const buildingsConfig: BuildingDef[] = [
       // (§9), reusing the same ambience → happiness path as parks/zoning.
       { type: 'ambience', amount: 2, radius: 3 },
     ],
+    // Prestige stages (§ center prestige): the town hall is the heart of the
+    // start city, and upgrading it — more civic jobs, a bigger central store and
+    // a wider pride aura — is a long-term milestone that visibly grows the centre
+    // rather than a bare number tweak. Level-gated and increasingly costly.
+    upgrades: [
+      {
+        cost: { money: 120_000, wood: 120, stone: 120 },
+        constructionSec: 180,
+        xpReward: 60,
+        unlockLevel: 5,
+        nameKey: 'building.town_hall.2',
+        effects: [
+          { type: 'jobs', amount: 12 },
+          { type: 'storage', resource: 'wood', amount: 700 },
+          { type: 'storage', resource: 'stone', amount: 700 },
+          { type: 'storage', resource: 'food', amount: 700 },
+          { type: 'ambience', amount: 3, radius: 4 },
+        ],
+      },
+      {
+        cost: { money: 500_000, wood: 260, stone: 320 },
+        constructionSec: 360,
+        xpReward: 140,
+        unlockLevel: 9,
+        nameKey: 'building.town_hall.3',
+        effects: [
+          { type: 'jobs', amount: 24 },
+          { type: 'storage', resource: 'wood', amount: 1_100 },
+          { type: 'storage', resource: 'stone', amount: 1_100 },
+          { type: 'storage', resource: 'food', amount: 1_100 },
+          { type: 'ambience', amount: 4, radius: 5 },
+        ],
+      },
+      {
+        cost: { money: 1_500_000, wood: 500, stone: 700 },
+        constructionSec: 600,
+        xpReward: 300,
+        unlockLevel: 13,
+        nameKey: 'building.town_hall.4',
+        effects: [
+          { type: 'jobs', amount: 40 },
+          { type: 'storage', resource: 'wood', amount: 1_600 },
+          { type: 'storage', resource: 'stone', amount: 1_600 },
+          { type: 'storage', resource: 'food', amount: 1_600 },
+          { type: 'ambience', amount: 5, radius: 6 },
+        ],
+      },
+    ],
   },
   {
     id: 'mayor_house',
@@ -113,11 +161,16 @@ export const buildingsConfig: BuildingDef[] = [
       // gently nets out the per-capita tax without hurting the early game.
       { type: 'upkeep', resource: 'money', perMinute: 35 },
     ],
+    // Densification path (§ upgrades > spam): each stage adds households on the
+    // same footprint, gated behind a city level and a steep price, so improving
+    // a home beats sprawling new ones — and the house visibly grows (renderer).
     upgrades: [
       {
         cost: { money: 30_000, wood: 50, stone: 20 },
         constructionSec: 90,
         xpReward: 18,
+        unlockLevel: 2,
+        nameKey: 'building.house_small.2',
         effects: [
           { type: 'housing', units: 2, minResidentsPerUnit: 2, maxResidentsPerUnit: 5, ambienceSensitivity: 1.4 },
           { type: 'demand', need: 'water', amount: 8 },
@@ -128,10 +181,26 @@ export const buildingsConfig: BuildingDef[] = [
         cost: { money: 85_000, wood: 110, stone: 80 },
         constructionSec: 240,
         xpReward: 30,
+        unlockLevel: 4,
+        nameKey: 'building.house_small.3',
         effects: [
           { type: 'housing', units: 3, minResidentsPerUnit: 2, maxResidentsPerUnit: 6, ambienceSensitivity: 1.3 },
           { type: 'demand', need: 'water', amount: 14 },
           { type: 'upkeep', resource: 'money', perMinute: 105 },
+        ],
+      },
+      // Town house — the single-family lot at its densest, a small four-household
+      // block. A real mid-game money goal (§ expensive long-term curve).
+      {
+        cost: { money: 210_000, wood: 170, stone: 150 },
+        constructionSec: 300,
+        xpReward: 46,
+        unlockLevel: 7,
+        nameKey: 'building.house_small.4',
+        effects: [
+          { type: 'housing', units: 4, minResidentsPerUnit: 3, maxResidentsPerUnit: 6, ambienceSensitivity: 1.2 },
+          { type: 'demand', need: 'water', amount: 22 },
+          { type: 'upkeep', resource: 'money', perMinute: 150 },
         ],
       },
     ],
@@ -156,6 +225,34 @@ export const buildingsConfig: BuildingDef[] = [
       { type: 'demand', need: 'energy', amount: 16 },
       { type: 'upkeep', resource: 'money', perMinute: 260 },
     ],
+    upgrades: [
+      {
+        cost: { money: 180_000, wood: 180, stone: 120 },
+        constructionSec: 240,
+        xpReward: 20,
+        unlockLevel: 8,
+        nameKey: 'building.house_row.2',
+        effects: [
+          { type: 'housing', units: 18, minResidentsPerUnit: 3, maxResidentsPerUnit: 4, ambienceSensitivity: 1.0 },
+          { type: 'demand', need: 'water', amount: 52 },
+          { type: 'demand', need: 'energy', amount: 26 },
+          { type: 'upkeep', resource: 'money', perMinute: 400 },
+        ],
+      },
+      {
+        cost: { money: 420_000, wood: 280, stone: 220 },
+        constructionSec: 360,
+        xpReward: 32,
+        unlockLevel: 11,
+        nameKey: 'building.house_row.3',
+        effects: [
+          { type: 'housing', units: 26, minResidentsPerUnit: 3, maxResidentsPerUnit: 4, ambienceSensitivity: 0.95 },
+          { type: 'demand', need: 'water', amount: 76 },
+          { type: 'demand', need: 'energy', amount: 40 },
+          { type: 'upkeep', resource: 'money', perMinute: 600 },
+        ],
+      },
+    ],
   },
   // Apartment — high density, many units, heavy infrastructure demand; without
   // parks its neighborhood quality suffers (§7).
@@ -176,6 +273,34 @@ export const buildingsConfig: BuildingDef[] = [
       { type: 'demand', need: 'water', amount: 210 },
       { type: 'demand', need: 'energy', amount: 140 },
       { type: 'upkeep', resource: 'money', perMinute: 2_600 },
+    ],
+    upgrades: [
+      {
+        cost: { money: 700_000, wood: 360, stone: 500 },
+        constructionSec: 420,
+        xpReward: 40,
+        unlockLevel: 11,
+        nameKey: 'building.apartment.2',
+        effects: [
+          { type: 'housing', units: 140, minResidentsPerUnit: 3, maxResidentsPerUnit: 4, ambienceSensitivity: 1.15 },
+          { type: 'demand', need: 'water', amount: 330 },
+          { type: 'demand', need: 'energy', amount: 220 },
+          { type: 'upkeep', resource: 'money', perMinute: 4_200 },
+        ],
+      },
+      {
+        cost: { money: 1_500_000, wood: 520, stone: 760 },
+        constructionSec: 540,
+        xpReward: 60,
+        unlockLevel: 13,
+        nameKey: 'building.apartment.3',
+        effects: [
+          { type: 'housing', units: 200, minResidentsPerUnit: 3, maxResidentsPerUnit: 4, ambienceSensitivity: 1.1 },
+          { type: 'demand', need: 'water', amount: 470 },
+          { type: 'demand', need: 'energy', amount: 320 },
+          { type: 'upkeep', resource: 'money', perMinute: 6_200 },
+        ],
+      },
     ],
   },
   // Residential tower — the density endgame (MVP 2): a 3×3 high-rise housing
@@ -199,6 +324,37 @@ export const buildingsConfig: BuildingDef[] = [
       { type: 'demand', need: 'water', amount: 900 },
       { type: 'demand', need: 'energy', amount: 560 },
       { type: 'upkeep', resource: 'money', perMinute: 7_200 },
+    ],
+    // The skyline endgame (§ visual center growth): two more stages take the
+    // tower into genuine high-rise territory, each a multi-million project gated
+    // to the very top levels — the long-term "densify the centre" motor.
+    upgrades: [
+      {
+        cost: { money: 2_400_000, wood: 600, stone: 1_100 },
+        constructionSec: 600,
+        xpReward: 70,
+        unlockLevel: 13,
+        nameKey: 'building.residential_tower.2',
+        effects: [
+          { type: 'housing', units: 520, minResidentsPerUnit: 3, maxResidentsPerUnit: 5, ambienceSensitivity: 1.3 },
+          { type: 'demand', need: 'water', amount: 1_300 },
+          { type: 'demand', need: 'energy', amount: 820 },
+          { type: 'upkeep', resource: 'money', perMinute: 10_500 },
+        ],
+      },
+      {
+        cost: { money: 5_000_000, wood: 900, stone: 1_800 },
+        constructionSec: 720,
+        xpReward: 110,
+        unlockLevel: 14,
+        nameKey: 'building.residential_tower.3',
+        effects: [
+          { type: 'housing', units: 720, minResidentsPerUnit: 3, maxResidentsPerUnit: 5, ambienceSensitivity: 1.35 },
+          { type: 'demand', need: 'water', amount: 1_820 },
+          { type: 'demand', need: 'energy', amount: 1_150 },
+          { type: 'upkeep', resource: 'money', perMinute: 14_800 },
+        ],
+      },
     ],
   },
 
@@ -285,6 +441,21 @@ export const buildingsConfig: BuildingDef[] = [
       { type: 'capacity', need: 'water', amount: 200, radius: 9 },
       { type: 'upkeep', resource: 'money', perMinute: 100 },
     ],
+    // Deepen the well: more capacity and a little more reach for a growing
+    // neighbourhood, without a second structure taking a tile.
+    upgrades: [
+      {
+        cost: { money: 22_000, wood: 30, stone: 20 },
+        constructionSec: 60,
+        xpReward: 16,
+        unlockLevel: 6,
+        nameKey: 'building.well.2',
+        effects: [
+          { type: 'capacity', need: 'water', amount: 380, radius: 11 },
+          { type: 'upkeep', resource: 'money', perMinute: 170 },
+        ],
+      },
+    ],
   },
   {
     id: 'water_pump',
@@ -306,6 +477,36 @@ export const buildingsConfig: BuildingDef[] = [
       { type: 'jobs', amount: 6 },
       { type: 'upkeep', resource: 'money', perMinute: 1_600 },
       { type: 'demand', need: 'energy', amount: 30 },
+    ],
+    // Expand the waterworks: bigger capacity pool and reach so one upgraded plant
+    // serves a metropolis quarter — cheaper on land than a wall of pumps.
+    upgrades: [
+      {
+        cost: { money: 260_000, stone: 280 },
+        constructionSec: 240,
+        xpReward: 55,
+        unlockLevel: 10,
+        nameKey: 'building.water_pump.2',
+        effects: [
+          { type: 'capacity', need: 'water', amount: 5_200, radius: 20 },
+          { type: 'jobs', amount: 10 },
+          { type: 'upkeep', resource: 'money', perMinute: 2_600 },
+          { type: 'demand', need: 'energy', amount: 50 },
+        ],
+      },
+      {
+        cost: { money: 560_000, stone: 520 },
+        constructionSec: 300,
+        xpReward: 75,
+        unlockLevel: 13,
+        nameKey: 'building.water_pump.3',
+        effects: [
+          { type: 'capacity', need: 'water', amount: 8_000, radius: 22 },
+          { type: 'jobs', amount: 14 },
+          { type: 'upkeep', resource: 'money', perMinute: 3_800 },
+          { type: 'demand', need: 'energy', amount: 70 },
+        ],
+      },
     ],
     buildLimit: [{ level: 7, max: 2 }, { level: 9, max: 3 }, { level: 11, max: 5 }, { level: 13, max: 8 }],
   },
@@ -341,6 +542,26 @@ export const buildingsConfig: BuildingDef[] = [
       { type: 'jobs', amount: 2 },
       { type: 'upkeep', resource: 'money', perMinute: 300 },
       { type: 'demand', need: 'energy', amount: 4 },
+    ],
+    // Automated high-bay storage: a real capacity jump on the same footprint, the
+    // upgrade answer to the escalating cost of ever more separate warehouses (§7).
+    upgrades: [
+      {
+        cost: { money: 180_000, wood: 180, stone: 120 },
+        constructionSec: 180,
+        xpReward: 28,
+        unlockLevel: 9,
+        nameKey: 'building.warehouse.2',
+        effects: [
+          { type: 'storage', resource: 'wood', amount: 1_400 },
+          { type: 'storage', resource: 'stone', amount: 1_400 },
+          { type: 'storage', resource: 'food', amount: 5_200 },
+          { type: 'storage', resource: 'freshwater', amount: 5_200 },
+          { type: 'jobs', amount: 4 },
+          { type: 'upkeep', resource: 'money', perMinute: 520 },
+          { type: 'demand', need: 'energy', amount: 6 },
+        ],
+      },
     ],
     // Storage stays modest per building, but with pricier materials and faster
     // production the ceiling is now raised generously (max 10) so a committed,
@@ -426,6 +647,23 @@ export const buildingsConfig: BuildingDef[] = [
       { type: 'upkeep', resource: 'money', perMinute: 900 },
       { type: 'demand', need: 'energy', amount: 8 },
     ],
+    // Grow the market hall: wider delivery reach, more stalls (jobs) and takings.
+    upgrades: [
+      {
+        cost: { money: 150_000, wood: 140, stone: 80 },
+        constructionSec: 180,
+        xpReward: 55,
+        unlockLevel: 8,
+        nameKey: 'building.market.2',
+        effects: [
+          { type: 'distribution', need: 'food', radius: 18 },
+          { type: 'jobs', amount: 34 },
+          { type: 'revenue', category: 'commercial', perMinute: 3_400 },
+          { type: 'upkeep', resource: 'money', perMinute: 1_500 },
+          { type: 'demand', need: 'energy', amount: 12 },
+        ],
+      },
+    ],
     buildLimit: [{ level: 5, max: 2 }, { level: 8, max: 3 }, { level: 10, max: 4 }],
   },
   // Supermarket (MVP 2, §4): the market's bigger successor — it distributes BOTH
@@ -496,6 +734,22 @@ export const buildingsConfig: BuildingDef[] = [
       { type: 'upkeep', resource: 'money', perMinute: 1_600 },
       { type: 'demand', need: 'energy', amount: 10 },
     ],
+    // Bigger fire HQ: a wider response area covering a metropolis quarter.
+    upgrades: [
+      {
+        cost: { money: 300_000, wood: 160, stone: 220 },
+        constructionSec: 300,
+        xpReward: 90,
+        unlockLevel: 11,
+        nameKey: 'building.fire_station.2',
+        effects: [
+          { type: 'protection', hazard: 'fire', radius: 24 },
+          { type: 'jobs', amount: 24 },
+          { type: 'upkeep', resource: 'money', perMinute: 2_600 },
+          { type: 'demand', need: 'energy', amount: 14 },
+        ],
+      },
+    ],
     buildLimit: [{ level: 8, max: 2 }, { level: 10, max: 3 }, { level: 13, max: 5 }],
   },
   // Police station (MVP 2): safety coverage for the homes in range — the same
@@ -522,6 +776,23 @@ export const buildingsConfig: BuildingDef[] = [
       { type: 'upkeep', resource: 'money', perMinute: 1_800 },
       { type: 'demand', need: 'energy', amount: 12 },
     ],
+    // Police HQ: the capacity upgrade (§2) — polices far more residents in a
+    // wider beat, so a growing metropolis scales safety by upgrading, not spamming.
+    upgrades: [
+      {
+        cost: { money: 900_000, stone: 420 },
+        constructionSec: 420,
+        xpReward: 120,
+        unlockLevel: 14,
+        nameKey: 'building.police_station.2',
+        effects: [
+          { type: 'coverage', need: 'safety', radius: 18, capacity: 14_000 },
+          { type: 'jobs', amount: 46 },
+          { type: 'upkeep', resource: 'money', perMinute: 2_900 },
+          { type: 'demand', need: 'energy', amount: 18 },
+        ],
+      },
+    ],
     buildLimit: [{ level: 13, max: 2 }, { level: 15, max: 4 }],
   },
   // Hospital (MVP 2): health coverage. Bigger footprint, heavier running costs
@@ -545,6 +816,23 @@ export const buildingsConfig: BuildingDef[] = [
       { type: 'jobs', amount: 80 },
       { type: 'upkeep', resource: 'money', perMinute: 3_000 },
       { type: 'demand', need: 'energy', amount: 25 },
+    ],
+    // University hospital: the top-tier health project — a multi-million upgrade
+    // that nearly doubles the capacity of the city's health backbone. Available
+    // at the hospital's own level as a pure long-term money goal (§ endgame sink).
+    upgrades: [
+      {
+        cost: { money: 4_500_000, wood: 300, stone: 800 },
+        constructionSec: 720,
+        xpReward: 220,
+        nameKey: 'building.hospital.2',
+        effects: [
+          { type: 'coverage', need: 'health', radius: 20, capacity: 26_000 },
+          { type: 'jobs', amount: 130 },
+          { type: 'upkeep', resource: 'money', perMinute: 5_000 },
+          { type: 'demand', need: 'energy', amount: 40 },
+        ],
+      },
     ],
     buildLimit: [{ level: 14, max: 2 }, { level: 15, max: 3 }],
   },
@@ -591,6 +879,36 @@ export const buildingsConfig: BuildingDef[] = [
       { type: 'revenue', category: 'commercial', perMinute: 18_000 },
       { type: 'upkeep', resource: 'money', perMinute: 6_000 },
       { type: 'demand', need: 'energy', amount: 120 },
+    ],
+    // Office tower stages: many more downtown jobs on the same block, so a dense
+    // residential centre can be staffed without paving new sectors with offices.
+    upgrades: [
+      {
+        cost: { money: 1_400_000, wood: 360, stone: 700 },
+        constructionSec: 600,
+        xpReward: 260,
+        unlockLevel: 11,
+        nameKey: 'building.office.2',
+        effects: [
+          { type: 'jobs', amount: 3_200 },
+          { type: 'revenue', category: 'commercial', perMinute: 30_000 },
+          { type: 'upkeep', resource: 'money', perMinute: 9_500 },
+          { type: 'demand', need: 'energy', amount: 190 },
+        ],
+      },
+      {
+        cost: { money: 3_000_000, wood: 520, stone: 1_100 },
+        constructionSec: 720,
+        xpReward: 360,
+        unlockLevel: 13,
+        nameKey: 'building.office.3',
+        effects: [
+          { type: 'jobs', amount: 4_600 },
+          { type: 'revenue', category: 'commercial', perMinute: 44_000 },
+          { type: 'upkeep', resource: 'money', perMinute: 13_500 },
+          { type: 'demand', need: 'energy', amount: 270 },
+        ],
+      },
     ],
     buildLimit: [{ level: 8, max: 1 }, { level: 10, max: 2 }, { level: 12, max: 4 }, { level: 14, max: 7 }],
   },
@@ -655,6 +973,22 @@ export const buildingsConfig: BuildingDef[] = [
       { type: 'coverage', need: 'leisure', radius: 11 },
       { type: 'ambience', amount: 2, radius: 6 },
       { type: 'upkeep', resource: 'money', perMinute: 250 },
+    ],
+    // City park: a bigger green lung with a wider leisure reach and a stronger
+    // attractiveness aura — the leisure answer for a dense, upgraded centre.
+    upgrades: [
+      {
+        cost: { money: 90_000, wood: 120 },
+        constructionSec: 120,
+        xpReward: 35,
+        unlockLevel: 10,
+        nameKey: 'building.park.2',
+        effects: [
+          { type: 'coverage', need: 'leisure', radius: 15 },
+          { type: 'ambience', amount: 3, radius: 8 },
+          { type: 'upkeep', resource: 'money', perMinute: 450 },
+        ],
+      },
     ],
   },
   {

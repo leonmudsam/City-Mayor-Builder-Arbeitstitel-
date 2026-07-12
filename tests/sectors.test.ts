@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { newController, setLevel } from './helpers.ts';
 import { sectorId } from '../src/game/types.ts';
 
-describe('sector expansion (open-end world)', () => {
+describe('sector expansion (bounded world)', () => {
   it('is locked before level 5', () => {
     const { controller } = newController();
     expect(controller.unlockSector(sectorId(1, 2))).toEqual({ ok: false, error: 'locked' });
@@ -55,14 +55,16 @@ describe('sector expansion (open-end world)', () => {
     expect(controller.canFoundDistrict(sectorId(3, 2)).eligible).toBe(false);
   });
 
-  it('materializes new terrain beyond the start region (open end)', () => {
+  it('has a hard world edge — nothing exists or unlocks past the bounds', () => {
     const { controller } = newController();
     setLevel(controller, 5);
     controller.state.resources.money = 5_000_000;
+    // The northern edge row (sy 0) is in bounds and unlockable…
     expect(controller.unlockSector(sectorId(1, 0))).toEqual({ ok: true });
-    expect(controller.unlockSector(sectorId(1, -1))).toEqual({ ok: true }); // outside start region
-    // Neighbor ring materialized for the "visible but locked" effect.
-    expect(controller.state.world.sectors[sectorId(1, -2)]).toBeDefined();
-    expect(controller.state.world.sectors[sectorId(1, -2)]?.status).toBe('locked');
+    // …but there is no sector north of it: the board is finite (§ bounded world).
+    expect(controller.state.world.sectors[sectorId(1, -1)]).toBeUndefined();
+    expect(controller.unlockSector(sectorId(1, -1))).toEqual({ ok: false, error: 'invalid' });
+    // Unlocking the edge sector does not spawn an out-of-bounds neighbour ring.
+    expect(controller.state.world.sectors[sectorId(6, 0)]).toBeUndefined();
   });
 });
