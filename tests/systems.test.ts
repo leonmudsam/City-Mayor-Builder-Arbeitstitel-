@@ -81,9 +81,9 @@ describe('logistics & workplaces', () => {
     controller.state.resources = { money: 500_000, wood: 1_000, stone: 1_000, food: 1_000 };
     for (let x = 26; x <= 31; x++) controller.placeBuilding('road', x, 26);
     const before = controller.derived.capacity.work;
-    expect(controller.placeBuilding('office', 26, 27)).toEqual({ ok: true }); // 4×2, 60 jobs
-    controller.update(T0 + 320_000); // office finishes
-    expect(controller.derived.capacity.work - before).toBe(60);
+    expect(controller.placeBuilding('office', 26, 27)).toEqual({ ok: true }); // 4×2, 400 jobs
+    controller.update(T0 + 440_000); // office finishes
+    expect(controller.derived.capacity.work - before).toBe(400);
   });
 });
 
@@ -159,11 +159,11 @@ describe('housing model (§6)', () => {
     controller.state.resources = { money: 500_000, wood: 1_000, stone: 1_000, food: 1_000 };
     for (let x = 26; x <= 33; x++) controller.placeBuilding('road', x, 26);
     controller.placeBuilding('house_small', 26, 27); // 1 unit × 5
-    controller.placeBuilding('house_row', 28, 27); // 5 units × 4 = 20
-    controller.placeBuilding('apartment', 30, 27); // 16 units × 3 = 48
+    controller.placeBuilding('house_row', 28, 27); // 6 units × 4 = 24
+    controller.placeBuilding('apartment', 30, 27); // 24 units × 4 = 96
     controller.update(T0 + 400_000); // all finish
-    expect(controller.derived.capacity.housing).toBe(5 + 20 + 48);
-    expect(controller.derived.housingUnits).toBe(1 + 5 + 16);
+    expect(controller.derived.capacity.housing).toBe(5 + 24 + 96);
+    expect(controller.derived.housingUnits).toBe(1 + 6 + 24);
   });
 });
 

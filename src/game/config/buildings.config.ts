@@ -149,10 +149,10 @@ export const buildingsConfig: BuildingDef[] = [
     constructionSec: 120,
     xpReward: 20,
     effects: [
-      { type: 'housing', units: 5, minResidentsPerUnit: 2, maxResidentsPerUnit: 4, ambienceSensitivity: 1.0 },
-      { type: 'demand', need: 'water', amount: 16 },
-      { type: 'demand', need: 'energy', amount: 6 },
-      { type: 'upkeep', resource: 'money', perMinute: 175 },
+      { type: 'housing', units: 6, minResidentsPerUnit: 3, maxResidentsPerUnit: 4, ambienceSensitivity: 1.0 },
+      { type: 'demand', need: 'water', amount: 20 },
+      { type: 'demand', need: 'energy', amount: 8 },
+      { type: 'upkeep', resource: 'money', perMinute: 200 },
     ],
   },
   // Apartment — high density, many units, heavy infrastructure demand; without
@@ -164,14 +164,35 @@ export const buildingsConfig: BuildingDef[] = [
     size: { w: 2, h: 3 },
     requiresRoad: true,
     unlockLevel: 9,
-    cost: { money: 145_000, wood: 150, stone: 210 },
+    cost: { money: 170_000, wood: 160, stone: 230 },
     constructionSec: 360,
     xpReward: 45,
     effects: [
-      { type: 'housing', units: 16, minResidentsPerUnit: 2, maxResidentsPerUnit: 3, ambienceSensitivity: 1.15 },
-      { type: 'demand', need: 'water', amount: 40 },
-      { type: 'demand', need: 'energy', amount: 20 },
-      { type: 'upkeep', resource: 'money', perMinute: 560 },
+      { type: 'housing', units: 24, minResidentsPerUnit: 3, maxResidentsPerUnit: 4, ambienceSensitivity: 1.15 },
+      { type: 'demand', need: 'water', amount: 60 },
+      { type: 'demand', need: 'energy', amount: 40 },
+      { type: 'upkeep', resource: 'money', perMinute: 900 },
+    ],
+  },
+  // Residential tower — the density endgame (MVP 2): a 3×3 high-rise housing
+  // hundreds, so a city can actually staff its office towers. Heavy on water,
+  // power and upkeep, and its residents care about their surroundings — a tower
+  // without parks nearby is a grim place to live (§6, believable populations).
+  {
+    id: 'residential_tower',
+    category: 'residential',
+    nameKey: 'building.residential_tower',
+    size: { w: 3, h: 3 },
+    requiresRoad: true,
+    unlockLevel: 12,
+    cost: { money: 420_000, wood: 200, stone: 420 },
+    constructionSec: 480,
+    xpReward: 70,
+    effects: [
+      { type: 'housing', units: 60, minResidentsPerUnit: 3, maxResidentsPerUnit: 5, ambienceSensitivity: 1.25 },
+      { type: 'demand', need: 'water', amount: 150 },
+      { type: 'demand', need: 'energy', amount: 90 },
+      { type: 'upkeep', resource: 'money', perMinute: 2_400 },
     ],
   },
 
@@ -271,7 +292,7 @@ export const buildingsConfig: BuildingDef[] = [
       { type: 'upkeep', resource: 'money', perMinute: 1_200 },
       { type: 'demand', need: 'energy', amount: 18 },
     ],
-    buildLimit: [{ level: 7, max: 1 }, { level: 9, max: 2 }, { level: 10, max: 3 }],
+    buildLimit: [{ level: 7, max: 2 }, { level: 9, max: 3 }, { level: 11, max: 5 }],
   },
   {
     id: 'warehouse',
@@ -456,16 +477,20 @@ export const buildingsConfig: BuildingDef[] = [
     size: { w: 4, h: 2 },
     requiresRoad: true,
     unlockLevel: 8,
-    cost: { money: 185_000, wood: 120, stone: 180 },
-    constructionSec: 300,
-    xpReward: 50,
+    cost: { money: 400_000, wood: 160, stone: 320 },
+    constructionSec: 420,
+    xpReward: 90,
+    // A true downtown employer (§5): 400 jobs in a compact 4×2 tower, so dense
+    // districts can host real workforces and "job-centre planning" matters. Its
+    // commercial revenue scales with *filled* jobs — an office without residents
+    // to staff it earns little, which self-balances the huge job count.
     effects: [
-      { type: 'jobs', amount: 60 },
-      { type: 'revenue', category: 'commercial', perMinute: 6_000 },
-      { type: 'upkeep', resource: 'money', perMinute: 2_000 },
-      { type: 'demand', need: 'energy', amount: 30 },
+      { type: 'jobs', amount: 400 },
+      { type: 'revenue', category: 'commercial', perMinute: 18_000 },
+      { type: 'upkeep', resource: 'money', perMinute: 6_000 },
+      { type: 'demand', need: 'energy', amount: 120 },
     ],
-    buildLimit: [{ level: 8, max: 2 }, { level: 9, max: 3 }, { level: 10, max: 5 }],
+    buildLimit: [{ level: 8, max: 1 }, { level: 10, max: 2 }, { level: 12, max: 4 }],
   },
 
   // ---- Infrastruktur / Energie (MVP 2) ----

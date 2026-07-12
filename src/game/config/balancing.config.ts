@@ -13,15 +13,21 @@ export const balancingConfig: BalancingConfig = {
   // Half the population works; commercial/industrial income scales with how
   // many jobs that labor force actually fills.
   laborParticipation: 0.5,
-  growthPerMin: 4,
-  declinePerMin: 2,
+  // Growth is quicker now so the bigger residential capacities (towers house
+  // hundreds) fill in a believable time instead of trickling for hours (§6).
+  growthPerMin: 10,
+  declinePerMin: 5,
   growthHappinessThreshold: 60,
   declineHappinessThreshold: 40,
   foodWithoutDistributionCap: 0.3,
   startResources: { money: 45_000, wood: 60, stone: 0, food: 40 },
   startGold: 0,
-  // Expansion is a genuine "special project" sink now, not a rounding error.
-  sectorCost: { base: 80_000, distanceFactor: 1.6, countFactor: 0.25 },
+  // Expansion is a genuine "special project" sink — and now a real brake on
+  // sprawl (§7): each new sector costs more (distance) and every sector you own
+  // raises the price of the next, so spreading out is a deliberate, expensive
+  // choice and money stays valuable. Good, dense planning is rewarded over
+  // grabbing land for free.
+  sectorCost: { base: 120_000, distanceFactor: 1.7, countFactor: 0.35 },
   fireChancePerBuildingPerMin: 0.002,
   fireDurationSec: 30 * 60,
   fireDurationProtectedSec: 5 * 60,

@@ -1,5 +1,42 @@
 # Patch Notes
 
+## v0.13 — „MVP 2: Balance & Rollen"
+
+Ein Balancing-Pass, der Gebäude glaubwürdigere Größen und Rollen gibt und Sprawl
+teurer macht.
+
+### Wasserwerk-Ausbau (Item 1)
+
+- **Wasserwerk-Limit 3 → 5** (gestaffelt: L7 max 2, L9 max 3, L11 max 5). Der
+  Wert „3" war das Bau-Limit — größere Städte dürfen jetzt mehr Wasserwerke
+  bauen. Wasser bleibt bedarfsgesteuert, wird also nicht überstark.
+
+### Bürogebäude = echter Großarbeitgeber (Item 5)
+
+- **Büro: 60 → 400 Arbeitsplätze** in kompakten 4×2. Ein Innenstadt-Turm, der
+  ganze Distrikte beschäftigt. Da die Gewerbe-Einnahmen mit den **besetzten**
+  Jobs skalieren, ist ein Büro ohne Einwohner zum Besetzen wenig wert — das
+  balanciert die riesige Jobzahl von selbst. Kosten/Unterhalt/Strombedarf/
+  Einnahmen entsprechend hoch, Limit knapp (max 1 → 4 mit Level).
+
+### Wohnen neu austariert (Item 6)
+
+- **Reihenhaus 20 → 24**, **Apartment 48 → 96** Bewohner — dichter und
+  glaubwürdiger.
+- **Neuer Wohnturm** (3×3, ab L12): bis **300 Bewohner**, damit eine Stadt ihre
+  Bürotürme überhaupt bemannen kann. Hoher Wasser-/Strom-/Unterhaltsbedarf, und
+  seine Bewohner reagieren stark auf ihr Umfeld — ein Turm ohne Parks drumherum
+  ist ein trister Ort.
+- **Schnelleres Wachstum** (Zuzug 4 → 10/min), damit die großen Kapazitäten in
+  glaubwürdiger Zeit gefüllt werden.
+
+### Sprawl kostet mehr (Item 7)
+
+- **Sektor-Erweiterung deutlich teurer**: Basis 80k → **120k**, Distanz- und
+  Mengenfaktor angehoben. Jeder Sektor kostet mehr, und je mehr man besitzt,
+  desto teurer der nächste — in die Breite zu wuchern ist eine bewusste, teure
+  Entscheidung. Gute, dichte Planung wird belohnt; Geld bleibt wertvoll.
+
 ## v0.12 — „MVP 2 Teil 4: Fluss-Distrikt"
 
 Die erste **Fern-Expansion**: Am Fluss lässt sich ein eigener **Distrikt**
