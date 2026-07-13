@@ -67,6 +67,20 @@ export class GameController {
     return () => this.listeners.delete(listener);
   }
 
+  /**
+   * Replace the entire game state in place (§ robust restart / import). The
+   * controller *instance* stays the same, so every UI subscriber keeps working
+   * — we just swap the state, rebuild derived values and quests, and notify.
+   * This is what makes "start over" and "import save" work without a page
+   * reload (a reload re-triggers the autosave and clobbers the change).
+   */
+  resetTo(state: GameState): void {
+    this.state = state;
+    this.derived = recomputeDerived(state, this.config);
+    updateQuests(state, this.config);
+    this.notify({ type: 'change' });
+  }
+
   private notify(event: GameEvent): void {
     this.version += 1;
     for (const listener of this.listeners) listener(event);
