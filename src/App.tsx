@@ -1,7 +1,8 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { loadConfig } from './game/config/index.ts';
 import { createNewGame } from './game/newGame.ts';
 import { GameController } from './game/commands/controller.ts';
+import type { GameState } from './game/types.ts';
 import { LocalStorageSaveAdapter } from './game/storage/localStorageAdapter.ts';
 import { DEFAULT_SLOT } from './game/storage/saveAdapter.ts';
 import { importSave } from './game/storage/exportImport.ts';
@@ -23,9 +24,16 @@ import { t } from './i18n/index.ts';
 
 const adapter = new LocalStorageSaveAdapter();
 
+/** Optional "how to start over" flavour for the reset button (§10). */
+export type ResetVariant = 'normal' | 'bonus';
+
 export function App() {
   const [ready, setReady] = useState(false);
   const [bootError, setBootError] = useState<string>();
+  // Bumped on reset/import to remount the game view (fresh Pixi renderer, no
+  // stale sector/building caches) — the controller instance itself is reused.
+  const [gameKey, setGameKey] = useState(0);
+  const controllerRef = useRef<GameController | undefined>(undefined);
 
   useEffect(() => {
     let cancelled = false;
@@ -47,6 +55,7 @@ export function App() {
         const existing = await adapter.load(DEFAULT_SLOT);
         const state = existing ?? createNewGame(config, 'Neustadt', Date.now());
         controller = new GameController(config, state);
+        controllerRef.current = controller;
         setController(controller);
         controller.update(Date.now()); // offline catch-up
         controller.subscribe((event) => {
@@ -85,30 +94,60 @@ export function App() {
     };
   }, []);
 
+  /** Swap in a fresh (or imported) state in place, persist it, and remount the
+   *  view — no page reload, so the autosave can't clobber the change (§10). */
+  const applyState = useCallback((next: GameState) => {
+    const controller = controllerRef.current;
+    if (!controller) return;
+    const ui = useUiStore.getState();
+    ui.stopPlacing();
+    ui.stopMoving();
+    ui.selectBuilding(undefined);
+    ui.openSectorDialog(undefined);
+    ui.setPanel('quests');
+    controller.resetTo(next);
+    void adapter.save(DEFAULT_SLOT, next);
+    controller.update(Date.now());
+    setGameKey((k) => k + 1);
+  }, []);
+
+  const handleReset = useCallback(
+    (variant: ResetVariant = 'normal') => {
+      const controller = controllerRef.current;
+      if (!controller) return;
+      const fresh = createNewGame(controller.config, 'Neustadt', Date.now());
+      if (variant === 'bonus') {
+        // A generous test-start for balancing the early game quickly (§10).
+        fresh.resources.money += 200_000;
+        fresh.gold.balance += 500;
+      }
+      applyState(fresh);
+    },
+    [applyState],
+  );
+
+  const handleImport = useCallback(
+    (json: string): boolean => {
+      try {
+        applyState(importSave(json));
+        return true;
+      } catch {
+        return false;
+      }
+    },
+    [applyState],
+  );
+
   if (bootError) return <div className="boot-error">Fehler beim Start: {bootError}</div>;
   if (!ready) return <div className="boot-loading">{t('app.title')} …</div>;
-  return <GameScreen />;
+  return <GameScreen key={gameKey} onImport={handleImport} onReset={handleReset} />;
 }
 
-function GameScreen() {
+function GameScreen({ onImport, onReset }: { onImport(json: string): boolean; onReset(variant?: ResetVariant): void }) {
   const openPanel = useUiStore((s) => s.openPanel);
   const events = useUiStore((s) => s.events);
   const dismissEvent = useUiStore((s) => s.dismissEvent);
   const currentEvent = events[0];
-
-  const handleImport = (json: string): boolean => {
-    try {
-      const state = importSave(json);
-      void adapter.save(DEFAULT_SLOT, state).then(() => window.location.reload());
-      return true;
-    } catch {
-      return false;
-    }
-  };
-
-  const handleReset = () => {
-    void adapter.delete(DEFAULT_SLOT).then(() => window.location.reload());
-  };
 
   return (
     <div className="app">
@@ -119,7 +158,7 @@ function GameScreen() {
         {openPanel === 'mayor' && <MayorPanel />}
         {openPanel === 'status' && <CityStatusPanel />}
         {openPanel === 'economy' && <EconomyPanel />}
-        {openPanel === 'settings' && <SettingsPanel onImport={handleImport} onReset={handleReset} />}
+        {openPanel === 'settings' && <SettingsPanel onImport={onImport} onReset={onReset} />}
         <FloatingBuildingSheet />
         <SectorDialog />
         {openPanel === 'build' && <BuildMenu />}

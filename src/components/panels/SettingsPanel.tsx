@@ -1,11 +1,17 @@
-import { Download, RefreshCw, Upload, X } from 'lucide-react';
+import { Download, Gift, RefreshCw, Upload, X } from 'lucide-react';
 import { useGame, useUiStore } from '../../state/store.ts';
 import { exportSave, importSave } from '../../game/storage/exportImport.ts';
 import { t } from '../../i18n/index.ts';
 
 declare const __APP_VERSION__: string;
 
-export function SettingsPanel({ onImport, onReset }: { onImport(json: string): boolean; onReset(): void }) {
+export function SettingsPanel({
+  onImport,
+  onReset,
+}: {
+  onImport(json: string): boolean;
+  onReset(variant?: 'normal' | 'bonus'): void;
+}) {
   const game = useGame();
   const { setPanel, pushToast } = useUiStore();
 
@@ -56,10 +62,24 @@ export function SettingsPanel({ onImport, onReset }: { onImport(json: string): b
       <button
         className="btn-danger"
         onClick={() => {
-          if (window.confirm(t('ui.reset.confirm'))) onReset();
+          if (window.confirm(t('ui.reset.confirm'))) {
+            onReset('normal');
+            pushToast(t('ui.reset.done'), 'success');
+          }
         }}
       >
         <RefreshCw size={16} /> {t('ui.reset')}
+      </button>
+      <button
+        className="btn-secondary"
+        onClick={() => {
+          if (window.confirm(t('ui.reset.confirm'))) {
+            onReset('bonus');
+            pushToast(t('ui.reset.done'), 'success');
+          }
+        }}
+      >
+        <Gift size={16} /> {t('ui.reset.bonus')}
       </button>
       <p className="muted version">v{__APP_VERSION__}</p>
     </aside>

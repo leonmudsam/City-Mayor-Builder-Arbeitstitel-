@@ -1,5 +1,26 @@
 # Patch Notes
 
+## v0.19.1 — „Neu anfangen repariert"
+
+**Bugfix:** Der „Neu anfangen"-Button funktionierte nicht zuverlässig. Ursache:
+Der Reset löschte den Spielstand und lud die Seite neu — beim Neuladen schrieb
+der `beforeunload`-Autosave aber sofort den **alten** Zustand zurück, sodass die
+alte Stadt wieder auftauchte.
+
+**Fix:** Reset läuft jetzt **in-place, ganz ohne Reload**
+(`GameController.resetTo`): ein frischer Spielstand wird direkt in den laufenden
+Controller getauscht, sofort gespeichert und die Ansicht neu aufgebaut (frischer
+Pixi-Renderer per Remount-Key). Kein Reload → kein Zurückschreiben. Der Import
+eines Spielstands nutzt jetzt denselben sicheren Pfad.
+
+- Bestätigungsdialog „Spielstand wirklich löschen und neu anfangen?", danach eine
+  Erfolgsmeldung.
+- Zusätzlicher Button **„Neustart mit Startbonus"** (Test-Start mit extra Geld +
+  Gold) für schnelles Balancing-Testen (§10).
+- Verifiziert: neuer Unit-Test (`resetTo` ersetzt den Zustand vollständig und
+  reaktiviert die Tutorial-Aufgabe) **und** ein echter Browser-Test (Reset ohne
+  Reload, frischer Spielstand bleibt bestehen). 85/85 Tests grün, Lint + Build ok.
+
 ## v0.19 — „Spieltypische UI: Marker, Bürgeranliegen & klare Gebäude-Popups"
 
 Reiner UI/UX-Pass (§ Vorgabe: keine neue Gameplay-Logik). Die 2D-Prototyp-Karte
