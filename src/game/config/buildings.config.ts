@@ -204,6 +204,13 @@ export const buildingsConfig: BuildingDef[] = [
         ],
       },
     ],
+    // Residential build limits per level (§1/§2): houses are no longer infinitely
+    // spammable — the cap rises with the city so growth stays possible, but past
+    // it the way forward is upgrading (denser stages) or the next housing type,
+    // not another identical box. The small house is the backbone, so it keeps the
+    // most generous cap. Tuned together with row/apartment/tower and their
+    // capacities so every level has a believable population ceiling.
+    buildLimit: [{ level: 1, max: 8 }, { level: 6, max: 10 }, { level: 9, max: 12 }, { level: 16, max: 14 }, { level: 18, max: 16 }],
   },
   // Row house — denser: several households per footprint, medium quality,
   // higher water/supply demand. The efficient way to grow a neighborhood (§7).
@@ -253,6 +260,9 @@ export const buildingsConfig: BuildingDef[] = [
         ],
       },
     ],
+    // Row-house cap (§1/§2): the efficient mid-game density step; a handful per
+    // level, rising as the city matures.
+    buildLimit: [{ level: 6, max: 6 }, { level: 9, max: 8 }, { level: 14, max: 12 }, { level: 16, max: 14 }],
   },
   // Apartment — high density, many units, heavy infrastructure demand; without
   // parks its neighborhood quality suffers (§7).
@@ -302,6 +312,9 @@ export const buildingsConfig: BuildingDef[] = [
         ],
       },
     ],
+    // Apartment cap (§1/§2): the workhorse of a real city's population; a handful
+    // per level so density comes from upgrading them, not a wall of blocks.
+    buildLimit: [{ level: 9, max: 8 }, { level: 14, max: 12 }, { level: 16, max: 14 }],
   },
   // Residential tower — the density endgame (MVP 2): a 3×3 high-rise housing
   // hundreds, so a city can actually staff its office towers. Heavy on water,
@@ -356,6 +369,10 @@ export const buildingsConfig: BuildingDef[] = [
         ],
       },
     ],
+    // Tower cap (§1/§2): the skyline endgame. Few but enormous — six at first,
+    // growing to a dozen at the metropolis levels, each a multi-thousand-resident
+    // high-rise, so the very top of the population comes from towers you upgrade.
+    buildLimit: [{ level: 12, max: 6 }, { level: 14, max: 12 }, { level: 16, max: 16 }],
   },
 
   // ---- Ressourcen / Produktion ----
@@ -367,6 +384,9 @@ export const buildingsConfig: BuildingDef[] = [
     requiresRoad: true,
     unlockLevel: 2,
     cost: { money: 11_000 },
+    // First sawmill is free (§3): the wood loop starts the moment it unlocks, no
+    // money wait. Every later sawmill costs full price.
+    firstBuildDiscount: 1,
     constructionSec: 30,
     xpReward: 15,
     effects: [
@@ -389,6 +409,8 @@ export const buildingsConfig: BuildingDef[] = [
     requiresRoad: true,
     unlockLevel: 4,
     cost: { money: 45_000, wood: 120 },
+    // First quarry half price (§3): eases the jump into stone production.
+    firstBuildDiscount: 0.5,
     constructionSec: 90,
     xpReward: 25,
     effects: [
@@ -410,6 +432,8 @@ export const buildingsConfig: BuildingDef[] = [
     requiresRoad: true,
     unlockLevel: 4,
     cost: { money: 28_000, wood: 80 },
+    // First farm is free (§3): food production starts without a money wait.
+    firstBuildDiscount: 1,
     constructionSec: 60,
     xpReward: 20,
     effects: [
@@ -433,6 +457,9 @@ export const buildingsConfig: BuildingDef[] = [
     requiresRoad: false,
     unlockLevel: 3,
     cost: { money: 6_500, wood: 10 },
+    // First well is free (§3): the water need can be answered the moment it
+    // appears, so level 3 never becomes a money-wait wall.
+    firstBuildDiscount: 1,
     constructionSec: 15,
     xpReward: 12,
     // A neighbourhood well: cheap early water with a real, but local, reach.
@@ -525,6 +552,9 @@ export const buildingsConfig: BuildingDef[] = [
     // real budget decision. Upgrading production/logistics is usually the smarter
     // play than a wall of silos. Cap still applies on top of this.
     costScaling: 1.4,
+    // First warehouse half price (§3): the first storage buffer is an easy early
+    // buy; escalating cost then makes further silos a real investment.
+    firstBuildDiscount: 0.5,
     effects: [
       // Deliberately modest storage, and capped in number (below): the goal is
       // active play — production runs hot, storage stays tight, so you come back
@@ -632,6 +662,9 @@ export const buildingsConfig: BuildingDef[] = [
     requiresRoad: true,
     unlockLevel: 5,
     cost: { money: 55_000, wood: 90 },
+    // First market half price (§3): the food-distribution step of the loop opens
+    // at level 5 without a long money-wait — directly targets the "level 5 wall".
+    firstBuildDiscount: 0.5,
     constructionSec: 90,
     xpReward: 45,
     // Relocatable service: reorganise supply as the city reshapes (§5).

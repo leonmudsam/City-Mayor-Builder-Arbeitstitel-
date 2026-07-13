@@ -179,6 +179,7 @@ body {
 }
 .build-card-invest { font-size: 11.5px; color: var(--warn); font-weight: 600; line-height: 1.35; }
 .build-card-scaled { font-size: 11px; color: var(--text-muted); font-style: italic; }
+.build-card-tag.free { color: var(--good); background: color-mix(in srgb, var(--good) 18%, transparent); }
 
 /* ---- Needs / happiness ---- */
 .need-row { display: flex; flex-direction: column; gap: 4px; }
@@ -449,6 +450,14 @@ body {
   background: var(--surface-2); border-radius: 10px;
 }
 .status-happiness strong { font-size: 17px; }
+.status-growth {
+  display: flex; flex-direction: column; gap: 4px; padding: 8px 12px;
+  background: var(--surface-2); border-radius: 10px;
+}
+.status-growth-head { display: flex; justify-content: space-between; align-items: baseline; }
+.status-growth-head .status-need-name { display: flex; align-items: center; gap: 6px; font-weight: 600; }
+.status-growth-line { display: flex; align-items: center; gap: 6px; font-size: 12px; }
+.sheet-growth { display: flex; align-items: center; gap: 6px; font-size: 12.5px; margin: 2px 0 4px; }
 .status-alerts { display: flex; flex-direction: column; gap: 7px; }
 .status-ok { display: flex; align-items: center; gap: 8px; font-size: 12.5px; color: var(--good); padding: 6px 2px; }
 .status-alert {

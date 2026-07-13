@@ -3,10 +3,10 @@ import type { BuildingUpgradeDef } from '../config/types.ts';
 import type { GameState, ResourceId, SectorId } from '../types.ts';
 import { parseSectorId, sectorId } from '../types.ts';
 import { recomputeDerived, type Derived } from '../simulation/derived.ts';
-import { advance } from '../simulation/tick.ts';
+import { advance, moveInPerMin } from '../simulation/tick.ts';
 import { updateQuests, objectiveTarget } from '../simulation/quests.ts';
 import { validatePlacement, type PlacementError } from '../buildings/placement.ts';
-import { demolishRefund, effectiveBuildCost } from '../buildings/effects.ts';
+import { demolishRefund, effectiveBuildCost, isFirstBuildDiscounted } from '../buildings/effects.ts';
 import { buildLimitAt, countOf, nextLimitLevel } from '../buildings/limits.ts';
 import { coverageOverlay, type CoverageOverlay } from '../buildings/coverage.ts';
 import { canAfford, grantGold, grantResources, spendCost, spendGold } from '../economy/economyService.ts';
@@ -93,9 +93,10 @@ export class GameController {
     if (!def) return fail('not_found');
     const placementError = validatePlacement(this.state, this.config, this.derived, def, x, y);
     if (placementError) return fail(placementError);
-    // Escalating cost for anti-spam utilities (warehouses, §7): the price of the
-    // next copy rises with how many already exist.
-    const cost = effectiveBuildCost(def, countOf(this.state, defId));
+    // Escalating cost for anti-spam utilities (warehouses, §7) or a first-build
+    // discount for core economy buildings (§ faster early game). Lifetime count
+    // gates the discount so demolish/rebuild can't farm it.
+    const cost = effectiveBuildCost(def, countOf(this.state, defId), this.state.stats.built[defId] ?? 0);
     const spend = spendCost(this.state, cost, `build_${defId}`);
     if (!spend.ok) return fail('insufficient');
 
@@ -426,7 +427,39 @@ export class GameController {
   getBuildCost(defId: string): Partial<Record<ResourceId, number>> {
     const def = this.config.buildings.get(defId);
     if (!def) return {};
-    return effectiveBuildCost(def, countOf(this.state, defId));
+    return effectiveBuildCost(def, countOf(this.state, defId), this.state.stats.built[defId] ?? 0);
+  }
+
+  /** Whether the next copy is the free/discounted first build (build-menu badge). */
+  isFirstBuildDiscount(defId: string): boolean {
+    const def = this.config.buildings.get(defId);
+    if (!def) return false;
+    return isFirstBuildDiscounted(def, this.state.stats.built[defId] ?? 0);
+  }
+
+  /**
+   * Why the population is (not) growing — the single source the UI uses to
+   * explain move-in (§ "why isn't my city filling up"). `growing` when happy
+   * citizens are actively arriving; otherwise `reason` says what blocks them.
+   */
+  getGrowthStatus(): {
+    growing: boolean;
+    reason?: 'no_housing' | 'housing_full' | 'unhappy';
+    population: number;
+    capacity: number;
+    freeHousing: number;
+    ratePerMin: number;
+  } {
+    const bal = this.config.balancing;
+    const pop = this.state.citizens.population;
+    const capacity = this.derived.capacity.housing;
+    const freeHousing = Math.max(0, capacity - pop);
+    const happiness = this.state.citizens.happiness;
+    const base = { population: pop, capacity, freeHousing, ratePerMin: 0 };
+    if (capacity <= 0) return { growing: false, reason: 'no_housing', ...base };
+    if (freeHousing <= 0) return { growing: false, reason: 'housing_full', ...base };
+    if (happiness < bal.growthHappinessThreshold) return { growing: false, reason: 'unhappy', ...base };
+    return { growing: true, ...base, ratePerMin: Math.round(moveInPerMin(bal, freeHousing, happiness)) };
   }
 
   /**

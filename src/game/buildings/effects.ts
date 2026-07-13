@@ -24,15 +24,34 @@ export function investedCost(def: BuildingDef, upgradeLevel: number): Partial<Re
 }
 
 /**
- * Effective build cost of the *next* copy of a building (§7 anti-spam). With
- * `costScaling` set, each already-built copy multiplies the whole cost by that
- * factor: `baseCost × factor^existingCount`, rounded per resource. Without it,
- * the flat `def.cost` is returned. This is the single source of truth used by
- * both the placement command and the build-menu display, so the price shown is
- * exactly the price charged. The escalation premium is intentionally not
- * refunded on demolition (refund stays on the base cost).
+ * Effective build cost of the *next* copy of a building. Two generic modifiers,
+ * both config-only and both feeding the single price path used by the placement
+ * command and the build-menu display (shown price == charged price):
+ *
+ *  - `firstBuildDiscount` (§ faster early game): if this is the first-EVER copy
+ *    (`lifetimeCount === 0`), take that fraction off the cost — 1 = free. Keyed
+ *    on lifetime built, never the current count, so demolish/rebuild can't farm it.
+ *  - `costScaling` (§7 anti-spam): otherwise, each already-built copy multiplies
+ *    the whole cost by that factor (`baseCost × factor^existingCount`).
+ *
+ * The two never overlap (discount only at count 0, scaling only above 0). The
+ * escalation premium is intentionally not refunded on demolition.
  */
-export function effectiveBuildCost(def: BuildingDef, existingCount: number): Partial<Record<ResourceId, number>> {
+export function effectiveBuildCost(
+  def: BuildingDef,
+  existingCount: number,
+  lifetimeCount: number = existingCount,
+): Partial<Record<ResourceId, number>> {
+  if (lifetimeCount <= 0 && def.firstBuildDiscount && def.firstBuildDiscount > 0) {
+    const keep = Math.max(0, 1 - def.firstBuildDiscount);
+    const discounted: Partial<Record<ResourceId, number>> = {};
+    for (const [res, amount] of Object.entries(def.cost)) {
+      const value = Math.round((amount ?? 0) * keep);
+      // Drop zero costs so a fully-free first build shows no price chips at all.
+      if (value > 0) discounted[res as ResourceId] = value;
+    }
+    return discounted;
+  }
   if (!def.costScaling || def.costScaling <= 1 || existingCount <= 0) return def.cost;
   const mult = Math.pow(def.costScaling, existingCount);
   const scaled: Partial<Record<ResourceId, number>> = {};
@@ -40,6 +59,11 @@ export function effectiveBuildCost(def: BuildingDef, existingCount: number): Par
     scaled[res as ResourceId] = Math.round((amount ?? 0) * mult);
   }
   return scaled;
+}
+
+/** Whether the first-build discount currently applies to a building (UI hint). */
+export function isFirstBuildDiscounted(def: BuildingDef, lifetimeCount: number): boolean {
+  return lifetimeCount <= 0 && (def.firstBuildDiscount ?? 0) > 0;
 }
 
 /** Resources returned when demolishing, floored per resource. */

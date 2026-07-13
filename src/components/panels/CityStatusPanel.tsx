@@ -1,4 +1,4 @@
-import { AlertTriangle, ChevronRight, Gift, Info, PackageX, Sparkles, X } from 'lucide-react';
+import { AlertTriangle, ChevronRight, Gift, Info, PackageX, Sparkles, TrendingUp, Users, X } from 'lucide-react';
 import { useGame, useUiStore } from '../../state/store.ts';
 import type { NeedId, ResourceId } from '../../game/types.ts';
 import { NeedIcon } from '../common/icons.tsx';
@@ -92,6 +92,8 @@ export function CityStatusPanel() {
         <strong>{Math.round(state.citizens.happiness)}/100</strong>
       </div>
 
+      <GrowthRow />
+
       <div className="status-alerts">
         {alerts.length === 0 ? (
           <div className="status-ok">
@@ -124,6 +126,46 @@ export function CityStatusPanel() {
         })}
       </div>
     </aside>
+  );
+}
+
+/**
+ * Population & move-in explainer (§15/§19): shows occupancy and, crucially, WHY
+ * the city is or isn't growing — so "99 % happy but stuck far below capacity"
+ * is never a mystery. Reads the same growth model the tick uses (getGrowthStatus).
+ */
+function GrowthRow() {
+  const game = useGame();
+  const fmt = (n: number) => Math.round(n).toLocaleString('de-DE');
+  const g = game.getGrowthStatus();
+  const reasonKey =
+    g.reason === 'no_housing'
+      ? 'ui.growth.no_housing'
+      : g.reason === 'housing_full'
+        ? 'ui.growth.full'
+        : g.reason === 'unhappy'
+          ? 'ui.growth.unhappy'
+          : undefined;
+  return (
+    <div className="status-growth">
+      <div className="status-growth-head">
+        <span className="status-need-name">
+          <Users size={14} /> {t('ui.population')}
+        </span>
+        <strong>
+          {fmt(g.population)} <span className="muted">/ {fmt(g.capacity)}</span>
+        </strong>
+      </div>
+      {g.growing ? (
+        <div className="status-growth-line text-good">
+          <TrendingUp size={13} /> {t('ui.growth.moving_in', { rate: fmt(g.ratePerMin) })}
+        </div>
+      ) : (
+        <div className={`status-growth-line ${g.reason === 'unhappy' ? 'text-bad' : 'text-warn'}`}>
+          <Info size={13} /> {reasonKey ? t(reasonKey) : ''}
+        </div>
+      )}
+    </div>
   );
 }
 
