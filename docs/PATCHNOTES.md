@@ -1,5 +1,130 @@
 # Patch Notes
 
+## v0.18 — „Aktiver Anfang & echtes Wachstum: die Stadt füllt sich wieder"
+
+Dieser Patch behebt die im Durchspielen gefundenen Kernprobleme: die **kaputte
+Bevölkerungs-Kurve** (große Stadt blieb weit unter Kapazität, obwohl zufrieden),
+**Wohngebäude-Spam**, und der **zähe, passive Early-Game-Loop**. Alles über die
+bestehenden Systeme (Wachstumsformel, `buildLimit`, Kostenpfad, Quest-Engine) —
+keine Parallel-Logik, alle Werte in Configs. Savegame bleibt kompatibel
+(Schema v8, keine Migration nötig — nur Config-Änderungen).
+
+### 1. Kritischer Zuzugs-Fix: 8.909/45.677 trotz 99 % ist Geschichte (Item 15)
+
+**Ursache:** Der Zuzug war ein **flacher Wert** (`growthPerMin`, ~10 Bürger/min)
+— völlig unabhängig von der Stadtgröße. Eine 45.000-Kapazität-Stadt füllte sich
+im selben Tempo wie ein Dorf. Von 0 auf 45.677 hätte bei 10/min **rund 62
+Stunden reiner Simulationszeit** gebraucht — daher blieb die große, zufriedene
+Stadt dauerhaft halbleer.
+
+**Fix:** Zuzug skaliert jetzt mit dem **freien Wohnraum** und der Zufriedenheit
+(`moveInPerMin` in `tick.ts`, neuer Config-Wert `growthFillRatePerMin`). Ein
+Anteil des leeren Wohnraums zieht pro Minute ein — je zufriedener, desto mehr;
+ein flacher Sockel (`growthPerMin`) hält kleine Dörfer am Füllen. Dieselbe Formel
+speist die UI-Anzeige, also stimmt „angezeigte" und „tatsächliche" Rate überein.
+
+**Simulierte Füllkurve** (45.000 Kapazität, voll versorgt, `growthFillRatePerMin`
+= 0,06):
+
+| Zufriedenheit | nach 1 min | 10 min | 30 min | 60 min | voll |
+|---|---|---|---|---|---|
+| **99 %** | ~2.700 | ~20.600 | ~37.900 | ~44.000 | ~90 min |
+| **75 %** | ~1.600 | ~13.800 | ~30.100 | ~40.200 | ~2 h |
+| **65 %** | ~1.200 | ~10.500 | ~24.800 | ~36.000 | >90 min |
+
+(Offline-Catch-up rechnet dieselbe Formel in 60-s-Chunks, füllt also gleich
+schnell nach. Ein Dorf mit 5 Plätzen ist weiter in Minuten voll.)
+
+**Zuzug wird jetzt erklärt:** Der Controller liefert `getGrowthStatus()` (wächst
+/ voll / unzufrieden / kein Wohnraum + Rate). Angezeigt im **Stadtstatus**
+(Einwohner/Kapazität + „Zuzug: +X/min" oder Grund) **und direkt am Wohngebäude**
+im Info-Sheet („Hier will aktuell niemand einziehen: …").
+
+### 2. Wohngebäude-Limits pro Level — Verdichtung statt Spam (Items 1, 2)
+
+Wohngebäude sind nicht mehr endlos spammbar. Neue `buildLimit`-Tabellen pro Typ,
+config-basiert und skalierbar, abgestimmt auf Kapazität/Jobs/Versorgung:
+
+| Level | Kleines Haus | Reihenhaus | Apartment | Wohnturm |
+|---|---|---|---|---|
+| 1–5 | 8 | — | — | — |
+| 6–8 | 10 | 6 | — | — |
+| 9–11 | 12 | 8 | 8 | — |
+| 12–13 | 12 | 8 | 8 | 6 |
+| 14–15 | 12 | 12 | 12 | 12 |
+| 16+ | 14→16 | 14 | 14 | 16 |
+
+Das Limit erzwingt genau das gewünschte Verhalten: **mehr Bedeutung pro Gebäude**
+und **Upgrades/dichtere Typen statt Wiederholung**. Das Build-Menü zeigt weiterhin
+Bestand/Limit und „mehr ab Level X".
+
+### 3. First-Build-Discount: das erste Kerngebäude gratis/günstig (Items 3, 9)
+
+Neues generisches Config-Feld `firstBuildDiscount` (0..1): das **allererste**
+Exemplar eines Kernwirtschaftsgebäudes ist gratis oder billiger, danach normaler
+Preis. Gekoppelt an die **Lebenszeit-Bauzahl** (`stats.built`), nicht die aktuelle
+— Abreißen & Neubauen kann den Rabatt nicht farmen.
+
+- **Gratis:** erstes Sägewerk, erster Brunnen, erste Farm
+- **50 %:** erster Steinbruch, erster Markt, erstes Lager
+
+Der Wirtschafts-Loop startet damit sofort beim Freischalten — kein Geld-Warten,
+besonders an der berüchtigten **Level-5-Wand**. Das Build-Menü zeigt „1. gratis".
+
+### 4. Aktiver Early-Game-Loop: parallele Aufgaben (Items 6, 8, 9)
+
+Sechs neue **parallele Nebenaufgaben** laufen zusätzlich zur Hauptkette (kein
+Vorgänger, aktivieren sich sofort bei ihrem Level) und belohnen aktives Spielen
+mit Geld/XP/Gold — der Spieler hat immer ein konkretes Ziel statt auf Einnahmen zu
+warten:
+
+- L2 „Erste Holzlieferung" (120 Holz) · L3 „Erste Nachbarschaft" (30 Bürger)
+- L4 „Volle Speisekammer" (150 Nahrung) · L4 „Steinbruch läuft" (120 Stein)
+- L5 „Erste Erweiterung" (1. Sektor) · L5 „Zufriedene Bürger" (80 %)
+
+Reine Config in `quests.config.ts` über bestehende Objective-Typen — keine neue
+Quest-Logik.
+
+### Geänderte Dateien
+
+- `config/types.ts`, `config/schemas.ts` — `firstBuildDiscount`, `growthFillRatePerMin`
+- `config/balancing.config.ts` — `growthPerMin` 10→12, `growthFillRatePerMin` 0,06
+- `config/buildings.config.ts` — Wohn-`buildLimit`s, `firstBuildDiscount` (6 Gebäude)
+- `config/quests.config.ts` — 6 parallele Early-Quests
+- `buildings/effects.ts` — Rabatt im `effectiveBuildCost`-Pfad (+ `isFirstBuildDiscounted`)
+- `simulation/tick.ts` — `moveInPerMin`, freihausbasierter Zuzug
+- `commands/controller.ts` — `getGrowthStatus`, `isFirstBuildDiscount`, Lebenszeit-Kosten
+- UI: `CityStatusPanel` (Zuzugsanzeige), `FloatingBuildingSheet` (Zuzugs-Diagnose),
+  `BuildMenu` (Gratis-Badge), `de.json`, `styles.css`
+- Tests: `balancing.test.ts` (+4 v0.18-Tests), Anpassungen in `simulation.test.ts`
+
+**Verifikation:** 81/81 Tests grün, Lint sauber, Build erfolgreich.
+
+### Bewusst als nächste Schritte gestaffelt (aus dem großen Wunschzettel)
+
+Um den funktionierenden Stand nicht zu gefährden, sind diese größeren Systeme als
+eigene, jeweils testbare Iterationen vorgesehen (Reihenfolge = Empfehlung):
+
+1. **Gebäude-Rotation** (Item 13) — Footprint drehen + Rotation im Savegame.
+2. **Marktplatz 4×4 als Zentrum** (Item 5) + **Gründerhaus/Altstadt-Prestige** (Item 4)
+   — eigenes „Zentrum"-Feature mit sichtbarem Anker.
+3. **Handelsposten / aktiver Ressourcenverkauf** (Items 7, 8) — Verkaufen/Kaufen
+   über `EconomyService`, config-basierte Angebote mit Cooldown.
+4. **Upgrade-Bug „alte Werte während Upgrade aktiv"** + Fake-Shop + Gold-Speedup +
+   robuster Neustart-Button (aus dem vorherigen Wunschzettel).
+5. **Level 15 Energie-Meilenstein-Ausbau**, **pro-Typ-Wohnbedürfnisse** (Item 14),
+   **Biom-Standortboni-Ausbau** (Item 12).
+
+### Empfohlene nächste Balancing-Tests
+
+- 45k-Stadt bei 60–70 % Zufriedenheit: füllt sie sich noch angenehm, oder zu langsam?
+- L6–L9 mit den neuen Limits: reichen 10 Häuser + 6 Reihenhäuser für flüssiges
+  Wachstum bis zum Apartment-Unlock?
+- First-Build-Discount: startet der Loop bei L2–L5 jetzt ohne Wartephase (Sitzung
+  ohne >30 s Leerlauf)?
+- Aktiv vs. AFK: 30 min aktives Quest-Spiel vs. 30 min AFK — ist der aktive
+  Vorsprung deutlich spürbar?
+
 ## v0.17 — „Ausbaupfade & begrenzte Welt: das Zentrum wächst in die Höhe"
 
 Wachstum passiert ab jetzt nicht mehr nur durch Ausbreitung, sondern durch

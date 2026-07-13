@@ -220,4 +220,58 @@ export const questsConfig: QuestDef[] = [
     ],
     rewards: { money: 850_000, gold: 40, xp: 560 },
   },
+
+  // ---- Parallel early-game "side" quests (§6/§8/§9) --------------------------
+  // These run ALONGSIDE the main chain (no predecessor, so each activates the
+  // moment its level is reached) and reward active play with money/XP/gold so the
+  // player always has a concrete goal instead of waiting for income. They lean on
+  // the same objective types and are pure config — no bespoke quest code.
+  {
+    id: 'qe_wood',
+    titleKey: 'quest.qe_wood.title',
+    descriptionKey: 'quest.qe_wood.desc',
+    unlockLevel: 2,
+    objectives: [{ type: 'produce', resource: 'wood', amount: 120 }],
+    rewards: { money: 14_000, xp: 15 },
+  },
+  {
+    id: 'qe_neighbours',
+    titleKey: 'quest.qe_neighbours.title',
+    descriptionKey: 'quest.qe_neighbours.desc',
+    unlockLevel: 3,
+    objectives: [{ type: 'population', amount: 30 }],
+    rewards: { money: 16_000, xp: 18 },
+  },
+  {
+    id: 'qe_pantry',
+    titleKey: 'quest.qe_pantry.title',
+    descriptionKey: 'quest.qe_pantry.desc',
+    unlockLevel: 4,
+    objectives: [{ type: 'produce', resource: 'food', amount: 150 }],
+    rewards: { money: 20_000, xp: 18 },
+  },
+  {
+    id: 'qe_stone',
+    titleKey: 'quest.qe_stone.title',
+    descriptionKey: 'quest.qe_stone.desc',
+    unlockLevel: 4,
+    objectives: [{ type: 'produce', resource: 'stone', amount: 120 }],
+    rewards: { money: 22_000, xp: 20 },
+  },
+  {
+    id: 'qe_expand',
+    titleKey: 'quest.qe_expand.title',
+    descriptionKey: 'quest.qe_expand.desc',
+    unlockLevel: 5,
+    objectives: [{ type: 'sectors', count: 1 }],
+    rewards: { money: 40_000, gold: 10, xp: 30 },
+  },
+  {
+    id: 'qe_happy',
+    titleKey: 'quest.qe_happy.title',
+    descriptionKey: 'quest.qe_happy.desc',
+    unlockLevel: 5,
+    objectives: [{ type: 'happiness', amount: 80 }],
+    rewards: { money: 45_000, gold: 10, xp: 35 },
+  },
 ];

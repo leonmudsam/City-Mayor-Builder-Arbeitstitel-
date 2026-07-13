@@ -170,6 +170,15 @@ export interface BuildingDef {
    * demolition (refund stays on the base cost).
    */
   costScaling?: number;
+  /**
+   * First-build discount (§ faster early game): a fraction (0..1) taken off the
+   * cost of the *first ever* copy of this building — 1 means the first one is
+   * free, 0.5 half price. Keyed on lifetime built count (`stats.built`), never
+   * the current count, so demolishing and rebuilding can't farm the discount.
+   * Lets the core economy loop (first sawmill/well/farm/market) start without a
+   * money wait, after which normal prices apply. Generic and config-only.
+   */
+  firstBuildDiscount?: number;
 }
 
 // ---- Resources & needs ----------------------------------------------------
@@ -264,8 +273,21 @@ export interface BalancingConfig {
    * reference the work need uses so "filled jobs" is one consistent notion.
    */
   laborParticipation: number;
-  /** Citizens moving in per minute when there is free housing & happiness ≥ threshold. */
+  /**
+   * Base citizens moving in per minute — a flat floor so even a tiny village
+   * keeps filling. The real driver of a big city is `growthFillRatePerMin`
+   * below; this just guarantees a minimum trickle.
+   */
   growthPerMin: number;
+  /**
+   * Fraction of *free* housing that moves in per minute at full happiness
+   * (§ believable growth). Move-in scales with how much empty housing exists, so
+   * a 45 000-capacity metropolis at 99 % happiness fills in minutes instead of
+   * crawling at a flat trickle — the fix for "big city stuck far below capacity".
+   * Applied on top of `growthPerMin` and scaled by how far happiness sits above
+   * the growth threshold.
+   */
+  growthFillRatePerMin: number;
   declinePerMin: number;
   growthHappinessThreshold: number;
   declineHappinessThreshold: number;

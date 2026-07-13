@@ -107,8 +107,9 @@ describe('simulation tick', () => {
     // Third sawmill exceeds the level-2 cap.
     expect(controller.placeBuilding('sawmill', 30, 27)).toEqual({ ok: false, error: 'limit_reached' });
     expect(controller.getBuildLimit('sawmill')).toEqual({ count: 2, max: 2, nextLevel: 5 });
-    // Houses are never capped (§13).
-    expect(controller.getBuildLimit('house_small')).toBeUndefined();
+    // Houses now carry a per-level cap too (§ v0.18 anti-spam): 8 at level 1–5,
+    // more from level 6, so density comes from upgrades rather than spam.
+    expect(controller.getBuildLimit('house_small')).toEqual({ count: 0, max: 8, nextLevel: 6 });
     // Reaching level 5 raises the cap to 3.
     setLevel(controller, 5);
     expect(controller.placeBuilding('sawmill', 30, 27)).toEqual({ ok: true });

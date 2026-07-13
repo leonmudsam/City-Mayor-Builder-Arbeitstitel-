@@ -15,6 +15,7 @@ import {
   TrendingDown,
   TrendingUp,
   Truck,
+  UserX,
   Warehouse,
   X,
 } from 'lucide-react';
@@ -120,6 +121,8 @@ export function FloatingBuildingSheet() {
           )}
         </ul>
 
+        {def.category === 'residential' && b.status === 'active' && <ResidentialGrowthNote />}
+
         <div className="action-bubbles">
           {upgrade.next && b.status === 'active' && (
             upgrade.lockedUntilLevel !== undefined ? (
@@ -176,6 +179,35 @@ export function FloatingBuildingSheet() {
         />
       )}
     </>
+  );
+}
+
+/**
+ * Move-in status shown on a residential building (§11/§15): explains, right at
+ * the home the player clicked, whether citizens are arriving and — if not — why
+ * ("nobody wants to move in: …"). Population is a city-wide figure, so this
+ * mirrors the city's growth model rather than inventing per-house occupancy.
+ */
+function ResidentialGrowthNote() {
+  const game = useGame();
+  const g = game.getGrowthStatus();
+  if (g.growing) {
+    return (
+      <p className="sheet-growth text-good">
+        <TrendingUp size={14} /> {t('ui.growth.moving_in', { rate: Math.round(g.ratePerMin).toLocaleString('de-DE') })}
+      </p>
+    );
+  }
+  const key =
+    g.reason === 'housing_full'
+      ? 'ui.growth.full'
+      : g.reason === 'unhappy'
+        ? 'ui.growth.nobody_here'
+        : 'ui.growth.no_housing';
+  return (
+    <p className={`sheet-growth ${g.reason === 'unhappy' ? 'text-bad' : 'text-warn'}`}>
+      <UserX size={14} /> {t(key)}
+    </p>
   );
 }
 

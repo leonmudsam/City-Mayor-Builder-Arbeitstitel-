@@ -13,9 +13,14 @@ export const balancingConfig: BalancingConfig = {
   // Half the population works; commercial/industrial income scales with how
   // many jobs that labor force actually fills.
   laborParticipation: 0.5,
-  // Growth is quicker now so the bigger residential capacities (towers house
-  // hundreds) fill in a believable time instead of trickling for hours (§6).
-  growthPerMin: 10,
+  // Move-in now scales with the city (§ believable growth). `growthPerMin` is
+  // just the flat floor for tiny villages; `growthFillRatePerMin` fills a share
+  // of the *free* housing every minute, so a happy metropolis with tens of
+  // thousands of empty flats actually populates instead of crawling at a flat
+  // trickle. At 6 %/min a 45 000-cap city that is 99 % happy adds ~2 700 in the
+  // first minute and approaches full occupancy within ~20–30 simulated minutes.
+  growthPerMin: 12,
+  growthFillRatePerMin: 0.06,
   declinePerMin: 5,
   growthHappinessThreshold: 60,
   declineHappinessThreshold: 40,

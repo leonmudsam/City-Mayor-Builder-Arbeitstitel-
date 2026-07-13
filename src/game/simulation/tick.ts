@@ -15,6 +15,24 @@ export interface TickResult {
 }
 
 /**
+ * Citizens moving in per minute given free housing and current happiness.
+ * A flat floor (`growthPerMin`) keeps small towns filling; the dominant term
+ * takes a share (`growthFillRatePerMin`) of the free housing, scaled by how far
+ * happiness sits above the growth threshold (0.35× at the threshold, up to 1×
+ * at 100 %). Shared by the tick and the UI growth diagnostic so the shown rate
+ * matches what actually accrues.
+ */
+export function moveInPerMin(
+  bal: { growthPerMin: number; growthFillRatePerMin: number; growthHappinessThreshold: number },
+  freeHousing: number,
+  happiness: number,
+): number {
+  const span = Math.max(1, 100 - bal.growthHappinessThreshold);
+  const happinessFactor = Math.max(0, Math.min(1, (happiness - bal.growthHappinessThreshold) / span));
+  return bal.growthPerMin + freeHousing * bal.growthFillRatePerMin * (0.35 + 0.65 * happinessFactor);
+}
+
+/**
  * Advances the simulation from state.meta.lastSimTime to `nowMs`.
  * The same code path handles the regular 1-second tick and offline catch-up:
  * long gaps are processed in bounded chunks (balancing.maxTickChunkSec) so
@@ -163,10 +181,14 @@ export function advance(state: GameState, config: GameConfig, derived: Derived, 
       if (derived.upkeep[res] > 0) state.resources[res] = Math.max(0, state.resources[res] - derived.upkeep[res] * dtMin);
     }
 
-    // 5. Population flow.
+    // 5. Population flow. Move-in scales with free housing (a big happy city
+    //    fills fast, a village keeps a flat trickle) so a 45 000-cap metropolis
+    //    at 99 % happiness actually populates instead of crawling (§ growth fix).
     const housingCap = derived.capacity.housing;
-    if (state.citizens.happiness >= bal.growthHappinessThreshold && pop < housingCap) {
-      state.citizens.population = Math.min(housingCap, pop + bal.growthPerMin * dtMin);
+    const freeHousing = housingCap - pop;
+    if (state.citizens.happiness >= bal.growthHappinessThreshold && freeHousing > 0) {
+      const rate = moveInPerMin(bal, freeHousing, state.citizens.happiness);
+      state.citizens.population = Math.min(housingCap, pop + rate * dtMin);
     } else if (state.citizens.happiness < bal.declineHappinessThreshold && pop > 0) {
       state.citizens.population = Math.max(0, pop - bal.declinePerMin * dtMin);
     }

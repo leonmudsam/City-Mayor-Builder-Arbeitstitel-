@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { newController, setLevel, flattenTerrain, T0 } from './helpers.ts';
+import { moveInPerMin } from '../src/game/simulation/tick.ts';
 
 const MIN = 60_000;
 
@@ -36,10 +37,13 @@ describe('long-term balancing (v0.15)', () => {
     setLevel(controller, 10);
     controller.state.resources = { money: 5_000_000, wood: 5_000, stone: 5_000, food: 1_000, freshwater: 0 };
     for (let x = 24; x <= 33; x++) controller.placeBuilding('road', x, 26);
-    const base = controller.getBuildCost('warehouse').money!;
-    expect(controller.placeBuilding('warehouse', 24, 27)).toEqual({ ok: true });
-    const next = controller.getBuildCost('warehouse').money!;
-    // costScaling 1.4: the second warehouse costs 40 % more than the first.
+    // The first warehouse carries a first-build discount (§3), so measure the
+    // escalating copies AFTER it: the third costs 40 % more than the second.
+    expect(controller.placeBuilding('warehouse', 24, 27)).toEqual({ ok: true }); // first (discounted)
+    const base = controller.getBuildCost('warehouse').money!; // second, full price
+    expect(controller.placeBuilding('warehouse', 26, 27)).toEqual({ ok: true }); // second
+    const next = controller.getBuildCost('warehouse').money!; // third
+    // costScaling 1.4: each further warehouse costs 40 % more than the last.
     expect(next).toBe(Math.round(base * 1.4));
     expect(next).toBeGreaterThan(base);
   });
@@ -98,5 +102,53 @@ describe('big-city scaling (v0.16)', () => {
     expect(controller.placeBuilding('residential_tower', 26, 27)).toEqual({ ok: true });
     controller.update(T0 + 20 * MIN); // both finish
     expect(controller.derived.capacity.housing).toBeGreaterThanOrEqual(2_000);
+  });
+});
+
+// Active-play & growth pass (v0.18): the fixes for the playtest problems —
+// residential caps, first-build discount, and free-housing-scaled move-in.
+describe('active-play & growth (v0.18)', () => {
+  it('caps residential buildings per level and raises the cap over time (§1)', () => {
+    const { controller } = newController();
+    // The backbone house is capped from level 1 (8), rising at level 6.
+    expect(controller.getBuildLimit('house_small')).toEqual({ count: 0, max: 8, nextLevel: 6 });
+    setLevel(controller, 6);
+    expect(controller.getBuildLimit('house_small')?.max).toBe(10);
+    // Tower: none at low levels, six at 12, twelve at 14 (density via upgrades).
+    setLevel(controller, 12);
+    expect(controller.getBuildLimit('residential_tower')?.max).toBe(6);
+    setLevel(controller, 14);
+    expect(controller.getBuildLimit('residential_tower')?.max).toBe(12);
+  });
+
+  it('gives the first core economy building free, then charges full price (§3)', () => {
+    const { controller } = newController();
+    setLevel(controller, 2);
+    for (let x = 24; x <= 30; x++) controller.placeBuilding('road', x, 26);
+    // First sawmill: free (firstBuildDiscount 1) — the wood loop starts at once.
+    expect(controller.isFirstBuildDiscount('sawmill')).toBe(true);
+    expect(controller.getBuildCost('sawmill')).toEqual({});
+    expect(controller.placeBuilding('sawmill', 24, 27)).toEqual({ ok: true });
+    // Second sawmill: normal price, and the discount is spent for good.
+    expect(controller.isFirstBuildDiscount('sawmill')).toBe(false);
+    expect(controller.getBuildCost('sawmill').money).toBe(11_000);
+  });
+
+  it('scales move-in with free housing so a big happy city fills fast (§15)', () => {
+    const bal = { growthPerMin: 12, growthFillRatePerMin: 0.06, growthHappinessThreshold: 60 };
+    // A 40 000-flat metropolis at 99 % happiness adds well over a thousand a
+    // minute — not the old flat trickle that left it stuck far below capacity.
+    expect(moveInPerMin(bal, 40_000, 99)).toBeGreaterThan(1_500);
+    // More free housing and more happiness both speed move-in up.
+    expect(moveInPerMin(bal, 40_000, 99)).toBeGreaterThan(moveInPerMin(bal, 1_000, 99));
+    expect(moveInPerMin(bal, 10_000, 99)).toBeGreaterThan(moveInPerMin(bal, 10_000, 61));
+    // A tiny village still gets at least the flat floor.
+    expect(moveInPerMin(bal, 3, 90)).toBeGreaterThanOrEqual(12);
+  });
+
+  it('explains why a full or unhappy city is not growing (§15/§19)', () => {
+    const { controller } = newController();
+    // No housing yet → the status says so.
+    expect(controller.getGrowthStatus().reason).toBe('no_housing');
   });
 });

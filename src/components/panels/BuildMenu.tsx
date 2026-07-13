@@ -71,6 +71,8 @@ function BuildCard({ def, locked, onPick }: { def: BuildingDef; locked: boolean;
   // instead of a bare "too little money" (§11): show current vs. recommended
   // steady net income.
   const scaled = def.costScaling !== undefined && limit !== undefined && limit.count > 0;
+  // First-build discount active (§3): the first ever copy is free/cheap.
+  const firstFree = game.isFirstBuildDiscount(def.id);
 
   return (
     <button
@@ -86,6 +88,7 @@ function BuildCard({ def, locked, onPick }: { def: BuildingDef; locked: boolean;
         <div className="build-card-name">
           {t(def.nameKey)}
           {major && <span className="build-card-tag">{t('ui.major_project')}</span>}
+          {firstFree && !locked && <span className="build-card-tag free">{t('ui.first_build_free')}</span>}
         </div>
         <div className="build-card-info">
           {Object.entries(cost).map(([res, amount]) => (

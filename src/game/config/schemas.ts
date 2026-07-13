@@ -61,6 +61,7 @@ export const buildingDefSchema = z.object({
   biomeRequirement: z.array(z.string()).optional(),
   adjacentTerrain: z.string().optional(),
   costScaling: z.number().positive().optional(),
+  firstBuildDiscount: z.number().min(0).max(1).optional(),
 });
 
 export const levelDefSchema = z.object({
