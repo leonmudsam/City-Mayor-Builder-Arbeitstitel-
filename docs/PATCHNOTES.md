@@ -1,5 +1,88 @@
 # Patch Notes
 
+## v0.19 — „Spieltypische UI: Marker, Bürgeranliegen & klare Gebäude-Popups"
+
+Reiner UI/UX-Pass (§ Vorgabe: keine neue Gameplay-Logik). Die 2D-Prototyp-Karte
+bleibt, aber die Oberfläche wird deutlich spieltypischer und lesbarer — mit
+Problem-/Vorteil-Markern direkt auf der Karte, einem klar strukturierten
+Gebäude-Popup, Bürgeranliegen statt Checklisten-Aufgaben und „Neu"-Ankündigungen.
+Alle Anzeigen lesen bestehende Simulationsdaten; nichts am Spielverlauf geändert,
+Savegame bleibt v8-kompatibel.
+
+### 1. Problem- & Vorteil-Marker auf der Karte (Items 4/12)
+
+Neues geteiltes **Diagnose-Modul** (`buildings/diagnostics.ts`) benennt für jedes
+Gebäude, was gut läuft und was fehlt — die *eine* Quelle für Karte **und** Popup:
+
+- **Problem-Blase (rot, „!")** über einem Gebäude bei: kein Straßenzugang, Lager
+  voll (Produktion gestoppt), Betrieb pausiert (Brand), „hier will keiner
+  einziehen".
+- **Ausbau-Blase (bernstein, Pfeil nach oben)** wenn ein bezahlbares, freigeschaltetes
+  Upgrade bereitsteht — wie die Bau-Blasen der Referenzbilder.
+- Immer nur **ein** Marker pro Gebäude (Problem schlägt Ausbau), damit die Karte
+  nicht zur Icon-Wand wird. Der bestehende Standortbonus-Stern bleibt separat.
+
+### 2. Gebäude-Popup komplett überarbeitet (Items 2/12)
+
+- **Kopf** mit Kategorie-Zeile und **farbigem Status-Badge**: Aktiv · Im Bau ·
+  **Upgrade läuft** · Pausiert · Braucht Aufmerksamkeit · Ausbau bereit.
+- Neuer **„Was läuft gut / Was fehlt"-Block**: grüne Vorteile (Standortbonus mit
+  %, Ausbau bezahlbar, an Straße angeschlossen) und rote Probleme in klaren
+  Zeilen, aus demselben Diagnose-Modul — keine widersprüchlichen Hinweise mehr.
+- Bau-Status unterscheidet jetzt sichtbar **„Im Bau"** vs. **„Upgrade läuft"**.
+- Wohngebäude behalten die Zuzugs-Erklärung aus v0.18 („Zuzug +X/min" bzw. Grund).
+
+### 3. Aufgaben werden zu Bürgeranliegen (Items 6/13/14)
+
+Jede Aufgabe hat jetzt einen **Absender** (`sender` in der Quest-Config, rein
+präsentativ) und liest sich als lebendige Bitte statt Checkliste:
+
+- **Bürger · Bauamt · Feuerwehr · Händler · Bürgermeister-Team** — jeweils mit
+  **farbigem Avatar** (Platzhalter-Icon) und Absender-Label auf der Quest-Karte.
+- Panel-Titel „Aufgaben" → **„Bürgeranliegen"**, Belohnung klar mit Icon separat,
+  Claim-Button rechts. Der Fokus: „du hast jemandem geholfen" — die Belohnung
+  kommt weiter vom Spielsystem.
+
+### 4. Neue Gebäude werden angekündigt (Item 7)
+
+- **Level-Up-Popup** listet jetzt konkret die neu freigeschalteten Gebäude
+  (`event.level_up.body_unlocks`) mit Verweis aufs Baumenü.
+- **„Neu"-Badge** auf frisch freigeschalteten Baukarten und ein **grüner Punkt**
+  auf der Kategorie-Kachel. Verschwindet automatisch, sobald gebaut oder das
+  Level steigt — kein persistenter „gesehen"-Zustand nötig.
+- **Roter Empfehlungs-Punkt** auf einer Kategorie-Kachel, wenn ein dort baubares
+  Bedürfnis unter 60 % liegt (z. B. Wasser knapp → Kachel „Versorgung").
+
+### Neue/erweiterte UI-Komponenten & Vorbereitung echter Assets
+
+- Neu: geteiltes `buildingDiagnostics`/`primaryMarker`-Modul, Marker-Renderer,
+  Bürgeranliegen-Quest-Karten mit Avataren, Status-Badge & Diagnose-Block im
+  Sheet, „Neu"/Empfehlungs-Badges im Baumenü, Level-Up-Ankündigung.
+- Alle Grafiken weiterhin **programmatisch** (Pixi) bzw. als CSS/Lucide-Platzhalter,
+  bewusst so gekapselt (Marker, Avatare, Badges als eigene Zeichen-/Style-Bausteine),
+  dass echte Sprites/Avatare später ohne Aufruferänderung eingesetzt werden können.
+
+### Geänderte Dateien
+
+- Neu `game/buildings/diagnostics.ts`; `buildings/placement.ts` (`isConnectedToRoad` exportiert)
+- `commands/controller.ts` — `getBuildingDiagnostics`/`getBuildingMarker`/`isNewBuilding`/`unlocksAtLevel`
+- `config/types.ts` + `schemas.ts` — `QuestSender`/`sender`
+- `config/quests.config.ts` — Absender an allen Quests
+- `renderer/MapRenderer.ts` — Marker-Blasen; `App.tsx` — Level-Up-Ankündigung
+- UI: `FloatingBuildingSheet` (Status/Diagnosen), `QuestPanel` (Bürgeranliegen),
+  `BuildMenu` (Neu-/Empfehlungs-Badges), `de.json`, `styles.css`
+- Tests: neu `diagnostics.test.ts` (3 Tests)
+
+**Verifikation:** 84/84 Tests grün, Lint sauber, Build erfolgreich.
+
+### Bewusst als nächste UI-Iterationen gestaffelt
+
+Aus dem großen UI-Wunschzettel noch offen (jeweils eigene, testbare Schritte):
+Service-Overlay-Modus mit oberer Kapazitäts-/Bedarfsleiste + Berater-Box (§3/§15),
+HappinessBreakdown mit „betroffene Gebäude anzeigen"-Klick (§5), aus Gebäude-Problemen
+automatisch generierte Bürgeranliegen (§13), HUD-Neuordnung mit Ressourcenbildern
+(§9), sowie echte Bild-Assets für Gebäudekarten/Avatare (§11).
+
 ## v0.18 — „Aktiver Anfang & echtes Wachstum: die Stadt füllt sich wieder"
 
 Dieser Patch behebt die im Durchspielen gefundenen Kernprobleme: die **kaputte

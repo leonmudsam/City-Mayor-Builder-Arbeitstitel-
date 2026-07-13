@@ -596,9 +596,39 @@ export class MapRenderer {
         badge.poly([w - 7, 3, w - 3.5, 9, w - 10.5, 9]).fill(0xffffff);
         container.addChild(badge);
       }
+      // Problem / upgrade marker floating above the building (§4): a red "!"
+      // bubble for something wrong, an amber up-chevron for a ready upgrade. Only
+      // one at a time (primaryMarker) so the map never becomes a wall of icons.
+      if (b.status === 'active') {
+        const marker = this.controller.getBuildingMarker(b.id);
+        if (marker) this.drawBuildingMarker(container, w, marker);
+      }
       if (b.id === this.movingId) container.alpha = 0.35;
       this.buildingLayer.addChild(container);
     }
+  }
+
+  /**
+   * A pin bubble above a building (§4). `problem` = red with a white "!";
+   * `upgrade` = amber with a white up-chevron (echoes the reference hard-hat
+   * bubbles). Drawn programmatically like everything else — swap for a sprite
+   * later without touching callers.
+   */
+  private drawBuildingMarker(container: Container, w: number, kind: 'problem' | 'upgrade'): void {
+    const g = new Graphics();
+    const cx = w / 2;
+    const cy = -11;
+    const color = kind === 'problem' ? 0xe53935 : 0xf0a020;
+    g.poly([cx - 5, cy + 7, cx + 5, cy + 7, cx, cy + 14]).fill(color); // pointer
+    g.circle(cx, cy, 10).fill(color).stroke({ width: 2, color: 0xffffff, alpha: 0.95 });
+    if (kind === 'problem') {
+      g.roundRect(cx - 1.6, cy - 5.5, 3.2, 6.5, 1.5).fill(0xffffff);
+      g.circle(cx, cy + 4, 1.7).fill(0xffffff);
+    } else {
+      g.poly([cx - 4.5, cy + 1.5, cx, cy - 4, cx + 4.5, cy + 1.5]).stroke({ width: 2.2, color: 0xffffff });
+      g.poly([cx - 4.5, cy + 5, cx, cy - 0.5, cx + 4.5, cy + 5]).stroke({ width: 2.2, color: 0xffffff });
+    }
+    container.addChild(g);
   }
 
   /** Auto-tiled road: sidewalk frame, asphalt body, connection-aware markings. */

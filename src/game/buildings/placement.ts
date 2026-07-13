@@ -71,6 +71,16 @@ function touchesTerrain(state: GameState, def: BuildingDef, x: number, y: number
   return false;
 }
 
+/**
+ * Whether a placed building of this footprint at (x,y) borders the connected
+ * road network. Exported so the diagnostics layer can flag a building that lost
+ * (or never had) road access the same way placement validates it — one source
+ * of truth, no parallel check.
+ */
+export function isConnectedToRoad(derived: Derived, def: BuildingDef, x: number, y: number): boolean {
+  return touchesConnectedRoad(derived, def, x, y);
+}
+
 /** Any tile orthogonally adjacent to the footprint is a connected road. */
 function touchesConnectedRoad(derived: Derived, def: BuildingDef, x: number, y: number): boolean {
   for (let dx = 0; dx < def.size.w; dx++) {

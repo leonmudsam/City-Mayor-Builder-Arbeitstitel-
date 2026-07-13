@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Clock, Lock, Sparkles, X } from 'lucide-react';
 import { useGame, useUiStore } from '../../state/store.ts';
-import type { BuildingCategory, ResourceId } from '../../game/types.ts';
+import type { BuildingCategory, NeedId, ResourceId } from '../../game/types.ts';
 import type { BuildingDef } from '../../game/config/types.ts';
 import { formatMoney, t } from '../../i18n/index.ts';
 import { CategoryIcon, ResourceIcon } from '../common/icons.tsx';
@@ -18,6 +18,18 @@ const CATEGORY_ORDER: BuildingCategory[] = [
   'decoration',
 ];
 
+// Which build category best answers a struggling need (§8 problem badge on tabs).
+const NEED_CATEGORY: Partial<Record<NeedId, BuildingCategory>> = {
+  housing: 'residential',
+  water: 'services',
+  food: 'services',
+  work: 'economy',
+  leisure: 'leisure',
+  safety: 'services',
+  health: 'services',
+  energy: 'infrastructure',
+};
+
 export function BuildMenu() {
   const game = useGame();
   const { startPlacing, setPanel } = useUiStore();
@@ -27,6 +39,19 @@ export function BuildMenu() {
     .filter((b) => b.category === category && b.buildable !== false)
     .sort((a, b) => a.unlockLevel - b.unlockLevel);
   const level = game.state.level.current;
+
+  // Categories that hold a freshly-unlocked building ("Neu" dot) or that would
+  // fix a struggling need ("!" dot) — computed once, shown on the tabs.
+  const newCategories = new Set<BuildingCategory>();
+  for (const b of game.config.buildingList) if (game.isNewBuilding(b.id)) newCategories.add(b.category);
+  const problemCategories = new Set<BuildingCategory>();
+  for (const need of game.config.needs) {
+    if (need.unlockLevel > level || game.state.citizens.population <= 0) continue;
+    if (game.state.citizens.needs[need.id].fulfillment < 0.6) {
+      const cat = NEED_CATEGORY[need.id];
+      if (cat) problemCategories.add(cat);
+    }
+  }
 
   return (
     <div className="panel build-menu">
@@ -40,6 +65,10 @@ export function BuildMenu() {
             >
               <CategoryIcon id={cat} />
               <span>{t(`category.${cat}`)}</span>
+              {newCategories.has(cat) && <span className="tab-dot new" title={t('ui.new_building')} />}
+              {problemCategories.has(cat) && !newCategories.has(cat) && (
+                <span className="tab-dot problem" title={t('ui.build_recommended')} />
+              )}
             </button>
           ))}
         </div>
@@ -73,6 +102,8 @@ function BuildCard({ def, locked, onPick }: { def: BuildingDef; locked: boolean;
   const scaled = def.costScaling !== undefined && limit !== undefined && limit.count > 0;
   // First-build discount active (§3): the first ever copy is free/cheap.
   const firstFree = game.isFirstBuildDiscount(def.id);
+  // Freshly unlocked this level and not built yet (§7): a "Neu" badge.
+  const isNew = !locked && game.isNewBuilding(def.id);
 
   return (
     <button
@@ -83,6 +114,7 @@ function BuildCard({ def, locked, onPick }: { def: BuildingDef; locked: boolean;
       <div className="build-card-media">
         <BuildingPreview category={def.category} size={def.size} />
         <span className="build-card-size">{def.size.w}×{def.size.h}</span>
+        {isNew && <span className="build-card-new">{t('ui.new')}</span>}
       </div>
       <div className="build-card-body">
         <div className="build-card-name">

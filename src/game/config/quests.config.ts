@@ -9,6 +9,7 @@ import type { QuestDef } from './types.ts';
 export const questsConfig: QuestDef[] = [
   {
     id: 'q01_roads',
+    sender: 'buildingDept',
     titleKey: 'quest.q01.title',
     descriptionKey: 'quest.q01.desc',
     unlockLevel: 1,
@@ -18,6 +19,7 @@ export const questsConfig: QuestDef[] = [
   },
   {
     id: 'q02_houses',
+    sender: 'citizen',
     titleKey: 'quest.q02.title',
     descriptionKey: 'quest.q02.desc',
     unlockLevel: 1,
@@ -27,6 +29,7 @@ export const questsConfig: QuestDef[] = [
   },
   {
     id: 'q03_sawmill',
+    sender: 'buildingDept',
     titleKey: 'quest.q03.title',
     descriptionKey: 'quest.q03.desc',
     unlockLevel: 2,
@@ -39,6 +42,7 @@ export const questsConfig: QuestDef[] = [
   },
   {
     id: 'q04_water',
+    sender: 'citizen',
     titleKey: 'quest.q04.title',
     descriptionKey: 'quest.q04.desc',
     unlockLevel: 3,
@@ -48,6 +52,7 @@ export const questsConfig: QuestDef[] = [
   },
   {
     id: 'q05_mayor',
+    sender: 'mayor',
     titleKey: 'quest.q05.title',
     descriptionKey: 'quest.q05.desc',
     unlockLevel: 3,
@@ -60,6 +65,7 @@ export const questsConfig: QuestDef[] = [
   },
   {
     id: 'q06_food',
+    sender: 'citizen',
     titleKey: 'quest.q06.title',
     descriptionKey: 'quest.q06.desc',
     unlockLevel: 4,
@@ -72,6 +78,7 @@ export const questsConfig: QuestDef[] = [
   },
   {
     id: 'q07_stone',
+    sender: 'buildingDept',
     titleKey: 'quest.q07.title',
     descriptionKey: 'quest.q07.desc',
     unlockLevel: 4,
@@ -84,6 +91,7 @@ export const questsConfig: QuestDef[] = [
   },
   {
     id: 'q08_market',
+    sender: 'merchant',
     titleKey: 'quest.q08.title',
     descriptionKey: 'quest.q08.desc',
     unlockLevel: 5,
@@ -96,6 +104,7 @@ export const questsConfig: QuestDef[] = [
   },
   {
     id: 'q09_expand',
+    sender: 'buildingDept',
     titleKey: 'quest.q09.title',
     descriptionKey: 'quest.q09.desc',
     unlockLevel: 5,
@@ -105,6 +114,7 @@ export const questsConfig: QuestDef[] = [
   },
   {
     id: 'q10_growth',
+    sender: 'citizen',
     titleKey: 'quest.q10.title',
     descriptionKey: 'quest.q10.desc',
     unlockLevel: 5,
@@ -114,6 +124,7 @@ export const questsConfig: QuestDef[] = [
   },
   {
     id: 'q11_economy',
+    sender: 'merchant',
     titleKey: 'quest.q11.title',
     descriptionKey: 'quest.q11.desc',
     unlockLevel: 6,
@@ -126,6 +137,7 @@ export const questsConfig: QuestDef[] = [
   },
   {
     id: 'q12_leisure',
+    sender: 'citizen',
     titleKey: 'quest.q12.title',
     descriptionKey: 'quest.q12.desc',
     unlockLevel: 7,
@@ -139,6 +151,7 @@ export const questsConfig: QuestDef[] = [
   },
   {
     id: 'q13_fire',
+    sender: 'fire',
     titleKey: 'quest.q13.title',
     descriptionKey: 'quest.q13.desc',
     unlockLevel: 8,
@@ -148,6 +161,7 @@ export const questsConfig: QuestDef[] = [
   },
   {
     id: 'q14_density',
+    sender: 'citizen',
     titleKey: 'quest.q14.title',
     descriptionKey: 'quest.q14.desc',
     unlockLevel: 9,
@@ -160,6 +174,7 @@ export const questsConfig: QuestDef[] = [
   },
   {
     id: 'q15_metropolis',
+    sender: 'mayor',
     titleKey: 'quest.q15.title',
     descriptionKey: 'quest.q15.desc',
     unlockLevel: 10,
@@ -174,6 +189,7 @@ export const questsConfig: QuestDef[] = [
   // ---- MVP 2: energy grid ----
   {
     id: 'q16_power',
+    sender: 'buildingDept',
     titleKey: 'quest.q16.title',
     descriptionKey: 'quest.q16.desc',
     unlockLevel: 11,
@@ -186,6 +202,7 @@ export const questsConfig: QuestDef[] = [
   },
   {
     id: 'q17_grid',
+    sender: 'buildingDept',
     titleKey: 'quest.q17.title',
     descriptionKey: 'quest.q17.desc',
     unlockLevel: 12,
@@ -199,6 +216,7 @@ export const questsConfig: QuestDef[] = [
   // ---- MVP 2: emergency services ----
   {
     id: 'q18_safety',
+    sender: 'fire',
     titleKey: 'quest.q18.title',
     descriptionKey: 'quest.q18.desc',
     unlockLevel: 13,
@@ -211,6 +229,7 @@ export const questsConfig: QuestDef[] = [
   },
   {
     id: 'q19_health',
+    sender: 'citizen',
     titleKey: 'quest.q19.title',
     descriptionKey: 'quest.q19.desc',
     unlockLevel: 14,
@@ -228,6 +247,7 @@ export const questsConfig: QuestDef[] = [
   // the same objective types and are pure config — no bespoke quest code.
   {
     id: 'qe_wood',
+    sender: 'merchant',
     titleKey: 'quest.qe_wood.title',
     descriptionKey: 'quest.qe_wood.desc',
     unlockLevel: 2,
@@ -236,6 +256,7 @@ export const questsConfig: QuestDef[] = [
   },
   {
     id: 'qe_neighbours',
+    sender: 'citizen',
     titleKey: 'quest.qe_neighbours.title',
     descriptionKey: 'quest.qe_neighbours.desc',
     unlockLevel: 3,
@@ -244,6 +265,7 @@ export const questsConfig: QuestDef[] = [
   },
   {
     id: 'qe_pantry',
+    sender: 'citizen',
     titleKey: 'quest.qe_pantry.title',
     descriptionKey: 'quest.qe_pantry.desc',
     unlockLevel: 4,
@@ -252,6 +274,7 @@ export const questsConfig: QuestDef[] = [
   },
   {
     id: 'qe_stone',
+    sender: 'buildingDept',
     titleKey: 'quest.qe_stone.title',
     descriptionKey: 'quest.qe_stone.desc',
     unlockLevel: 4,
@@ -260,6 +283,7 @@ export const questsConfig: QuestDef[] = [
   },
   {
     id: 'qe_expand',
+    sender: 'buildingDept',
     titleKey: 'quest.qe_expand.title',
     descriptionKey: 'quest.qe_expand.desc',
     unlockLevel: 5,
@@ -268,6 +292,7 @@ export const questsConfig: QuestDef[] = [
   },
   {
     id: 'qe_happy',
+    sender: 'citizen',
     titleKey: 'quest.qe_happy.title',
     descriptionKey: 'quest.qe_happy.desc',
     unlockLevel: 5,

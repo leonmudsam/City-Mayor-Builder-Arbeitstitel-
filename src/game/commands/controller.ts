@@ -9,6 +9,7 @@ import { validatePlacement, type PlacementError } from '../buildings/placement.t
 import { demolishRefund, effectiveBuildCost, isFirstBuildDiscounted } from '../buildings/effects.ts';
 import { buildLimitAt, countOf, nextLimitLevel } from '../buildings/limits.ts';
 import { coverageOverlay, type CoverageOverlay } from '../buildings/coverage.ts';
+import { buildingDiagnostics, primaryMarker, type Diagnosis } from '../buildings/diagnostics.ts';
 import { canAfford, grantGold, grantResources, spendCost, spendGold } from '../economy/economyService.ts';
 import { computeIncome, type IncomeBreakdown } from '../economy/income.ts';
 import { addXp } from '../progression/levels.ts';
@@ -430,6 +431,22 @@ export class GameController {
     return effectiveBuildCost(def, countOf(this.state, defId), this.state.stats.built[defId] ?? 0);
   }
 
+  /**
+   * Whether a building was just unlocked at the current level and hasn't been
+   * built yet — drives the "Neu" badge (§7). No persisted "seen" flag needed: the
+   * badge naturally clears when the player builds one or the city levels up.
+   */
+  isNewBuilding(defId: string): boolean {
+    const def = this.config.buildings.get(defId);
+    if (!def) return false;
+    return def.unlockLevel === this.state.level.current && (this.state.stats.built[defId] ?? 0) === 0;
+  }
+
+  /** Building def-ids unlocked at a given level (for the level-up announcement). */
+  unlocksAtLevel(level: number): string[] {
+    return this.config.levels.find((l) => l.level === level)?.unlocks ?? [];
+  }
+
   /** Whether the next copy is the free/discounted first build (build-menu badge). */
   isFirstBuildDiscount(defId: string): boolean {
     const def = this.config.buildings.get(defId);
@@ -523,5 +540,17 @@ export class GameController {
    */
   getCoverageOverlay(buildingId: string): CoverageOverlay | undefined {
     return coverageOverlay(this.state, this.config, this.derived, buildingId);
+  }
+
+  /** Problems & benefits for a building (§2/§4/§12) — sheet + map markers. */
+  getBuildingDiagnostics(buildingId: string): Diagnosis[] {
+    const b = this.state.buildings[buildingId];
+    if (!b) return [];
+    return buildingDiagnostics(this.state, this.config, this.derived, b);
+  }
+
+  /** The single marker (if any) to float above a building on the map (§4). */
+  getBuildingMarker(buildingId: string): 'problem' | 'upgrade' | undefined {
+    return primaryMarker(this.getBuildingDiagnostics(buildingId));
   }
 }
