@@ -2,7 +2,7 @@ import type { GameConfig } from '../config/index.ts';
 import type { GameState, NeedId, ResourceId } from '../types.ts';
 import type { Derived } from './derived.ts';
 import { recomputeDerived } from './derived.ts';
-import { effectiveEffects } from '../buildings/effects.ts';
+import { effectiveEffects, isContributing } from '../buildings/effects.ts';
 import { computeIncome } from '../economy/income.ts';
 import { addXp } from '../progression/levels.ts';
 import { updateQuests } from './quests.ts';
@@ -12,6 +12,22 @@ export interface TickResult {
   derived: Derived;
   levelUps: number;
   structuralChange: boolean;
+  /** Money earned this advance from actively exporting overflow production (§6). */
+  overflowExport: number;
+}
+
+/**
+ * Money earned by exporting one resource's overflow production (§6). Only the
+ * amount that *cannot* be stored is sold, at the resource's export rate — so it
+ * rewards keeping production running against a full store, not hoarding.
+ */
+export function overflowExportValue(
+  bal: { exportRates: Partial<Record<ResourceId, number>> },
+  resource: ResourceId,
+  overflow: number,
+): number {
+  if (overflow <= 0) return 0;
+  return overflow * (bal.exportRates[resource] ?? 0);
 }
 
 /**
@@ -39,9 +55,16 @@ export function moveInPerMin(
  * mid-interval effects (construction finishing, storage filling up) stay
  * reasonably accurate. Pure with respect to inputs — no I/O, no Date.now().
  */
-export function advance(state: GameState, config: GameConfig, derived: Derived, nowMs: number): TickResult {
+/**
+ * @param live `true` only for real, foreground 1-second ticks. Active-player
+ * rewards that must NOT accrue while the game is closed — the overflow export
+ * (§6) — are gated on this. Offline catch-up (load, tab return) passes `false`,
+ * so a full store during downtime is simply wasted production, never money.
+ */
+export function advance(state: GameState, config: GameConfig, derived: Derived, nowMs: number, live = false): TickResult {
   let levelUps = 0;
   let structuralChange = false;
+  let overflowExport = 0;
   const maxChunkMs = config.balancing.maxTickChunkSec * 1000;
 
   while (state.meta.lastSimTime < nowMs) {
@@ -76,7 +99,8 @@ export function advance(state: GameState, config: GameConfig, derived: Derived, 
     //    Storage caps make warehouses matter; full storage halts production.
     const dtMin = dtSec / 60;
     for (const b of Object.values(state.buildings)) {
-      if (b.status !== 'active') continue;
+      // A building mid-upgrade keeps producing at its current stage (§2).
+      if (!isContributing(b)) continue;
       const def = config.buildings.get(b.defId);
       if (!def) continue;
       const bonus = 1 + (derived.productionBonus[b.id] ?? 0) / 100;
@@ -99,6 +123,16 @@ export function advance(state: GameState, config: GameConfig, derived: Derived, 
         const stored = Math.min(produced, Math.max(0, cap - state.resources[eff.resource]));
         state.resources[eff.resource] += stored;
         state.stats.produced[eff.resource] = (state.stats.produced[eff.resource] ?? 0) + stored;
+        // Active overflow export (§6): while the player is live, production that
+        // can't be stored is sold for money instead of wasted. Offline it's just
+        // lost — no AFK money printer. Money is uncapped, so it always lands.
+        if (live && cap !== Number.POSITIVE_INFINITY) {
+          const value = overflowExportValue(config.balancing, eff.resource, produced - stored);
+          if (value > 0) {
+            state.resources.money += value;
+            overflowExport += value;
+          }
+        }
       }
     }
 
@@ -232,11 +266,19 @@ export function advance(state: GameState, config: GameConfig, derived: Derived, 
     let completed = false;
     for (const b of Object.values(state.buildings)) {
       if (b.status === 'constructing' && b.constructionEndsAt !== undefined && b.constructionEndsAt <= chunkEnd) {
+        // Only now — at completion — does an in-progress upgrade become the live
+        // stage (§2): copy the target into upgradeLevel and clear it, then flip
+        // to active. Until this moment the old stage's effects stayed on.
+        const wasUpgrade = b.targetUpgradeLevel !== undefined;
+        if (b.targetUpgradeLevel !== undefined) {
+          b.upgradeLevel = b.targetUpgradeLevel;
+          delete b.targetUpgradeLevel;
+        }
         b.status = 'active';
         delete b.constructionEndsAt;
         const def = config.buildings.get(b.defId);
         if (def) {
-          const xp = b.upgradeLevel > 0 ? (def.upgrades?.[b.upgradeLevel - 1]?.xpReward ?? 0) : def.xpReward;
+          const xp = wasUpgrade ? (def.upgrades?.[b.upgradeLevel - 1]?.xpReward ?? 0) : def.xpReward;
           levelUps += addXp(state, config, derived, xp);
           if (def.id === 'mayor_house') state.mayor.houseLevel = Math.max(state.mayor.houseLevel, 1);
         }
@@ -249,7 +291,7 @@ export function advance(state: GameState, config: GameConfig, derived: Derived, 
 
   if (state.mayor.messages.length > 30) state.mayor.messages.length = 30;
   updateQuests(state, config);
-  return { derived, levelUps, structuralChange };
+  return { derived, levelUps, structuralChange, overflowExport };
 }
 
 const COMPLAINT_THROTTLE_MS = 10 * 60 * 1000;

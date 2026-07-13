@@ -536,3 +536,49 @@ body {
 .economy-ledger-row { display: flex; justify-content: space-between; font-size: 12.5px; font-variant-numeric: tabular-nums; }
 .economy-ledger-row span:first-child { display: inline-flex; align-items: center; gap: 5px; color: var(--text-muted); }
 .res-badge-warn .res-badge-sub { color: var(--warn); }
+
+/* ---- v0.20: trade panel, debug cheats, tax warnings, overflow, upgrade note ---- */
+
+/* Active overflow-export line in the economy panel (§6). */
+.economy-overflow {
+  display: flex; align-items: center; gap: 8px;
+  margin-top: 8px; padding: 8px 10px;
+  font-size: 12.5px; font-weight: 600; color: var(--good);
+  background: color-mix(in srgb, var(--good) 12%, transparent);
+  border-radius: 8px;
+}
+.economy-overflow svg { color: var(--good); }
+
+/* Tax slider effect preview + high-rate warning tint (§9). */
+.economy-tax-effect { font-size: 11.5px; font-weight: 600; margin-top: 2px; display: flex; align-items: center; gap: 4px; }
+.economy-tax-effect svg { vertical-align: -2px; }
+.economy-tax-row.tax-warn .economy-tax-value { color: var(--warn); }
+.economy-tax-row.tax-danger .economy-tax-value { color: var(--bad); }
+.economy-tax-row.tax-danger input[type='range'] { accent-color: var(--bad); }
+.economy-tax-row.tax-warn input[type='range'] { accent-color: var(--warn); }
+
+/* "Current stage stays active" hint under an in-progress upgrade (§2/§17). */
+.sheet-upgrade-note { color: var(--good); font-weight: 600; }
+
+/* Trade panel (§7). */
+.trade-rows { display: flex; flex-direction: column; gap: 10px; }
+.trade-row { padding: 10px; background: var(--surface-2); border: 1px solid var(--border); border-radius: 8px; }
+.trade-row-head { display: flex; justify-content: space-between; align-items: center; }
+.trade-row-name { display: flex; align-items: center; gap: 6px; font-weight: 600; font-size: 13.5px; }
+.trade-row-have { font-size: 12.5px; font-variant-numeric: tabular-nums; }
+.trade-row-prices { display: flex; gap: 12px; margin: 6px 0 8px; font-size: 12px; font-weight: 600; }
+.trade-price { display: flex; align-items: center; gap: 4px; }
+.trade-price.sell { color: var(--good); }
+.trade-price.buy { color: var(--warn); }
+.trade-row-actions { display: flex; flex-wrap: wrap; gap: 6px; }
+.trade-btn { flex: 1 1 auto; padding: 6px 8px; font-size: 12px; justify-content: center; }
+.trade-btn:disabled { opacity: 0.45; cursor: not-allowed; }
+
+/* Debug / prototype cheats panel (§10). */
+.debug-banner {
+  font-size: 12px; line-height: 1.4; font-weight: 600;
+  color: var(--warn); background: color-mix(in srgb, var(--warn) 12%, transparent);
+  border: 1px solid color-mix(in srgb, var(--warn) 40%, transparent);
+  border-radius: 8px; padding: 8px 10px; margin-bottom: 4px;
+}
+.debug-panel .btn-secondary { justify-content: flex-start; }

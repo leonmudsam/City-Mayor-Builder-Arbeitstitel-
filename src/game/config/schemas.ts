@@ -62,6 +62,7 @@ export const buildingDefSchema = z.object({
   adjacentTerrain: z.string().optional(),
   costScaling: z.number().positive().optional(),
   firstBuildDiscount: z.number().min(0).max(1).optional(),
+  tradePost: z.boolean().optional(),
 });
 
 export const levelDefSchema = z.object({
@@ -88,7 +89,12 @@ export const questDefSchema = z.object({
       z.object({ type: z.literal('happiness'), amount: z.number().positive() }),
     ]),
   ),
-  rewards: z.object({ money: z.number().optional(), gold: z.number().optional(), xp: z.number().optional() }),
+  rewards: z.object({
+    money: z.number().optional(),
+    gold: z.number().optional(),
+    xp: z.number().optional(),
+    resources: z.record(resourceId, z.number()).optional(),
+  }),
   nextQuestId: z.string().optional(),
   sender: z.enum(['citizen', 'buildingDept', 'fire', 'merchant', 'mayor']).optional(),
 });
@@ -148,6 +154,7 @@ export const saveGameSchema = z.object({
       y: z.number().int(),
       upgradeLevel: z.number().int().nonnegative(),
       status: z.enum(['constructing', 'active', 'paused']),
+      targetUpgradeLevel: z.number().int().nonnegative().optional(),
       constructionEndsAt: z.number().optional(),
     }),
   ),

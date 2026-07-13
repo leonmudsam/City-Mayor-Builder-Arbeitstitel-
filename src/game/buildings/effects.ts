@@ -8,6 +8,20 @@ export function effectiveEffects(def: BuildingDef, upgradeLevel: number): Buildi
   return upgrade ? upgrade.effects : def.effects;
 }
 
+/**
+ * Whether a building's effects are currently live in the simulation (§2). An
+ * active building counts, and so does one whose upgrade is *in progress*
+ * (`constructing` with a `targetUpgradeLevel`) — the latter keeps producing,
+ * housing and covering at its already-completed `upgradeLevel` for the whole
+ * upgrade time, so a building never drops to zero mid-upgrade. A fresh build
+ * (constructing, no target) contributes nothing until it finishes. The single
+ * predicate the derived layer and the production tick share, so effect
+ * aggregation and per-tick production always agree on who is "on".
+ */
+export function isContributing(b: { status: string; targetUpgradeLevel?: number }): boolean {
+  return b.status === 'active' || (b.status === 'constructing' && b.targetUpgradeLevel !== undefined);
+}
+
 /** Everything paid into a building: its build cost plus every applied upgrade. */
 export function investedCost(def: BuildingDef, upgradeLevel: number): Partial<Record<ResourceId, number>> {
   const total: Partial<Record<ResourceId, number>> = {};

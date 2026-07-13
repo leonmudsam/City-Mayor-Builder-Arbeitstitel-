@@ -134,9 +134,12 @@ describe('tax policy (MVP 2)', () => {
     // Raising the rate scales income directly (happiness penalty applies next tick).
     controller.setTaxRate('residential', 1.5);
     expect(controller.getIncome().residential).toBeCloseTo(base * 1.5, 5);
-    // Out-of-band values clamp to the configured maximum.
+    // The band now reaches a punishing 500 % (§9): 5.0 is in-band and sticks…
     controller.setTaxRate('residential', 5);
-    expect(controller.state.policy.residentialTaxRate).toBe(1.5);
+    expect(controller.state.policy.residentialTaxRate).toBe(5);
+    // …but anything beyond clamps to the configured maximum.
+    controller.setTaxRate('residential', 9);
+    expect(controller.state.policy.residentialTaxRate).toBe(5);
   });
 
   it('lets a tax hike bite happiness over the following ticks', () => {

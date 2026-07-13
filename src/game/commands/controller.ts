@@ -86,11 +86,19 @@ export class GameController {
     for (const listener of this.listeners) listener(event);
   }
 
-  /** Drive the simulation to `now` (called by the UI loop and after load). */
-  update(now: number): void {
+  /** Money earned from active overflow export in the last live tick (§6, UI). */
+  lastOverflowExport = 0;
+
+  /**
+   * Drive the simulation to `now`. `live` is `true` only for real foreground
+   * ticks; it enables active-player rewards (overflow export, §6) that must not
+   * accrue during offline catch-up. Load/tab-return catch-up passes `false`.
+   */
+  update(now: number, live = false): void {
     if (now <= this.state.meta.lastSimTime) return;
-    const result = advance(this.state, this.config, this.derived, now);
+    const result = advance(this.state, this.config, this.derived, now, live);
     this.derived = result.derived;
+    this.lastOverflowExport = live ? result.overflowExport : 0;
     if (result.levelUps > 0) this.notify({ type: 'levelUp', level: this.state.level.current });
     this.notify({ type: 'change' });
   }
@@ -185,7 +193,12 @@ export class GameController {
     if (next.unlockLevel && this.state.level.current < next.unlockLevel) return fail('locked');
     const spend = spendCost(this.state, next.cost, `upgrade_${b.defId}`);
     if (!spend.ok) return fail('insufficient');
-    b.upgradeLevel += 1;
+    // Critical upgrade fix (§2): DON'T advance upgradeLevel yet — record the
+    // target and go under construction. The building keeps every effect of its
+    // current (completed) stage for the whole build time; the tick promotes it
+    // to `targetUpgradeLevel` only on completion. No residents evicted, no
+    // production/coverage/storage dropping to zero mid-upgrade.
+    b.targetUpgradeLevel = b.upgradeLevel + 1;
     b.status = 'constructing';
     b.constructionEndsAt = this.state.meta.lastSimTime + next.constructionSec * 1000;
     this.afterStructuralChange();
@@ -384,6 +397,8 @@ export class GameController {
     this.state.quests.active.splice(index, 1);
     this.state.quests.completed.push(questId);
     if (quest.rewards.money) grantResources(this.state, { money: quest.rewards.money }, this.derived.storageCaps, `quest_${questId}`);
+    // Material rewards (§16) respect storage caps like any other grant.
+    if (quest.rewards.resources) grantResources(this.state, quest.rewards.resources, this.derived.storageCaps, `quest_${questId}`);
     if (quest.rewards.gold) grantGold(this.state, quest.rewards.gold, 'quest_reward');
     if (quest.rewards.xp) addXp(this.state, this.config, this.derived, quest.rewards.xp);
     updateQuests(this.state, this.config);
@@ -428,7 +443,133 @@ export class GameController {
     return ok;
   }
 
+  // ---- Trading (§7 Handelskontor) -----------------------------------------
+
+  /**
+   * The best trade tier the city currently has: the highest completed stage of
+   * any active trading post (0 = none). Manual trading requires a trading post;
+   * a higher-stage one improves the sell rate (§7 "better rates by upgrade").
+   */
+  private bestTradeStage(): number {
+    let best = -1;
+    for (const b of Object.values(this.state.buildings)) {
+      if (b.status !== 'active') continue;
+      const def = this.config.buildings.get(b.defId);
+      if (def?.tradePost) best = Math.max(best, b.upgradeLevel);
+    }
+    return best; // -1 = no trading post
+  }
+
+  hasTradePost(): boolean {
+    return this.bestTradeStage() >= 0;
+  }
+
+  /** Per-unit sell/buy price for a resource at the current best trade tier (§7). */
+  getTradeQuote(resource: ResourceId): { sell: number; buy: number } {
+    const bal = this.config.balancing;
+    const base = bal.exportRates[resource] ?? 0;
+    const stage = this.bestTradeStage();
+    const sell = stage < 0 ? 0 : base * (1 + stage * bal.tradeSellBonusPerLevel);
+    // Buying is deliberately expensive (markup on the *base* rate, no tier
+    // discount) so production stays the real source and trade can't be farmed.
+    const buy = base * bal.tradeBuyMarkup;
+    return { sell: Math.round(sell * 100) / 100, buy: Math.round(buy * 100) / 100 };
+  }
+
+  /** Sell stored resources for money at the current tier (§7). */
+  sellResource(resource: ResourceId, amount: number): CommandResult {
+    if (resource === 'money' || !Number.isFinite(amount) || amount <= 0) return fail('invalid');
+    if (!this.hasTradePost()) return fail('locked');
+    const have = this.state.resources[resource];
+    const qty = Math.min(amount, have);
+    if (qty <= 0) return fail('insufficient');
+    const { sell } = this.getTradeQuote(resource);
+    if (sell <= 0) return fail('invalid');
+    this.state.resources[resource] -= qty;
+    this.state.resources.money += qty * sell;
+    this.notify({ type: 'change' });
+    return ok;
+  }
+
+  /** Buy resources for money at the (marked-up) tier price, respecting storage (§7). */
+  buyResource(resource: ResourceId, amount: number): CommandResult {
+    if (resource === 'money' || !Number.isFinite(amount) || amount <= 0) return fail('invalid');
+    if (!this.hasTradePost()) return fail('locked');
+    const cap = this.derived.storageCaps[resource] ?? 0;
+    const room = Math.max(0, cap - this.state.resources[resource]);
+    const qty = Math.min(amount, room);
+    if (qty <= 0) return fail('invalid'); // no storage room for it
+    const { buy } = this.getTradeQuote(resource);
+    const cost = qty * buy;
+    if (this.state.resources.money < cost) return fail('insufficient');
+    this.state.resources.money -= cost;
+    this.state.resources[resource] += qty;
+    this.notify({ type: 'change' });
+    return ok;
+  }
+
+  // ---- Prototype cheats (§10, gated behind the debugTools flag) ------------
+
+  /** Grant money for balancing tests. Debug only. */
+  debugGrantMoney(amount: number): CommandResult {
+    if (!this.config.features.debugTools) return fail('feature_disabled');
+    grantResources(this.state, { money: amount }, this.derived.storageCaps, 'debug_money_grant');
+    this.notify({ type: 'change' });
+    return ok;
+  }
+
+  /** Fill every storable resource to its cap. Debug only. */
+  debugFillResources(): CommandResult {
+    if (!this.config.features.debugTools) return fail('feature_disabled');
+    for (const res of ['wood', 'stone', 'food', 'freshwater'] as const) {
+      const cap = this.derived.storageCaps[res] ?? 0;
+      if (cap > 0 && cap !== Number.POSITIVE_INFINITY) this.state.resources[res] = cap;
+    }
+    this.notify({ type: 'change' });
+    return ok;
+  }
+
+  /**
+   * Instantly complete in-progress construction. `kind` picks fresh builds,
+   * upgrades, or both (§10) — an upgrade is identified by its `targetUpgradeLevel`.
+   * Reuses the normal completion path (tick), so effects/XP apply exactly as if
+   * the timer had elapsed. Debug only.
+   */
+  debugFinishConstruction(kind: 'all' | 'build' | 'upgrade' = 'all'): CommandResult {
+    if (!this.config.features.debugTools) return fail('feature_disabled');
+    const now = this.state.meta.lastSimTime;
+    let touched = false;
+    for (const b of Object.values(this.state.buildings)) {
+      if (b.status !== 'constructing' || b.constructionEndsAt === undefined) continue;
+      const isUpgrade = b.targetUpgradeLevel !== undefined;
+      if (kind === 'build' && isUpgrade) continue;
+      if (kind === 'upgrade' && !isUpgrade) continue;
+      b.constructionEndsAt = now;
+      touched = true;
+    }
+    if (touched) this.update(now + 1);
+    return ok;
+  }
+
   // ---- Read helpers for the UI (no mutation) ------------------------------
+
+  /**
+   * Active overflow-export earnings to show in the UI (§6). `perMin` is the
+   * money the live overflow is currently earning, extrapolated from the last
+   * tick; `active` is whether any producer is spilling into export right now.
+   */
+  getOverflowExport(): { perMin: number; active: boolean } {
+    const bal = this.config.balancing;
+    let perMin = 0;
+    for (const res of ['wood', 'stone', 'food', 'freshwater'] as const) {
+      const cap = this.derived.storageCaps[res] ?? 0;
+      if (cap <= 0 || cap === Number.POSITIVE_INFINITY) continue;
+      if (this.state.resources[res] < cap - 0.5) continue; // store not full → no overflow
+      const rate = bal.exportRates[res] ?? 0;
+      if (rate > 0) perMin += this.derived.productionPerMin[res] * rate;
+    }
+    return { perMin: Math.round(perMin), active: perMin > 0 };
+  }
 
   canAffordCost(cost: Partial<Record<ResourceId, number>>): boolean {
     return canAfford(this.state, cost);

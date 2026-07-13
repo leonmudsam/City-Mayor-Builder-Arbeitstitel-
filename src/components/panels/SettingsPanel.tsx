@@ -1,4 +1,4 @@
-import { Download, Gift, RefreshCw, Upload, X } from 'lucide-react';
+import { Bug, Download, Gift, RefreshCw, Upload, X } from 'lucide-react';
 import { useGame, useUiStore } from '../../state/store.ts';
 import { exportSave, importSave } from '../../game/storage/exportImport.ts';
 import { t } from '../../i18n/index.ts';
@@ -14,6 +14,7 @@ export function SettingsPanel({
 }) {
   const game = useGame();
   const { setPanel, pushToast } = useUiStore();
+  const debugTools = game.config.features.debugTools;
 
   return (
     <aside className="panel side-panel">
@@ -81,6 +82,11 @@ export function SettingsPanel({
       >
         <Gift size={16} /> {t('ui.reset.bonus')}
       </button>
+      {debugTools && (
+        <button className="btn-secondary" onClick={() => setPanel('debug')}>
+          <Bug size={16} /> {t('ui.debug.title')}
+        </button>
+      )}
       <p className="muted version">v{__APP_VERSION__}</p>
     </aside>
   );

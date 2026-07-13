@@ -18,6 +18,8 @@ import { CityStatusPanel } from './components/panels/CityStatusPanel.tsx';
 import { EconomyPanel } from './components/panels/EconomyPanel.tsx';
 import { SectorDialog } from './components/panels/SectorDialog.tsx';
 import { SettingsPanel } from './components/panels/SettingsPanel.tsx';
+import { TradePanel } from './components/panels/TradePanel.tsx';
+import { DebugPanel } from './components/panels/DebugPanel.tsx';
 import { Toasts } from './components/common/Toasts.tsx';
 import { EventModal } from './components/common/EventModal.tsx';
 import { t } from './i18n/index.ts';
@@ -74,7 +76,9 @@ export function App() {
         });
         if (cancelled) return;
 
-        tickTimer = setInterval(() => controller?.update(Date.now()), 1000);
+        // Live foreground tick — enables active-player rewards (overflow export,
+        // §6). Offline catch-up (initial load, tab return) stays non-live.
+        tickTimer = setInterval(() => controller?.update(Date.now(), true), 1000);
         saveTimer = setInterval(save, 30_000);
         document.addEventListener('visibilitychange', onVisibility);
         window.addEventListener('beforeunload', save);
@@ -159,6 +163,8 @@ function GameScreen({ onImport, onReset }: { onImport(json: string): boolean; on
         {openPanel === 'status' && <CityStatusPanel />}
         {openPanel === 'economy' && <EconomyPanel />}
         {openPanel === 'settings' && <SettingsPanel onImport={onImport} onReset={onReset} />}
+        {openPanel === 'trade' && <TradePanel />}
+        {openPanel === 'debug' && <DebugPanel />}
         <FloatingBuildingSheet />
         <SectorDialog />
         {openPanel === 'build' && <BuildMenu />}
