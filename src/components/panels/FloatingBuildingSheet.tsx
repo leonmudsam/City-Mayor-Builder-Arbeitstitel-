@@ -1,7 +1,9 @@
 import {
+  AlertTriangle,
   ArrowUp,
   BriefcaseBusiness,
   Building2,
+  CheckCircle2,
   Clock,
   Coins,
   Flame,
@@ -23,6 +25,8 @@ import { useState } from 'react';
 import { useGame, useUiStore } from '../../state/store.ts';
 import { effectiveEffects } from '../../game/buildings/effects.ts';
 import type { BuildingEffect } from '../../game/config/types.ts';
+import type { BuildingInstance } from '../../game/types.ts';
+import type { Diagnosis } from '../../game/buildings/diagnostics.ts';
 import { ActionBubble } from '../common/ActionBubble.tsx';
 import { ConfirmModal } from '../common/ConfirmModal.tsx';
 import { formatDuration, formatMoney, t } from '../../i18n/index.ts';
@@ -62,6 +66,13 @@ export function FloatingBuildingSheet() {
   // A building that has been upgraded reads by its stage name (§ prestige/visual
   // development): "Wolkenkratzer", not "Wohnturm".
   const stageNameKey = b.upgradeLevel > 0 ? (def.upgrades?.[b.upgradeLevel - 1]?.nameKey ?? def.nameKey) : def.nameKey;
+  // Problems & benefits (§2/§4): the shared diagnostics, grouped for the sheet.
+  // "no_movein" is shown by the dedicated growth note below, so drop it here to
+  // avoid saying the same thing twice.
+  const diagnostics = game.getBuildingDiagnostics(b.id);
+  const problems = diagnostics.filter((d) => d.kind === 'problem' && d.code !== 'no_movein');
+  const benefits = diagnostics.filter((d) => d.kind === 'benefit');
+  const status = buildingStatus(b, diagnostics);
   const close = () => selectBuilding(undefined);
 
   return (
@@ -84,9 +95,15 @@ export function FloatingBuildingSheet() {
           </button>
         </div>
 
+        <div className="sheet-substatus">
+          <span className="sheet-category">{t(`category.${def.category}`)}</span>
+          <span className={`sheet-status-badge ${status.tone}`}>{t(status.key)}</span>
+        </div>
+
         {b.status === 'constructing' && b.constructionEndsAt !== undefined && (
           <p className="dialog-status">
-            <Clock size={15} /> {t('ui.construction')} — {t('ui.ready_in', { time: formatDuration(b.constructionEndsAt - now) })}
+            <Clock size={15} /> {t(b.upgradeLevel > 0 ? 'ui.upgrade_running' : 'ui.construction')} —{' '}
+            {t('ui.ready_in', { time: formatDuration(b.constructionEndsAt - now) })}
           </p>
         )}
         {b.status === 'paused' && (
@@ -120,6 +137,23 @@ export function FloatingBuildingSheet() {
             </li>
           )}
         </ul>
+
+        {(problems.length > 0 || benefits.length > 0) && (
+          <div className="sheet-diagnostics">
+            {problems.map((d, i) => (
+              <div key={`p${i}`} className="sheet-diag problem">
+                <AlertTriangle size={14} />
+                <span>{t(`diag.${d.code}`, d.params)}</span>
+              </div>
+            ))}
+            {benefits.map((d, i) => (
+              <div key={`b${i}`} className="sheet-diag benefit">
+                <CheckCircle2 size={14} />
+                <span>{t(`diag.${d.code}`, d.params)}</span>
+              </div>
+            ))}
+          </div>
+        )}
 
         {def.category === 'residential' && b.status === 'active' && <ResidentialGrowthNote />}
 
@@ -180,6 +214,23 @@ export function FloatingBuildingSheet() {
       )}
     </>
   );
+}
+
+/**
+ * The building's headline status for the sheet badge (§2): the same states the
+ * game already tracks, plus a "needs attention" / "upgrade ready" read derived
+ * from the shared diagnostics — no new state.
+ */
+function buildingStatus(b: BuildingInstance, diagnostics: Diagnosis[]): { key: string; tone: string } {
+  if (b.status === 'constructing') {
+    return b.upgradeLevel > 0
+      ? { key: 'ui.status.upgrading', tone: 'busy' }
+      : { key: 'ui.status.constructing', tone: 'busy' };
+  }
+  if (b.status === 'paused') return { key: 'ui.status.paused', tone: 'bad' };
+  if (diagnostics.some((d) => d.kind === 'problem')) return { key: 'ui.status.attention', tone: 'bad' };
+  if (diagnostics.some((d) => d.code === 'upgrade_ready')) return { key: 'ui.status.upgrade_ready', tone: 'good' };
+  return { key: 'ui.status.active', tone: 'good' };
 }
 
 /**

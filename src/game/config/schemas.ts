@@ -90,6 +90,7 @@ export const questDefSchema = z.object({
   ),
   rewards: z.object({ money: z.number().optional(), gold: z.number().optional(), xp: z.number().optional() }),
   nextQuestId: z.string().optional(),
+  sender: z.enum(['citizen', 'buildingDept', 'fire', 'merchant', 'mayor']).optional(),
 });
 
 export const mayorActionDefSchema = z.object({

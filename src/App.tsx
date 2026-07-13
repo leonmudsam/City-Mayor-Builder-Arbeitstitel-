@@ -52,11 +52,13 @@ export function App() {
         controller.subscribe((event) => {
           if (event.type === 'levelUp') {
             const level = controller!.state.level.current;
+            // Announce what the new level unlocks (§7) so new buildings aren't missed.
+            const unlocks = controller!.unlocksAtLevel(level).map((id) => t(`building.${id}`)).join(', ');
             useUiStore.getState().pushEvent({
               kind: 'levelUp',
               titleKey: 'event.level_up.title',
-              bodyKey: 'event.level_up.body',
-              params: { level },
+              bodyKey: unlocks ? 'event.level_up.body_unlocks' : 'event.level_up.body',
+              params: unlocks ? { level, buildings: unlocks } : { level },
             });
             save();
           }

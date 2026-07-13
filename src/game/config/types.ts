@@ -227,6 +227,14 @@ export type QuestObjective =
   | { type: 'mayorAction'; actionId: MayorActionId; count: number }
   | { type: 'happiness'; amount: number };
 
+/**
+ * Who a quest comes from (§6/§14): reframes the level checklist as a living
+ * request from a citizen, the building department, the fire service, a merchant
+ * or the mayor's office. Purely presentational — the reward still comes from the
+ * game system, but the task now reads as "you helped someone".
+ */
+export type QuestSender = 'citizen' | 'buildingDept' | 'fire' | 'merchant' | 'mayor';
+
 export interface QuestDef {
   id: QuestId;
   titleKey: string;
@@ -235,6 +243,8 @@ export interface QuestDef {
   objectives: QuestObjective[];
   rewards: { money?: number; gold?: number; xp?: number };
   nextQuestId?: QuestId;
+  /** Optional "who's asking" framing for the quest card (§6). */
+  sender?: QuestSender;
 }
 
 // ---- Mayor ----------------------------------------------------------------
