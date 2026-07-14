@@ -8,7 +8,7 @@ describe('income breakdown (§5)', () => {
     const { controller } = newController();
     controller.placeBuilding('road', 26, 26);
     controller.placeBuilding('house_small', 26, 27);
-    controller.update(T0 + 30_000 + 5 * MIN); // citizens move in
+    controller.update(T0 + 30_000 + 5 * MIN, true); // citizens move in
     const income = controller.getIncome();
     expect(controller.state.citizens.population).toBeGreaterThan(0);
     expect(income.residential).toBeGreaterThan(0);
@@ -50,7 +50,7 @@ describe('income breakdown (§5)', () => {
     controller.placeBuilding('house_small', 28, 27);
     controller.placeBuilding('well', 30, 27);
     controller.placeBuilding('sawmill', 26, 29);
-    controller.update(T0 + 60_000 + 6 * MIN); // everything builds + fills
+    controller.update(T0 + 60_000 + 6 * MIN, true); // everything builds + fills
     // A starter town's tax + industry must clearly outrun its running costs,
     // or the upkeep sink would strangle the early game.
     expect(controller.getIncome().net).toBeGreaterThan(0);
@@ -128,7 +128,7 @@ describe('tax policy (MVP 2)', () => {
     const { controller } = newController();
     controller.placeBuilding('road', 26, 26);
     controller.placeBuilding('house_small', 26, 27);
-    controller.update(T0 + 30_000 + 5 * MIN); // citizens move in
+    controller.update(T0 + 30_000 + 5 * MIN, true); // citizens move in
     const base = controller.getIncome().residential;
     expect(base).toBeGreaterThan(0);
     // Raising the rate scales income directly (happiness penalty applies next tick).
@@ -146,10 +146,10 @@ describe('tax policy (MVP 2)', () => {
     const { controller } = newController();
     controller.placeBuilding('road', 26, 26);
     controller.placeBuilding('house_small', 26, 27);
-    controller.update(T0 + 30_000 + 5 * MIN);
+    controller.update(T0 + 30_000 + 5 * MIN, true);
     const before = controller.state.citizens.happiness;
     controller.setTaxRate('residential', 1.5); // +50 % → −12 happiness
-    controller.update(T0 + 30_000 + 6 * MIN);
+    controller.update(T0 + 30_000 + 6 * MIN, true);
     expect(controller.state.citizens.happiness).toBeLessThan(before);
   });
 });
@@ -157,7 +157,7 @@ describe('tax policy (MVP 2)', () => {
 describe('housing model (§6)', () => {
   it('derives resident capacity from units × max residents per unit', () => {
     const { controller } = newController();
-    setLevel(controller, 9);
+    setLevel(controller, 10); // apartment now unlocks at L10 (§13)
     flattenTerrain(controller);
     controller.state.resources = { money: 500_000, wood: 1_000, stone: 1_000, food: 1_000, freshwater: 0 };
     for (let x = 26; x <= 33; x++) controller.placeBuilding('road', x, 26);
@@ -165,7 +165,8 @@ describe('housing model (§6)', () => {
     controller.placeBuilding('house_row', 28, 27); // 12 units × 4 = 48
     controller.placeBuilding('apartment', 30, 27); // 90 units × 4 = 360
     controller.update(T0 + 400_000); // all finish
-    expect(controller.derived.capacity.housing).toBe(5 + 48 + 360);
+    // Capacity is scaled ×20 by populationScale (§9); household units are not.
+    expect(controller.derived.capacity.housing).toBe((5 + 48 + 360) * 20);
     expect(controller.derived.housingUnits).toBe(1 + 12 + 90);
   });
 });
@@ -180,19 +181,19 @@ describe('building upgrades (v0.17)', () => {
     expect(controller.placeBuilding('house_row', 24, 27)).toEqual({ ok: true });
     controller.update(T0 + 130_000); // row finishes (120s)
     const row = Object.values(controller.state.buildings).find((b) => b.defId === 'house_row')!;
-    expect(controller.derived.capacity.housing).toBe(48); // 12 units × 4
+    expect(controller.derived.capacity.housing).toBe(48 * 20); // 12 units × 4 × scale
 
-    // Tier 1 needs level 8 — at level 6 it is visible but locked (§ level cap).
+    // Tier 1 now needs level 9 (§13 spread-out) — at level 6 visible but locked.
     const info6 = controller.getUpgradeInfo(row.id);
-    expect(info6.lockedUntilLevel).toBe(8);
+    expect(info6.lockedUntilLevel).toBe(9);
     expect(controller.upgradeBuilding(row.id)).toEqual({ ok: false, error: 'locked' });
 
     // Reach the level → the upgrade opens and adds households without a new tile.
-    setLevel(controller, 8);
+    setLevel(controller, 9);
     expect(controller.getUpgradeInfo(row.id).lockedUntilLevel).toBeUndefined();
     expect(controller.upgradeBuilding(row.id)).toEqual({ ok: true });
     controller.update(T0 + 130_000 + 260_000); // upgrade construction (240s)
-    expect(controller.derived.capacity.housing).toBe(72); // 18 units × 4, same footprint
+    expect(controller.derived.capacity.housing).toBe(72 * 20); // 18 units × 4, same footprint
   });
 
   it('lets the town hall be upgraded into a prestige centre (bigger central store)', () => {

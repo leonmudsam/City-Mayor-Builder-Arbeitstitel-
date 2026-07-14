@@ -93,29 +93,65 @@ const migrations: Record<number, Migration> = {
   // locked/visible, so all biomes now show from the start. Existing sectors —
   // including anything the player already unlocked or built beyond the new bounds
   // — are kept untouched; only missing in-bounds sectors are added.
-  7: (raw) => {
-    const world = { ...(raw.world as { sectors: Record<string, unknown>; districts: unknown }) };
-    const sectors = { ...(world.sectors as Record<string, unknown>) };
-    const { minSx, minSy, maxSx, maxSy } = startRegionConfig.worldBounds;
-    for (let sy = minSy; sy <= maxSy; sy++) {
-      for (let sx = minSx; sx <= maxSx; sx++) {
-        const id = `${sx}:${sy}`;
-        if (sectors[id]) continue;
-        const tiles: { terrain: string }[] = [];
-        for (let ly = 0; ly < SECTOR_SIZE; ly++) {
-          for (let lx = 0; lx < SECTOR_SIZE; lx++) {
-            tiles.push({ terrain: terrainAt(sx * SECTOR_SIZE + lx, sy * SECTOR_SIZE + ly) });
-          }
-        }
-        sectors[id] = { id, sx, sy, districtId: 'main', status: 'locked', tiles };
-      }
-    }
-    return { ...raw, schemaVersion: 8, world: { ...world, sectors } };
+  7: (raw) => ({ ...raw, schemaVersion: 8, world: fillMissingInBoundsSectors(raw.world) }),
+  // v8 → v9 (v0.21 "Aktive Stadt"):
+  // 1. Seed the Stadtarbeit activity state and its lifetime stats.
+  // 2. sectorsUnlocked now counts only ADDITIONAL sectors (§5): the free start
+  //    sector no longer counts, so drop one from existing saves.
+  // 3. Population moved to a realistic scale (§9): homes hold ~20× the
+  //    residents, so an old save's citizens are scaled up to keep its relative
+  //    occupancy against the new capacities.
+  // 4. The world grew west (§17): materialize the new mountain-valley sectors.
+  8: (raw) => {
+    const stats = { ...(raw.stats as Record<string, unknown>) };
+    stats.sectorsUnlocked = Math.max(0, Number(stats.sectorsUnlocked ?? 1) - 1);
+    stats.upgradesCompleted ??= 0;
+    stats.upgraded ??= {};
+    stats.tradeEarnings ??= 0;
+    stats.activitiesCompleted ??= 0;
+    const citizens = { ...(raw.citizens as Record<string, unknown>) };
+    citizens.population = Number(citizens.population ?? 0) * POPULATION_SCALE_V9;
+    return {
+      ...raw,
+      schemaVersion: 9,
+      stats,
+      citizens,
+      activities: (raw.activities as unknown) ?? { cooldowns: {}, fulfilledContracts: [] },
+      world: fillMissingInBoundsSectors(raw.world),
+    };
   },
 };
 
+/**
+ * Adds every in-bounds sector a save has never materialized, as locked/visible
+ * terrain. Used whenever `worldBounds` grows (v8 bounded world, v9 western
+ * mountains) — existing sectors, unlocked or built, are never touched.
+ */
+function fillMissingInBoundsSectors(rawWorld: unknown): Record<string, unknown> {
+  const world = { ...(rawWorld as { sectors: Record<string, unknown>; districts: unknown }) };
+  const sectors = { ...(world.sectors as Record<string, unknown>) };
+  const { minSx, minSy, maxSx, maxSy } = startRegionConfig.worldBounds;
+  for (let sy = minSy; sy <= maxSy; sy++) {
+    for (let sx = minSx; sx <= maxSx; sx++) {
+      const id = `${sx}:${sy}`;
+      if (sectors[id]) continue;
+      const tiles: { terrain: string }[] = [];
+      for (let ly = 0; ly < SECTOR_SIZE; ly++) {
+        for (let lx = 0; lx < SECTOR_SIZE; lx++) {
+          tiles.push({ terrain: terrainAt(sx * SECTOR_SIZE + lx, sy * SECTOR_SIZE + ly) });
+        }
+      }
+      sectors[id] = { id, sx, sy, districtId: 'main', status: 'locked', tiles };
+    }
+  }
+  return { ...world, sectors };
+}
+
 /** Money rescale applied when upgrading v2 saves to the v3 economy. */
 const MONEY_SCALE_V3 = 100;
+
+/** Population rescale applied when upgrading v8 saves to the v9 city scale. */
+const POPULATION_SCALE_V9 = 20;
 
 export class SaveValidationError extends Error {}
 

@@ -9,6 +9,7 @@ import {
   Flame,
   Home,
   Leaf,
+  MapPinned,
   Move,
   PackageOpen,
   ShieldCheck,
@@ -125,31 +126,25 @@ export function FloatingBuildingSheet() {
           </p>
         )}
 
-        <ul className="effect-list">
-          {effects.map((eff, i) => {
-            const line = describeEffect(eff, bonusPct);
-            return line ? (
-              <li key={i}>
-                {effectIcon(eff)}
-                <span>{line}</span>
-              </li>
-            ) : null;
-          })}
-          {bonusPct > 0 && (
-            <li className="text-good">
-              <Sparkles size={15} />
-              <span>{t('ui.location_bonus', { pct: Math.round(bonusPct) })}</span>
-            </li>
-          )}
-          {ambience !== undefined && (
-            <li className={ambience >= 0 ? 'text-good' : 'text-bad'}>
-              <Leaf size={15} />
-              <span>
-                {t('ui.ambience')}: {ambience >= 0 ? '+' : ''}{ambience}
-              </span>
-            </li>
-          )}
-        </ul>
+        {(() => {
+          // "Werte" block (mockup §6): the building's key figures as a compact
+          // label/value grid rather than a wall of sentences. Derived straight
+          // from the effective effects — no new state.
+          const stats = effects.flatMap((eff) => effectStats(eff, bonusPct));
+          if (bonusPct > 0) stats.push({ icon: <Sparkles size={14} />, label: t('ui.location_bonus_short'), value: `+${Math.round(bonusPct)}%`, tone: 'good' });
+          if (ambience !== undefined) stats.push({ icon: <Leaf size={14} />, label: t('ui.ambience'), value: `${ambience >= 0 ? '+' : ''}${ambience}`, tone: ambience >= 0 ? 'good' : 'bad' });
+          if (stats.length === 0) return null;
+          return (
+            <div className="sheet-stat-grid">
+              {stats.map((s, i) => (
+                <div key={i} className="sheet-stat">
+                  <span className="sheet-stat-label">{s.icon} {s.label}</span>
+                  <span className={`sheet-stat-value${s.tone ? ` text-${s.tone}` : ''}`}>{s.value}</span>
+                </div>
+              ))}
+            </div>
+          );
+        })()}
 
         {(problems.length > 0 || benefits.length > 0) && (
           <div className="sheet-diagnostics">
@@ -317,37 +312,53 @@ function effectIcon(eff: BuildingEffect) {
   }
 }
 
-function describeEffect(eff: BuildingEffect, bonusPct: number): string | undefined {
+interface SheetStat {
+  icon: React.ReactNode;
+  label: string;
+  value: string;
+  tone?: 'good' | 'bad';
+}
+
+/** One effect → its "Werte" grid rows (label + value). Empty for effects that
+ *  have no legible figure (ambience/demand are shown elsewhere or implied). */
+function effectStats(eff: BuildingEffect, bonusPct: number): SheetStat[] {
+  const icon = effectIcon(eff);
   switch (eff.type) {
     case 'produce': {
       const rate = eff.perMinute * (1 + bonusPct / 100);
-      return t('ui.effect.produce', { rate: rate % 1 === 0 ? rate : rate.toFixed(1), resource: t(`resource.${eff.resource}`) });
+      return [{ icon, label: t(`resource.${eff.resource}`), value: `+${rate % 1 === 0 ? rate : rate.toFixed(1)}/min`, tone: 'good' }];
     }
     case 'housing':
-      return `${t('ui.effect.housing', { units: eff.units, residents: eff.units * eff.maxResidentsPerUnit })} (${t('ui.effect.housing_units', { min: eff.minResidentsPerUnit, max: eff.maxResidentsPerUnit })})`;
+      return [
+        { icon, label: t('ui.housing.units'), value: String(eff.units) },
+        { icon: <Home size={14} />, label: t('need.housing'), value: `${eff.units * eff.minResidentsPerUnit}–${eff.units * eff.maxResidentsPerUnit}` },
+      ];
     case 'revenue':
-      return t('ui.effect.revenue', { amount: formatMoney(eff.perMinute), category: t(`ui.revenue.${eff.category}`) });
+      return [{ icon, label: t(`ui.revenue.${eff.category}`), value: `+${formatMoney(eff.perMinute)}/min`, tone: 'good' }];
     case 'capacity':
-      return eff.radius !== undefined
-        ? t('ui.effect.capacity_radius', { amount: eff.amount, need: t(`need.${eff.need}`), radius: eff.radius })
-        : t('ui.effect.capacity', { amount: eff.amount, need: t(`need.${eff.need}`) });
+      return [
+        { icon, label: t(`need.${eff.need}`), value: `+${eff.amount}` },
+        ...(eff.radius !== undefined ? [{ icon: <MapPinned size={14} />, label: t('ui.radius'), value: t('ui.radius.tiles', { n: eff.radius }) }] : []),
+      ];
     case 'coverage':
-      return t('ui.effect.coverage', { need: t(`need.${eff.need}`), radius: eff.radius });
+      return [
+        { icon, label: t(`need.${eff.need}`), value: t('ui.effect.covers') },
+        { icon: <MapPinned size={14} />, label: t('ui.radius'), value: t('ui.radius.tiles', { n: eff.radius }) },
+      ];
     case 'storage':
-      return t('ui.effect.storage', { amount: eff.amount, resource: t(`resource.${eff.resource}`) });
+      return [{ icon, label: `${t('ui.storage')} ${t(`resource.${eff.resource}`)}`, value: `+${eff.amount}` }];
     case 'jobs':
-      return t('ui.effect.jobs', { amount: eff.amount });
+      return [{ icon, label: t('ui.jobs'), value: `+${eff.amount}` }];
     case 'distribution':
-      return t('ui.effect.distribution', { need: t(`need.${eff.need}`), radius: eff.radius });
-    case 'demand':
-      return undefined;
+      return [{ icon, label: `${t('ui.distribution')} ${t(`need.${eff.need}`)}`, value: t('ui.radius.tiles', { n: eff.radius }) }];
     case 'protection':
-      return t('ui.effect.protection', { radius: eff.radius });
-    case 'ambience':
-      return undefined;
+      return [{ icon, label: t('ui.protection'), value: t('ui.radius.tiles', { n: eff.radius }) }];
     case 'logistics':
-      return t('ui.effect.logistics', { boost: eff.boostPct, radius: eff.radius });
+      return [{ icon, label: t('ui.logistics'), value: `+${eff.boostPct}% · ${t('ui.radius.tiles', { n: eff.radius })}`, tone: 'good' }];
     case 'upkeep':
-      return t('ui.effect.upkeep', { amount: formatMoney(eff.perMinute) });
+      return [{ icon, label: t('ui.finance.upkeep'), value: `−${formatMoney(eff.perMinute)}/min`, tone: 'bad' }];
+    case 'ambience':
+    case 'demand':
+      return [];
   }
 }

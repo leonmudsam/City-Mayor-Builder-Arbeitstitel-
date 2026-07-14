@@ -52,6 +52,7 @@ export const CATEGORY_ICON: Record<BuildingCategory, LucideIcon> = {
   residential: Home,
   production: Factory,
   services: ShoppingBasket,
+  energy: Zap,
   leisure: TreePine,
   economy: Store,
   government: Landmark,

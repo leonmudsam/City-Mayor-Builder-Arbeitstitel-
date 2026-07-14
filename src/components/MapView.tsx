@@ -1,14 +1,22 @@
 import { useEffect, useRef, useState } from 'react';
 import { AlertTriangle, CheckCircle2, Move, Sparkles } from 'lucide-react';
 import { MapRenderer, type HoverInfo } from '../renderer/MapRenderer.ts';
-import { getController, useUiStore } from '../state/store.ts';
+import { getController, setMapApi, useUiStore } from '../state/store.ts';
+import { ServiceOverlayBanner } from './hud/ServiceOverlayBanner.tsx';
 import { t } from '../i18n/index.ts';
+
+interface CoverageInfo {
+  label: string;
+  underCapacity: boolean;
+  counts: { supplied: number; partial: number; unsupplied: number };
+  capacity?: { servable: number; used: number };
+}
 
 export function MapView() {
   const hostRef = useRef<HTMLDivElement>(null);
   const rendererRef = useRef<MapRenderer>(undefined);
   const [hoverInfo, setHoverInfo] = useState<HoverInfo | undefined>(undefined);
-  const [coverage, setCoverage] = useState<{ label: string; underCapacity: boolean; capacity?: { servable: number; used: number } } | undefined>(undefined);
+  const [coverage, setCoverage] = useState<CoverageInfo | undefined>(undefined);
 
   useEffect(() => {
     const host = hostRef.current;
@@ -17,7 +25,22 @@ export function MapView() {
     const ui = useUiStore.getState();
 
     const renderer = new MapRenderer(controller, {
-      onSelectBuilding: (id) => useUiStore.getState().selectBuilding(id),
+      onSelectBuilding: (id) => {
+        // While a Stadtarbeit run is active, clicking one of its map targets
+        // delivers/inspects it instead of opening the building sheet (§ aktive
+        // Karte). Any other building still selects normally.
+        const active = controller.state.activities.active;
+        if (id && active?.targets.some((tg) => tg.buildingId === id && !tg.done)) {
+          const result = controller.progressActivity(id);
+          if (result.ok) {
+            useUiStore.getState().pushToast(t('ui.activity.delivered'), 'success');
+          } else {
+            ui.pushToast(t(`error.${result.error}`), 'error');
+          }
+          return;
+        }
+        useUiStore.getState().selectBuilding(id);
+      },
       onClickLockedSector: (id) => useUiStore.getState().openSectorDialog(id),
       onCancelPlacement: () => {
         useUiStore.getState().stopPlacing();
@@ -64,6 +87,9 @@ export function MapView() {
     });
     rendererRef.current = renderer;
     void renderer.init(host);
+    // Expose the camera to the HUD (Quick-action "Karte") without leaking the
+    // renderer instance.
+    setMapApi({ centerOnCity: () => renderer.centerOnCity() });
 
     // Mirror UI state (placement/move/selection) into the renderer.
     const unsubscribe = useUiStore.subscribe((s) => {
@@ -85,6 +111,7 @@ export function MapView() {
     return () => {
       window.removeEventListener('keydown', onKey);
       unsubscribe();
+      setMapApi(undefined);
       renderer.destroy();
       rendererRef.current = undefined;
     };
@@ -92,14 +119,29 @@ export function MapView() {
 
   const placing = useUiStore((s) => s.placingDefId);
   const moving = useUiStore((s) => s.movingBuildingId);
+  const overlayMode = useUiStore((s) => s.overlayMode);
   const active = placing !== undefined || moving !== undefined;
 
+  // Headline supply figure for the top-centre banner (§7): share of served
+  // consumers among all in-radius consumers.
+  const banner = coverage ? coverageBanner(coverage) : undefined;
+
   return (
-    <div className="map-host" ref={hostRef}>
+    <div className={`map-host${overlayMode ? ' overlay-active' : ''}`} ref={hostRef}>
       {active && <PlacementBanner info={hoverInfo} moving={moving !== undefined} />}
+      {banner && !active && <ServiceOverlayBanner label={banner.label} detail={banner.detail} tone={banner.tone} />}
       {coverage && !active && <CoverageLegend info={coverage} />}
     </div>
   );
+}
+
+/** Turn coverage counts into the top-centre banner's headline. */
+function coverageBanner(info: CoverageInfo): { label: string; detail: string; tone: 'good' | 'warn' | 'bad' } {
+  const { supplied, partial, unsupplied } = info.counts;
+  const total = supplied + partial + unsupplied;
+  const pct = total > 0 ? Math.round((supplied / total) * 100) : 100;
+  const tone: 'good' | 'warn' | 'bad' = pct >= 90 ? 'good' : pct >= 60 ? 'warn' : 'bad';
+  return { label: info.label, detail: t('ui.overlay.covered', { pct }), tone };
 }
 
 /** Build-limit failures carry the next unlock level for a clear message (§16). */
@@ -112,8 +154,9 @@ function placementErrorText(defId: string, error: string): string {
   return t('ui.limit.reached_max', { building });
 }
 
-/** Legend for the coverage overlay: what each home color means (§1). */
-function CoverageLegend({ info }: { info: { label: string; underCapacity: boolean; capacity?: { servable: number; used: number } } }) {
+/** Legend for the coverage overlay: what each home color means (§1) + a summary
+ *  of how many buildings are served / partial / unserved (§21). */
+function CoverageLegend({ info }: { info: CoverageInfo }) {
   const states = ['supplied', 'redundant', 'partial', 'unsupplied'] as const;
   const fmt = (n: number) => Math.round(n).toLocaleString('de-DE');
   return (
@@ -124,6 +167,13 @@ function CoverageLegend({ info }: { info: { label: string; underCapacity: boolea
           {t('ui.coverage.capacity', { used: fmt(info.capacity.used), servable: fmt(info.capacity.servable) })}
         </div>
       )}
+      <div className="coverage-legend-summary">
+        {t('ui.coverage.summary', {
+          supplied: info.counts.supplied,
+          partial: info.counts.partial,
+          unsupplied: info.counts.unsupplied,
+        })}
+      </div>
       <div className="coverage-legend-items">
         {states.map((s) => (
           <span key={s} className="coverage-legend-item">

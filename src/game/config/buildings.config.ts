@@ -156,7 +156,9 @@ export const buildingsConfig: BuildingDef[] = [
     xpReward: 5,
     effects: [
       { type: 'housing', units: 1, minResidentsPerUnit: 2, maxResidentsPerUnit: 5, ambienceSensitivity: 1.4 },
-      { type: 'demand', need: 'water', amount: 4 },
+      // Water demands raised (§8) so a single well no longer covers a whole
+      // district — a growing town needs more wells and, in time, a pump.
+      { type: 'demand', need: 'water', amount: 6 },
       // Residential upkeep scales with households, so it tracks population and
       // gently nets out the per-capita tax without hurting the early game.
       { type: 'upkeep', resource: 'money', perMinute: 35 },
@@ -178,7 +180,7 @@ export const buildingsConfig: BuildingDef[] = [
         nameKey: 'building.house_small.2', // Ausgebautes Haus
         effects: [
           { type: 'housing', units: 2, minResidentsPerUnit: 2, maxResidentsPerUnit: 5, ambienceSensitivity: 1.4 },
-          { type: 'demand', need: 'water', amount: 8 },
+          { type: 'demand', need: 'water', amount: 12 },
           { type: 'upkeep', resource: 'money', perMinute: 70 },
         ],
       },
@@ -200,7 +202,9 @@ export const buildingsConfig: BuildingDef[] = [
         cost: { money: 320_000, wood: 220, stone: 180 },
         constructionSec: 300,
         xpReward: 50,
-        unlockLevel: 10,
+        // Moved to L11 (§13): L10 already introduces the apartment as a NEW
+        // residential type, so no housing upgrade shares that level.
+        unlockLevel: 11,
         nameKey: 'building.house_small.4', // Mehrfamilienhaus
         effects: [
           { type: 'housing', units: 7, minResidentsPerUnit: 3, maxResidentsPerUnit: 6, ambienceSensitivity: 1.2 },
@@ -213,7 +217,9 @@ export const buildingsConfig: BuildingDef[] = [
         cost: { money: 700_000, wood: 340, stone: 320 },
         constructionSec: 420,
         xpReward: 75,
-        unlockLevel: 12,
+        // Moved to L13 (§13): L12 introduces the residential tower as a NEW
+        // type, so the Stadthaus upgrade waits a level.
+        unlockLevel: 13,
         nameKey: 'building.house_small.5', // Stadthaus
         effects: [
           { type: 'housing', units: 11, minResidentsPerUnit: 3, maxResidentsPerUnit: 6, ambienceSensitivity: 1.1 },
@@ -269,7 +275,9 @@ export const buildingsConfig: BuildingDef[] = [
         cost: { money: 180_000, wood: 180, stone: 120 },
         constructionSec: 240,
         xpReward: 20,
-        unlockLevel: 8,
+        // Moved to L9 (§13) to spread out the housing milestones: L8 already
+        // carries the Doppelhaus upgrade.
+        unlockLevel: 9,
         nameKey: 'building.house_row.2',
         effects: [
           { type: 'housing', units: 18, minResidentsPerUnit: 3, maxResidentsPerUnit: 4, ambienceSensitivity: 1.0 },
@@ -304,7 +312,9 @@ export const buildingsConfig: BuildingDef[] = [
     nameKey: 'building.apartment',
     size: { w: 2, h: 3 },
     requiresRoad: true,
-    unlockLevel: 9,
+    // Moved to L10 (§13): each residential type now unlocks in its own level so
+    // the player isn't handed a new building and an upgrade at once.
+    unlockLevel: 10,
     cost: { money: 280_000, wood: 220, stone: 320 },
     constructionSec: 360,
     xpReward: 22,
@@ -346,7 +356,7 @@ export const buildingsConfig: BuildingDef[] = [
     ],
     // Apartment cap (§1/§2): the workhorse of a real city's population; a handful
     // per level so density comes from upgrading them, not a wall of blocks.
-    buildLimit: [{ level: 9, max: 8 }, { level: 14, max: 12 }, { level: 16, max: 14 }],
+    buildLimit: [{ level: 10, max: 8 }, { level: 14, max: 12 }, { level: 16, max: 14 }],
   },
   // Residential tower — the density endgame (MVP 2): a 3×3 high-rise housing
   // hundreds, so a city can actually staff its office towers. Heavy on water,
@@ -663,7 +673,9 @@ export const buildingsConfig: BuildingDef[] = [
     // A neighbourhood well: cheap early water with a real, but local, reach.
     canRelocate: true,
     effects: [
-      { type: 'capacity', need: 'water', amount: 200, radius: 9 },
+      // Cut in v0.21 (§8) so a single well no longer waters a whole district;
+      // water becomes a real, but fair, constraint that grows with the city.
+      { type: 'capacity', need: 'water', amount: 120, radius: 9 },
       { type: 'upkeep', resource: 'money', perMinute: 100 },
     ],
     // Deepen the well: more capacity and a little more reach for a growing
@@ -676,7 +688,7 @@ export const buildingsConfig: BuildingDef[] = [
         unlockLevel: 6,
         nameKey: 'building.well.2',
         effects: [
-          { type: 'capacity', need: 'water', amount: 380, radius: 11 },
+          { type: 'capacity', need: 'water', amount: 220, radius: 11 },
           { type: 'upkeep', resource: 'money', perMinute: 170 },
         ],
       },
@@ -698,7 +710,7 @@ export const buildingsConfig: BuildingDef[] = [
     canRelocate: true,
     relocationCost: { money: 15_000 },
     effects: [
-      { type: 'capacity', need: 'water', amount: 3_000, radius: 18 },
+      { type: 'capacity', need: 'water', amount: 1_800, radius: 18 },
       { type: 'jobs', amount: 6 },
       { type: 'upkeep', resource: 'money', perMinute: 1_600 },
       { type: 'demand', need: 'energy', amount: 30 },
@@ -713,7 +725,7 @@ export const buildingsConfig: BuildingDef[] = [
         unlockLevel: 10,
         nameKey: 'building.water_pump.2',
         effects: [
-          { type: 'capacity', need: 'water', amount: 5_200, radius: 20 },
+          { type: 'capacity', need: 'water', amount: 3_000, radius: 20 },
           { type: 'jobs', amount: 10 },
           { type: 'upkeep', resource: 'money', perMinute: 2_600 },
           { type: 'demand', need: 'energy', amount: 50 },
@@ -726,7 +738,7 @@ export const buildingsConfig: BuildingDef[] = [
         unlockLevel: 13,
         nameKey: 'building.water_pump.3',
         effects: [
-          { type: 'capacity', need: 'water', amount: 8_000, radius: 22 },
+          { type: 'capacity', need: 'water', amount: 4_600, radius: 22 },
           { type: 'jobs', amount: 14 },
           { type: 'upkeep', resource: 'money', perMinute: 3_800 },
           { type: 'demand', need: 'energy', amount: 70 },
@@ -1201,7 +1213,7 @@ export const buildingsConfig: BuildingDef[] = [
   // answer to the L11 energy crunch; you pay for it in air quality and cash.
   {
     id: 'power_plant',
-    category: 'infrastructure',
+    category: 'energy',
     nameKey: 'building.power_plant',
     size: { w: 3, h: 3 },
     requiresRoad: true,
@@ -1223,11 +1235,13 @@ export const buildingsConfig: BuildingDef[] = [
   // The greener, land-hungry path: build several instead of one dirty plant.
   {
     id: 'wind_farm',
-    category: 'infrastructure',
+    category: 'energy',
     nameKey: 'building.wind_farm',
     size: { w: 3, h: 3 },
     requiresRoad: true,
-    unlockLevel: 12,
+    // Renewable option offered at L11 alongside the coal plant (§18), so the
+    // player chooses their first power source right away.
+    unlockLevel: 11,
     cost: { money: 360_000, wood: 80, stone: 220 },
     constructionSec: 300,
     xpReward: 75,
@@ -1237,7 +1251,7 @@ export const buildingsConfig: BuildingDef[] = [
       { type: 'upkeep', resource: 'money', perMinute: 900 },
       { type: 'ambience', amount: 1, radius: 4 },
     ],
-    buildLimit: [{ level: 12, max: 3 }, { level: 14, max: 6 }],
+    buildLimit: [{ level: 11, max: 3 }, { level: 14, max: 6 }],
   },
 
   // ---- Freizeit ----

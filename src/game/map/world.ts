@@ -90,8 +90,10 @@ export function sectorUnlockCost(state: GameState, config: GameConfig, sx: numbe
   const { base, distanceFactor, countFactor } = config.balancing.sectorCost;
   const start = startRegionConfig.startSector;
   const dist = Math.max(Math.abs(sx - start.sx), Math.abs(sy - start.sy));
-  const count = state.stats.sectorsUnlocked;
-  return Math.round(base * Math.pow(distanceFactor, Math.max(0, dist - 1)) * (1 + countFactor * (count - 1)));
+  // sectorsUnlocked counts only ADDITIONAL sectors (§5), so the first purchase
+  // pays the plain base price and each one after raises it by countFactor.
+  const additional = state.stats.sectorsUnlocked;
+  return Math.round(base * Math.pow(distanceFactor, Math.max(0, dist - 1)) * (1 + countFactor * additional));
 }
 
 const UNBUILDABLE: ReadonlySet<string> = new Set(['river', 'water', 'mountain']);

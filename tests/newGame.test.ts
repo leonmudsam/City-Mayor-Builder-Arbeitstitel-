@@ -6,9 +6,9 @@ describe('new game', () => {
   it('materializes the whole bounded world with one unlocked sector', () => {
     const { controller } = newController();
     const sectors = Object.values(controller.state.world.sectors);
-    // The finite board (6×5 sectors) is fully materialized and visible from the
-    // start (§ bounded world), with only the start sector unlocked.
-    expect(sectors.length).toBe(30);
+    // The finite board (8×5 sectors after the v0.21 western extension) is fully
+    // materialized and visible from the start, only the start sector unlocked.
+    expect(sectors.length).toBe(40);
     expect(sectors.filter((s) => s.status === 'unlocked').length).toBe(1);
     expect(controller.state.world.sectors[sectorId(1, 1)]?.status).toBe('unlocked');
     // Far biomes are on show as goals: the eastern coast has open water.

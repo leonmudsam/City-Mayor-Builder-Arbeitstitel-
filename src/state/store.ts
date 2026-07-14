@@ -17,6 +17,23 @@ export function getController(): GameController {
   return gameController;
 }
 
+// ---- Map API bridge --------------------------------------------------------
+// The renderer owns the camera; the HUD (Quick-action "Karte") needs to recall
+// it without importing the renderer. MapView registers a small imperative API
+// here, mirroring the controller bridge above — no renderer internals leak.
+
+export interface MapApi {
+  centerOnCity(): void;
+}
+
+let mapApi: MapApi | undefined;
+export function setMapApi(api: MapApi | undefined): void {
+  mapApi = api;
+}
+export function getMapApi(): MapApi | undefined {
+  return mapApi;
+}
+
 /** Re-renders the component whenever the simulation state changes. */
 export function useGame(): GameController {
   const controller = getController();
@@ -38,16 +55,35 @@ export interface Toast {
 /** A staged, acknowledge-me moment shown in an EventModal (§9). */
 export interface GameEvent {
   id: number;
-  kind: 'levelUp' | 'sectorUnlocked' | 'fire' | 'celebrate';
+  kind: 'levelUp' | 'sectorUnlocked' | 'fire' | 'celebrate' | 'activityDone';
   titleKey: string;
   bodyKey: string;
   params?: Record<string, string | number>;
 }
 
-type PanelId = 'build' | 'mayor' | 'happiness' | 'status' | 'economy' | 'settings' | 'quests' | 'trade' | 'debug' | undefined;
+export type PanelId =
+  | 'build'
+  | 'mayor'
+  | 'happiness'
+  | 'status'
+  | 'economy'
+  | 'settings'
+  | 'trade'
+  | 'debug'
+  | 'activities'
+  | 'menu'
+  | undefined;
+
+/** A concrete panel destination (never `undefined`) — for menu/nav lists. */
+export type PanelTarget = NonNullable<PanelId>;
 
 interface UiState {
   openPanel: PanelId;
+  /** SimCity-style service overlay toggle (§7/§10): dims the map & emphasises
+   *  supply status. The renderer already paints a selected building's coverage;
+   *  this flag drives the persistent city-wide overlay chrome. */
+  overlayMode: boolean;
+  toggleOverlay(): void;
   placingDefId: string | undefined;
   /** Building currently being relocated (hold-drag or "Verschieben" button). */
   movingBuildingId: string | undefined;
@@ -72,7 +108,9 @@ let toastId = 0;
 let eventId = 0;
 
 export const useUiStore = create<UiState>((set) => ({
-  openPanel: 'quests',
+  openPanel: undefined,
+  overlayMode: false,
+  toggleOverlay: () => set((s) => ({ overlayMode: !s.overlayMode })),
   placingDefId: undefined,
   movingBuildingId: undefined,
   selectedBuildingId: undefined,

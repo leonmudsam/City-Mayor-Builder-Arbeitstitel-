@@ -568,3 +568,30 @@ Gameplay zuerst, Monetarisierung zuletzt:
 ## 20. Verifikation dieses Plans
 
 Da dies ein Konzept-Dokument ist (keine Code-Änderung), besteht die Verifikation aus: (a) Konzept als `docs/CONCEPT.md` ins Repo committen und auf den Branch `claude/city-builder-concept-w2f70y` pushen, (b) beim Implementierungsstart Schritt 1 (§19) gegen dieses Dokument prüfen — insbesondere die Architekturregeln (§12) als ESLint-Regeln verankern, damit das Konzept durchgesetzt wird statt nur dokumentiert.
+
+---
+
+## 21. Visual layer & 3D-Vorbereitung (v0.21)
+
+Das Spiel bleibt im MVP2 ein 2D-Prototyp (Pixi, programmatisch gezeichnete
+Gebäude), soll aber später ohne Umbau der Spiellogik auf eine hochwertige
+2.5D-/3D-Darstellung wechseln können. Dafür gilt:
+
+- **Logik ist rendering-unabhängig.** Die Simulation liest nur logische Felder
+  (Position, Footprint, Rotation, Level, Status, Effekte, Radius, Produktion).
+  Ob ein Gebäude als 2D-Tile, Sprite, Iso-Asset oder 3D-Modell erscheint, ist
+  ausschließlich Sache der Renderer-Schicht.
+- **`BuildingDef.visual`** (optional, aktuell ungenutzt) hält die visuellen
+  Daten getrennt von der Logik: `heightClass`, `sprite2d`, `spriteIso`,
+  `model3d`, `overlayAnchor` und optionale `stages[]` pro Upgrade-Stufe. So
+  lassen sich Upgrade-Visuals (Haus → Doppelhaus → … → Hochhaus) und spätere
+  3D-Modelle je Stufe einhängen, ohne Datenmigration. Der aktuelle Renderer
+  leitet die Skyline-Höhe weiterhin aus `upgradeLevel` ab.
+- **Marker & Overlays** (Problem-/Ziel-Marker, Bürger-Sprechblasen,
+  Coverage-Tints, Kamera-Fokus) rechnen bereits in Welt-/Tile-Koordinaten und
+  werden in Container transformiert — kein DOM-Pixel-Hack. Eine spätere Iso-/
+  3D-Kamera kann dieselben Weltkoordinaten nutzen.
+- **Terrain-Höhen** (Gebirge, Täler, Küste, Wasser­tiefe) sind noch nicht als
+  Datenfelder modelliert; die Terrain-Typen sind aber sauber getrennt, sodass
+  eine spätere Höhenkarte additiv ergänzt werden kann, ohne bestehende Daten zu
+  brechen. Bewusst keine toten Felder jetzt — erst bei Bedarf.

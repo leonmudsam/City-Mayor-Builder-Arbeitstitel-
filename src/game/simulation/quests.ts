@@ -20,6 +20,12 @@ function objectiveProgress(state: GameState, obj: QuestObjective): number {
       return Math.min(obj.count, state.stats.mayorActions[obj.actionId] ?? 0);
     case 'happiness':
       return Math.min(obj.amount, Math.floor(state.citizens.happiness));
+    case 'upgrade':
+      return Math.min(obj.count, obj.defId ? state.stats.upgraded[obj.defId] ?? 0 : state.stats.upgradesCompleted);
+    case 'activity':
+      return Math.min(obj.count, state.stats.activitiesCompleted);
+    case 'tradeEarnings':
+      return Math.min(obj.amount, Math.floor(state.stats.tradeEarnings));
   }
 }
 
@@ -38,6 +44,11 @@ export function objectiveTarget(obj: QuestObjective): number {
       return obj.count;
     case 'mayorAction':
       return obj.count;
+    case 'upgrade':
+    case 'activity':
+      return obj.count;
+    case 'tradeEarnings':
+      return obj.amount;
   }
 }
 
