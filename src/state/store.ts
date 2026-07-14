@@ -84,6 +84,10 @@ interface UiState {
    *  this flag drives the persistent city-wide overlay chrome. */
   overlayMode: boolean;
   toggleOverlay(): void;
+  /** Hide-the-whole-UI toggle (§8): blanks the HUD frame so the map is clean;
+   *  a small restore button stays visible to bring the chrome back. */
+  uiHidden: boolean;
+  toggleUiHidden(): void;
   placingDefId: string | undefined;
   /** Building currently being relocated (hold-drag or "Verschieben" button). */
   movingBuildingId: string | undefined;
@@ -111,6 +115,8 @@ export const useUiStore = create<UiState>((set) => ({
   openPanel: undefined,
   overlayMode: false,
   toggleOverlay: () => set((s) => ({ overlayMode: !s.overlayMode })),
+  uiHidden: false,
+  toggleUiHidden: () => set((s) => ({ uiHidden: !s.uiHidden })),
   placingDefId: undefined,
   movingBuildingId: undefined,
   selectedBuildingId: undefined,

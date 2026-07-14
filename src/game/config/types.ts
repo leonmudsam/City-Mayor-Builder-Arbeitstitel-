@@ -205,6 +205,20 @@ export interface BuildingVisual {
   sprite2d?: string;
   spriteIso?: string;
   model3d?: string;
+  /**
+   * Consistent art family per building (v0.26, §14): keeps the build-menu
+   * preview, the detail sheet, the later 2D map sprite and the eventual iso/3D
+   * variant referencing the SAME visual identity. All optional and currently
+   * ignored by the 2D renderer; when unset the art components fall back to
+   * `buildings/<id>.png` and finally the built-in vector art. `cardArt`/`sheetArt`
+   * are asset-registry keys (filenames without extension), the sprite/model
+   * fields are references a later renderer resolves.
+   */
+  cardArt?: string;
+  sheetArt?: string;
+  mapSprite2d?: string;
+  isoPreview?: string;
+  model3dRef?: string;
   /** Where markers/overlays anchor, in footprint-relative tile units. */
   overlayAnchor?: { x: number; y: number };
   /** Optional per-upgrade-stage overrides, index = upgradeLevel. */

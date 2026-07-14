@@ -69,7 +69,7 @@ export function CityWorkPanel() {
       <div className={`work-feature${running ? ' is-running' : ''}`}>
         <div className="work-feature-head">
           <span className="work-avatar">
-            <CitizenPortrait role={featured.sender} seed={featured.id} size={48} />
+            <CitizenPortrait role={featured.sender} seed={featured.id} size={58} />
           </span>
           <div className="work-feature-title">
             <span className="work-feature-name">

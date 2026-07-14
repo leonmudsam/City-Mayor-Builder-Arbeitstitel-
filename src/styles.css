@@ -109,10 +109,16 @@ body {
 .text-warn { color: var(--warn); }
 .text-bad { color: var(--bad); }
 
+/* Large right-docked detail sheet (§5): compact overviews live on the left,
+   full-height detail sheets open here on the right. */
 .side-panel {
-  position: absolute; top: 12px; right: 12px; width: 300px; max-height: calc(100% - 24px);
-  overflow-y: auto; display: flex; flex-direction: column; gap: 10px;
+  position: absolute; top: var(--hud-gap); right: var(--hud-gap); bottom: var(--hud-gap);
+  width: 420px; max-width: calc(100vw - 2 * var(--hud-gap)); max-height: none;
+  overflow-y: auto; display: flex; flex-direction: column; gap: 12px;
+  background: var(--panel-bg); border: 1px solid var(--panel-border); border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-lg); padding: 16px; backdrop-filter: blur(3px);
 }
+.side-panel .panel-head h3 { font-size: 17px; }
 .quest-panel {
   position: absolute; top: 12px; left: 12px; width: 270px; max-height: calc(100% - 24px); overflow-y: auto;
 }
@@ -155,7 +161,7 @@ body {
 
 /* ---- Build menu (bottom sheet) ---- */
 .build-menu {
-  position: absolute; left: 12px; right: 12px; bottom: 12px; max-height: 48%;
+  position: absolute; left: 12px; right: 12px; bottom: 12px; max-height: 62%;
   display: flex; flex-direction: column; gap: 12px; padding: 16px;
 }
 .build-menu-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
@@ -170,48 +176,84 @@ body {
 .tab-dot { position: absolute; top: 4px; right: 4px; width: 8px; height: 8px; border-radius: 50%; box-shadow: 0 0 0 2px var(--surface-2); }
 .tab-dot.new { background: var(--good); }
 .tab-dot.problem { background: var(--bad); }
-.build-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 10px; overflow-y: auto; padding-bottom: 2px; }
+/* Build cards: vertical zoned cards (media · title · values · status · action).
+   auto-fit + max cap so a category with few buildings stretches to fill the row
+   instead of leaving a dead black gap on the right (§3). */
+.build-cards {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 236px));
+  gap: 12px; overflow-y: auto; padding: 2px; align-content: start; align-items: start;
+  justify-content: center;
+}
 .build-card {
   text-align: left; background: var(--surface-2); border: 1px solid var(--border);
-  border-radius: 10px; padding: 10px; display: flex; gap: 11px;
+  border-radius: 14px; padding: 0; display: flex; flex-direction: column; overflow: visible;
+  max-width: 300px;
 }
-.build-card:not(.disabled):hover { border-color: var(--primary); transform: translateY(-1px); transition: transform 0.1s; }
-.build-card.locked { opacity: 0.6; }
-.build-card-media { position: relative; flex-shrink: 0; }
-.build-card-media .bp { display: block; border-radius: 8px; }
-.build-card-body { display: flex; flex-direction: column; gap: 5px; min-width: 0; flex: 1; }
+.build-card:not(.disabled):hover { border-color: var(--primary); transform: translateY(-2px); transition: transform 0.1s; }
+.build-card.locked { opacity: 0.72; }
 .bp-ground { fill: rgba(0, 0, 0, 0.28); }
-.build-card-name { font-weight: 700; font-size: 13.5px; }
+
+/* Zone 1 — media: fixed-height image band, badges in the corners only. */
+.build-card-media {
+  position: relative; width: 100%; height: 116px; display: grid; place-items: center; overflow: hidden;
+  border-top-left-radius: 13px; border-top-right-radius: 13px;
+  background: radial-gradient(circle at 50% 38%, rgba(255,255,255,0.09), rgba(0,0,0,0.22));
+  border-bottom: 1px solid var(--border);
+}
+.build-card-media .bp { display: block; border-radius: 8px; }
 .build-card-size {
-  position: absolute; right: 3px; bottom: 3px; font-size: 10px; font-weight: 600;
-  color: var(--text); background: rgba(0, 0, 0, 0.5); border-radius: 5px; padding: 0 4px;
+  position: absolute; right: 7px; bottom: 7px; font-size: 10.5px; font-weight: 800;
+  color: var(--text); background: rgba(0, 0, 0, 0.62); border-radius: 6px; padding: 1px 6px;
+  font-variant-numeric: tabular-nums;
 }
 .build-card-new {
-  position: absolute; left: 3px; top: 3px; font-size: 9.5px; font-weight: 800; letter-spacing: 0.03em;
-  color: #fff; background: var(--good); border-radius: 5px; padding: 1px 5px; text-transform: uppercase;
+  position: absolute; left: 7px; top: 7px; font-size: 9.5px; font-weight: 800; letter-spacing: 0.04em;
+  color: #12240f; background: var(--good); border-radius: 6px; padding: 2px 7px; text-transform: uppercase;
 }
+.build-card-badge {
+  position: absolute; left: 7px; bottom: 7px; padding: 2px 8px; border-radius: 999px;
+  font-size: 9.5px; font-weight: 800; letter-spacing: 0.03em; text-transform: uppercase;
+  color: var(--primary); background: color-mix(in srgb, var(--primary) 22%, rgba(0,0,0,0.5));
+}
+.build-card-badge.free { color: #12240f; background: var(--good); }
+
+/* Zones 2-5 — body */
+.build-card-body { display: flex; flex-direction: column; gap: 7px; min-width: 0; padding: 11px 12px 12px; }
+.build-card-name { font-weight: 800; font-size: 15px; line-height: 1.15; }
 .build-card-info { display: flex; flex-wrap: wrap; gap: 5px; }
 .chip {
-  display: inline-flex; align-items: center; gap: 4px; padding: 2px 7px; border-radius: 6px;
-  background: rgba(0, 0, 0, 0.25); font-size: 12px; color: var(--text); font-variant-numeric: tabular-nums;
+  display: inline-flex; align-items: center; gap: 4px; padding: 3px 8px; border-radius: 7px;
+  background: rgba(0, 0, 0, 0.28); font-size: 12px; color: var(--text); font-variant-numeric: tabular-nums;
 }
 .chip svg { color: var(--text-muted); }
 .build-card-effect { font-size: 11.5px; color: var(--text-muted); line-height: 1.4; }
 .build-card-bonus { display: flex; align-items: center; gap: 4px; font-size: 11.5px; color: var(--good); font-weight: 600; }
-.build-card-lock { display: flex; align-items: center; gap: 4px; font-size: 11.5px; color: var(--warn); font-weight: 600; }
-.build-card-limit { font-size: 11.5px; color: var(--text-muted); font-weight: 600; }
+.build-card-status { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: auto; }
+.build-card-lock { display: inline-flex; align-items: center; gap: 4px; font-size: 11.5px; color: var(--warn); font-weight: 700; }
+.build-card-limit { font-size: 11.5px; color: var(--text-muted); font-weight: 700; }
 .build-card-limit.reached { color: var(--warn); }
+.build-card-ready { font-size: 11.5px; color: var(--good); font-weight: 700; }
 .cost-missing, .cost-missing svg { color: var(--bad); }
 /* Major project (Großprojekt): a big investment, framed to stand out. */
 .build-card.major { border-color: color-mix(in srgb, var(--primary) 45%, transparent); }
-.build-card-tag {
-  margin-left: 6px; padding: 1px 6px; border-radius: 999px; font-size: 10px; font-weight: 700;
-  vertical-align: middle; letter-spacing: 0.02em; text-transform: uppercase;
-  color: var(--primary); background: color-mix(in srgb, var(--primary) 16%, transparent);
-}
 .build-card-invest { font-size: 11.5px; color: var(--warn); font-weight: 600; line-height: 1.35; }
 .build-card-scaled { font-size: 11px; color: var(--text-muted); font-style: italic; }
-.build-card-tag.free { color: var(--good); background: color-mix(in srgb, var(--good) 18%, transparent); }
+/* Zone 5 — action strip */
+.build-card-action {
+  display: flex; align-items: center; justify-content: center; gap: 6px; margin-top: 2px;
+  padding: 8px; border-radius: 9px; font-size: 12.5px; font-weight: 800;
+  background: var(--primary); color: var(--primary-text);
+}
+.build-card-action.is-disabled { background: var(--surface); color: var(--text-muted); }
+.build-card.locked .build-card-action { background: var(--surface); color: var(--warn); }
+/* Filler tile for sparse categories: soft dashed placeholder, not a black gap. */
+.build-card-filler {
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px;
+  min-height: 160px; padding: 18px; text-align: center; cursor: default;
+  background: rgba(255, 255, 255, 0.02); border: 1px dashed var(--border);
+}
+.build-card-filler-art { opacity: 0.4; }
+.build-card-filler-text { font-size: 11.5px; color: var(--text-muted); font-weight: 600; line-height: 1.35; max-width: 150px; }
 
 /* ---- Needs / happiness ---- */
 .need-row { display: flex; flex-direction: column; gap: 4px; }
@@ -843,9 +885,19 @@ body {
 .quick-build:hover { filter: brightness(1.06); }
 .quick-build.active { outline: 2px solid rgba(255, 255, 255, 0.5); }
 .quick-actions {
-  display: flex; gap: 7px; padding: 7px; border-radius: 14px;
+  display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 7px; padding: 7px; border-radius: 14px;
+  max-width: min(560px, calc(100vw - 2 * var(--hud-gap)));
   background: var(--panel-bg); border: 1px solid var(--panel-border); box-shadow: var(--shadow);
 }
+
+/* Restore button shown while the UI is hidden (§8). */
+.ui-restore {
+  position: absolute; right: var(--hud-gap); bottom: var(--hud-gap); z-index: 20;
+  display: flex; align-items: center; gap: 8px; padding: 11px 18px; border-radius: 14px;
+  background: linear-gradient(180deg, #f2b24e, var(--primary)); color: var(--primary-text);
+  font-weight: 800; font-size: 14px; box-shadow: 0 4px 14px rgba(232, 163, 61, 0.45);
+}
+.ui-restore:hover { filter: brightness(1.06); }
 .quick-btn {
   display: flex; flex-direction: column; align-items: center; gap: 4px; width: 74px; padding: 7px 3px; border-radius: 10px;
   color: var(--text-muted); font-size: 10px; font-weight: 600; text-align: center; line-height: 1.15;
@@ -918,16 +970,6 @@ body {
 }
 .action-bubble-primary .action-bubble-ring { color: var(--primary-text); }
 
-/* ---- Build menu: vertical media-on-top cards (mockup §9) ---- */
-.build-cards { grid-template-columns: repeat(auto-fill, minmax(128px, 1fr)); }
-.build-card { flex-direction: column; gap: 8px; padding: 9px; }
-.build-card-media {
-  width: 100%; height: 66px; border-radius: 9px; display: grid; place-items: center;
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.06), rgba(0, 0, 0, 0.12));
-}
-.build-card-body { width: 100%; }
-.build-card-info { gap: 4px; }
-
 /* ===== v0.23 Cartoon-Artwork-System (§11) ===== */
 /* Illustrated resource/building/character art replaces the icon-first look on
    the visible HUD surfaces. All cel-shaded SVG; call sites accept sprites later. */
@@ -939,9 +981,9 @@ body {
 .res-card-icon { width: 36px; height: 36px; border-radius: 10px; }
 .res-card-icon .res-art { width: 30px; height: 30px; }
 
-/* Build-menu building thumbnails */
-.build-card-media .bld-art { display: block; border-radius: 10px; }
-.build-card-media { background: linear-gradient(180deg, rgba(255, 255, 255, 0.05), rgba(0, 0, 0, 0.14)); }
+/* Build-menu building thumbnails: big, centred, never text-overlapped. */
+.build-card-media .bld-art { display: block; border-radius: 12px; width: 104px; height: 104px; }
+.build-card-media .bld-art-img { width: 108px; height: 108px; border-radius: 12px; object-fit: contain; }
 
 /* Building sheet hero (mockup §2: artwork top-left, name + status beside it) */
 .sheet-hero { display: flex; align-items: center; gap: 11px; min-width: 0; }
@@ -982,4 +1024,36 @@ body {
 .res-art-img { object-fit: contain; }
 .bld-art-img { object-fit: cover; border-radius: 10px; }
 .portrait-img { object-fit: cover; border-radius: 11px; }
-.build-card-media .bld-art-img { width: 100%; height: 100%; border-radius: 9px; }
+
+/* ===== v0.26 UI overhaul: bigger, more graphical chrome ===== */
+/* UI-art frame (category/activity/reward/marker/event tiles). */
+.ui-art { display: block; object-fit: contain; }
+.ui-art-fallback { display: grid; place-items: center; border-radius: 10px; color: var(--text); }
+.ui-art-category.ui-art-fallback { background: rgba(255, 255, 255, 0.08); }
+.ui-art-activity.ui-art-fallback { background: color-mix(in srgb, var(--primary) 18%, transparent); color: var(--primary); border-radius: 13px; }
+.ui-art-reward.ui-art-fallback { background: transparent; }
+.ui-art-reward.reward-xp.ui-art-fallback { color: var(--res-population); }
+.ui-art-reward.reward-happiness.ui-art-fallback { color: var(--good); }
+.ui-art-event.ui-art-fallback { background: color-mix(in srgb, var(--primary) 16%, transparent); color: var(--primary); border-radius: 16px; }
+.ui-art-marker.ui-art-fallback { background: transparent; color: var(--bad); }
+
+/* Bigger, more graphical HUD panels (§16-§19). */
+.hud-panel { width: 300px; }
+.status-line-icon { width: 32px; height: 32px; border-radius: 9px; }
+.status-line-icon svg { width: 17px; height: 17px; }
+.status-line-label { font-size: 13px; }
+.status-line-bar { height: 7px; }
+.hud-panel-more { font-size: 13px; padding: 9px; }
+
+/* Graphical reward chips (quest & activity payouts). */
+.request-reward, .activity-reward { flex-wrap: wrap; gap: 8px; }
+.reward-chip { display: inline-flex; align-items: center; gap: 4px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.reward-chip .ui-art, .reward-chip .res-art { flex-shrink: 0; }
+
+/* Activity board card: big illustration lead + small sender portrait chip. */
+.activity-card-head .ui-art-activity { flex-shrink: 0; }
+.activity-card-sender { display: inline-flex; align-items: center; gap: 5px; }
+.activity-card-sender .portrait { border-radius: 50%; box-shadow: inset 0 0 0 1.5px rgba(255,255,255,0.25); }
+
+/* Build-menu category tab artwork sits a touch larger than the old glyph. */
+.btn-tab .ui-art-category { flex-shrink: 0; }
