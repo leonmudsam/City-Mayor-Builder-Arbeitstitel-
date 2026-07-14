@@ -1,5 +1,35 @@
 # Patch Notes
 
+## v0.24 — „Grafik-Asset-Pipeline: echte Bilder per Drop-in"
+
+Damit das UI **exakt wie das Mockup** werden kann, braucht es echte gerenderte
+Bild-Assets (gemalte/isometrische Grafiken). Diese kann die Umgebung nicht selbst
+erzeugen — deshalb wurde stattdessen die **Einbaustelle** dafür gebaut: eine
+Drop-in-Pipeline. Sobald Bilder abgelegt werden, zeigt die UI sie automatisch;
+fehlt ein Bild, rendert weiter die eingebaute SVG-Grafik.
+
+**Neu**
+- `src/assets/registry.ts` — erkennt via `import.meta.glob` automatisch alle
+  Bilder in `src/assets/resources|buildings|portraits/`, gekeyt nach Dateiname.
+  Kein Wiring pro Datei, kein manuelles Manifest.
+- `ResourceArt`, `BuildingArt`, `CitizenPortrait` rendern jetzt **Bild zuerst**
+  (wenn vorhanden), sonst den SVG-Platzhalter. Bürgerporträts rotieren über
+  `citizen_1..N` per Seed; Rollen (Bürgermeister/Händler/Feuerwehr/Bauamt) nutzen
+  eigene Dateien.
+- **`docs/ASSETS.md`** — vollständige Asset-Liste (alle Ressourcen, alle 34
+  Gebäude, Bürger/Berater) mit exakten Dateinamen, Größen, technischen Vorgaben
+  und je einem **fertigen Bild-Generierungs-Prompt** plus einheitlichem Stil-
+  Prefix, sodass ein KI-Bildgenerator konsistente Grafiken im Mockup-Look liefert.
+
+**Wichtig / ehrlich**
+- Es liegen noch **keine** finalen Bilder bei — bis welche abgelegt werden, sieht
+  das Spiel aus wie v0.23 (SVG-Cartoons). Die Pipeline ist getestet: ein Testbild
+  in `src/assets/resources/money.png` ersetzte sofort und ohne Codeänderung die
+  Geld-Grafik im HUD.
+- Noch **nicht** an die Pipeline gebunden (bewusst, als möglicher Folgeschritt):
+  die Kartengebäude im 2D-Renderer, Karten-Marker/Service-Symbole und große
+  Aktivitäts-/Event-Bildkarten.
+
 ## v0.23 — „Cartoon-Artwork: illustrierte UI statt SVG-Icons"
 
 Umsetzung der ausdrücklichen Vorgabe „generierte/cartoonartige Bilder statt
