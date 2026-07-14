@@ -1,5 +1,123 @@
 # Patch Notes
 
+## v0.20 — „Langzeit-Ausbau, aktiver Handel & Steuer-Regler bis 500 %"
+
+Großer Balancing- und Mechanik-Pass für das Mid-/Late-Game. Der kritische
+Upgrade-Bug ist behoben, Wohn- und Produktionsgebäude bekommen lange, teure
+Ausbaupfade, überschüssige Rohstoffe werden für aktive Spieler zu Geld, und der
+Steuer-Regler wird zu einem echten Entscheidungswerkzeug. Alles bleibt
+config-getrieben und savegame-kompatibel (Schema v8 unverändert; das neue
+`targetUpgradeLevel`-Feld ist optional, alte Spielstände laden unverändert).
+
+**Kritischer Upgrade-Fix (§2) — Gebäude behalten ihre Wirkung während des Ausbaus**
+- Bisher verlor ein Gebäude beim Upgrade *sofort* seine Funktion: Bewohner
+  raus, Produktion/Radius/Versorgung/Lager auf 0, bis der Ausbau fertig war.
+- Neu: Ein Ausbau merkt sich nur ein **Ziel** (`targetUpgradeLevel`) und lässt
+  `upgradeLevel` (die *abgeschlossene* Stufe) unangetastet. Solange gebaut wird,
+  bleiben **alle Eigenschaften der aktuellen Stufe voll aktiv** — Wohnkapazität,
+  Bewohner, Produktionsrate, Radius, Service-Coverage, Lager, Jobs, Einnahmen,
+  Unterhalt. Erst bei Abschluss schaltet der Tick sauber auf die Zielstufe um.
+- Kein Doppel-Effekt, kein Produktions-Blackout, kein Wegzug mehr. Geprüft durch
+  neue Tests (Rathaus behält seinen Lagerausbau, Sägewerk produziert
+  ununterbrochen weiter) — greift für Live-Tick *und* Offline-Catch-up.
+- UI: „Ausbau läuft — aktuelle Stufe bleibt voll aktiv" inkl. Zielstufen-Name.
+
+**Langsamere Levelprogression (§1)**
+- XP-Kurve ab L4 um ~15–30 % gestreckt (L5 620 statt 480, L10 ~5 700 statt
+  4 400, L14 ~21 400 statt 16 800). L1–3 bleiben bewusst schnell, damit der gute
+  Early-Flow erhalten bleibt — Level-Ups fühlen sich jetzt wertvoller an.
+
+**Wohngebäude-Ausbaupfade (§3/§4/§5) — Zentrum bleibt langfristig wichtig**
+- Kleines Haus hat jetzt einen 6-stufigen Pfad auf gleicher 2×2-Fläche:
+  Kleines Haus → Ausgebautes Haus (L3) → **Doppelhaus (ab L8)** →
+  Mehrfamilienhaus (L10) → Stadthaus (L12) → Wohnblock (L14, 16 Haushalte).
+- Das Doppelhaus ist wie gefordert **erst ab Level 8** verfügbar. Höhere Stufen
+  sind teuer (bis 1,4 Mio. €) und anspruchsvoller (mehr Wasser/Unterhalt), dafür
+  wird das Gründerhaus dauerhaft wertvoll — ein voll ausgebautes Kleines Haus
+  ersetzt eine ganze Straße Starterhäuser. Reihenhaus/Apartment/Wohnturm haben
+  bereits mehrstufige Pfade und bleiben.
+
+**Produktionsgebäude-Upgrades (§14)**
+- Sägewerk ab **L7** (ab 200.000 €): Verbesserte Sägen → Automatisiertes
+  Sägewerk → Industrie-Sägewerk (45 → 300 Holz/min).
+- Steinbruch ab **L8** (ab 300.000 €): Bessere Fördertechnik → Schweres Gerät →
+  Industrieller Steinbruch (38 → 240 Stein/min).
+- Farm ab **L8** (ab 300.000 €): Bewässerung → Moderne Landwirtschaft →
+  Automatisierte Farm (220 → 1 250 Nahrung/min). Höhere Farmstufen brauchen
+  jetzt **Wasser** — mehr Nahrung heißt auch mehr Wasserwerk (echtes Trade-off).
+- Spätere Stufen kosten Millionen und ziehen mehr Arbeitskräfte/Energie/Unterhalt.
+
+**Aktiver Rohstoff-Überlauf (§6)**
+- Läuft ein Lager voll, wird überschüssige Produktion **nur im aktiven Spiel** zu
+  Geld (Holz 2 €, Stein 4 €, Nahrung/Trinkwasser 1 € je Einheit). Offline/
+  Catch-up gibt es **kein** Export-Geld — kein AFK-Gelddrucker. Anzeige in der
+  Stadtkasse: „Überschuss-Export: +X €/min".
+
+**Neues Gebäude: Handelskontor (§7)**
+- Ab L5 baubar. Schaltet **aktiven Handel** frei: Rohstoffe manuell verkaufen
+  (Hälfte/alles) oder — teuer, mit 4× Aufschlag — kaufen. Upgrades (Rohstoffbörse
+  +25 %, Exportzentrum +50 % Verkaufskurs) verbessern den Kurs. Kaufen liegt weit
+  über jedem Verkaufskurs, also kein Arbitrage-Exploit — Produktion bleibt die
+  Hauptquelle. Eigenes Handels-Panel, geöffnet über das Gebäude-Sheet.
+
+**Verschiebbare Produktionsgebäude (§8)**
+- Sägewerk, Steinbruch und Farm sind jetzt über das Gebäude-Sheet **verschiebbar**
+  (kleine Umzugsgebühr). Zielort wird neu geprüft (Terrain, Straße), Standortbonus
+  neu berechnet — frühe Fehlplatzierung ist keine dauerhafte Strafe mehr.
+
+**Steuer-Regler bis 500 % (§9)**
+- Band von ±50 % auf **50–500 %** erweitert. Hohe Sätze bringen mehr Geld pro
+  Kopf, kosten aber massiv Zufriedenheit (Wohnsteuer bei 300–500 %: −48 … −96),
+  wodurch Zuzug einbricht und Bürger wegziehen — ein Werkzeug, kein Gratisgeld.
+  UI: Warnfarben ab 150 %/250 % und eine Effekt-Vorschau der Zufriedenheitskosten.
+
+**Prototyp-Cheats (§10)**
+- Neuer, klar als Test markierter **Debug-Bereich** (Feature-Flag `debugTools`,
+  über Einstellungen): +100.000 € / +1.000.000 €, alle Lager auffüllen, alle
+  Bauten abschließen, alle Upgrades abschließen. Läuft über GameController-Commands
+  (mit Reason geloggt), nie am normalen Datenfluss vorbei.
+
+**Farm & Ressourcenwert (§11/§12/§13)**
+- Nahrungsverbrauch pro Kopf angehoben (0,03 → 0,05) — Nahrung ist jetzt ein
+  echter, aber fairer Engpass; eine wachsende Stadt braucht mehr/aufgewertete
+  Farmen und einen guten fruchtbaren Standort.
+- Standortboni verstärkt und sichtbarer: Steinbruch an Fels bis **+70 %**, Farm
+  auf fruchtbarem Boden bis **+50 %** — die frühe Entscheidung Gebirge vs.
+  fruchtbares Land hat jetzt spürbar unterschiedliche Stärken.
+- Volle Lager sind sinnvoller (aktiver Export + Handelskontor), teure
+  Material-Upgrades verbrauchen Überschüsse — Rohstoffe fühlen sich wertvoller an.
+
+**Level-7-Aufgabe (§16)**
+- Neue Bauamt-Aufgabe „Mehr Wohnraum": 10 Kleine Häuser + 6 Reihenhäuser (passt
+  genau zu den Wohnlimits bei L7). Belohnung: Geld, XP **und Material** (Holz/
+  Stein — neu unterstützt). Zählt Lebenszeit-Bauten, erfüllt sich also automatisch,
+  wenn schon genug gebaut wurde.
+
+**Geänderte Dateien**
+- Logik: `types.ts` (targetUpgradeLevel), `buildings/effects.ts` (isContributing),
+  `simulation/derived.ts`, `simulation/tick.ts` (live-Flag, Überlauf-Export,
+  Upgrade-Abschluss), `commands/controller.ts` (Upgrade-Fix, Handel, Cheats,
+  Überlauf-Anzeige).
+- Config: `types.ts`, `schemas.ts`, `balancing.config.ts`, `levels.config.ts`,
+  `buildings.config.ts`, `needs.config.ts`, `quests.config.ts`.
+- UI: `TradePanel.tsx` (neu), `DebugPanel.tsx` (neu), `App.tsx`, `store.ts`,
+  `FloatingBuildingSheet.tsx`, `EconomyPanel.tsx`, `SettingsPanel.tsx`,
+  `i18n/de.json`, `styles.css`.
+- Tests: `tests/upgrade.test.ts` (neu, 7 Tests), `tests/systems.test.ts`
+  (Steuerband). **92/92 Tests grün, Lint + Build sauber.**
+
+**Empfohlene nächste Balancing-Tests**
+- Simulierter Durchlauf L1–14 mit Zeit-Skip (Debug): Wie lange bis zur ersten
+  Doppelhaus-/Sägewerk-Stufe? Fühlen sich die 200k/300k-Schwellen fair an?
+- Voll-Lager-Szenario: Reicht der aktive Export, um Warten zu überbrücken, ohne
+  Produktion zu entwerten? Sind die Export-/Handelskurse (2/4/1) stimmig?
+- Nahrungs-Engpass: Ab welcher Einwohnerzahl reicht 1 Farm nicht mehr? Passt der
+  neue Verbrauch (0,05) zu den Farmstufen und dem Wasserbedarf?
+- Steuer-Stresstest: Bei welchem Satz kippt die Stadt in den Wegzug? Ist 500 %
+  ein sinnvoller „Notgroschen" oder zu hart/zu weich?
+- Upgrade-während-Betrieb: Große Stadt, mehrere gleichzeitige Upgrades — bleibt
+  Zufriedenheit/Versorgung durchgehend stabil?
+
 ## v0.19.1 — „Neu anfangen repariert"
 
 **Bugfix:** Der „Neu anfangen"-Button funktionierte nicht zuverlässig. Ursache:

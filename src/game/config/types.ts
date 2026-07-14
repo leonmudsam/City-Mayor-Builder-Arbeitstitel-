@@ -179,6 +179,13 @@ export interface BuildingDef {
    * money wait, after which normal prices apply. Generic and config-only.
    */
   firstBuildDiscount?: number;
+  /**
+   * Marks the building as an active-trade hub (§7 Handelskontor). Its presence
+   * unlocks manual selling/buying of resources; a higher completed upgrade stage
+   * improves the sell rate. Purely a flag — the pricing lives in the balancing
+   * config so the mechanic stays config-driven.
+   */
+  tradePost?: boolean;
 }
 
 // ---- Resources & needs ----------------------------------------------------
@@ -241,7 +248,12 @@ export interface QuestDef {
   descriptionKey: string;
   unlockLevel: number;
   objectives: QuestObjective[];
-  rewards: { money?: number; gold?: number; xp?: number };
+  /**
+   * Payout on claim. `resources` lets a quest hand out materials (wood/stone/…)
+   * alongside money/gold/xp — used by the housing drive (§16) to seed the next
+   * build. Materials respect storage caps like any grant.
+   */
+  rewards: { money?: number; gold?: number; xp?: number; resources?: Partial<Record<ResourceId, number>> };
   nextQuestId?: QuestId;
   /** Optional "who's asking" framing for the quest card (§6). */
   sender?: QuestSender;
@@ -351,6 +363,26 @@ export interface BalancingConfig {
    * shown is `cost / this`. Purely advisory UI text, no simulation effect.
    */
   majorProjectPaybackMinutes: number;
+  /**
+   * Money earned per unit of a resource that a full store overflows while the
+   * player is active (§6 active overflow export) — also the base sell price at
+   * the trading post (§7). Scarcer/harder resources are worth more (stone > wood
+   * > food). Absent resources aren't exported. Live-only: offline overflow is
+   * simply lost, so this never becomes an AFK money printer.
+   */
+  exportRates: Partial<Record<ResourceId, number>>;
+  /**
+   * Sell-rate bonus per completed trading-post stage (§7): a stage-1 Handelskontor
+   * sells at `1 + tradeSellBonusPerLevel` × the base export rate, so upgrading it
+   * pays off. Only affects manual selling, not the passive overflow export.
+   */
+  tradeSellBonusPerLevel: number;
+  /**
+   * How much dearer buying is than the base export rate (§7): buy price =
+   * `exportRates × tradeBuyMarkup`. Kept well above the sell rate so buying is an
+   * emergency convenience, never an arbitrage — production stays the real source.
+   */
+  tradeBuyMarkup: number;
 }
 
 export interface FeaturesConfig {

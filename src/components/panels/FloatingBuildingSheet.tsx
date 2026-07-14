@@ -13,6 +13,7 @@ import {
   PackageOpen,
   ShieldCheck,
   Sparkles,
+  Store,
   Trash2,
   TrendingDown,
   TrendingUp,
@@ -46,7 +47,7 @@ function costLabel(cost: Partial<Record<string, number>>): string {
  */
 export function FloatingBuildingSheet() {
   const game = useGame();
-  const { selectedBuildingId, selectBuilding, startMoving, pushToast } = useUiStore();
+  const { selectedBuildingId, selectBuilding, startMoving, setPanel, pushToast } = useUiStore();
   const [confirmDemolish, setConfirmDemolish] = useState(false);
   if (!selectedBuildingId) return null;
   const b = game.state.buildings[selectedBuildingId];
@@ -101,10 +102,22 @@ export function FloatingBuildingSheet() {
         </div>
 
         {b.status === 'constructing' && b.constructionEndsAt !== undefined && (
-          <p className="dialog-status">
-            <Clock size={15} /> {t(b.upgradeLevel > 0 ? 'ui.upgrade_running' : 'ui.construction')} —{' '}
-            {t('ui.ready_in', { time: formatDuration(b.constructionEndsAt - now) })}
-          </p>
+          <>
+            <p className="dialog-status">
+              <Clock size={15} /> {t(b.targetUpgradeLevel !== undefined ? 'ui.upgrade_running' : 'ui.construction')} —{' '}
+              {t('ui.ready_in', { time: formatDuration(b.constructionEndsAt - now) })}
+            </p>
+            {b.targetUpgradeLevel !== undefined && (
+              // §2/§17: reassure that the current stage stays fully active during
+              // the upgrade, and name the stage the building is heading toward.
+              <p className="dialog-hint sheet-upgrade-note">
+                {t('ui.upgrade_running.keeps')}
+                {def.upgrades?.[b.targetUpgradeLevel - 1]?.nameKey && (
+                  <> {t('ui.upgrade_to', { name: t(def.upgrades[b.targetUpgradeLevel - 1]!.nameKey!) })}</>
+                )}
+              </p>
+            )}
+          </>
         )}
         {b.status === 'paused' && (
           <p className="dialog-status text-bad">
@@ -181,6 +194,14 @@ export function FloatingBuildingSheet() {
               />
             )
           )}
+          {def.tradePost && b.status === 'active' && (
+            <ActionBubble
+              icon={<Store size={18} />}
+              label={t('ui.trade.open')}
+              tone="primary"
+              onClick={() => setPanel('trade')}
+            />
+          )}
           {canRelocate && (
             <ActionBubble
               icon={<Move size={18} />}
@@ -223,7 +244,10 @@ export function FloatingBuildingSheet() {
  */
 function buildingStatus(b: BuildingInstance, diagnostics: Diagnosis[]): { key: string; tone: string } {
   if (b.status === 'constructing') {
-    return b.upgradeLevel > 0
+    // An in-progress upgrade is flagged by targetUpgradeLevel (upgradeLevel now
+    // only advances on completion), so this correctly reads "upgrading" even for
+    // a base→stage-1 upgrade where upgradeLevel is still 0 (§2).
+    return b.targetUpgradeLevel !== undefined
       ? { key: 'ui.status.upgrading', tone: 'busy' }
       : { key: 'ui.status.constructing', tone: 'busy' };
   }

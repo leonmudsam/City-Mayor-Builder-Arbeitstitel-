@@ -1,4 +1,4 @@
-import { Briefcase, Building2, Factory, SlidersHorizontal, TrendingDown, TrendingUp, Wallet, X } from 'lucide-react';
+import { AlertTriangle, Briefcase, Building2, Factory, PackageOpen, SlidersHorizontal, TrendingDown, TrendingUp, Wallet, X } from 'lucide-react';
 import { useGame, useUiStore } from '../../state/store.ts';
 import { formatMoney, t } from '../../i18n/index.ts';
 
@@ -19,12 +19,16 @@ export function EconomyPanel() {
   ] as const;
 
   // Tax sliders unlock once the commercial economy exists (§ tax sliders, MVP 2).
-  const { taxRateMin, taxRateMax } = game.config.balancing;
+  const bal = game.config.balancing;
+  const { taxRateMin, taxRateMax } = bal;
   const showTax = game.state.level.current >= 6;
   const taxSliders = [
-    { kind: 'residential' as const, rate: game.state.policy.residentialTaxRate },
-    { kind: 'commercial' as const, rate: game.state.policy.commercialTaxRate },
+    { kind: 'residential' as const, rate: game.state.policy.residentialTaxRate, happPer: bal.residentialTaxHappinessPer },
+    { kind: 'commercial' as const, rate: game.state.policy.commercialTaxRate, happPer: bal.commercialTaxHappinessPer },
   ];
+  // Warn as the rate climbs into punishing territory (§9): amber ≥ 150 %, red ≥ 250 %.
+  const taxTone = (rate: number) => (rate >= 2.5 ? 'danger' : rate >= 1.5 ? 'warn' : '');
+  const overflow = game.getOverflowExport();
 
   return (
     <aside className="panel side-panel economy-panel">
@@ -77,28 +81,53 @@ export function EconomyPanel() {
         <span>{t('ui.finance.employment', { pct: Math.round(income.employment * 100) })}</span>
       </div>
 
+      {overflow.active && (
+        // Active overflow export (§6): only shows while a full store is spilling
+        // into money — and only for a live, foreground session.
+        <div className="economy-overflow">
+          <PackageOpen size={15} />
+          <span>{t('ui.finance.overflow', { amount: formatMoney(overflow.perMin) })}</span>
+        </div>
+      )}
+
       {showTax && (
         <div className="economy-tax">
           <div className="economy-tax-head">
             <SlidersHorizontal size={15} /> {t('ui.tax.title')}
           </div>
-          {taxSliders.map(({ kind, rate }) => (
-            <div key={kind} className="economy-tax-row">
-              <div className="economy-tax-label">
-                <span>{t(`ui.tax.${kind}`)}</span>
-                <span className="economy-tax-value">{Math.round(rate * 100)}%</span>
+          {taxSliders.map(({ kind, rate, happPer }) => {
+            const tone = taxTone(rate);
+            const penalty = Math.round((rate - 1) * happPer);
+            return (
+              <div key={kind} className={`economy-tax-row${tone ? ` tax-${tone}` : ''}`}>
+                <div className="economy-tax-label">
+                  <span>{t(`ui.tax.${kind}`)}</span>
+                  <span className="economy-tax-value">{Math.round(rate * 100)}%</span>
+                </div>
+                <input
+                  type="range"
+                  min={Math.round(taxRateMin * 100)}
+                  max={Math.round(taxRateMax * 100)}
+                  step={5}
+                  value={Math.round(rate * 100)}
+                  onChange={(e) => game.setTaxRate(kind, Number(e.target.value) / 100)}
+                  aria-label={t(`ui.tax.${kind}`)}
+                />
+                {/* Effect preview (§9): the happiness cost/benefit of this rate. */}
+                <div className="economy-tax-effect">
+                  {penalty > 0 ? (
+                    <span className={`text-${tone === 'danger' ? 'bad' : 'warn'}`}>
+                      {tone === 'danger' && <AlertTriangle size={12} />} {t('ui.tax.happiness_cost', { pts: penalty })}
+                    </span>
+                  ) : penalty < 0 ? (
+                    <span className="text-good">{t('ui.tax.happiness_gain', { pts: -penalty })}</span>
+                  ) : (
+                    <span className="muted">{t('ui.tax.neutral')}</span>
+                  )}
+                </div>
               </div>
-              <input
-                type="range"
-                min={Math.round(taxRateMin * 100)}
-                max={Math.round(taxRateMax * 100)}
-                step={5}
-                value={Math.round(rate * 100)}
-                onChange={(e) => game.setTaxRate(kind, Number(e.target.value) / 100)}
-                aria-label={t(`ui.tax.${kind}`)}
-              />
-            </div>
-          ))}
+            );
+          })}
           <p className="muted economy-tax-note">{t('ui.tax.note')}</p>
         </div>
       )}

@@ -53,13 +53,24 @@ export const balancingConfig: BalancingConfig = {
   // A growing city must keep investing in supply, so happiness rarely sticks at
   // 100 % — a well-run city lands around 70–90 % (§3).
   needExpectationPerLevel: 0.04,
-  // Tax sliders (MVP 2): the mayor can dial each rate within ±50 % of neutral.
-  // Residents feel residential tax strongly; the commercial rate bites softer
-  // (it reads as "business climate"), so pushing it up is the gentler lever.
+  // Tax sliders (§9): the mayor can dial each rate from 50 % up to a punishing
+  // 500 %. Above neutral earns more per head but citizens feel it — residents
+  // strongly, business softer ("business climate"). At 300–500 % the happiness
+  // hit is so large (residential −48 … −96) that zuzug collapses and the city
+  // sheds people, so a sky-high rate is a deliberate trade-off, never free money.
   taxRateMin: 0.5,
-  taxRateMax: 1.5,
+  taxRateMax: 5,
   residentialTaxHappinessPer: 24,
   commercialTaxHappinessPer: 10,
+  // Active resource economy (§6/§7). Money per unit exported: scarcer inputs are
+  // worth more (stone hardest to produce, food most abundant). These are the
+  // overflow-export rates AND the trading-post base sell prices.
+  exportRates: { wood: 2, stone: 4, food: 1, freshwater: 1 },
+  // Each trading-post stage lifts the manual sell price by 25 % of the base rate.
+  tradeSellBonusPerLevel: 0.25,
+  // Buying costs 4× the base rate — far above any sell price, so trade can never
+  // be arbitraged and production stays the real source of resources.
+  tradeBuyMarkup: 4,
   // Fern-Expansion (MVP 2): founding the river district is a genuine "special
   // project" — a big one-off cost that plants a district centre in the river
   // biome and opens a second, self-connected build area (§8).

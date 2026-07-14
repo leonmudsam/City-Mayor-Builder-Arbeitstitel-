@@ -31,8 +31,21 @@ export interface BuildingInstance {
   /** World tile coordinates of the top-left corner (sector-spanning). */
   x: number;
   y: number;
+  /**
+   * The building's *completed* stage — the one whose effects are live. It is
+   * only advanced when an upgrade finishes, never when it starts (§2), so a
+   * building keeps all its current-stage effects for the whole build time.
+   */
   upgradeLevel: number;
   status: BuildingStatus;
+  /**
+   * Stage an in-progress upgrade is heading toward (§2 critical upgrade fix).
+   * Set while `status === 'constructing'` for an *upgrade* (not a fresh build);
+   * on completion the tick copies it into `upgradeLevel` and clears it. Its
+   * presence is what distinguishes "upgrading (old effects stay active)" from
+   * "newly building (no effects yet)".
+   */
+  targetUpgradeLevel?: number;
   constructionEndsAt?: number;
 }
 

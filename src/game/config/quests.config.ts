@@ -299,4 +299,20 @@ export const questsConfig: QuestDef[] = [
     objectives: [{ type: 'happiness', amount: 80 }],
     rewards: { money: 45_000, gold: 10, xp: 35 },
   },
+  // Level 7 housing drive (§16): "our city needs more homes". Its targets line up
+  // with the residential build limits at L7 (house_small cap 10, house_row cap 6),
+  // and — since `build` counts lifetime — it auto-completes for a player who has
+  // already built that many. Pays out materials for the next expansion, too.
+  {
+    id: 'qe_housing',
+    sender: 'buildingDept',
+    titleKey: 'quest.qe_housing.title',
+    descriptionKey: 'quest.qe_housing.desc',
+    unlockLevel: 7,
+    objectives: [
+      { type: 'build', defId: 'house_small', count: 10 },
+      { type: 'build', defId: 'house_row', count: 6 },
+    ],
+    rewards: { money: 120_000, xp: 90, resources: { wood: 200, stone: 120 } },
+  },
 ];

@@ -1,6 +1,6 @@
 import type { GameConfig } from '../config/index.ts';
 import type { GameState, NeedId, ResourceId } from '../types.ts';
-import { centerOf, chebyshev, effectiveEffects } from '../buildings/effects.ts';
+import { centerOf, chebyshev, effectiveEffects, isContributing } from '../buildings/effects.ts';
 import { locationBonusPct } from '../buildings/location.ts';
 import { computeRoadNetwork } from '../map/world.ts';
 
@@ -86,7 +86,11 @@ export function recomputeDerived(state: GameState, config: GameConfig): Derived 
   };
 
   for (const b of Object.values(state.buildings)) {
-    if (b.status !== 'active') continue;
+    // Active buildings AND those mid-upgrade contribute their *current* stage's
+    // effects — an upgrade never zeroes a building out (§2). effectiveEffects
+    // reads `upgradeLevel` (the completed stage), so the old effects stay live
+    // until the upgrade actually finishes.
+    if (!isContributing(b)) continue;
     const def = config.buildings.get(b.defId);
     if (!def) continue;
     const { cx, cy } = centerOf(def, b);

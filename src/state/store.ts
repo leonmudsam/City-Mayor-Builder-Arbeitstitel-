@@ -44,7 +44,7 @@ export interface GameEvent {
   params?: Record<string, string | number>;
 }
 
-type PanelId = 'build' | 'mayor' | 'happiness' | 'status' | 'economy' | 'settings' | 'quests' | undefined;
+type PanelId = 'build' | 'mayor' | 'happiness' | 'status' | 'economy' | 'settings' | 'quests' | 'trade' | 'debug' | undefined;
 
 interface UiState {
   openPanel: PanelId;
