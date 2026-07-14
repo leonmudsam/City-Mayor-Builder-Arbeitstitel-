@@ -1,9 +1,9 @@
 import { useState } from 'react';
-import { Check, Gift, User } from 'lucide-react';
+import { Check, User } from 'lucide-react';
 import { useGame, useUiStore } from '../../state/store.ts';
 import { objectiveTarget } from '../../game/simulation/quests.ts';
 import { formatMoney, t } from '../../i18n/index.ts';
-import { CitizenPortrait } from '../art/index.ts';
+import { CitizenPortrait, RewardArt } from '../art/index.ts';
 
 // Bürgeranliegen (mockup §5, right column): the city's open requests as living
 // citizen cards — an illustrated portrait, a spoken wish (speech bubble), the
@@ -42,7 +42,7 @@ export function CitizenRequestsPanel() {
             <div key={quest.questId} className={`request-card${quest.claimable ? ' is-claimable' : ''}`}>
               <div className="request-top">
                 <span className="request-avatar">
-                  <CitizenPortrait role={sender} seed={quest.questId} size={42} />
+                  <CitizenPortrait role={sender} seed={quest.questId} size={54} />
                 </span>
                 <div className="request-bubble">{t(def.descriptionKey)}</div>
               </div>
@@ -68,7 +68,7 @@ export function CitizenRequestsPanel() {
               </div>
               <div className="request-foot">
                 <span className="request-reward">
-                  <Gift size={13} /> {rewardLabel(def.rewards)}
+                  <RewardRow rewards={def.rewards} />
                 </span>
                 {quest.claimable && (
                   <button
@@ -96,10 +96,25 @@ export function CitizenRequestsPanel() {
   );
 }
 
-function rewardLabel(rewards: { money?: number; gold?: number; xp?: number }): string {
-  const parts: string[] = [];
-  if (rewards.money) parts.push(`${formatMoney(rewards.money)} ${t('resource.money')}`);
-  if (rewards.gold) parts.push(`${rewards.gold} ${t('ui.gold')}`);
-  if (rewards.xp) parts.push(`${rewards.xp} XP`);
-  return parts.join(' · ');
+/** Reward row with a small artwork per reward kind (§9 grafischer). */
+function RewardRow({ rewards }: { rewards: { money?: number; gold?: number; xp?: number } }) {
+  return (
+    <>
+      {rewards.money ? (
+        <span className="reward-chip">
+          <RewardArt kind="money" px={18} /> {formatMoney(rewards.money)}
+        </span>
+      ) : null}
+      {rewards.gold ? (
+        <span className="reward-chip">
+          <RewardArt kind="gold" px={18} /> {rewards.gold}
+        </span>
+      ) : null}
+      {rewards.xp ? (
+        <span className="reward-chip">
+          <RewardArt kind="xp" px={18} /> {rewards.xp} XP
+        </span>
+      ) : null}
+    </>
+  );
 }

@@ -1,11 +1,11 @@
 import { useState } from 'react';
-import { Clock, Lock, Sparkles, X } from 'lucide-react';
+import { Clock, Hammer, Lock, Sparkles, X } from 'lucide-react';
 import { useGame, useUiStore } from '../../state/store.ts';
 import type { BuildingCategory, NeedId, ResourceId } from '../../game/types.ts';
 import type { BuildingDef } from '../../game/config/types.ts';
 import { formatMoney, t } from '../../i18n/index.ts';
-import { CategoryIcon, ResourceIcon } from '../common/icons.tsx';
-import { BuildingArt } from '../art/index.ts';
+import { ResourceIcon } from '../common/icons.tsx';
+import { BuildingArt, CategoryArt } from '../art/index.ts';
 
 // Full tab order (§19). Previously `infrastructure` and the new `energy`
 // category were missing, so the coal plant / wind farm never appeared anywhere
@@ -75,7 +75,7 @@ export function BuildMenu() {
               className={`btn-tab${category === cat ? ' active' : ''}`}
               onClick={() => setCategory(cat)}
             >
-              <CategoryIcon id={cat} />
+              <CategoryArt id={cat} px={26} />
               <span>{t(`category.${cat}`)}</span>
               {newCategories.has(cat) && <span className="tab-dot new" title={t('ui.new_building')} />}
               {problemCategories.has(cat) && !newCategories.has(cat) && (
@@ -91,6 +91,16 @@ export function BuildMenu() {
       <div className="build-cards">
         {buildings.map((def) => (
           <BuildCard key={def.id} def={def} locked={def.unlockLevel > level} onPick={() => startPlacing(def.id)} />
+        ))}
+        {/* Fill a sparse category so the wide sheet never reads as a half-empty
+            black hole (§3): soft "more coming" tiles pad the row out. */}
+        {Array.from({ length: Math.max(0, 4 - buildings.length) }).map((_, i) => (
+          <div key={`filler-${i}`} className="build-card build-card-filler" aria-hidden="true">
+            <div className="build-card-filler-art">
+              <CategoryArt id={category} px={44} />
+            </div>
+            <span className="build-card-filler-text">{t('ui.build.more_coming')}</span>
+          </div>
         ))}
       </div>
     </div>
@@ -117,23 +127,30 @@ function BuildCard({ def, locked, onPick }: { def: BuildingDef; locked: boolean;
   // Freshly unlocked this level and not built yet (§7): a "Neu" badge.
   const isNew = !locked && game.isNewBuilding(def.id);
 
+  // The single most important secondary effect, as a short capacity/output line.
+  const highlight = effectSummary(def);
+
   return (
     <button
       className={`build-card${disabled ? ' disabled' : ''}${locked ? ' locked' : ''}${major ? ' major' : ''}`}
       onClick={onPick}
       disabled={disabled}
     >
+      {/* Zone 1 — media: big thumbnail, footprint + new badge in the corners,
+          never overlapped by text (text lives in the separate body below). */}
       <div className="build-card-media">
-        <BuildingArt id={def.id} category={def.category} />
+        <BuildingArt id={def.id} category={def.category} px={128} />
         <span className="build-card-size">{def.size.w}×{def.size.h}</span>
         {isNew && <span className="build-card-new">{t('ui.new')}</span>}
+        {major && <span className="build-card-badge major">{t('ui.major_project')}</span>}
+        {firstFree && !locked && <span className="build-card-badge free">{t('ui.first_build_free')}</span>}
       </div>
+
       <div className="build-card-body">
-        <div className="build-card-name">
-          {t(def.nameKey)}
-          {major && <span className="build-card-tag">{t('ui.major_project')}</span>}
-          {firstFree && !locked && <span className="build-card-tag free">{t('ui.first_build_free')}</span>}
-        </div>
+        {/* Zone 2 — title */}
+        <div className="build-card-name">{t(def.nameKey)}</div>
+
+        {/* Zone 3 — key values */}
         <div className="build-card-info">
           {Object.entries(cost).map(([res, amount]) => (
             <span
@@ -151,26 +168,33 @@ function BuildCard({ def, locked, onPick }: { def: BuildingDef; locked: boolean;
             </span>
           )}
         </div>
-        <div className="build-card-effect">{effectSummary(def)}</div>
-        {scaled && <div className="build-card-scaled">{t('ui.cost_scaled')}</div>}
+        {highlight && <div className="build-card-effect">{highlight}</div>}
         {def.locationBonus && (
           <div className="build-card-bonus">
             <Sparkles size={12} />
             {t('ui.location_bonus_hint', { terrain: t(`terrain.${def.locationBonus.terrain}`) })}
           </div>
         )}
-        {locked && (
-          <div className="build-card-lock">
-            <Lock size={12} />
-            {t('ui.locked_at', { level: def.unlockLevel })}
-          </div>
-        )}
-        {!locked && limit && (
-          <div className={`build-card-limit${limitReached ? ' reached' : ''}`}>
-            {t('ui.limit.count', { count: limit.count, max: limit.max })}
-            {limitReached && limit.nextLevel !== undefined && ` · ${t('ui.limit.more_at', { level: limit.nextLevel })}`}
-          </div>
-        )}
+
+        {/* Zone 4 — status */}
+        <div className="build-card-status">
+          {locked ? (
+            <span className="build-card-lock">
+              <Lock size={12} />
+              {t('ui.locked_at', { level: def.unlockLevel })}
+            </span>
+          ) : uniqueBuilt ? (
+            <span className="build-card-lock">{t('error.unique_exists')}</span>
+          ) : limit ? (
+            <span className={`build-card-limit${limitReached ? ' reached' : ''}`}>
+              {t('ui.limit.count', { count: limit.count, max: limit.max })}
+              {limitReached && limit.nextLevel !== undefined && ` · ${t('ui.limit.more_at', { level: limit.nextLevel })}`}
+            </span>
+          ) : (
+            <span className="build-card-ready">{t('ui.status.unlocked')}</span>
+          )}
+          {scaled && <span className="build-card-scaled">{t('ui.cost_scaled')}</span>}
+        </div>
         {!locked && !affordable && !limitReached && !uniqueBuilt && major && (
           <div className="build-card-invest">
             {t('ui.major_project_hint', {
@@ -179,7 +203,19 @@ function BuildCard({ def, locked, onPick }: { def: BuildingDef; locked: boolean;
             })}
           </div>
         )}
-        {uniqueBuilt && <div className="build-card-lock">{t('error.unique_exists')}</div>}
+
+        {/* Zone 5 — action */}
+        <div className={`build-card-action${disabled ? ' is-disabled' : ''}`}>
+          {locked ? (
+            <>
+              <Lock size={13} /> {t('ui.locked_at', { level: def.unlockLevel })}
+            </>
+          ) : (
+            <>
+              <Hammer size={13} /> {t('ui.build')}
+            </>
+          )}
+        </div>
       </div>
     </button>
   );

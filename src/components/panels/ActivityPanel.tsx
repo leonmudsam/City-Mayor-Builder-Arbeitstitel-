@@ -3,7 +3,7 @@ import { ClipboardList, Gift, MapPin, PackageCheck, Search, Store, Timer, X } fr
 import { useGame, useUiStore } from '../../state/store.ts';
 import { DecisionModal } from '../common/DecisionModal.tsx';
 import { RESOURCE_ICON } from '../common/icons.tsx';
-import { CitizenPortrait } from '../art/index.ts';
+import { ActivityArt, CitizenPortrait } from '../art/index.ts';
 import { formatDuration, formatMoney, t } from '../../i18n/index.ts';
 import { playFeedback } from '../../services/feedback.ts';
 import type { ActivityDef } from '../../game/config/types.ts';
@@ -90,9 +90,12 @@ export function ActivityPanel() {
           return (
             <div key={def.id} className={`activity-card${entry.available ? '' : ' is-disabled'}`}>
               <div className="activity-card-head">
-                <CitizenPortrait role={def.sender} seed={def.id} size={40} />
+                <ActivityArt id={def.id} type={def.type} px={56} />
                 <div className="activity-card-title">
-                  <span className="activity-card-sender">{t(`quest.sender.${def.sender}`)}</span>
+                  <span className="activity-card-sender">
+                    <CitizenPortrait role={def.sender} seed={def.id} size={20} />
+                    {t(`quest.sender.${def.sender}`)}
+                  </span>
                   <span className="activity-card-name">
                     <Icon size={13} /> {t(def.nameKey)}
                   </span>

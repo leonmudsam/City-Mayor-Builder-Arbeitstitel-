@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { Eye } from 'lucide-react';
 import { loadConfig } from './game/config/index.ts';
 import { createNewGame } from './game/newGame.ts';
 import { GameController } from './game/commands/controller.ts';
@@ -175,11 +176,35 @@ export function App() {
   return <GameScreen key={gameKey} onImport={handleImport} onReset={handleReset} />;
 }
 
+// Panels that dock as large sheets on the RIGHT side (§5). While one is open the
+// compact citizen-requests widget steps aside so the sheet has the full column.
+const RIGHT_SHEET_PANELS = new Set(['status', 'economy', 'trade', 'mayor', 'activities']);
+
 function GameScreen({ onImport, onReset }: { onImport(json: string): boolean; onReset(variant?: ResetVariant): void }) {
   const openPanel = useUiStore((s) => s.openPanel);
+  const uiHidden = useUiStore((s) => s.uiHidden);
+  const toggleUiHidden = useUiStore((s) => s.toggleUiHidden);
   const events = useUiStore((s) => s.events);
   const dismissEvent = useUiStore((s) => s.dismissEvent);
   const currentEvent = events[0];
+  const rightSheetOpen = openPanel !== undefined && RIGHT_SHEET_PANELS.has(openPanel);
+
+  // Hidden-UI mode (§8): only the map and a small restore button remain, so the
+  // 2D city stays fully playable with a clean, chrome-free view.
+  if (uiHidden) {
+    return (
+      <div className="app">
+        <main className="main">
+          <MapView />
+          <button className="ui-restore" onClick={toggleUiHidden} title={t('ui.quick.show')}>
+            <Eye size={18} />
+            <span>{t('ui.quick.show')}</span>
+          </button>
+        </main>
+        <Toasts />
+      </div>
+    );
+  }
 
   return (
     <div className="app">
@@ -191,10 +216,10 @@ function GameScreen({ onImport, onReset }: { onImport(json: string): boolean; on
             citizen requests right, quick actions right-bottom. */}
         <CityStatusPanel />
         <CityWorkPanel />
-        <CitizenRequestsPanel />
+        {!rightSheetOpen && <CitizenRequestsPanel />}
         <QuickActionBar />
 
-        {/* Overlay panels, opened from the HUD / menu — only one at a time. */}
+        {/* Large right-docked detail sheets (§5) — one at a time. */}
         {openPanel === 'mayor' && <MayorPanel />}
         {openPanel === 'status' && <CityStatusDetail />}
         {openPanel === 'economy' && <EconomyPanel />}

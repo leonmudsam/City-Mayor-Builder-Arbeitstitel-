@@ -1,5 +1,79 @@
 # Patch Notes
 
+## v0.26 — „UI-/UX-Überarbeitung: mockup-getreuer, größer, grafischer"
+
+Gezielte Überarbeitung der Spieloberfläche anhand der aktuellen Screenshots, mit
+dem Mockup als verbindlicher Zielreferenz. Karte bleibt 2D; bestehende Systeme,
+Asset-Pipeline und die Trennung Logik/UI/Registry wurden weiterverwendet — keine
+Parallelsysteme.
+
+**Erkannte Probleme (aus den Screenshots)**
+- Baushop: Gebäudebild und Werte/Badges wirkten überlappt, Karten klein; bei
+  wenigen Gebäuden ein breites, halb-leeres schwarzes Bottom-Sheet.
+- Wichtige Funktionen (Bürgermeister, Handel, Stadtarbeit, Wirtschaft) im
+  Hamburger-Menü versteckt; „Karte" unnötig prominent als erster Quick-Button.
+- Overlay-Button konnte das UI nicht ausblenden.
+- Panels (Stadt-Status, Bürgeranliegen, Stadtarbeit) klein, textlastig, grafikarm;
+  „Details ansehen" öffnete kein großes rechtes Sheet.
+
+**Baushop komplett neu (§3)**
+- Zonen-Karten: fester **Bildbereich** oben (großes Thumbnail, Footprint- und
+  „Neu"/„Großprojekt"-Badges nur in den Ecken), darunter getrennt **Titel**,
+  **Kernwerte** (Kosten · Bauzeit · Kapazität/Produktion · Unterhalt), **Status**
+  (Freigeschaltet / Ab Level X / gebaut X/Y / Großprojekt) und ein eigener
+  **Bauen-Button**. Keine Text-/Bild-Überlappung mehr, in keiner Kategorie.
+- Größere Karten, zentriertes Raster; bei wenigen Gebäuden füllen dezente
+  „Weitere Gebäude folgen"-Kacheln die Reihe — kein leeres schwarzes Loch mehr.
+- Bautabs zeigen jetzt **Kategorie-Grafiken** (`CategoryArt`) statt reiner Icons.
+
+**Quick-Actions & Menü neu priorisiert (§6/§7/§20)**
+- Immer sichtbar unten rechts: **Bauen**, **Bürgermeister**, **Stadtarbeit**
+  (ab L4), **Handel** (mit Handelskontor), **Overlay**, **Statistiken**,
+  **UI ausblenden**, **Menü** — grafische Buttons (Drop-in-PNGs möglich).
+- „Karte zentrieren" ist nicht mehr prominent, sondern liegt (mit Einstellungen)
+  im Hamburger-Menü, das jetzt nur noch Sekundäres enthält.
+
+**UI-ausblenden-Toggle mit Restore (§8)**
+- „UI ausblenden" blendet das gesamte Overlay aus; die 2D-Karte bleibt voll
+  spielbar. Ein deutlicher **„UI einblenden"**-Button bleibt unten rechts sichtbar.
+
+**Rechtes Side-Sheet-System (§5)**
+- Große Detailansichten docken rechts als vollhohe Sheets an (Stadt-Status-Details,
+  Stadtarbeit, Handel, Bürgermeister, Wirtschaft). „Details ansehen" im linken
+  Status-Panel öffnet dieses große rechte Sheet; kompakte Übersichten bleiben
+  links. Solange ein rechtes Sheet offen ist, tritt das kompakte Bürgeranliegen-
+  Widget zur Seite.
+
+**Größer & grafischer (§16-§19)**
+- Bürgeranliegen: größerer Porträt-Avatar, Belohnungen als Grafik-Chips
+  (`RewardArt`: Geld/Gold/XP).
+- Stadtarbeit-Board: große Aktivitäts-Illustration (`ActivityArt`) je Karte plus
+  kleines Absender-Porträt; Featured-Charakter vergrößert.
+- Stadt-Status: größere Icons/Balken. HUD- und Panelabstände erhöht.
+
+**Asset-Pipeline auf UI ausgeweitet (§10-§13)**
+- `src/assets/registry.ts` erkennt jetzt zusätzlich Drop-in-Bilder aus
+  `ui/buttons`, `ui/categories`, `ui/markers`, `ui/activities`, `ui/events`,
+  `ui/rewards`, `vehicles`, `overlays` (alle mit Fallback, nie ein Crash).
+- Neue Art-Komponenten `CategoryArt`, `ActivityArt`, `RewardArt`, `MarkerArt`,
+  `EventArt` (Bild wenn vorhanden, sonst Vektor/Glyph-Fallback).
+- **`docs/UI_ASSETS.md`**: vollständige Liste aller UI-Bildgruppen mit exaktem
+  Dateinamen, Zielordner, Größe (512×512, transparent), Stilhinweis, Verwendungs-
+  ort und je einem Generierungs-Prompt.
+
+**3D-/Isometrie-Konsistenz vorbereitet (§14)**
+- `BuildingDef.visual` um `cardArt`, `sheetArt`, `mapSprite2d`, `isoPreview`,
+  `model3dRef` erweitert, damit Baushop-Vorschau, Detail-Sheet, späteres
+  Kartensprite und die spätere Iso-/3D-Variante dieselbe Asset-Familie teilen.
+  Optional, vom 2D-Renderer ignoriert, ohne Datenmigration (`passthrough`).
+  Dokumentiert in `docs/CONCEPT.md` §21 und `docs/UI_ASSETS.md`.
+
+**Noch offen / Nächste Schritte**
+- Kartengebäude, Karten-Marker und Fahrzeug-/Route-Animation (§4) sind noch nicht
+  asset-gebunden — Ordner, Registry und Doku dafür stehen bereits bereit.
+- Optionale Button-/Kategorie-/Aktivitäts-PNGs sind noch nicht beigelegt; bis
+  dahin rendern die eingebauten Fallbacks.
+
 ## v0.25 — „Stadtarbeit wird aktiv: mehrere Aufträge, keine starren Cooldowns, Bronze/Silber/Gold"
 
 Erste Ausbaustufe der Stadtarbeit-Überarbeitung (MVP2-Spec §2/§6/§7/§10/§12/§16).

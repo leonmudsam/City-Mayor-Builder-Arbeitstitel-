@@ -587,6 +587,15 @@ Gebäude), soll aber später ohne Umbau der Spiellogik auf eine hochwertige
   lassen sich Upgrade-Visuals (Haus → Doppelhaus → … → Hochhaus) und spätere
   3D-Modelle je Stufe einhängen, ohne Datenmigration. Der aktuelle Renderer
   leitet die Skyline-Höhe weiterhin aus `upgradeLevel` ab.
+- **Konsistente Asset-Familie je Gebäude (v0.26, §14).** `BuildingDef.visual`
+  wurde um `cardArt`, `sheetArt`, `mapSprite2d`, `isoPreview`, `model3dRef`
+  erweitert. Ziel: Baushop-Vorschau, Gebäude-Detail-Sheet, späteres 2D-Karten­
+  sprite und die spätere Iso-/3D-Variante referenzieren **dieselbe** visuelle
+  Identität eines Gebäudetyps. Die Felder sind optional und werden vom 2D-Renderer
+  ignoriert; fehlen sie, greifen die Art-Komponenten weiter auf
+  `src/assets/buildings/<id>.png` und zuletzt die eingebaute Vektorgrafik zurück.
+  Das Schema akzeptiert sie über den bestehenden `passthrough()` von `visual` —
+  keine Migration nötig. Naming/Prompts stehen in `docs/UI_ASSETS.md`.
 - **Marker & Overlays** (Problem-/Ziel-Marker, Bürger-Sprechblasen,
   Coverage-Tints, Kamera-Fokus) rechnen bereits in Welt-/Tile-Koordinaten und
   werden in Container transformiert — kein DOM-Pixel-Hack. Eine spätere Iso-/

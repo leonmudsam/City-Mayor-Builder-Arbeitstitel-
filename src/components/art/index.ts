@@ -4,3 +4,4 @@
 export { ResourceArt, type ArtResourceId } from './ResourceArtwork.tsx';
 export { BuildingArt } from './BuildingArtwork.tsx';
 export { CitizenPortrait, AdvisorPortrait } from './Portraits.tsx';
+export { CategoryArt, ActivityArt, RewardArt, MarkerArt, EventArt } from './UiArt.tsx';
