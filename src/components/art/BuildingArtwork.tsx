@@ -1,4 +1,5 @@
 import type { BuildingCategory } from '../../game/types.ts';
+import { buildingImage } from '../../assets/registry.ts';
 
 // Cartoon building artwork (§11/§ "cartoonartige Gebäudebilder"): every building
 // id gets a small illustrated scene — pitched roofs, windows, a barn with a
@@ -423,6 +424,10 @@ export function BuildingArt({
   category: BuildingCategory;
   px?: number;
 }) {
+  // Real generated artwork wins when supplied (src/assets/buildings/<id>.png);
+  // otherwise the built-in cel-shaded SVG scene renders.
+  const img = buildingImage(id);
+  if (img) return <img className="bld-art bld-art-img" src={img} width={px} height={px} alt="" aria-hidden="true" />;
   const draw = (id && BUILDINGS[id]) || CATEGORY_FALLBACK[category];
   return (
     <svg className="bld-art" viewBox="0 0 64 64" width={px} height={px} aria-hidden="true">

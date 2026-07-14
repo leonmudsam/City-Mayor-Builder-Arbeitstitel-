@@ -1,4 +1,5 @@
 import type { QuestSender } from '../../game/config/types.ts';
+import { portraitImage } from '../../assets/registry.ts';
 
 // Cartoon character portraits (§ "Bürger / Avatare / Berater"): little people
 // with a face, hair, clothing and a role marker on a coloured backdrop — a
@@ -67,6 +68,10 @@ function roleLayer(role: QuestSender): JSX.Element | null {
 
 export function CitizenPortrait({ role, seed, size = 40 }: { role: QuestSender; seed: string; size?: number }) {
   const h = hash(seed + role);
+  // Real generated portrait wins when supplied (src/assets/portraits/*.png);
+  // officials by role, citizens rotate by seed. Otherwise the SVG face renders.
+  const img = portraitImage(role, h);
+  if (img) return <img className="portrait portrait-img" src={img} width={size} height={size} alt="" aria-hidden="true" />;
   const skin = SKIN[h % SKIN.length]!;
   const hair = HAIR[(h >> 3) % HAIR.length]!;
   const shirt = role === 'citizen' ? SHIRT[(h >> 6) % SHIRT.length]! : bodyColor(role);

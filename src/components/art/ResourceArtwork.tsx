@@ -1,4 +1,5 @@
 import type { ResourceId } from '../../game/types.ts';
+import { resourceImage } from '../../assets/registry.ts';
 
 // Cartoon resource artwork (§11 "generierte Bilder statt SVG-Icons"): each
 // resource is a small illustrated object — a coin stack, a log pile, a food
@@ -21,6 +22,10 @@ const DRAW: Record<ArtResourceId, () => JSX.Element> = {
 };
 
 export function ResourceArt({ id, size = 30 }: { id: ArtResourceId; size?: number }) {
+  // Real generated artwork wins when supplied (src/assets/resources/<id>.png);
+  // otherwise the built-in cel-shaded SVG placeholder renders.
+  const img = resourceImage(id);
+  if (img) return <img className="res-art res-art-img" src={img} width={size} height={size} alt="" aria-hidden="true" />;
   return (
     <svg className="res-art" viewBox="0 0 40 40" width={size} height={size} aria-hidden="true">
       <ellipse cx="20" cy="35" rx="13" ry="3" className="art-shadow" />
