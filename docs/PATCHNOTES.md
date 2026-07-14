@@ -1,5 +1,70 @@
 # Patch Notes
 
+## v0.27 — „Isometrie Slice 1: RenderMode, Iso-Projektion, extrudierte Gebäude"
+
+Erster sauberer Schritt vom 2D-Raster zur isometrischen 2.5D-Karte (Iso-Mockup als
+Zielrichtung). Bewusst **kein** Rewrite: Spiellogik, Gebäudeplatzierung, Ressourcen,
+Bedürfnisse, Stadtarbeit, Sektoren und Savegames bleiben unverändert; nur die
+Kartendarstellung ist erweitert. `flat2d` bleibt vollwertiger Fallback.
+
+**Mockup-Analyse — was für MVP2 realistisch war:** isometrische Projektion,
+Diamant-Terrain, extrudierte Gebäude-Platzhalter mit Höhe/Tiefe/Schattierung,
+Depth-Sorting, Kamera/Zoom/Pan, Iso-Ghost/Auswahl/Overlays, Asset-Pipeline für
+Iso-Sprites. **Später:** echte Iso-/3D-Gebäudesprites, Fluss/Ufer/Brücke, Gebirge-
+Props, Fahrzeuge/Routen, feinere Straßen-Autotiles, Iso-Culling.
+
+**RenderMode-System (§3)**
+- `RenderMode = 'flat2d' | 'isometric2d'` in `useUiStore`, in **localStorage**
+  persistiert (`cmb.renderMode`) — nicht im Savegame, also kein Speicherstand-Risiko.
+- Umschalter in **Einstellungen → „Kartenansicht"** (2D-Raster / Isometrisch).
+- `MapView` schiebt den Modus in den Renderer; `MapRenderer.setRenderMode` baut
+  Terrain neu, erzwingt einen Gebäude-Redraw und zentriert die Kamera.
+
+**Iso-Projektion (§4)** — neues `src/renderer/projection.ts` als einzige Quelle der
+Wahrheit: `tileCenterWorld`, `footprintCenterWorld`, `isoTileDiamond`,
+`isoFootprintDiamond`, `pickTile` (inverse), `isoDepth`. 2:1-Diamanten
+(`isoW=64/isoH=32`, konfigurierbar). Kamera/Zoom/Pan laufen über die Container-
+Transform → modus-unabhängig; Klick/Platzierung über `pickTile`. Logik bleibt in
+Tile-Koordinaten.
+
+**Depth Sorting (§5)** — `buildingLayer.sortableChildren`, `zIndex = (x+y)*8+(w+h)`:
+hinten→vorne, große/vordere Gebäude überdecken korrekt. Terrain immer darunter,
+Marker/Overlays darüber, UI (React) ganz oben. Flat-Modus unverändert.
+
+**Gebäude im Iso-Modus (§7/§12/§17)** — Fallback-Kette: Straße = flacher Asphalt-
+Diamant → `isoSprite` (async geladen, unten-mittig verankert, auf Footprint
+skaliert) → **extrudierter Diamant-Block** (Deckfläche + zwei schattierte Wände,
+Höhe aus `visual.heightClass`/Kategorie/Upgrade, 2-Buchstaben-Code + Upgrade-Pips).
+Fehlt ein Asset, bleibt der Platzhalter — nie ein Crash.
+
+**Terrain/Marker/Overlays iso** — Diamant-Terrain mit Relief-Hinweisen (Wald/
+Gebirge/Wasser), gesperrte Sektoren als getönter Diamant + „+"; Coverage-Overlay,
+Effekt-Radien, Ghost, Auswahl, Aktivitäts-Zielmarker und Bau-Vorschau alle in
+Iso-Projektion an Weltkoordinaten gekoppelt.
+
+**Asset-Pipeline (§7/§8/§11)** — `registry.ts` erkennt jetzt
+`src/assets/buildings/iso/<id>_iso.png` (`buildingIsoImage`) und
+`src/assets/terrain/<name>_iso.png` (`terrainIsoImage`). Neue Ordner:
+`buildings/iso`, `terrain`, `props`, `models/{buildings,terrain,vehicles}`.
+
+**3D-Vorbereitung (§9/§26)** — `BuildingDef.visual` trägt bereits
+`cardArt/sheetArt/mapSprite2d/isoPreview/model3dRef/heightClass` (v0.26) für eine
+konsistente Asset-Familie; `models/`-Ordner (bevorzugt `.glb`) angelegt. Die Iso-
+Sprites sind Übergang **oder** finaler 2.5D-Stil **oder** aus 3D gerenderte Frames.
+
+**Dokumentation (§25)** — neu: `docs/ISO_RENDERING.md` (Modi, Projektion, Layer,
+Depth Sorting, Kamera, Fallbacks, Marker-Anker, 3D-Ausblick) und `docs/ISO_ASSETS.md`
+(Ordner, Dateinamen, Größen, Stil-Prefix, Prompts für alle Gebäude/Terrain/Props/
+Fahrzeuge/3D-Modelle).
+
+**Akzeptanz (§24) erfüllt:** RenderMode flat2d/isometric2d ✓, flat2d unverändert ✓,
+iso aktivierbar ✓, Tiles iso projiziert ✓, Gebäude korrekt positioniert ✓, Straßen
+sichtbar ✓, Depth Sorting ✓, Kamera/Zoom/Pan ✓, `isoSprite`-Pipeline ✓, Fallback ✓,
+Doku ✓, UI unverändert über der Karte ✓, keine Savegames betroffen ✓.
+
+**Nächste Schritte:** reale Iso-Gebäudesprites ablegen (Slice 2); Iso-Terrain-
+Sprites + Fluss/Ufer/Brücke + Gebirge-Props (Slice 3); Fahrzeuge/Routen (Slice 5).
+
 ## v0.26 — „UI-/UX-Überarbeitung: mockup-getreuer, größer, grafischer"
 
 Gezielte Überarbeitung der Spieloberfläche anhand der aktuellen Screenshots, mit

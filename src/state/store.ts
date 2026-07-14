@@ -2,6 +2,18 @@ import { create } from 'zustand';
 import { useSyncExternalStore } from 'react';
 import type { GameController } from '../game/commands/controller.ts';
 import type { SectorId } from '../game/types.ts';
+import type { RenderMode } from '../renderer/projection.ts';
+
+// Render mode is a pure presentation choice (§3): persisted in localStorage, not
+// in the savegame, so switching flat2d ↔ isometric2d never touches game data.
+const RENDER_MODE_KEY = 'cmb.renderMode';
+function loadRenderMode(): RenderMode {
+  try {
+    return localStorage.getItem(RENDER_MODE_KEY) === 'isometric2d' ? 'isometric2d' : 'flat2d';
+  } catch {
+    return 'flat2d';
+  }
+}
 
 // The React side never mutates game state directly: it reads snapshots off
 // the controller (re-rendering via the version counter) and sends commands.
@@ -88,6 +100,9 @@ interface UiState {
    *  a small restore button stays visible to bring the chrome back. */
   uiHidden: boolean;
   toggleUiHidden(): void;
+  /** Map render mode (§3): flat top-down grid vs isometric 2.5D. */
+  renderMode: RenderMode;
+  setRenderMode(mode: RenderMode): void;
   placingDefId: string | undefined;
   /** Building currently being relocated (hold-drag or "Verschieben" button). */
   movingBuildingId: string | undefined;
@@ -117,6 +132,16 @@ export const useUiStore = create<UiState>((set) => ({
   toggleOverlay: () => set((s) => ({ overlayMode: !s.overlayMode })),
   uiHidden: false,
   toggleUiHidden: () => set((s) => ({ uiHidden: !s.uiHidden })),
+  renderMode: loadRenderMode(),
+  setRenderMode: (mode) =>
+    set(() => {
+      try {
+        localStorage.setItem(RENDER_MODE_KEY, mode);
+      } catch {
+        /* ignore storage failures */
+      }
+      return { renderMode: mode };
+    }),
   placingDefId: undefined,
   movingBuildingId: undefined,
   selectedBuildingId: undefined,

@@ -86,16 +86,19 @@ export function MapView() {
       },
     });
     rendererRef.current = renderer;
+    // Apply the persisted render mode before the first frame (§3).
+    renderer.setRenderMode(ui.renderMode);
     void renderer.init(host);
     // Expose the camera to the HUD (Quick-action "Karte") without leaking the
     // renderer instance.
     setMapApi({ centerOnCity: () => renderer.centerOnCity() });
 
-    // Mirror UI state (placement/move/selection) into the renderer.
+    // Mirror UI state (placement/move/selection/render mode) into the renderer.
     const unsubscribe = useUiStore.subscribe((s) => {
       renderer.setPlacing(s.placingDefId);
       renderer.setMoving(s.movingBuildingId);
       renderer.setSelected(s.selectedBuildingId);
+      renderer.setRenderMode(s.renderMode);
     });
 
     const onKey = (e: KeyboardEvent) => {

@@ -1037,6 +1037,18 @@ body {
 .ui-art-event.ui-art-fallback { background: color-mix(in srgb, var(--primary) 16%, transparent); color: var(--primary); border-radius: 16px; }
 .ui-art-marker.ui-art-fallback { background: transparent; color: var(--bad); }
 
+/* Settings: render-mode segmented control (§3). */
+.settings-group { display: flex; flex-direction: column; gap: 6px; margin-bottom: 4px; }
+.settings-group-label { font-size: 12.5px; font-weight: 700; color: var(--text-muted); }
+.settings-group-hint { font-size: 11px; color: var(--text-muted); line-height: 1.4; }
+.settings-segmented { display: flex; gap: 6px; }
+.settings-seg {
+  flex: 1; display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+  padding: 9px; border-radius: 9px; font-size: 12.5px; font-weight: 700;
+  background: var(--surface-2); border: 1px solid var(--border); color: var(--text-muted);
+}
+.settings-seg.active { border-color: var(--primary); color: var(--primary); background: color-mix(in srgb, var(--primary) 12%, var(--surface-2)); }
+
 /* Bigger, more graphical HUD panels (§16-§19). */
 .hud-panel { width: 300px; }
 .status-line-icon { width: 32px; height: 32px; border-radius: 9px; }
