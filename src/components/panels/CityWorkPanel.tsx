@@ -1,34 +1,15 @@
-import {
-  ClipboardList,
-  Crown,
-  Gift,
-  HardHat,
-  MapPin,
-  PackageCheck,
-  Search,
-  Store,
-  Timer,
-  User,
-  type LucideIcon,
-} from 'lucide-react';
+import { ClipboardList, Gift, MapPin, PackageCheck, Search, Timer } from 'lucide-react';
 import { useGame, useUiStore } from '../../state/store.ts';
 import { rewardTierFor } from '../../game/simulation/activities.ts';
 import { formatDuration, formatMoney, t } from '../../i18n/index.ts';
 import { playFeedback } from '../../services/feedback.ts';
-import type { QuestSender } from '../../game/config/types.ts';
+import { CitizenPortrait } from '../art/index.ts';
 
 // Persistent Stadtarbeiten widget (mockup §4, bottom-left): the featured job —
-// the running run if there is one, else the best available task — shown with a
-// sender avatar, timer, description, progress bar and reward. "Alle Aufträge"
-// opens the full board (ActivityPanel). It only renders once the city has any
-// activities unlocked, so early levels stay uncluttered.
-const SENDER_ICON: Record<QuestSender, LucideIcon> = {
-  citizen: User,
-  buildingDept: HardHat,
-  fire: Crown,
-  merchant: Store,
-  mayor: Crown,
-};
+// the running run if there is one, else the best available task — shown with an
+// illustrated sender portrait, timer, description, progress bar and reward.
+// "Alle Aufträge" opens the full board (ActivityPanel). It only renders once the
+// city has any activities unlocked, so early levels stay uncluttered.
 const TYPE_ICON = { delivery: PackageCheck, inspection: Search, decision: ClipboardList } as const;
 
 export function CityWorkPanel() {
@@ -50,7 +31,6 @@ export function CityWorkPanel() {
     defs[0]!;
 
   const badge = available.length + (active ? 1 : 0);
-  const Avatar = SENDER_ICON[featured.sender];
   const TypeIcon = TYPE_ICON[featured.type];
   const tier = rewardTierFor(featured, game.state.level.current);
 
@@ -86,8 +66,8 @@ export function CityWorkPanel() {
 
       <div className={`work-feature${running ? ' is-running' : ''}`}>
         <div className="work-feature-head">
-          <span className={`work-avatar avatar-${featured.sender}`}>
-            <Avatar size={22} />
+          <span className="work-avatar">
+            <CitizenPortrait role={featured.sender} seed={featured.id} size={48} />
           </span>
           <div className="work-feature-title">
             <span className="work-feature-name">

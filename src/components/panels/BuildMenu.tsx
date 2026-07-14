@@ -5,7 +5,7 @@ import type { BuildingCategory, NeedId, ResourceId } from '../../game/types.ts';
 import type { BuildingDef } from '../../game/config/types.ts';
 import { formatMoney, t } from '../../i18n/index.ts';
 import { CategoryIcon, ResourceIcon } from '../common/icons.tsx';
-import { BuildingPreview } from '../common/BuildingPreview.tsx';
+import { BuildingArt } from '../art/index.ts';
 
 // Full tab order (§19). Previously `infrastructure` and the new `energy`
 // category were missing, so the coal plant / wind farm never appeared anywhere
@@ -124,7 +124,7 @@ function BuildCard({ def, locked, onPick }: { def: BuildingDef; locked: boolean;
       disabled={disabled}
     >
       <div className="build-card-media">
-        <BuildingPreview category={def.category} size={def.size} />
+        <BuildingArt id={def.id} category={def.category} />
         <span className="build-card-size">{def.size.w}×{def.size.h}</span>
         {isNew && <span className="build-card-new">{t('ui.new')}</span>}
       </div>

@@ -1,12 +1,15 @@
 import { Award, CheckCircle2, Flame, MapPin, PartyPopper, type LucideIcon } from 'lucide-react';
 import { Modal } from './Modal.tsx';
-import type { GameEvent } from '../../state/store.ts';
-import { t } from '../../i18n/index.ts';
+import { useGame, useUiStore, type GameEvent } from '../../state/store.ts';
+import { BuildingArt, ResourceArt } from '../art/index.ts';
+import { formatMoney, t } from '../../i18n/index.ts';
 
 // Prominent one-off event notifications (§9): level-ups, new districts, fires.
 // Distinct from toasts (which are transient, low-priority) — an EventModal is a
-// staged moment the player should acknowledge. Content is data-driven from the
-// UI event queue so new event kinds need no new component.
+// staged moment the player should acknowledge. A level-up additionally shows a
+// card with the artwork of every newly-unlocked building and the level reward,
+// plus a shortcut into the build menu (mockup §8 "Level-Up-Popup"). Content is
+// data-driven from the UI event queue so new event kinds need no new component.
 
 const EVENT_META: Record<GameEvent['kind'], { icon: LucideIcon; tone: 'primary' | 'good' | 'bad' }> = {
   levelUp: { icon: Award, tone: 'primary' },
@@ -19,6 +22,11 @@ const EVENT_META: Record<GameEvent['kind'], { icon: LucideIcon; tone: 'primary' 
 export function EventModal({ event, onClose }: { event: GameEvent; onClose: () => void }) {
   const meta = EVENT_META[event.kind];
   const Icon = meta.icon;
+  const isLevelUp = event.kind === 'levelUp';
+  const buildingIds = String(event.params?.buildingIds ?? '')
+    .split(',')
+    .filter(Boolean);
+
   return (
     <Modal
       title={t(event.titleKey, event.params)}
@@ -26,17 +34,71 @@ export function EventModal({ event, onClose }: { event: GameEvent; onClose: () =
       tone={meta.tone}
       onClose={onClose}
       footer={
-        <button className="btn-primary" onClick={onClose}>
-          {t('ui.ok')}
-        </button>
+        isLevelUp && buildingIds.length > 0 ? (
+          <button
+            className="btn-primary"
+            onClick={() => {
+              useUiStore.getState().setPanel('build');
+              onClose();
+            }}
+          >
+            {t('ui.to_build_menu')}
+          </button>
+        ) : (
+          <button className="btn-primary" onClick={onClose}>
+            {t('ui.ok')}
+          </button>
+        )
       }
     >
-      <div className="event-modal-body">
-        <div className={`event-modal-glyph event-glyph-${meta.tone}`}>
-          <Icon size={40} />
+      {isLevelUp && buildingIds.length > 0 ? (
+        <LevelUpBody level={Number(event.params?.level ?? 0)} buildingIds={buildingIds} />
+      ) : (
+        <div className="event-modal-body">
+          <div className={`event-modal-glyph event-glyph-${meta.tone}`}>
+            <Icon size={40} />
+          </div>
+          <p>{t(event.bodyKey, event.params)}</p>
         </div>
-        <p>{t(event.bodyKey, event.params)}</p>
-      </div>
+      )}
     </Modal>
+  );
+}
+
+/** The rich level-up content: unlocked buildings as artwork cards + the reward. */
+function LevelUpBody({ level, buildingIds }: { level: number; buildingIds: string[] }) {
+  const game = useGame();
+  const reward = game.config.levels.find((l) => l.level === level)?.rewards ?? {};
+  return (
+    <div className="levelup-body">
+      <p className="levelup-lead">{t('event.level_up.unlocked_intro')}</p>
+      <div className="levelup-grid">
+        {buildingIds.map((id) => {
+          const def = game.config.buildings.get(id);
+          if (!def) return null;
+          return (
+            <div key={id} className="levelup-card">
+              <BuildingArt id={id} category={def.category} px={54} />
+              <span className="levelup-card-name">{t(def.nameKey)}</span>
+            </div>
+          );
+        })}
+      </div>
+      {(reward.money || reward.gold) && (
+        <div className="levelup-reward">
+          <span className="levelup-reward-label">{t('ui.reward')}</span>
+          {reward.money ? (
+            <span className="levelup-reward-item">
+              <ResourceArt id="money" size={22} /> {formatMoney(reward.money)}
+            </span>
+          ) : null}
+          {reward.gold ? (
+            <span className="levelup-reward-item">
+              <ResourceArt id="gold" size={22} /> {reward.gold}
+            </span>
+          ) : null}
+        </div>
+      )}
+    </div>
   );
 }

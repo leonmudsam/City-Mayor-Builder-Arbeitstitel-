@@ -2,6 +2,7 @@ import { Crown, HardHat, Store, User, type LucideIcon } from 'lucide-react';
 import { Modal } from './Modal.tsx';
 import { useGame, useUiStore } from '../../state/store.ts';
 import { RESOURCE_ICON } from './icons.tsx';
+import { AdvisorPortrait } from '../art/index.ts';
 import { formatMoney, t } from '../../i18n/index.ts';
 import { playFeedback } from '../../services/feedback.ts';
 import type { ActivityDef, QuestSender } from '../../game/config/types.ts';
@@ -39,9 +40,7 @@ export function DecisionModal({ def, onClose }: { def: ActivityDef; onClose: () 
     <Modal title={t(def.nameKey)} icon={<Avatar size={20} />} tone="primary" onClose={onClose}>
       <div className="decision-modal">
         <div className="decision-sender">
-          <span className={`quest-avatar avatar-${def.sender}`}>
-            <Avatar size={20} />
-          </span>
+          <AdvisorPortrait role={def.sender} size={52} />
           <span className="muted">{t(`quest.sender.${def.sender}`)}</span>
         </div>
         <p className="decision-brief">{t(def.descriptionKey)}</p>
