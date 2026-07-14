@@ -623,7 +623,26 @@ body {
 .activity-card-foot { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
 .activity-reward { display: flex; align-items: center; gap: 4px; font-size: 12px; font-weight: 600; color: var(--good); }
 .activity-cooldown { display: flex; align-items: center; gap: 4px; font-size: 11.5px; color: var(--text-muted); font-variant-numeric: tabular-nums; }
+.activity-blocked { font-size: 11px; color: var(--text-muted); font-style: italic; }
 .activity-note { margin-top: 10px; font-size: 11px; }
+
+/* Mission badges: category / difficulty / time chips on each card (§6, §8). */
+.activity-badges { display: flex; flex-wrap: wrap; gap: 5px; margin: 7px 0 0; }
+.activity-badge {
+  display: inline-flex; align-items: center; gap: 3px;
+  padding: 1px 7px; border-radius: 999px; font-size: 10px; font-weight: 700;
+  background: var(--surface-3, var(--surface-2)); color: var(--text-muted);
+  border: 1px solid var(--border); letter-spacing: 0.2px;
+}
+.activity-badge.badge-time { font-variant-numeric: tabular-nums; }
+.activity-badge.diff-easy { background: color-mix(in srgb, var(--good) 18%, transparent); color: var(--good); border-color: transparent; }
+.activity-badge.diff-medium { background: color-mix(in srgb, #d9a441 22%, transparent); color: #d9a441; border-color: transparent; }
+.activity-badge.diff-hard { background: color-mix(in srgb, var(--bad) 18%, transparent); color: var(--bad); border-color: transparent; }
+.activity-timer { display: inline-flex; align-items: center; gap: 4px; font-size: 11.5px; font-variant-numeric: tabular-nums; color: var(--text-muted); }
+.activity-timer.is-over { color: var(--bad); }
+.decision-option:disabled, .decision-option.is-disabled { opacity: 0.5; cursor: not-allowed; }
+.decision-option:disabled:hover { border-color: var(--border); background: var(--surface-2); }
+.decision-option-lock { font-size: 10.5px; color: var(--bad); font-weight: 600; margin-top: 2px; }
 
 /* Activity/decision cards reuse the quest sender avatars, but address the
    sender by its raw id, so alias buildingDept onto the existing dept tint. */

@@ -1,4 +1,4 @@
-import type { ActivitiesConfig, ActivityDef, ActivityRewardTier, TradeContractTemplate } from '../config/types.ts';
+import type { ActivitiesConfig, ActivityDef, ActivityQuality, ActivityRewardTier, TradeContractTemplate } from '../config/types.ts';
 import type { GameState, ResourceId } from '../types.ts';
 import { nextRandom } from '../engine/rng.ts';
 
@@ -14,6 +14,31 @@ export function rewardTierFor(def: ActivityDef, level: number): ActivityRewardTi
   }
   if (best === undefined) throw new Error(`activity ${def.id} has no reward tiers`);
   return best;
+}
+
+/**
+ * Money/XP multipliers per quality grade (§6/§7). Bronze is a valid but slow/
+ * sloppy finish, silver the expected result, gold a clean fast run. The band
+ * from `rewardTierFor` sets the level-scaled base; quality scales it.
+ */
+export const QUALITY_SCALE: Record<ActivityQuality, { money: number; xp: number }> = {
+  bronze: { money: 0.6, xp: 0.7 },
+  silver: { money: 1.0, xp: 1.0 },
+  gold: { money: 1.35, xp: 1.3 },
+};
+
+/**
+ * Grade a finished delivery run (§6): pure speed against its time limit. Gold
+ * needs a comfortably fast finish (≤60 % of the limit), silver anything inside
+ * the limit, bronze a late — but never failed — completion. Runs without a
+ * time limit (inspections) settle at silver, the neutral grade.
+ */
+export function resolveQuality(def: ActivityDef, startedAt: number, now: number): ActivityQuality {
+  if (def.timeLimitSec === undefined) return 'silver';
+  const elapsedSec = (now - startedAt) / 1000;
+  if (elapsedSec <= def.timeLimitSec * 0.6) return 'gold';
+  if (elapsedSec <= def.timeLimitSec) return 'silver';
+  return 'bronze';
 }
 
 /**

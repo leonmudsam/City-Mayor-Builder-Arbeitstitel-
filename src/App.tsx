@@ -81,12 +81,19 @@ export function App() {
             });
             save();
           } else if (event.type === 'activityCompleted') {
-            // Celebrate the finished Stadtarbeit run (§ Abschlussmeldung).
+            // Celebrate the finished Stadtarbeit run (§ Abschlussmeldung). A
+            // graded run (delivery) shows its Bronze/Silber/Gold medal (§6).
+            const quality = event.quality;
             useUiStore.getState().pushEvent({
               kind: 'activityDone',
-              titleKey: 'event.activity.title',
-              bodyKey: 'event.activity.body',
-              params: { name: t(`activity.${event.defId}`), money: formatMoney(event.money), xp: event.xp },
+              titleKey: quality ? `event.activity.title_${quality}` : 'event.activity.title',
+              bodyKey: quality ? 'event.activity.body_quality' : 'event.activity.body',
+              params: {
+                name: t(`activity.${event.defId}`),
+                money: formatMoney(event.money),
+                xp: event.xp,
+                ...(quality ? { quality: t(`activity.quality.${quality}`) } : {}),
+              },
             });
             save();
           }

@@ -4,16 +4,17 @@ import { useGame, useUiStore } from '../../state/store.ts';
 import { DecisionModal } from '../common/DecisionModal.tsx';
 import { RESOURCE_ICON } from '../common/icons.tsx';
 import { CitizenPortrait } from '../art/index.ts';
-import { rewardTierFor } from '../../game/simulation/activities.ts';
 import { formatDuration, formatMoney, t } from '../../i18n/index.ts';
 import { playFeedback } from '../../services/feedback.ts';
 import type { ActivityDef } from '../../game/config/types.ts';
+import type { ActivityBoardEntry } from '../../game/commands/controller.ts';
 import type { ResourceId } from '../../game/types.ts';
 
-// Stadtarbeit panel (§ aktives Stadtmanagement): the player's to-do board when
-// they can't build. Delivery/inspection activities put targets on the map;
-// decisions open a trade-off modal; trade contracts rotate. Everything is a
-// controller command — the panel just renders state and dispatches.
+// Stadtarbeit panel (§ aktives Stadtmanagement): the player's mission board when
+// they can't build. Several missions are offered at once (§16.1); delivery/
+// inspection activities put targets on the map; decisions open a trade-off
+// modal; trade contracts rotate. Everything is a controller command — the panel
+// just renders the board snapshot and dispatches.
 const TYPE_ICON = { delivery: PackageCheck, inspection: Search, decision: ClipboardList } as const;
 
 export function ActivityPanel() {
@@ -22,9 +23,9 @@ export function ActivityPanel() {
   const [decision, setDecision] = useState<ActivityDef | undefined>();
 
   const now = game.state.meta.lastSimTime;
-  const defs = game.getActivityDefs();
+  const board = game.getActivityBoard();
   const active = game.state.activities.active;
-  const activeDef = active ? defs.find((d) => d.id === active.defId) : undefined;
+  const activeDef = active ? board.find((e) => e.def.id === active.defId)?.def : undefined;
   const contracts = game.getTradeContracts();
 
   return (
@@ -52,22 +53,26 @@ export function ActivityPanel() {
           </div>
           <div className="activity-running-foot">
             <span>{t('ui.activity.targets', { done: active.targets.filter((tg) => tg.done).length, total: active.targets.length })}</span>
+            {active.expiresAt !== undefined && (
+              <span className={`activity-timer${now > active.expiresAt ? ' is-over' : ''}`}>
+                <Timer size={12} /> {formatDuration(Math.max(0, Math.ceil((active.expiresAt - now) / 1000)))}
+              </span>
+            )}
             <button className="btn-secondary btn-tiny" onClick={() => game.abandonActivity()}>
               {t('ui.activity.abandon')}
             </button>
           </div>
-          <p className="muted activity-hint">{t('ui.activity.click_targets')}</p>
+          <p className="muted activity-hint">
+            {t('ui.activity.click_targets')}
+            {active.expiresAt !== undefined && ` ${t('ui.activity.quality_hint')}`}
+          </p>
         </div>
       )}
 
       <div className="activity-cards">
-        {defs.map((def) => {
+        {board.map((entry) => {
+          const { def } = entry;
           const Icon = TYPE_ICON[def.type];
-          const tier = rewardTierFor(def, game.state.level.current);
-          const readyAt = game.activityReadyAt(def.id);
-          const onCooldown = now < readyAt;
-          const busy = active !== undefined && def.type !== 'decision';
-          const disabled = onCooldown || (def.type !== 'decision' && busy);
           const start = () => {
             if (def.type === 'decision') {
               setDecision(def);
@@ -81,8 +86,9 @@ export function ActivityPanel() {
               pushToast(t(`error.${result.error}`), 'error');
             }
           };
+          const showCooldown = entry.reason === 'cooldown';
           return (
-            <div key={def.id} className={`activity-card${disabled ? ' is-disabled' : ''}`}>
+            <div key={def.id} className={`activity-card${entry.available ? '' : ' is-disabled'}`}>
               <div className="activity-card-head">
                 <CitizenPortrait role={def.sender} seed={def.id} size={40} />
                 <div className="activity-card-title">
@@ -92,19 +98,30 @@ export function ActivityPanel() {
                   </span>
                 </div>
               </div>
+              <div className="activity-badges">
+                {def.category && <span className={`activity-badge cat-${def.category}`}>{t(`activity.category.${def.category}`)}</span>}
+                {def.difficulty && <span className={`activity-badge diff-${def.difficulty}`}>{t(`activity.difficulty.${def.difficulty}`)}</span>}
+                {def.timeLimitSec !== undefined && (
+                  <span className="activity-badge badge-time">
+                    <Timer size={11} /> {formatDuration(def.timeLimitSec)}
+                  </span>
+                )}
+              </div>
               <p className="activity-card-desc">{t(def.descriptionKey)}</p>
               <div className="activity-card-foot">
                 <span className="activity-reward">
-                  <Gift size={12} /> {activityRewardLabel(tier)}
+                  <Gift size={12} /> {activityRewardLabel(entry)}
                 </span>
-                {onCooldown ? (
+                {showCooldown ? (
                   <span className="activity-cooldown">
-                    <Timer size={12} /> {formatDuration(Math.ceil((readyAt - now) / 1000))}
+                    <Timer size={12} /> {formatDuration(Math.ceil((entry.readyAt - now) / 1000))}
                   </span>
-                ) : (
-                  <button className="btn-primary btn-tiny" disabled={busy && def.type !== 'decision'} onClick={start}>
+                ) : def.type === 'decision' || entry.available ? (
+                  <button className="btn-primary btn-tiny" disabled={!entry.available && def.type !== 'decision'} onClick={start}>
                     {def.type === 'decision' ? t('ui.activity.decide') : t('ui.activity.start')}
                   </button>
+                ) : (
+                  <span className="activity-blocked">{t(`activity.reason.${entry.reason ?? 'busy'}`)}</span>
                 )}
               </div>
             </div>
@@ -165,10 +182,13 @@ export function ActivityPanel() {
   );
 }
 
-function activityRewardLabel(tier: { money: number; xp: number; gold?: number }): string {
+function activityRewardLabel(entry: ActivityBoardEntry): string {
+  const { def, reward } = entry;
   const parts: string[] = [];
-  if (tier.money > 0) parts.push(formatMoney(tier.money));
-  parts.push(`${tier.xp} XP`);
-  if (tier.gold) parts.push(`${tier.gold} ${t('ui.gold')}`);
-  return parts.join(' · ');
+  if (reward.money > 0) parts.push(formatMoney(reward.money));
+  if (reward.xp > 0) parts.push(`${reward.xp} XP`);
+  // Decisions pay through their options (money + buffs), not the flat band —
+  // hint at that instead of showing a misleading 0.
+  if (def.type === 'decision') parts.push(t('ui.activity.reward_choice'));
+  return parts.join(' · ') || t('ui.activity.reward_choice');
 }

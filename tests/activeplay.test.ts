@@ -46,36 +46,97 @@ describe('no AFK farming (§1/§16)', () => {
 
 // Stadtarbeit activity system (§2/§15/§3): active tasks that pay only through
 // commands, plus manual food distribution.
+
+/** A level-6 city with homes AND a farm (a food source for deliveries). */
+function deliveryCity() {
+  const bundle = newController();
+  const { controller } = bundle;
+  setLevel(controller, 6);
+  flattenTerrain(controller);
+  controller.state.resources = { money: 100_000, wood: 500, stone: 500, food: 1_000, freshwater: 0 };
+  for (let x = 22; x <= 33; x++) controller.placeBuilding('road', x, 26);
+  for (let x = 22; x <= 30; x += 2) controller.placeBuilding('house_small', x, 27);
+  controller.placeBuilding('farm', 28, 23); // the food source (requiresAnyBuilding, 60s build)
+  controller.update(T0 + 90_000, false); // finish construction without economy noise
+  return bundle;
+}
+
 describe('Stadtarbeit activities', () => {
   it('runs a delivery: pick targets, deliver each, get paid + counted', () => {
+    const { controller } = deliveryCity();
+    const money0 = controller.state.resources.money;
+    expect(controller.startActivity('food_delivery')).toEqual({ ok: true });
+    const targets = controller.getActivityTargets();
+    expect(targets.length).toBeGreaterThanOrEqual(3);
+    for (const tg of targets) controller.progressActivity(tg.buildingId);
+    // Completed: no active run, money & count went up.
+    expect(controller.state.activities.active).toBeUndefined();
+    expect(controller.state.resources.money).toBeGreaterThan(money0);
+    expect(controller.state.stats.activitiesCompleted).toBe(1);
+  });
+
+  it('has NO fixed cooldown for deliveries — can be started again at once (§2)', () => {
+    const { controller } = deliveryCity();
+    expect(controller.startActivity('food_delivery')).toEqual({ ok: true });
+    for (const tg of controller.getActivityTargets()) controller.progressActivity(tg.buildingId);
+    // Ready-at is not pushed into the future — a new run starts immediately.
+    expect(controller.activityReadyAt('food_delivery')).toBe(0);
+    expect(controller.startActivity('food_delivery')).toEqual({ ok: true });
+  });
+
+  it('needs a food source building to be available (§10 requiresAnyBuilding)', () => {
     const { controller } = newController();
     setLevel(controller, 6);
     flattenTerrain(controller);
     controller.state.resources = { money: 100_000, wood: 500, stone: 500, food: 1_000, freshwater: 0 };
     for (let x = 22; x <= 33; x++) controller.placeBuilding('road', x, 26);
     for (let x = 22; x <= 30; x += 2) controller.placeBuilding('house_small', x, 27);
-    controller.update(T0 + 40_000, true); // homes active
-
-    const money0 = controller.state.resources.money;
-    expect(controller.startActivity('food_delivery')).toEqual({ ok: true });
-    const targets = controller.getActivityTargets();
-    expect(targets.length).toBeGreaterThanOrEqual(3);
-    for (const tg of targets) controller.progressActivity(tg.buildingId);
-    // Completed: no active run, money & count went up, cooldown set.
-    expect(controller.state.activities.active).toBeUndefined();
-    expect(controller.state.resources.money).toBeGreaterThan(money0);
-    expect(controller.state.stats.activitiesCompleted).toBe(1);
-    expect(controller.activityReadyAt('food_delivery')).toBeGreaterThan(controller.state.meta.lastSimTime);
+    controller.update(T0 + 40_000, true); // homes active, but no farm/market yet
+    // No source building → cannot start, and the board flags why.
+    expect(controller.startActivity('food_delivery')).toEqual({ ok: false, error: 'locked' });
+    const entry = controller.getActivityBoard().find((e) => e.def.id === 'food_delivery')!;
+    expect(entry.available).toBe(false);
+    expect(entry.reason).toBe('missing_building');
   });
 
-  it('applies a decision option: books cost and adds a buff', () => {
+  it('grades a delivery Gold when finished fast, Bronze when slow (§6)', () => {
+    const { controller } = deliveryCity();
+    // Finish instantly (well inside 60 % of the 75s limit) → gold multiplier.
+    expect(controller.startActivity('food_delivery')).toEqual({ ok: true });
+    const goldMoney0 = controller.state.resources.money;
+    for (const tg of controller.getActivityTargets()) controller.progressActivity(tg.buildingId);
+    const goldGain = controller.state.resources.money - goldMoney0;
+
+    // A second run, but let the clock pass the time limit → bronze multiplier.
+    controller.state.resources.food = 1_000;
+    expect(controller.startActivity('food_delivery')).toEqual({ ok: true });
+    const start = controller.state.meta.lastSimTime;
+    controller.state.activities.active!.startedAt = start - 200_000; // 200s ago, past 75s
+    const bronzeMoney0 = controller.state.resources.money;
+    for (const tg of controller.getActivityTargets()) controller.progressActivity(tg.buildingId);
+    const bronzeGain = controller.state.resources.money - bronzeMoney0;
+
+    expect(goldGain).toBeGreaterThan(bronzeGain);
+  });
+
+  it('applies a decision with multiple simultaneous effects (§12)', () => {
     const { controller } = newController();
     setLevel(controller, 6);
     controller.state.resources = { money: 100_000, wood: 100, stone: 100, food: 100, freshwater: 0 };
     const money0 = controller.state.resources.money;
-    expect(controller.chooseDecision('decision_farm_subsidy', 'fund')).toEqual({ ok: true });
-    expect(controller.state.resources.money).toBe(money0 - 20_000);
+    // The "big" option carries two buffs at once: production + happiness.
+    expect(controller.chooseDecision('decision_farm_subsidy', 'big')).toEqual({ ok: true });
+    expect(controller.state.resources.money).toBe(money0 - 40_000);
     expect(controller.state.buffs.some((b) => b.kind === 'production')).toBe(true);
+    expect(controller.state.buffs.some((b) => b.kind === 'happiness')).toBe(true);
+  });
+
+  it('locks a decision option behind a required building (§12)', () => {
+    const { controller } = newController();
+    setLevel(controller, 6);
+    controller.state.resources = { money: 100_000, wood: 100, stone: 100, food: 100, freshwater: 0 };
+    // The "contract" option needs a trading_post the city doesn't have.
+    expect(controller.chooseDecision('decision_farm_subsidy', 'contract')).toEqual({ ok: false, error: 'locked' });
   });
 
   it('offers rotating trade contracts and pays out on fulfilment', () => {
