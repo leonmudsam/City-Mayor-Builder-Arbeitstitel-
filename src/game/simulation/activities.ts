@@ -8,10 +8,11 @@ import { nextRandom } from '../engine/rng.ts';
 
 /** The reward band for the player's level: highest matching minLevel wins. */
 export function rewardTierFor(def: ActivityDef, level: number): ActivityRewardTier {
-  let best = def.rewardTiers[0];
+  let best: ActivityRewardTier | undefined = def.rewardTiers[0];
   for (const tier of def.rewardTiers) {
-    if (tier.minLevel <= level && tier.minLevel >= best.minLevel) best = tier;
+    if (tier.minLevel <= level && (best === undefined || tier.minLevel >= best.minLevel)) best = tier;
   }
+  if (best === undefined) throw new Error(`activity ${def.id} has no reward tiers`);
   return best;
 }
 
@@ -23,7 +24,9 @@ export function pickTargets(state: GameState, candidates: string[], min: number,
   const pool = [...candidates];
   for (let i = pool.length - 1; i > 0; i--) {
     const j = Math.floor(nextRandom(state) * (i + 1));
-    [pool[i], pool[j]] = [pool[j], pool[i]];
+    const tmp = pool[i]!;
+    pool[i] = pool[j]!;
+    pool[j] = tmp;
   }
   const span = Math.max(0, max - min);
   const count = Math.min(pool.length, min + Math.floor(nextRandom(state) * (span + 1)));
@@ -60,13 +63,13 @@ export function currentTradeContracts(state: GameState, cfg: ActivitiesConfig, n
     let roll = rand() * totalWeight;
     let index = 0;
     for (let j = 0; j < pool.length; j++) {
-      roll -= pool[j].weight ?? 1;
+      roll -= pool[j]!.weight ?? 1;
       if (roll <= 0) {
         index = j;
         break;
       }
     }
-    picked.push(pool[index]);
+    picked.push(pool[index]!);
     pool.splice(index, 1);
   }
   const expiresAt = (window + 1) * windowMs;

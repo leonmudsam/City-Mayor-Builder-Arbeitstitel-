@@ -548,8 +548,8 @@ export class GameController {
     this.state.activities.active = {
       defId,
       startedAt: now,
-      expiresAt: def.timeLimitSec !== undefined ? now + def.timeLimitSec * 1000 : undefined,
       targets,
+      ...(def.timeLimitSec !== undefined ? { expiresAt: now + def.timeLimitSec * 1000 } : {}),
     };
     this.notify({ type: 'change' });
     return ok;
@@ -579,7 +579,7 @@ export class GameController {
       const tier = rewardTierFor(def, this.state.level.current);
       const onTime = active.expiresAt === undefined || now <= active.expiresAt;
       const factor = onTime ? (def.speedBonusFactor ?? 1) : 1;
-      this.state.activities.active = undefined;
+      delete this.state.activities.active;
       this.payoutActivity(def, Math.round(tier.money * factor), Math.round(tier.xp * factor), tier);
     } else {
       this.notify({ type: 'change' });
@@ -590,7 +590,7 @@ export class GameController {
   /** Cancel the running activity. No payout, no cooldown — just tidy up. */
   abandonActivity(): CommandResult {
     if (!this.state.activities.active) return fail('invalid');
-    this.state.activities.active = undefined;
+    delete this.state.activities.active;
     this.notify({ type: 'change' });
     return ok;
   }
