@@ -1,5 +1,54 @@
 # Patch Notes
 
+## v0.25 — „Stadtarbeit wird aktiv: mehrere Aufträge, keine starren Cooldowns, Bronze/Silber/Gold"
+
+Erste Ausbaustufe der Stadtarbeit-Überarbeitung (MVP2-Spec §2/§6/§7/§10/§12/§16).
+Ziel: weg von „Aufgabe klicken → Sofortbelohnung → Cooldown", hin zu einem echten
+Auftragsbrett, das aus der realen Stadt gespeist wird und aktives Spielen belohnt.
+Das bestehende generische Aktivitäts-System wurde **erweitert** (keine Parallel-
+Logik), Sim/UI/Rendering bleiben getrennt, die Karte bleibt 2D.
+
+**Neu / geändert**
+- **Mehrere Aufträge gleichzeitig (§16.1):** Neues `getActivityBoard()` liefert das
+  komplette Missionsbrett — jede freigeschaltete Aktivität mit Belohnungsvorschau
+  und einer **echten Verfügbarkeitsprüfung** aus der Stadt heraus (Freischalt-
+  Level, benötigtes Quellgebäude, genügend Kartenziele, freier Auftragsslot).
+- **Keine starren Cooldowns mehr (§2):** Lieferungen und Inspektionen haben **keinen**
+  festen Cooldown — eine Lieferung ist verfügbar, solange Lebensmittelquelle und
+  Wohngebiete existieren, und kann sofort erneut gestartet werden. Nur Bürger-
+  meister-Entscheidungen behalten einen kurzen Cooldown, damit eine einzelne
+  Politik nicht spam-gefarmt wird.
+- **Qualitätsstufen Bronze/Silber/Gold (§6):** Lieferungen werden nach Tempo gegen
+  ihr Zeitlimit bewertet (Gold ≤ 60 % der Zeit, Silber innerhalb, Bronze danach —
+  ein verpasstes Limit lässt den Auftrag nie scheitern, senkt nur die Wertung).
+  Die Belohnung skaliert mit der Wertung (Bronze ×0,6 / Silber ×1,0 / Gold ×1,35),
+  zusätzlich zur Level-Belohnungsstufe. Das Abschluss-Popup zeigt die Medaille.
+- **Aufträge aus der echten Stadt (§10):** `requiresAnyBuilding` an Aktivitäten und
+  Entscheidungs-Optionen — z. B. „Essen verteilen" braucht Hof/Markt/Supermarkt,
+  „Baumaterial liefern" ein Sägewerk/Steinbruch/Lager. Fehlt die Quelle, zeigt die
+  Karte klar den Grund („Passendes Gebäude fehlt") statt eines toten Buttons.
+- **Reichere Entscheidungen (§12):** Optionen tragen jetzt **mehrere gleichzeitige
+  Effekte** (`buffs[]`) mit echten Trade-offs. Die drei Entscheidungen bieten
+  3–4 Optionen (voll/maßvoll fördern, Liefervertrag übers Kontor, ablehnen; großes/
+  kleines/gesponsertes Fest; volle/teilweise/keine Überstunden). Gebäude-gebundene
+  Optionen sind ohne das nötige Gebäude sichtbar, aber gesperrt.
+- **Kategorien & Schwierigkeit:** Jede Aktivität hat `category` (Versorgung/Inspektion/
+  Politik/Event/…) und `difficulty` (Leicht/Mittel/Schwer). Die Auftragskarten zeigen
+  Kategorie-, Schwierigkeits- und Zeitlimit-Badges.
+- **Kein AFK-Verdienst:** Unverändert laufen alle Belohnungen ausschließlich über
+  Commands beim aktiven Abschluss — offline entsteht kein Einkommen.
+
+**UI**
+- Auftragsbrett (`ActivityPanel`) und das Featured-Widget (`CityWorkPanel`) lesen
+  jetzt das Board: Badges, Belohnungsvorschau, Restzeit-Timer bei laufender Mission,
+  klare Blockier-Gründe. Abschluss-Popup mit Bronze/Silber/Gold-Medaille.
+
+**Nächste Phasen (bewusst noch offen, spec-vermerkt)**
+- §4/§16.2: sichtbares Lieferfahrzeug/animierte Route auf der Karte (renderer-lastig)
+  — kommt als eigener Schritt; aktuell werden Ziele weiter als pulsierende Marker
+  angeklickt.
+- Inspektions-Ursachen-Minispiel (Problemursache wählen) als Folgeausbau.
+
 ## v0.24 — „Grafik-Asset-Pipeline: echte Bilder per Drop-in"
 
 Damit das UI **exakt wie das Mockup** werden kann, braucht es echte gerenderte

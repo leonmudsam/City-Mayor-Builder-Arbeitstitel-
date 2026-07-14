@@ -10,15 +10,19 @@ import type { ActivitiesConfig } from './types.ts';
  */
 export const activitiesConfig: ActivitiesConfig = {
   activities: [
-    // -- Deliveries: pick map targets, click each to deliver (mini route run) --
+    // -- Deliveries: an ordered route run — click the numbered stops in turn.
+    //    No cooldown (§2): a delivery is always available while food sources and
+    //    homes exist. Speed + completion decide the Bronze/Silber/Gold grade.
     {
       id: 'food_delivery',
       type: 'delivery',
+      category: 'supply',
+      difficulty: 'easy',
       nameKey: 'activity.food_delivery',
       descriptionKey: 'activity.food_delivery.desc',
       unlockLevel: 4, // as soon as farms exist food can be hand-distributed (§3)
-      cooldownSec: 10 * 60,
       sender: 'citizen',
+      requiresAnyBuilding: ['farm', 'market', 'supermarket'],
       targetCount: { min: 3, max: 5 },
       timeLimitSec: 75,
       speedBonusFactor: 1.25,
@@ -34,11 +38,13 @@ export const activitiesConfig: ActivitiesConfig = {
     {
       id: 'material_delivery',
       type: 'delivery',
+      category: 'supply',
+      difficulty: 'medium',
       nameKey: 'activity.material_delivery',
       descriptionKey: 'activity.material_delivery.desc',
       unlockLevel: 7,
-      cooldownSec: 15 * 60,
       sender: 'buildingDept',
+      requiresAnyBuilding: ['sawmill', 'quarry', 'warehouse', 'depot'],
       targetCount: { min: 3, max: 4 },
       timeLimitSec: 60,
       speedBonusFactor: 1.25,
@@ -50,14 +56,16 @@ export const activitiesConfig: ActivitiesConfig = {
         { minLevel: 13, money: 380_000, xp: 100 },
       ],
     },
-    // -- Inspection: visit flagged buildings, learn what's wrong, get paid ----
+    // -- Inspection: visit flagged buildings, learn what's wrong, get paid.
+    //    No cooldown — a new inspection can be run whenever the city has issues.
     {
       id: 'city_inspection',
       type: 'inspection',
+      category: 'inspection',
+      difficulty: 'medium',
       nameKey: 'activity.city_inspection',
       descriptionKey: 'activity.city_inspection.desc',
       unlockLevel: 6,
-      cooldownSec: 20 * 60,
       sender: 'mayor',
       targetCount: { min: 3, max: 5 },
       rewardTiers: [
@@ -67,18 +75,37 @@ export const activitiesConfig: ActivitiesConfig = {
         { minLevel: 12, money: 200_000, xp: 110 },
       ],
     },
-    // -- Mayor decisions: quick trade-offs with a face and a consequence ------
+    // -- Mayor decisions (§12): 3–4 real options with multi-effect trade-offs.
+    //    These keep a modest cooldown so a single policy can't be spam-farmed.
     {
       id: 'decision_farm_subsidy',
       type: 'decision',
+      category: 'politics',
+      difficulty: 'medium',
       nameKey: 'activity.decision_farm_subsidy',
       descriptionKey: 'activity.decision_farm_subsidy.desc',
       unlockLevel: 6,
-      cooldownSec: 40 * 60,
+      cooldownSec: 15 * 60,
       sender: 'merchant',
       options: [
-        { id: 'fund', cost: { money: 20_000 }, buff: { kind: 'production', amount: 1.3, durationSec: 10 * 60 }, reward: { xp: 25 } },
-        { id: 'decline', reward: { money: 5_000, xp: 8 }, buff: { kind: 'happiness', amount: -4, durationSec: 10 * 60 } },
+        {
+          id: 'big',
+          cost: { money: 40_000 },
+          buffs: [
+            { kind: 'production', amount: 1.3, durationSec: 10 * 60 },
+            { kind: 'happiness', amount: 5, durationSec: 5 * 60 },
+          ],
+          reward: { xp: 30 },
+        },
+        { id: 'small', cost: { money: 12_000 }, buffs: [{ kind: 'production', amount: 1.1, durationSec: 10 * 60 }], reward: { xp: 15 } },
+        {
+          id: 'contract',
+          requiresAnyBuilding: ['trading_post'],
+          cost: { money: 15_000 },
+          buffs: [{ kind: 'production', amount: 1.2, durationSec: 20 * 60 }],
+          reward: { xp: 25 },
+        },
+        { id: 'decline', buffs: [{ kind: 'happiness', amount: -3, durationSec: 8 * 60 }], reward: { money: 5_000, xp: 8 } },
       ],
       rewardTiers: [
         { minLevel: 1, money: 0, xp: 5 },
@@ -88,13 +115,23 @@ export const activitiesConfig: ActivitiesConfig = {
     {
       id: 'decision_street_party',
       type: 'decision',
+      category: 'event',
+      difficulty: 'easy',
       nameKey: 'activity.decision_street_party',
       descriptionKey: 'activity.decision_street_party.desc',
       unlockLevel: 7,
-      cooldownSec: 60 * 60,
+      cooldownSec: 15 * 60,
       sender: 'citizen',
       options: [
-        { id: 'host', cost: { money: 30_000 }, buff: { kind: 'happiness', amount: 8, durationSec: 20 * 60 }, reward: { xp: 30 } },
+        { id: 'big', cost: { money: 30_000 }, buffs: [{ kind: 'happiness', amount: 8, durationSec: 20 * 60 }], reward: { xp: 30 } },
+        { id: 'small', cost: { money: 10_000 }, buffs: [{ kind: 'happiness', amount: 4, durationSec: 12 * 60 }], reward: { xp: 15 } },
+        {
+          id: 'sponsor',
+          requiresAnyBuilding: ['market', 'supermarket', 'shop_small'],
+          cost: { money: 18_000 },
+          buffs: [{ kind: 'happiness', amount: 6, durationSec: 15 * 60 }],
+          reward: { money: 6_000, xp: 22 },
+        },
         { id: 'skip', reward: { money: 8_000, xp: 8 } },
       ],
       rewardTiers: [
@@ -105,14 +142,17 @@ export const activitiesConfig: ActivitiesConfig = {
     {
       id: 'decision_overtime',
       type: 'decision',
+      category: 'politics',
+      difficulty: 'hard',
       nameKey: 'activity.decision_overtime',
       descriptionKey: 'activity.decision_overtime.desc',
       unlockLevel: 8,
-      cooldownSec: 60 * 60,
+      cooldownSec: 15 * 60,
       sender: 'buildingDept',
       options: [
-        { id: 'pay', cost: { money: 60_000 }, buff: { kind: 'production', amount: 1.2, durationSec: 30 * 60 }, reward: { xp: 40 } },
-        { id: 'refuse', reward: { money: 15_000, xp: 10 }, buff: { kind: 'happiness', amount: -6, durationSec: 15 * 60 } },
+        { id: 'pay', cost: { money: 60_000 }, buffs: [{ kind: 'production', amount: 1.2, durationSec: 30 * 60 }], reward: { xp: 40 } },
+        { id: 'partial', cost: { money: 25_000 }, buffs: [{ kind: 'production', amount: 1.1, durationSec: 20 * 60 }], reward: { xp: 22 } },
+        { id: 'refuse', buffs: [{ kind: 'happiness', amount: -6, durationSec: 15 * 60 }], reward: { money: 15_000, xp: 10 } },
       ],
       rewardTiers: [
         { minLevel: 1, money: 0, xp: 5 },

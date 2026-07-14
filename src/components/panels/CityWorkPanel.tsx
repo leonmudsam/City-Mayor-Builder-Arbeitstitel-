@@ -1,6 +1,5 @@
 import { ClipboardList, Gift, MapPin, PackageCheck, Search, Timer } from 'lucide-react';
 import { useGame, useUiStore } from '../../state/store.ts';
-import { rewardTierFor } from '../../game/simulation/activities.ts';
 import { formatDuration, formatMoney, t } from '../../i18n/index.ts';
 import { playFeedback } from '../../services/feedback.ts';
 import { CitizenPortrait } from '../art/index.ts';
@@ -16,30 +15,33 @@ export function CityWorkPanel() {
   const game = useGame();
   const { setPanel, pushToast } = useUiStore();
 
-  const defs = game.getActivityDefs();
-  if (defs.length === 0) return null;
+  const board = game.getActivityBoard();
+  if (board.length === 0) return null;
 
   const now = game.state.meta.lastSimTime;
   const active = game.state.activities.active;
-  const activeDef = active ? defs.find((d) => d.id === active.defId) : undefined;
-  const available = defs.filter((d) => now >= game.activityReadyAt(d.id));
-  // The featured task: the running one, or the first ready non-decision, or any ready.
-  const featured =
-    activeDef ??
-    available.find((d) => d.type !== 'decision') ??
-    available[0] ??
-    defs[0]!;
+  const activeEntry = active ? board.find((e) => e.def.id === active.defId) : undefined;
+  const startable = board.filter((e) => e.available);
+  // The featured task: the running one, or the first startable non-decision,
+  // or any startable, else just the first card.
+  const featuredEntry =
+    activeEntry ??
+    startable.find((e) => e.def.type !== 'decision') ??
+    startable[0] ??
+    board[0]!;
+  const featured = featuredEntry.def;
 
-  const badge = available.length + (active ? 1 : 0);
+  const badge = startable.length + (active ? 1 : 0);
   const TypeIcon = TYPE_ICON[featured.type];
-  const tier = rewardTierFor(featured, game.state.level.current);
+  const reward = featuredEntry.reward;
 
-  const running = activeDef && active;
+  const running = activeEntry && active;
   const done = running ? active!.targets.filter((tg) => tg.done).length : 0;
   const total = running ? active!.targets.length : 0;
   const remaining = running && active!.expiresAt ? active!.expiresAt - now : undefined;
-  const readyAt = game.activityReadyAt(featured.id);
-  const onCooldown = !running && now < readyAt;
+  const onCooldown = !running && featuredEntry.reason === 'cooldown';
+  const readyAt = featuredEntry.readyAt;
+  const blocked = !running && !featuredEntry.available && featuredEntry.def.type !== 'decision';
 
   const startFeatured = () => {
     if (featured.type === 'decision') {
@@ -81,6 +83,8 @@ export function CityWorkPanel() {
               <span className="work-feature-timer">
                 <Timer size={12} /> {formatDuration(readyAt - now)}
               </span>
+            ) : blocked ? (
+              <span className="work-feature-timer">{t(`activity.reason.${featuredEntry.reason ?? 'busy'}`)}</span>
             ) : (
               <span className="work-feature-timer ready">{t('ui.activity.available')}</span>
             )}
@@ -98,7 +102,7 @@ export function CityWorkPanel() {
                 <MapPin size={12} /> {t('ui.activity.targets', { done, total })}
               </span>
               <span className="work-reward">
-                <Gift size={12} /> {rewardLabel(tier)}
+                <Gift size={12} /> {rewardLabel(reward)}
               </span>
             </div>
             <p className="muted work-hint">{t('ui.activity.click_targets')}</p>
@@ -106,9 +110,9 @@ export function CityWorkPanel() {
         ) : (
           <div className="work-feature-foot">
             <span className="work-reward">
-              <Gift size={12} /> {rewardLabel(tier)}
+              <Gift size={12} /> {rewardLabel(reward)}
             </span>
-            <button className="btn-primary btn-tiny" disabled={onCooldown} onClick={startFeatured}>
+            <button className="btn-primary btn-tiny" disabled={onCooldown || blocked} onClick={startFeatured}>
               {featured.type === 'decision' ? t('ui.activity.decide') : t('ui.activity.start')}
             </button>
           </div>
@@ -122,10 +126,9 @@ export function CityWorkPanel() {
   );
 }
 
-function rewardLabel(tier: { money: number; xp: number; gold?: number }): string {
+function rewardLabel(reward: { money: number; xp: number }): string {
   const parts: string[] = [];
-  if (tier.money > 0) parts.push(`${formatMoney(tier.money)} ${t('resource.money')}`);
-  parts.push(`${tier.xp} XP`);
-  if (tier.gold) parts.push(`${tier.gold} ${t('ui.gold')}`);
-  return parts.join(' · ');
+  if (reward.money > 0) parts.push(`${formatMoney(reward.money)} ${t('resource.money')}`);
+  if (reward.xp > 0) parts.push(`${reward.xp} XP`);
+  return parts.join(' · ') || t('ui.activity.reward_choice');
 }

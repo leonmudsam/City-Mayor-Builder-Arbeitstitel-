@@ -45,23 +45,34 @@ export function DecisionModal({ def, onClose }: { def: ActivityDef; onClose: () 
         </div>
         <p className="decision-brief">{t(def.descriptionKey)}</p>
         <div className="decision-options">
-          {def.options?.map((opt) => (
-            <button key={opt.id} className="decision-option" onClick={() => choose(opt.id)}>
-              <span className="decision-option-label">{t(`activity.${def.id}.option.${opt.id}`)}</span>
-              <span className="decision-option-effect">
-                {opt.cost &&
-                  Object.entries(opt.cost).map(([res, amount]) => {
-                    const Icon = RESOURCE_ICON[res as ResourceId];
-                    return (
-                      <span key={res} className="decision-cost">
-                        −{formatMoney(amount ?? 0)} <Icon size={12} />
-                      </span>
-                    );
-                  })}
-                <span className="muted">{t(`activity.${def.id}.option.${opt.id}.effect`)}</span>
-              </span>
-            </button>
-          ))}
+          {def.options?.map((opt) => {
+            const missingBuilding = opt.requiresAnyBuilding !== undefined && !game.hasBuildingOfType(opt.requiresAnyBuilding);
+            const unaffordable = opt.cost?.money !== undefined && game.state.resources.money < opt.cost.money;
+            const disabled = missingBuilding || unaffordable;
+            return (
+              <button
+                key={opt.id}
+                className={`decision-option${disabled ? ' is-disabled' : ''}`}
+                disabled={disabled}
+                onClick={() => choose(opt.id)}
+              >
+                <span className="decision-option-label">{t(`activity.${def.id}.option.${opt.id}`)}</span>
+                <span className="decision-option-effect">
+                  {opt.cost &&
+                    Object.entries(opt.cost).map(([res, amount]) => {
+                      const Icon = RESOURCE_ICON[res as ResourceId];
+                      return (
+                        <span key={res} className="decision-cost">
+                          −{formatMoney(amount ?? 0)} <Icon size={12} />
+                        </span>
+                      );
+                    })}
+                  <span className="muted">{t(`activity.${def.id}.option.${opt.id}.effect`)}</span>
+                </span>
+                {missingBuilding && <span className="decision-option-lock">{t('activity.reason.missing_building')}</span>}
+              </button>
+            );
+          })}
         </div>
       </div>
     </Modal>

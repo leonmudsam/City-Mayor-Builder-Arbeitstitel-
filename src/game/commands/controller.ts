@@ -1,6 +1,13 @@
 import type { GameConfig } from '../config/index.ts';
-import type { ActivityDef, ActivityRewardTier, BuildingUpgradeDef } from '../config/types.ts';
-import { currentTradeContracts, pickTargets, rewardTierFor, type TradeContractOffer } from '../simulation/activities.ts';
+import type { ActivityDef, ActivityQuality, ActivityRewardTier, BuildingUpgradeDef } from '../config/types.ts';
+import {
+  currentTradeContracts,
+  pickTargets,
+  QUALITY_SCALE,
+  resolveQuality,
+  rewardTierFor,
+  type TradeContractOffer,
+} from '../simulation/activities.ts';
 import type { GameState, ResourceId, SectorId } from '../types.ts';
 import { parseSectorId, sectorId } from '../types.ts';
 import { recomputeDerived, type Derived } from '../simulation/derived.ts';
@@ -43,8 +50,22 @@ const fail = (error: CommandError): CommandResult => ({ ok: false, error });
 export type GameEvent =
   | { type: 'levelUp'; level: number }
   | { type: 'questClaimable' }
-  | { type: 'activityCompleted'; defId: string; money: number; xp: number }
+  | { type: 'activityCompleted'; defId: string; money: number; xp: number; quality?: ActivityQuality }
   | { type: 'change' };
+
+/** Why a mission can't be started right now (§16.1 board state). */
+export type ActivityUnavailableReason = 'cooldown' | 'missing_building' | 'no_targets' | 'busy';
+
+/** One row of the Stadtarbeit mission board: a def plus its live availability. */
+export interface ActivityBoardEntry {
+  def: ActivityDef;
+  available: boolean;
+  reason?: ActivityUnavailableReason;
+  /** Cooldown readyAt timestamp (only meaningful when reason === 'cooldown'). */
+  readyAt: number;
+  /** Level-scaled base reward preview (before quality scaling). */
+  reward: { money: number; xp: number };
+}
 
 /**
  * The command API between UI and simulation. The UI never touches simulation
@@ -523,9 +544,48 @@ export class GameController {
     return this.config.activities.activities.filter((a) => a.unlockLevel <= this.state.level.current);
   }
 
+  /**
+   * The full mission board (§16.1): every unlocked activity with its level-
+   * scaled reward preview and whether it can be started right now. Deliveries/
+   * inspections need a source building and enough map targets and a free slot;
+   * decisions gate on their own cooldown. No fixed cooldown blocks deliveries
+   * or inspections anymore (§2) — availability is driven by the real city.
+   */
+  getActivityBoard(): ActivityBoardEntry[] {
+    const now = this.state.meta.lastSimTime;
+    const busy = this.state.activities.active !== undefined;
+    return this.getActivityDefs().map((def) => {
+      const tier = rewardTierFor(def, this.state.level.current);
+      const readyAt = this.activityReadyAt(def.id);
+      let available = true;
+      let reason: ActivityUnavailableReason | undefined;
+      if (def.cooldownSec && now < readyAt) {
+        available = false;
+        reason = 'cooldown';
+      } else if (def.requiresAnyBuilding && !this.hasAnyBuilding(def.requiresAnyBuilding)) {
+        available = false;
+        reason = 'missing_building';
+      } else if (def.type !== 'decision') {
+        if (busy) {
+          available = false;
+          reason = 'busy';
+        } else if (this.activityCandidates(def).length < 2) {
+          available = false;
+          reason = 'no_targets';
+        }
+      }
+      return { def, available, ...(reason ? { reason } : {}), readyAt, reward: { money: tier.money, xp: tier.xp } };
+    });
+  }
+
   /** Cooldown readyAt timestamp for an activity (0 = ready). */
   activityReadyAt(defId: string): number {
     return this.state.activities.cooldowns[defId] ?? 0;
+  }
+
+  /** UI helper: does the city have any active building of these defIds? (§12 gated options.) */
+  hasBuildingOfType(defIds: string[]): boolean {
+    return this.hasAnyBuilding(defIds);
   }
 
   /** Open/done targets of the running activity — the renderer's map markers. */
@@ -540,7 +600,10 @@ export class GameController {
     if (def.unlockLevel > this.state.level.current) return fail('locked');
     if (this.state.activities.active) return fail('invalid');
     const now = this.state.meta.lastSimTime;
-    if (now < this.activityReadyAt(defId)) return fail('cooldown');
+    // No fixed cooldown gate for deliveries/inspections (§2) — only defs that
+    // still carry a cooldownSec (none by default) are time-gated here.
+    if (def.cooldownSec && now < this.activityReadyAt(defId)) return fail('cooldown');
+    if (def.requiresAnyBuilding && !this.hasAnyBuilding(def.requiresAnyBuilding)) return fail('locked');
     const candidates = this.activityCandidates(def);
     if (candidates.length < 2) return fail('invalid'); // not enough of a city yet
     const { min, max } = def.targetCount ?? { min: 3, max: 4 };
@@ -573,14 +636,15 @@ export class GameController {
     }
     target.done = true;
     if (active.targets.every((t) => t.done)) {
-      // Speed bonus: finishing inside the (optional) time limit pays extra.
-      // Missing it never fails the run — relaxed by design.
+      // Quality grade (§6): deliveries are scored Bronze/Silber/Gold on speed
+      // against their time limit, inspections settle at silver. Missing the
+      // limit never fails the run — it just drops the grade to bronze.
       const now = this.state.meta.lastSimTime;
       const tier = rewardTierFor(def, this.state.level.current);
-      const onTime = active.expiresAt === undefined || now <= active.expiresAt;
-      const factor = onTime ? (def.speedBonusFactor ?? 1) : 1;
+      const quality = resolveQuality(def, active.startedAt, now);
+      const scale = QUALITY_SCALE[quality];
       delete this.state.activities.active;
-      this.payoutActivity(def, Math.round(tier.money * factor), Math.round(tier.xp * factor), tier);
+      this.payoutActivity(def, Math.round(tier.money * scale.money), Math.round(tier.xp * scale.xp), tier, true, quality);
     } else {
       this.notify({ type: 'change' });
     }
@@ -604,11 +668,15 @@ export class GameController {
     if (now < this.activityReadyAt(defId)) return fail('cooldown');
     const option = def.options?.find((o) => o.id === optionId);
     if (!option) return fail('invalid');
+    if (option.requiresAnyBuilding && !this.hasAnyBuilding(option.requiresAnyBuilding)) return fail('locked');
     if (option.cost) {
       const spent = spendCost(this.state, option.cost, `activity_${def.id}_${option.id}`);
       if (!spent.ok) return fail('insufficient');
     }
+    // A decision can carry several simultaneous effects (§12): a single legacy
+    // `buff` and/or a `buffs[]` list of trade-off effects. Apply them all.
     if (option.buff) this.pushBuff(option.buff);
+    if (option.buffs) for (const buff of option.buffs) this.pushBuff(buff);
     const tier = rewardTierFor(def, this.state.level.current);
     const money = (option.reward?.money ?? 0) + tier.money;
     const xp = (option.reward?.xp ?? 0) + tier.xp;
@@ -655,6 +723,12 @@ export class GameController {
     return ok;
   }
 
+  /** True if the city has at least one active building of any of these defIds. */
+  private hasAnyBuilding(defIds: string[]): boolean {
+    const wanted = new Set(defIds);
+    return Object.values(this.state.buildings).some((b) => b.status === 'active' && wanted.has(b.defId));
+  }
+
   /** Candidate buildings for a delivery (homes) or inspection (flagged, then any). */
   private activityCandidates(def: ActivityDef): string[] {
     const homes: string[] = [];
@@ -682,6 +756,7 @@ export class GameController {
     xp: number,
     tier?: ActivityRewardTier,
     setCooldown = true,
+    quality?: ActivityQuality,
   ): void {
     const now = this.state.meta.lastSimTime;
     if (money > 0) grantResources(this.state, { money }, this.derived.storageCaps, `activity_${def.id}`);
@@ -690,10 +765,10 @@ export class GameController {
     if (tier?.buff) this.pushBuff(tier.buff);
     const levelUps = xp > 0 ? addXp(this.state, this.config, this.derived, xp) : 0;
     this.state.stats.activitiesCompleted += 1;
-    if (setCooldown && def.cooldownSec > 0) this.state.activities.cooldowns[def.id] = now + def.cooldownSec * 1000;
+    if (setCooldown && (def.cooldownSec ?? 0) > 0) this.state.activities.cooldowns[def.id] = now + (def.cooldownSec ?? 0) * 1000;
     updateQuests(this.state, this.config);
     if (levelUps > 0) this.notify({ type: 'levelUp', level: this.state.level.current });
-    this.notify({ type: 'activityCompleted', defId: def.id, money, xp });
+    this.notify({ type: 'activityCompleted', defId: def.id, money, xp, ...(quality ? { quality } : {}) });
     this.notify({ type: 'change' });
   }
 

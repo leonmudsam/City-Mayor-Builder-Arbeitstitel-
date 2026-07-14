@@ -326,23 +326,60 @@ export interface ActivityDecisionOption {
   cost?: Partial<Record<ResourceId, number>>;
   reward?: { money?: number; xp?: number };
   buff?: { kind: 'happiness' | 'tax' | 'production' | 'foodDistribution'; amount: number; durationSec: number };
+  /** Several simultaneous effects for one option (§12: real trade-offs). */
+  buffs?: { kind: 'happiness' | 'tax' | 'production' | 'foodDistribution'; amount: number; durationSec: number }[];
+  /** Option only offered when the city has one of these buildings (§12). */
+  requiresAnyBuilding?: string[];
 }
+
+/**
+ * Display grouping for the Stadtarbeit board filters (§3) — orthogonal to the
+ * mechanic (`type`). Several activities can share a mechanic but sit in
+ * different categories (a delivery can be `supply` or `logistics`).
+ */
+export type ActivityCategory =
+  | 'supply'
+  | 'inspection'
+  | 'politics'
+  | 'event'
+  | 'safety'
+  | 'trade'
+  | 'environment'
+  | 'logistics';
+
+/** How demanding a mission is — drives a board badge and reward scaling (§6). */
+export type ActivityDifficulty = 'easy' | 'medium' | 'hard';
+
+/** Completion grade (§6): scales the payout — poor run < full run < perfect run. */
+export type ActivityQuality = 'bronze' | 'silver' | 'gold';
 
 /**
  * A Stadtarbeit activity: a short, repeatable, hands-on mayor task that only
  * exists while the player is playing. `delivery` and `inspection` put clickable
  * targets on the map; `decision` opens a trade-off popup. Trade contracts are
  * separate templates (below) because they rotate instead of cooling down.
+ *
+ * Availability is no longer a cooldown wall (§2): a mission shows on the board
+ * whenever the city can actually support it (unlock level, required buildings,
+ * enough targets). Only `decision` activities keep a modest cooldown so a single
+ * policy choice can't be spammed for XP.
  */
 export interface ActivityDef {
   id: string;
   type: 'delivery' | 'inspection' | 'decision';
+  /** Board grouping for filters/badges (§3). Defaults from `type` if omitted. */
+  category?: ActivityCategory;
+  /** Difficulty badge + reward scaling context (§6). */
+  difficulty?: ActivityDifficulty;
   nameKey: string;
   descriptionKey: string;
   unlockLevel: number;
-  cooldownSec: number;
+  /** Cooldown in seconds. Optional/0 = always available (§2). Used for decisions. */
+  cooldownSec?: number;
   /** Who's asking — reuses the quest sender avatars (§ Stadtkommunikation). */
   sender: QuestSender;
+  /** Offered only if the city has at least one of these building def ids (§14). */
+  requiresAnyBuilding?: string[];
   /** delivery/inspection: how many map targets are picked. */
   targetCount?: { min: number; max: number };
   /** delivery: beating this deadline pays the speed bonus. Never fails. */
@@ -351,7 +388,7 @@ export interface ActivityDef {
   speedBonusFactor?: number;
   /** delivery: resources consumed per delivered target (e.g. food per stop). */
   costPerTarget?: Partial<Record<ResourceId, number>>;
-  /** decision: 2–3 options with trade-offs. */
+  /** decision: 2–4 options with trade-offs. */
   options?: ActivityDecisionOption[];
   rewardTiers: ActivityRewardTier[];
 }
