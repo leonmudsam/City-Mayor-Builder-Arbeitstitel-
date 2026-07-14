@@ -8,19 +8,22 @@ import { DEFAULT_SLOT } from './game/storage/saveAdapter.ts';
 import { importSave } from './game/storage/exportImport.ts';
 import { setController, useUiStore } from './state/store.ts';
 import { MapView } from './components/MapView.tsx';
-import { TopBar } from './components/hud/TopBar.tsx';
-import { BottomBar } from './components/hud/BottomBar.tsx';
+import { GameHud } from './components/hud/GameHud.tsx';
+import { QuickActionBar } from './components/hud/QuickActionBar.tsx';
 import { BuildMenu } from './components/panels/BuildMenu.tsx';
 import { FloatingBuildingSheet } from './components/panels/FloatingBuildingSheet.tsx';
-import { QuestPanel } from './components/panels/QuestPanel.tsx';
+import { CitizenRequestsPanel } from './components/panels/CitizenRequestsPanel.tsx';
 import { MayorPanel } from './components/panels/MayorPanel.tsx';
 import { CityStatusPanel } from './components/panels/CityStatusPanel.tsx';
+import { CityStatusDetail } from './components/panels/CityStatusDetail.tsx';
+import { CityWorkPanel } from './components/panels/CityWorkPanel.tsx';
 import { EconomyPanel } from './components/panels/EconomyPanel.tsx';
 import { SectorDialog } from './components/panels/SectorDialog.tsx';
 import { SettingsPanel } from './components/panels/SettingsPanel.tsx';
 import { TradePanel } from './components/panels/TradePanel.tsx';
 import { DebugPanel } from './components/panels/DebugPanel.tsx';
 import { ActivityPanel } from './components/panels/ActivityPanel.tsx';
+import { MenuPanel } from './components/panels/MenuPanel.tsx';
 import { formatMoney } from './i18n/index.ts';
 import { Toasts } from './components/common/Toasts.tsx';
 import { EventModal } from './components/common/EventModal.tsx';
@@ -123,7 +126,7 @@ export function App() {
     ui.stopMoving();
     ui.selectBuilding(undefined);
     ui.openSectorDialog(undefined);
-    ui.setPanel('quests');
+    ui.setPanel(undefined);
     controller.resetTo(next);
     void adapter.save(DEFAULT_SLOT, next);
     controller.update(Date.now());
@@ -170,22 +173,31 @@ function GameScreen({ onImport, onReset }: { onImport(json: string): boolean; on
 
   return (
     <div className="app">
-      <TopBar />
+      <GameHud />
       <main className="main">
         <MapView />
-        {openPanel === 'quests' && <QuestPanel />}
+
+        {/* Persistent HUD frame (mockup): status left-top, city work left-bottom,
+            citizen requests right, quick actions right-bottom. */}
+        <CityStatusPanel />
+        <CityWorkPanel />
+        <CitizenRequestsPanel />
+        <QuickActionBar />
+
+        {/* Overlay panels, opened from the HUD / menu — only one at a time. */}
         {openPanel === 'mayor' && <MayorPanel />}
-        {openPanel === 'status' && <CityStatusPanel />}
+        {openPanel === 'status' && <CityStatusDetail />}
         {openPanel === 'economy' && <EconomyPanel />}
         {openPanel === 'settings' && <SettingsPanel onImport={onImport} onReset={onReset} />}
         {openPanel === 'trade' && <TradePanel />}
         {openPanel === 'debug' && <DebugPanel />}
         {openPanel === 'activities' && <ActivityPanel />}
+        {openPanel === 'menu' && <MenuPanel />}
+
         <FloatingBuildingSheet />
         <SectorDialog />
         {openPanel === 'build' && <BuildMenu />}
       </main>
-      <BottomBar />
       <Toasts />
       {currentEvent && <EventModal event={currentEvent} onClose={() => dismissEvent(currentEvent.id)} />}
     </div>

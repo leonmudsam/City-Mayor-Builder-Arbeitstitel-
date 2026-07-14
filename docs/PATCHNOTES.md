@@ -1,5 +1,83 @@
 # Patch Notes
 
+## v0.22 — „UI-Überarbeitung: hochwertiges City-Builder-Interface nach Mockup"
+
+Komplette Neugestaltung von HUD, Panels, Baumenü, Gebäude-Sheet und Overlays
+entlang des vorgegebenen UI-Mockups. Die 2D-Prototyp-Karte bleibt unverändert —
+nur die Oberfläche wurde überarbeitet. Es wurde bewusst kein paralleles System
+gebaut: alle Panels lesen die vorhandenen echten Spielwerte über den bestehenden
+Controller/Store, das Rendering bleibt sauber von der Simulation getrennt.
+
+**Wie wurde das UI dem Mockup angepasst?**
+Aus der alten Top-Bar-/Bottom-Bar-Struktur wurde ein permanentes HUD-Rahmen­
+layout wie im Mockup: oben die Ressourcen-HUD-Leiste, links oben der Stadtstatus,
+links unten die Stadtarbeiten, rechts die Bürgeranliegen, unten das Baumenü,
+unten rechts die Schnellaktionen, mittig das Gebäude-Info-Sheet und ein
+Versorgungs-Banner oben.
+
+**Neue Komponenten**
+- `GameHud` + `ResourceCard` — obere Ressourcenleiste mit rundem Level-Badge,
+  XP-Balken und je einer Karte pro Ressource (Icon-Chip · großer Wert ·
+  Zuwachs/min). Menü-Button rechts (`MenuPanel`).
+- `CityStatusPanel` — permanentes Stadtstatus-Widget (Zufriedenheit, Wasser,
+  Essen, Arbeit, Umwelt, Sicherheit) mit Icon, Balken und konkreter
+  Statuszeile; „Details ansehen" öffnet die volle Kontrollraum-Ansicht
+  (`CityStatusDetail`, vormals das ausführliche Panel).
+- `CityWorkPanel` — permanentes Stadtarbeiten-Widget mit Absender-Avatar,
+  Timer, Beschreibung, Fortschrittsbalken und Belohnung; „Alle Aufträge"
+  öffnet das vollständige Board (`ActivityPanel`).
+- `CitizenRequestsPanel` — Bürgeranliegen rechts als lebendige Karten mit
+  Porträt, Sprechblase, Aufgabe, Fortschrittsbalken und Belohnung
+  (ersetzt/erweitert das frühere `QuestPanel`).
+- `QuickActionBar` — Schnellaktionen unten rechts: Bauen, Karte (Kamera
+  zentrieren), Overlay, Statistiken, Einstellungen — erweiterbar angelegt.
+- `ServiceOverlayBanner` — Versorgungs-Banner oben mittig („Wasser-Versorgung —
+  92 % abgedeckt"), gespeist aus den Coverage-Zählwerten der Simulation.
+
+**Neue HUD-Leiste (§2)** — Level-Badge + XP-Balken, dann Geld (mit stabilem
+Einkommen/min), Holz, Stein, Nahrung, Wasser (Frischwasser oder Abdeckung),
+Einwohner (mit Zuzugsrate) und Zufriedenheit (Prozent + Laune). Kompakte
+Zahlen (`61,5 Mio.`, `1,2 Mio.`, `12.500`).
+
+**Gebäude-Info-Sheet (§6)** — breiteres Sheet mit Kopf (Icon, Name,
+Level-Pips, Status-Badge, Schließen), Kategorie-/Status-Zeile, einer klaren
+Werte-Grid (Bewohner/Wohnungen/Radius/Produktion/Einnahmen/Unterhalt statt
+Fließtext), Problem-/Vorteil-Diagnosen und großen, beschrifteten Aktions-
+Buttons (Ausbau · Verschieben · Radius · Abreißen) mit Kosten/Wirkung.
+
+**Service-Overlay & Marker (§7/§8)** — Beim Auswählen eines Radius-Gebäudes
+erscheint das Versorgungs-Banner oben; die Karte färbt versorgte/teilweise/
+unversorgte Gebäude wie bisher (Coverage-Overlay), plus Overlay-Modus über den
+Schnellbutton (Rahmen-Hervorhebung). Marker/Overlays leiten sich aus
+Simulationsdaten und Weltkoordinaten ab, nicht aus Bildschirmpixeln.
+
+**Baumenü (§9)** — Gebäudekarten jetzt vertikal mit Bild-/Miniatur-Fläche oben,
+Name, Kosten, Bauzeit, Größe, Limit und „Neu"-Badge; Kategorie-Tabs mit
+Neu-/Problem-Punkten. Das Menü sitzt eingerückt zwischen Stadtarbeiten und
+Schnellaktionen, sodass nichts verdeckt wird.
+
+**Angebundene echte Spielwerte** — Ressourcen/Produktion/Einkommen,
+Zufriedenheit & Bedürfnisse, Bevölkerung/Zuzug, Quests & Fortschritt,
+Gebäude-Effekte/Upgrades, Bau-/Upgrade-Kosten, Serviceabdeckung, Aktivitäten
+und Handelsaufträge. Kein Wert ist hartkodiert; Näherungen (z. B. „N Gebäude
+ohne Wasser", Umwelt-Score) sind klar aus der Simulation abgeleitet.
+
+**Design-Tokens (§16)** — zentrale Tokens erweitert: transluzente Panel-Flächen
+über der hellen Karte, größere Radien/Schatten, Ressourcen-/Status-/Marker-
+Farben, Badge- und Button-Stile — konsistent und leicht anpassbar.
+
+**Was bleibt bewusst 2D / 3D-Vorbereitung (§14)** — Die Karte bleibt 2D-
+Prototyp; kein Rendering-Umbau. Das UI ist rendering-unabhängig gehalten:
+Marker/Sheet koppeln an Gebäude-/Weltkoordinaten (nicht an Pixel-Hacks), die
+Kamera wird über eine schmale `MapApi`-Brücke angesteuert, Overlays kommen aus
+Simulationsdaten — damit ist der Wechsel auf eine 2.5D/Iso-Ansicht später ohne
+UI-Neubau möglich.
+
+**Verifikation** — `tsc`, ESLint und `vite build` sauber; 97/97 Vitest-Tests
+grün; Browser-Smoke-Test bestätigt fehlerfreien Start und das vollständige neue
+HUD (Ressourcenkarten, Stadtstatus, Bürgeranliegen, Schnellaktionen, Baumenü,
+Gebäude-Sheet).
+
 ## v0.21 — „Aktive Stadt: kein AFK-Farmen mehr, echtes Stadtmanagement"
 
 Die große Richtungsänderung weg vom Idle-/AFK-Spiel hin zum aktiven

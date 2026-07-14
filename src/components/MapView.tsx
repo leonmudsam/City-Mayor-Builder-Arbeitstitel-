@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
 import { AlertTriangle, CheckCircle2, Move, Sparkles } from 'lucide-react';
 import { MapRenderer, type HoverInfo } from '../renderer/MapRenderer.ts';
-import { getController, useUiStore } from '../state/store.ts';
+import { getController, setMapApi, useUiStore } from '../state/store.ts';
+import { ServiceOverlayBanner } from './hud/ServiceOverlayBanner.tsx';
 import { t } from '../i18n/index.ts';
 
 interface CoverageInfo {
@@ -86,6 +87,9 @@ export function MapView() {
     });
     rendererRef.current = renderer;
     void renderer.init(host);
+    // Expose the camera to the HUD (Quick-action "Karte") without leaking the
+    // renderer instance.
+    setMapApi({ centerOnCity: () => renderer.centerOnCity() });
 
     // Mirror UI state (placement/move/selection) into the renderer.
     const unsubscribe = useUiStore.subscribe((s) => {
@@ -107,6 +111,7 @@ export function MapView() {
     return () => {
       window.removeEventListener('keydown', onKey);
       unsubscribe();
+      setMapApi(undefined);
       renderer.destroy();
       rendererRef.current = undefined;
     };
@@ -114,14 +119,29 @@ export function MapView() {
 
   const placing = useUiStore((s) => s.placingDefId);
   const moving = useUiStore((s) => s.movingBuildingId);
+  const overlayMode = useUiStore((s) => s.overlayMode);
   const active = placing !== undefined || moving !== undefined;
 
+  // Headline supply figure for the top-centre banner (§7): share of served
+  // consumers among all in-radius consumers.
+  const banner = coverage ? coverageBanner(coverage) : undefined;
+
   return (
-    <div className="map-host" ref={hostRef}>
+    <div className={`map-host${overlayMode ? ' overlay-active' : ''}`} ref={hostRef}>
       {active && <PlacementBanner info={hoverInfo} moving={moving !== undefined} />}
+      {banner && !active && <ServiceOverlayBanner label={banner.label} detail={banner.detail} tone={banner.tone} />}
       {coverage && !active && <CoverageLegend info={coverage} />}
     </div>
   );
+}
+
+/** Turn coverage counts into the top-centre banner's headline. */
+function coverageBanner(info: CoverageInfo): { label: string; detail: string; tone: 'good' | 'warn' | 'bad' } {
+  const { supplied, partial, unsupplied } = info.counts;
+  const total = supplied + partial + unsupplied;
+  const pct = total > 0 ? Math.round((supplied / total) * 100) : 100;
+  const tone: 'good' | 'warn' | 'bad' = pct >= 90 ? 'good' : pct >= 60 ? 'warn' : 'bad';
+  return { label: info.label, detail: t('ui.overlay.covered', { pct }), tone };
 }
 
 /** Build-limit failures carry the next unlock level for a clear message (§16). */

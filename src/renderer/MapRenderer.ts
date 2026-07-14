@@ -173,6 +173,17 @@ export class MapRenderer {
     };
   }
 
+  /** Re-centre the camera on the town hall (Quick-action "Karte"). Public so the
+   *  HUD can recall a lost camera without touching renderer internals. */
+  centerOnCity(): void {
+    const th = startRegionConfig.townHall;
+    const scale = this.world.scale.x;
+    this.focusTarget = {
+      x: this.app.screen.width / 2 - (th.x + 1.5) * TILE * scale,
+      y: this.app.screen.height / 2 - (th.y + 1.5) * TILE * scale,
+    };
+  }
+
   private clearGhost(): void {
     this.ghost.clear();
     this.ghostRadius.clear();
