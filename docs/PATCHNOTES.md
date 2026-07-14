@@ -1,5 +1,124 @@
 # Patch Notes
 
+## v0.21 — „Aktive Stadt: kein AFK-Farmen mehr, echtes Stadtmanagement"
+
+Die große Richtungsänderung weg vom Idle-/AFK-Spiel hin zum aktiven
+Bürgermeister-Städtebau. Verdient wird nur noch beim Spielen; dazu ein neues
+Stadtarbeit-System, realistische Einwohnerzahlen, ein straffes Nahrungs-/
+Wasser-Balancing und eine Reihe Bugfixes. Savegame-kompatibel über eine
+Migration (Schema **v8 → v9**); alte Spielstände laden unverändert.
+
+**Kein passives AFK-Farmen mehr (§1/§16)**
+- Bei geschlossenem oder im Hintergrund liegendem Spiel läuft **nur noch**:
+  Bau- und Upgrade-Timer (inkl. deren XP bei Abschluss), Ablauf von Buffs/
+  Ereignissen und Cooldowns. **Nichts** wird offline produziert, verkauft,
+  verdient, verbraucht oder bevölkert.
+- Technisch: Die gesamte Wirtschaft (Produktion, Verbrauch, Bedürfnisse,
+  Zufriedenheit, Einkommen, Bevölkerungsfluss, Feuer) läuft in `advanceLiveEconomy`
+  und wird nur bei `live`-Ticks ausgeführt. `App.tsx` tickt live nur, wenn der
+  Tab sichtbar ist (`document.visibilityState === 'visible'`).
+- Der passive Überlauf-Export ist **komplett entfernt**. Ersatz: deutlich
+  höhere aktive Verkaufspreise (Holz 2 → **10**, Stein 4 → **20**, Nahrung 1 →
+  **5**, Frischwasser 1 → **3** pro Einheit), nur über das Handelskontor.
+
+**Neues aktives Stadtarbeit-System (§2/§15/§3)**
+- Ein generisches, config-getriebenes Aktivitäten-System (`activities.config.ts`)
+  mit vier MVP2-Typen:
+  - **Lieferung** (Essen/Baumaterial verteilen): 3–5 Zielgebäude leuchten auf
+    der Karte, per Klick beliefern; schnelle Erledigung gibt einen Zeitbonus.
+  - **Stadtinspektion**: Problemgebäude finden und begutachten.
+  - **Bürgermeister-Entscheidung**: Popup mit Berater/Bürger und 2–3 Optionen
+    samt klaren Vor-/Nachteilen (Kosten ↔ Produktions-/Zufriedenheits-Buff).
+  - **Handelsaufträge**: rotierende Angebote am Handelskontor, deterministisch
+    pro Zeitfenster; seltene Großaufträge bis ~1 Mio.
+- Belohnungen skalieren nach Level-Band (früh Tausender, ab L6 Zehntausender,
+  ab L10 Hunderttausender) und laufen ausschließlich über Controller-Commands →
+  inhärent aktiv, nie offline. Eigenes **Stadtarbeit-Panel**, Kartenmarker mit
+  Zielringen, Abschluss-Popup, Sound-Hook (`services/feedback.ts`) vorbereitet.
+- **Manuelle Essens-Verteilung (§3)**: die `food_delivery`-Aktivität gewährt
+  einen zeitlich begrenzten Verteil-Buff, der Häuser ohne Marktabdeckung
+  vorübergehend voll versorgt — echter Unterschied „produzieren vs. verteilen"
+  ohne neue Simulation.
+
+**Realistische Einwohnerzahlen (§9)**
+- Neuer Config-Wert `populationScale = 20`: Jedes Haus fasst das 20-fache seiner
+  angegebenen Haushalte, sodass eine ausgebaute L11-Stadt ~80–120k Einwohner
+  erreicht (statt ~5,5k). Alle Pro-Kopf-Größen (Steuer 40 → 2, Nahrung/Wasser/
+  Arbeit) werden durch 20 geteilt, Wachstums- und Service-Kapazitäten mal 20 —
+  die Ökonomie bleibt größenordnungsgleich, nur die Zahlen sind glaubwürdig.
+
+**Nahrung & Wasser als echte Engpässe (§8)**
+- Nahrungsbedarf pro Kopf ~40 % straffer als eine neutrale Neuskalierung.
+- Brunnen 200 → **120**, Wasserpumpe 3000 → **1800/3000/4600**, kleine Häuser
+  brauchen mehr Wasser (4 → 6, ausgebaut 8 → 12) — Wasser wächst mit der Stadt
+  und macht Pumpen/Upgrades nötig.
+
+**Sektor-Aufgaben korrekt gezählt (§5)**
+- `stats.sectorsUnlocked` zählt jetzt nur **zusätzliche** Sektoren; der
+  Startsektor zählt nicht mehr mit. „Erste Erweiterung" verlangt damit wirklich
+  einen ersten Kauf. Neue Folge-Aufgaben `qe_expand3`/`qe_expand4`.
+
+**Handel dauerhaft per UI erreichbar (§6)**
+- Sobald ein Handelskontor gebaut wurde, erscheint ein permanenter
+  **Handel-Button** in der Fußleiste — kein Gebäude-Suchen mehr. Ein Kontor
+  reicht fürs ganze Spiel, Upgrades verbessern die Kurse.
+
+**Aktive Aufgaben & entzerrte Progression (§10–§14)**
+- Neue Aufgaben-Zieltypen `upgrade`, `activity`, `tradeEarnings`.
+- Viele neue aktive Aufgaben für L6–L8 (Reihenhäuser, Sägewerk/Steinbruch
+  ausbauen, Büro, Essen verteilen, Inspektion, Handelsaufträge, große
+  Handelsziele).
+- **Wohn-Freischaltungen entzerrt (§13)**: Apartment L9 → **L10**, Reihenhaus-
+  Ausbau L8 → **L9**, Mehrfamilienhaus L10 → **L11**, Stadthaus L12 → **L13** —
+  kein Wohn-Upgrade mehr im selben Level wie ein neues Wohngebäude (per Test
+  abgesichert).
+
+**Bugfix: Energie-Gebäude sichtbar (§18/§19)**
+- Das Baumenü hatte keinen **Infrastruktur/Energie-Tab** — Kohlekraftwerk und
+  Windpark konnten nie erscheinen. Neue Kategorie **Energie**; Windpark schon ab
+  **L11** (erneuerbare Alternative zur Kohle). Bautabs vollständig überarbeitet,
+  leere Tabs werden ausgeblendet.
+
+**Karte nach Westen erweitert (§17)**
+- Zwei neue Sektor-Spalten (`worldBounds.minSx -2`) mit einem Gebirge und zwei
+  Tal-Korridoren; hinter der Felswand liegt Land für ein späteres Biom. Der
+  Steinbruch-Fels-Bonus wird dadurch wertvoller.
+
+**Stabiles Einkommen für Großprojekte (§20)**
+- Die Großprojekt-Empfehlung und das Wirtschafts-Panel zeigen jetzt das
+  **stabile** Einkommen (ohne temporäre Boosts); aktive Boosts werden separat
+  ausgewiesen. Einmalige Handels-/Auftragsgelder fließen nicht in /min-Werte.
+
+**Bessere Service-Overlays (§21)**
+- Versorgungs-Overlays füllen betroffene Gebäude-Grundflächen jetzt farbig
+  (versorgt/teilweise/ohne) und zeigen eine Zusammenfassung mit Zählwerten.
+
+**3D-/Visual-Vorbereitung**
+- Optionales, ungenutztes `visual`-Feld auf Gebäuden (Höhenklasse, 2D/Iso/3D-
+  Asset-Referenzen, Overlay-Anker) — vorbereitet für spätere hochwertige
+  Darstellung, ohne die Spiellogik zu berühren. Marker/Overlays rechnen bereits
+  in Welt-Koordinaten.
+
+**Balancing-Feinschliff (§1/§22)**
+- XP-Kurve unverändert (L1–5 bleiben schnell), aber Level-Up-Geldgeschenke
+  L2–L5 um ~15 % gesenkt — die neuen aktiven Aufgaben tragen den frühen
+  Geldfluss.
+
+**Tests & Verifikation**
+- **97/97 Vitest-Tests grün**, `tsc`, ESLint und `vite build` sauber. Neue
+  Tests: Offline-Gating, das Aktivitäten-System (Lieferung/Entscheidung/
+  Handelsauftrag), die v8→v9-Migration und die Wohn-Progressions-Invariante.
+  Browser-Smoke-Test: sauberer Start ohne Fehler, Energie-Tab vorhanden.
+
+**Empfohlene nächste Balancing-Schritte**
+- Ein Zeit-Skip-Durchlauf L1–14 über die Debug-Tools, um Nahrungs-/Wasser-
+  Korridore und die ×20-Einwohnerkurve im echten Verlauf zu prüfen.
+- Das schwergewichtige Service-Overlay (Karten-Abdunkelung, Legende als
+  Vollpanel) und tiefere Ausbaupfade für Reihenhaus/Apartment/Wohnturm sind
+  bewusst als Folge-Schritt offen gelassen.
+
+---
+
 ## v0.20 — „Langzeit-Ausbau, aktiver Handel & Steuer-Regler bis 500 %"
 
 Großer Balancing- und Mechanik-Pass für das Mid-/Late-Game. Der kritische

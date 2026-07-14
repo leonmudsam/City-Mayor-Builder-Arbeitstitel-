@@ -8,6 +8,7 @@ export type BuildingCategory =
   | 'residential'
   | 'production'
   | 'services'
+  | 'energy'
   | 'leisure'
   | 'economy'
   | 'government'
@@ -77,10 +78,17 @@ export interface NeedState {
   fulfillment: number;
 }
 
+/**
+ * Timed session bonus. `happiness` adds points, `tax` and `production` are
+ * multipliers, `foodDistribution` ignores `amount` and lifts undistributed
+ * food delivery to 100 % while active (manual distribution run, § Stadtarbeit).
+ * Buffs expire on wall-clock time but only ever *apply* during live ticks —
+ * the economy doesn't run offline, so buffs can't boost anything there.
+ */
 export interface ActiveBuff {
   id: string;
-  kind: 'happiness' | 'tax';
-  amount: number; // happiness: additive points; tax: multiplier
+  kind: 'happiness' | 'tax' | 'production' | 'foodDistribution';
+  amount: number;
   endsAt: number;
 }
 
@@ -122,7 +130,40 @@ export interface GameStats {
   /** Lifetime resources produced into storage (production is automatic). */
   produced: Record<ResourceId, number>;
   mayorActions: Record<MayorActionId, number>;
+  /**
+   * ADDITIONAL sectors the player actively unlocked (v0.21, §5): the start
+   * sector does NOT count, so "unlock your first new sector" means exactly that.
+   */
   sectorsUnlocked: number;
+  /** Completed building upgrades, total and per definition (quest goals). */
+  upgradesCompleted: number;
+  upgraded: Record<BuildingDefId, number>;
+  /** Lifetime money earned by actively selling/fulfilling trade (quest goals). */
+  tradeEarnings: number;
+  /** Completed Stadtarbeit activities of any type (quest goals). */
+  activitiesCompleted: number;
+}
+
+/**
+ * A running Stadtarbeit activity (§ aktives Stadtmanagement). Targets are
+ * building instances the player must click on the map; `done` flips per
+ * delivery/inspection. Completion, rewards and cooldowns are handled by
+ * controller commands — never by the tick, so nothing completes offline.
+ */
+export interface ActiveActivity {
+  defId: string;
+  startedAt: number;
+  /** Optional deadline; delivery pays a speed bonus when beaten. */
+  expiresAt?: number;
+  targets: { buildingId: BuildingInstanceId; done: boolean }[];
+}
+
+export interface ActivitiesState {
+  active?: ActiveActivity;
+  /** readyAt timestamps per activity def (cooldowns keep running offline). */
+  cooldowns: Record<string, number>;
+  /** Trade-contract ids already fulfilled in the current rotation window. */
+  fulfilledContracts: string[];
 }
 
 export interface GameState {
@@ -164,6 +205,7 @@ export interface GameState {
   quests: { completed: QuestId[]; active: ActiveQuest[] };
   buffs: ActiveBuff[];
   events: ActiveEvent[];
+  activities: ActivitiesState;
   stats: GameStats;
   nextId: number;
 }

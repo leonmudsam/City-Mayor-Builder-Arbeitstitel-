@@ -7,21 +7,30 @@ export const balancingConfig: BalancingConfig = {
   // jobs (offices, shops, industry). A balanced, employed city earns far more
   // than a wall of houses — money rewards good zoning, not AFK growth. Real
   // pacing still comes from materials, build limits, supply radii and space.
-  taxPerCapitaPerMin: 40,
+  // Realistic city scale (§9): homes hold 20× their stated households, so a
+  // built-up Level-11 city reaches ~80–120k residents instead of ~5k. Every
+  // per-capita coefficient below is divided by 20 to keep the economy identical
+  // at the larger head count; growth rates and coverage capacities are ×20.
+  populationScale: 20,
+  taxPerCapitaPerMin: 2,
   taxFactorMin: 0.4,
   taxFactorMax: 1.5,
   // Half the population works; commercial/industrial income scales with how
-  // many jobs that labor force actually fills.
-  laborParticipation: 0.5,
+  // many jobs that labor force actually fills. Divided by the population scale
+  // so the absolute labor force (and thus employment) is unchanged.
+  laborParticipation: 0.025,
   // Move-in now scales with the city (§ believable growth). `growthPerMin` is
   // just the flat floor for tiny villages; `growthFillRatePerMin` fills a share
   // of the *free* housing every minute, so a happy metropolis with tens of
   // thousands of empty flats actually populates instead of crawling at a flat
   // trickle. At 6 %/min a 45 000-cap city that is 99 % happy adds ~2 700 in the
   // first minute and approaches full occupancy within ~20–30 simulated minutes.
-  growthPerMin: 12,
+  // Scaled ×20 with the population so the flat move-in floor and shedding rate
+  // stay proportional; growthFillRatePerMin is a fraction of (now ×20) free
+  // housing, so it scales on its own.
+  growthPerMin: 240,
   growthFillRatePerMin: 0.06,
-  declinePerMin: 5,
+  declinePerMin: 100,
   growthHappinessThreshold: 60,
   declineHappinessThreshold: 40,
   foodWithoutDistributionCap: 0.3,
@@ -62,10 +71,11 @@ export const balancingConfig: BalancingConfig = {
   taxRateMax: 5,
   residentialTaxHappinessPer: 24,
   commercialTaxHappinessPer: 10,
-  // Active resource economy (§6/§7). Money per unit exported: scarcer inputs are
-  // worth more (stone hardest to produce, food most abundant). These are the
-  // overflow-export rates AND the trading-post base sell prices.
-  exportRates: { wood: 2, stone: 4, food: 1, freshwater: 1 },
+  // Active resource economy (§7). Money per unit sold at the trading post:
+  // scarcer inputs are worth more (stone hardest to produce). Raised sharply in
+  // v0.21 because selling is now the ONLY way surplus becomes money — the
+  // passive overflow export is gone, trade is a deliberate player action.
+  exportRates: { wood: 10, stone: 20, food: 5, freshwater: 3 },
   // Each trading-post stage lifts the manual sell price by 25 % of the base rate.
   tradeSellBonusPerLevel: 0.25,
   // Buying costs 4× the base rate — far above any sell price, so trade can never

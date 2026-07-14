@@ -1,5 +1,6 @@
 import type { GameConfig } from '../config/index.ts';
-import type { BuildingUpgradeDef } from '../config/types.ts';
+import type { ActivityDef, ActivityRewardTier, BuildingUpgradeDef } from '../config/types.ts';
+import { currentTradeContracts, pickTargets, rewardTierFor, type TradeContractOffer } from '../simulation/activities.ts';
 import type { GameState, ResourceId, SectorId } from '../types.ts';
 import { parseSectorId, sectorId } from '../types.ts';
 import { recomputeDerived, type Derived } from '../simulation/derived.ts';
@@ -39,7 +40,11 @@ export type CommandResult = { ok: true } | { ok: false; error: CommandError };
 const ok: CommandResult = { ok: true };
 const fail = (error: CommandError): CommandResult => ({ ok: false, error });
 
-export type GameEvent = { type: 'levelUp'; level: number } | { type: 'questClaimable' } | { type: 'change' };
+export type GameEvent =
+  | { type: 'levelUp'; level: number }
+  | { type: 'questClaimable' }
+  | { type: 'activityCompleted'; defId: string; money: number; xp: number }
+  | { type: 'change' };
 
 /**
  * The command API between UI and simulation. The UI never touches simulation
@@ -86,19 +91,16 @@ export class GameController {
     for (const listener of this.listeners) listener(event);
   }
 
-  /** Money earned from active overflow export in the last live tick (§6, UI). */
-  lastOverflowExport = 0;
-
   /**
    * Drive the simulation to `now`. `live` is `true` only for real foreground
-   * ticks; it enables active-player rewards (overflow export, §6) that must not
-   * accrue during offline catch-up. Load/tab-return catch-up passes `false`.
+   * ticks while the tab is visible — the entire economy (production, income,
+   * growth) runs exclusively then. Offline/hidden catch-up passes `false` and
+   * only advances construction timers, buff expiry and cooldown clocks.
    */
   update(now: number, live = false): void {
     if (now <= this.state.meta.lastSimTime) return;
     const result = advance(this.state, this.config, this.derived, now, live);
     this.derived = result.derived;
-    this.lastOverflowExport = live ? result.overflowExport : 0;
     if (result.levelUps > 0) this.notify({ type: 'levelUp', level: this.state.level.current });
     this.notify({ type: 'change' });
   }
@@ -487,6 +489,8 @@ export class GameController {
     if (sell <= 0) return fail('invalid');
     this.state.resources[resource] -= qty;
     this.state.resources.money += qty * sell;
+    this.state.stats.tradeEarnings += qty * sell;
+    updateQuests(this.state, this.config);
     this.notify({ type: 'change' });
     return ok;
   }
@@ -506,6 +510,200 @@ export class GameController {
     this.state.resources[resource] += qty;
     this.notify({ type: 'change' });
     return ok;
+  }
+
+  // ---- Stadtarbeit (v0.21, § aktives Stadtmanagement) ----------------------
+  // Short hands-on activities: deliveries and inspections put clickable targets
+  // on the map, decisions open a trade-off popup, trade contracts rotate at the
+  // trading post. Every reward flows through a command here, so activity income
+  // is inherently active — nothing pays out offline.
+
+  /** Activity definitions unlocked at the current level (UI list). */
+  getActivityDefs(): ActivityDef[] {
+    return this.config.activities.activities.filter((a) => a.unlockLevel <= this.state.level.current);
+  }
+
+  /** Cooldown readyAt timestamp for an activity (0 = ready). */
+  activityReadyAt(defId: string): number {
+    return this.state.activities.cooldowns[defId] ?? 0;
+  }
+
+  /** Open/done targets of the running activity — the renderer's map markers. */
+  getActivityTargets(): { buildingId: string; done: boolean }[] {
+    return this.state.activities.active?.targets ?? [];
+  }
+
+  /** Start a delivery/inspection run: picks targets and puts them on the map. */
+  startActivity(defId: string): CommandResult {
+    const def = this.config.activities.activities.find((a) => a.id === defId);
+    if (!def || def.type === 'decision') return fail('not_found');
+    if (def.unlockLevel > this.state.level.current) return fail('locked');
+    if (this.state.activities.active) return fail('invalid');
+    const now = this.state.meta.lastSimTime;
+    if (now < this.activityReadyAt(defId)) return fail('cooldown');
+    const candidates = this.activityCandidates(def);
+    if (candidates.length < 2) return fail('invalid'); // not enough of a city yet
+    const { min, max } = def.targetCount ?? { min: 3, max: 4 };
+    const targets = pickTargets(this.state, candidates, min, max).map((buildingId) => ({ buildingId, done: false }));
+    this.state.activities.active = {
+      defId,
+      startedAt: now,
+      expiresAt: def.timeLimitSec !== undefined ? now + def.timeLimitSec * 1000 : undefined,
+      targets,
+    };
+    this.notify({ type: 'change' });
+    return ok;
+  }
+
+  /**
+   * One map-target click of the running activity (deliver to / inspect this
+   * building). Deliveries consume their per-stop cost; the final target
+   * completes the run and pays out.
+   */
+  progressActivity(buildingId: string): CommandResult {
+    const active = this.state.activities.active;
+    if (!active) return fail('invalid');
+    const def = this.config.activities.activities.find((a) => a.id === active.defId);
+    if (!def) return fail('not_found');
+    const target = active.targets.find((t) => t.buildingId === buildingId && !t.done);
+    if (!target) return fail('invalid');
+    if (def.costPerTarget) {
+      const spent = spendCost(this.state, def.costPerTarget, `activity_${def.id}`);
+      if (!spent.ok) return fail('insufficient');
+    }
+    target.done = true;
+    if (active.targets.every((t) => t.done)) {
+      // Speed bonus: finishing inside the (optional) time limit pays extra.
+      // Missing it never fails the run — relaxed by design.
+      const now = this.state.meta.lastSimTime;
+      const tier = rewardTierFor(def, this.state.level.current);
+      const onTime = active.expiresAt === undefined || now <= active.expiresAt;
+      const factor = onTime ? (def.speedBonusFactor ?? 1) : 1;
+      this.state.activities.active = undefined;
+      this.payoutActivity(def, Math.round(tier.money * factor), Math.round(tier.xp * factor), tier);
+    } else {
+      this.notify({ type: 'change' });
+    }
+    return ok;
+  }
+
+  /** Cancel the running activity. No payout, no cooldown — just tidy up. */
+  abandonActivity(): CommandResult {
+    if (!this.state.activities.active) return fail('invalid');
+    this.state.activities.active = undefined;
+    this.notify({ type: 'change' });
+    return ok;
+  }
+
+  /** Resolve a mayor decision (§ Entscheidungen): pay the cost, take the effect. */
+  chooseDecision(defId: string, optionId: string): CommandResult {
+    const def = this.config.activities.activities.find((a) => a.id === defId);
+    if (!def || def.type !== 'decision') return fail('not_found');
+    if (def.unlockLevel > this.state.level.current) return fail('locked');
+    const now = this.state.meta.lastSimTime;
+    if (now < this.activityReadyAt(defId)) return fail('cooldown');
+    const option = def.options?.find((o) => o.id === optionId);
+    if (!option) return fail('invalid');
+    if (option.cost) {
+      const spent = spendCost(this.state, option.cost, `activity_${def.id}_${option.id}`);
+      if (!spent.ok) return fail('insufficient');
+    }
+    if (option.buff) this.pushBuff(option.buff);
+    const tier = rewardTierFor(def, this.state.level.current);
+    const money = (option.reward?.money ?? 0) + tier.money;
+    const xp = (option.reward?.xp ?? 0) + tier.xp;
+    this.payoutActivity(def, money, xp, tier);
+    return ok;
+  }
+
+  /**
+   * The rotating trade contracts (§ Handelsaufträge), with fulfillment and
+   * affordability flags for the UI. Empty without an active trading post.
+   */
+  getTradeContracts(): (TradeContractOffer & { fulfilled: boolean; affordable: boolean })[] {
+    if (!this.hasTradePost()) return [];
+    const offers = currentTradeContracts(this.state, this.config.activities, this.state.meta.lastSimTime);
+    return offers.map((offer) => ({
+      ...offer,
+      fulfilled: this.state.activities.fulfilledContracts.includes(offer.id),
+      affordable: canAfford(this.state, offer.template.demands),
+    }));
+  }
+
+  /** Deliver a contract's demanded goods and collect the payout. Once per rotation. */
+  fulfillTradeContract(offerId: string): CommandResult {
+    if (!this.hasTradePost()) return fail('locked');
+    const offers = currentTradeContracts(this.state, this.config.activities, this.state.meta.lastSimTime);
+    const offer = offers.find((o) => o.id === offerId);
+    if (!offer) return fail('not_found'); // unknown or from an expired rotation
+    if (this.state.activities.fulfilledContracts.includes(offerId)) return fail('invalid');
+    const spent = spendCost(this.state, offer.template.demands, `trade_contract_${offer.template.id}`);
+    if (!spent.ok) return fail('insufficient');
+    // Keep only this rotation's ids so the list can't grow unbounded.
+    const currentIds = new Set(offers.map((o) => o.id));
+    this.state.activities.fulfilledContracts = this.state.activities.fulfilledContracts.filter((id) => currentIds.has(id));
+    this.state.activities.fulfilledContracts.push(offerId);
+    this.state.stats.tradeEarnings += offer.template.rewardMoney;
+    if (offer.template.rewardGold) grantGold(this.state, offer.template.rewardGold, `trade_contract_${offer.template.id}`);
+    this.payoutActivity(
+      { id: offer.template.id, cooldownSec: 0 } as ActivityDef,
+      offer.template.rewardMoney,
+      offer.template.rewardXp,
+      undefined,
+      /* setCooldown */ false,
+    );
+    return ok;
+  }
+
+  /** Candidate buildings for a delivery (homes) or inspection (flagged, then any). */
+  private activityCandidates(def: ActivityDef): string[] {
+    const homes: string[] = [];
+    const flagged: string[] = [];
+    const others: string[] = [];
+    for (const b of Object.values(this.state.buildings)) {
+      if (b.status !== 'active') continue;
+      const d = this.config.buildings.get(b.defId);
+      if (!d || d.category === 'roads' || d.category === 'decoration') continue;
+      if (d.category === 'residential') homes.push(b.id);
+      if (def.type === 'inspection') {
+        if (this.getBuildingMarker(b.id) === 'problem') flagged.push(b.id);
+        else others.push(b.id);
+      }
+    }
+    if (def.type === 'delivery') return homes;
+    // Inspection prefers real problems and pads with spot checks.
+    return flagged.length >= (def.targetCount?.min ?? 3) ? flagged : [...flagged, ...others];
+  }
+
+  /** Shared payout path: money/xp/extras, stats, cooldown, notifications. */
+  private payoutActivity(
+    def: Pick<ActivityDef, 'id' | 'cooldownSec'>,
+    money: number,
+    xp: number,
+    tier?: ActivityRewardTier,
+    setCooldown = true,
+  ): void {
+    const now = this.state.meta.lastSimTime;
+    if (money > 0) grantResources(this.state, { money }, this.derived.storageCaps, `activity_${def.id}`);
+    if (tier?.resources) grantResources(this.state, tier.resources, this.derived.storageCaps, `activity_${def.id}`);
+    if (tier?.gold) grantGold(this.state, tier.gold, `activity_${def.id}`);
+    if (tier?.buff) this.pushBuff(tier.buff);
+    const levelUps = xp > 0 ? addXp(this.state, this.config, this.derived, xp) : 0;
+    this.state.stats.activitiesCompleted += 1;
+    if (setCooldown && def.cooldownSec > 0) this.state.activities.cooldowns[def.id] = now + def.cooldownSec * 1000;
+    updateQuests(this.state, this.config);
+    if (levelUps > 0) this.notify({ type: 'levelUp', level: this.state.level.current });
+    this.notify({ type: 'activityCompleted', defId: def.id, money, xp });
+    this.notify({ type: 'change' });
+  }
+
+  private pushBuff(buff: { kind: 'happiness' | 'tax' | 'production' | 'foodDistribution'; amount: number; durationSec: number }): void {
+    this.state.buffs.push({
+      id: newId(this.state, 'buff'),
+      kind: buff.kind,
+      amount: buff.amount,
+      endsAt: this.state.meta.lastSimTime + buff.durationSec * 1000,
+    });
   }
 
   // ---- Prototype cheats (§10, gated behind the debugTools flag) ------------
@@ -552,24 +750,6 @@ export class GameController {
   }
 
   // ---- Read helpers for the UI (no mutation) ------------------------------
-
-  /**
-   * Active overflow-export earnings to show in the UI (§6). `perMin` is the
-   * money the live overflow is currently earning, extrapolated from the last
-   * tick; `active` is whether any producer is spilling into export right now.
-   */
-  getOverflowExport(): { perMin: number; active: boolean } {
-    const bal = this.config.balancing;
-    let perMin = 0;
-    for (const res of ['wood', 'stone', 'food', 'freshwater'] as const) {
-      const cap = this.derived.storageCaps[res] ?? 0;
-      if (cap <= 0 || cap === Number.POSITIVE_INFINITY) continue;
-      if (this.state.resources[res] < cap - 0.5) continue; // store not full → no overflow
-      const rate = bal.exportRates[res] ?? 0;
-      if (rate > 0) perMin += this.derived.productionPerMin[res] * rate;
-    }
-    return { perMin: Math.round(perMin), active: perMin > 0 };
-  }
 
   canAffordCost(cost: Partial<Record<ResourceId, number>>): boolean {
     return canAfford(this.state, cost);
@@ -687,6 +867,20 @@ export class GameController {
   /** Current per-minute income split by source, for the finance UI (§5). */
   getIncome(): IncomeBreakdown {
     return computeIncome(this.state, this.config, this.derived);
+  }
+
+  /**
+   * Income without temporary boosts (§20): the reliable per-minute figure a
+   * project's payback should be judged against, so a fleeting festival buff
+   * doesn't make an unaffordable project look reachable. `hasIncomeBuffs` tells
+   * the UI whether the two figures currently differ (show the "with boosts" line).
+   */
+  getStableIncome(): IncomeBreakdown {
+    return computeIncome(this.state, this.config, this.derived, false);
+  }
+
+  hasIncomeBuffs(): boolean {
+    return this.state.buffs.some((b) => b.kind === 'tax');
   }
 
   /**

@@ -1,4 +1,4 @@
-import { Crown, Frown, Hammer, Meh, ScrollText, Settings, Smile, Users, Wallet } from 'lucide-react';
+import { ClipboardList, Crown, Frown, Hammer, Meh, ScrollText, Settings, Smile, Store, Users, Wallet } from 'lucide-react';
 import { useGame, useUiStore } from '../../state/store.ts';
 import { t } from '../../i18n/index.ts';
 
@@ -10,6 +10,11 @@ export function BottomBar() {
   const happiness = Math.round(game.state.citizens.happiness);
   const HappyIcon = happiness >= 65 ? Smile : happiness >= 40 ? Meh : Frown;
   const claimable = game.state.quests.active.some((q) => q.claimable);
+  // Stadtarbeit unlocks with its first activity (§ aktives Stadtmanagement);
+  // trade becomes permanently reachable once a trading post exists (§6).
+  const hasActivities = game.getActivityDefs().length > 0;
+  const hasTrade = (game.state.stats.built['trading_post'] ?? 0) > 0;
+  const activityBadge = game.state.activities.active !== undefined;
 
   return (
     <footer className="bottombar">
@@ -30,6 +35,22 @@ export function BottomBar() {
           <Wallet size={18} />
           <span>{t('ui.economy.short')}</span>
         </button>
+        {hasActivities && (
+          <button
+            className={btn(openPanel === 'activities') + (activityBadge ? ' attention' : '')}
+            onClick={() => setPanel('activities')}
+            title={t('ui.activities.title')}
+          >
+            <ClipboardList size={18} />
+            <span>{t('ui.activities.short')}</span>
+          </button>
+        )}
+        {hasTrade && (
+          <button className={btn(openPanel === 'trade')} onClick={() => setPanel('trade')} title={t('ui.trade.title')}>
+            <Store size={18} />
+            <span>{t('ui.trade.short')}</span>
+          </button>
+        )}
         <div className="bar-stat" title={`${t('ui.population')} · ${game.derived.housingUnits} ${t('ui.housing.units')}`}>
           <Users size={18} />
           <span>

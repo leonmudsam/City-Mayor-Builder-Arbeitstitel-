@@ -51,6 +51,8 @@ export interface CoverageOverlay {
    * whether reach or capacity is the bottleneck. Absent for uncapped coverage.
    */
   capacity?: { servable: number; used: number };
+  /** Consumer tallies for the summary (§21): served / partial / unserved. */
+  counts: { supplied: number; partial: number; unsupplied: number };
 }
 
 interface GroupMeta {
@@ -153,5 +155,11 @@ export function coverageOverlay(state: GameState, config: GameConfig, derived: D
     consumers.push({ x: b.x, y: b.y, w: def.size.w, h: def.size.h, state: cstate });
   }
 
-  return { group, labelKey: meta.labelKey, colorKey: meta.colorKey, sources, consumers, underCapacity, ...(capacity ? { capacity } : {}) };
+  const counts = {
+    supplied: consumers.filter((c) => c.state === 'supplied' || c.state === 'redundant').length,
+    partial: consumers.filter((c) => c.state === 'partial').length,
+    unsupplied: consumers.filter((c) => c.state === 'unsupplied').length,
+  };
+
+  return { group, labelKey: meta.labelKey, colorKey: meta.colorKey, sources, consumers, underCapacity, counts, ...(capacity ? { capacity } : {}) };
 }

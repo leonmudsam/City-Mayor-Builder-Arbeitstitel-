@@ -1,0 +1,144 @@
+import type { ActivitiesConfig } from './types.ts';
+
+/**
+ * Stadtarbeit (v0.21, § aktives Stadtmanagement): short, repeatable, hands-on
+ * mayor tasks that bridge build timers with active play. All values live here —
+ * reward bands follow the progression spec: thousands early, tens of thousands
+ * mid-game (L6–9), hundreds of thousands from L10, with rare ~1M trade mega
+ * contracts. Rewards only ever pay out through controller commands, so none of
+ * this can accrue offline.
+ */
+export const activitiesConfig: ActivitiesConfig = {
+  activities: [
+    // -- Deliveries: pick map targets, click each to deliver (mini route run) --
+    {
+      id: 'food_delivery',
+      type: 'delivery',
+      nameKey: 'activity.food_delivery',
+      descriptionKey: 'activity.food_delivery.desc',
+      unlockLevel: 4, // as soon as farms exist food can be hand-distributed (§3)
+      cooldownSec: 10 * 60,
+      sender: 'citizen',
+      targetCount: { min: 3, max: 5 },
+      timeLimitSec: 75,
+      speedBonusFactor: 1.25,
+      costPerTarget: { food: 40 },
+      rewardTiers: [
+        { minLevel: 1, money: 4_000, xp: 10, buff: { kind: 'foodDistribution', amount: 1, durationSec: 10 * 60 } },
+        { minLevel: 6, money: 16_000, xp: 22, buff: { kind: 'foodDistribution', amount: 1, durationSec: 10 * 60 } },
+        { minLevel: 8, money: 42_000, xp: 38, buff: { kind: 'foodDistribution', amount: 1, durationSec: 12 * 60 } },
+        { minLevel: 10, money: 130_000, xp: 60, buff: { kind: 'foodDistribution', amount: 1, durationSec: 15 * 60 } },
+        { minLevel: 12, money: 300_000, xp: 90, buff: { kind: 'foodDistribution', amount: 1, durationSec: 15 * 60 } },
+      ],
+    },
+    {
+      id: 'material_delivery',
+      type: 'delivery',
+      nameKey: 'activity.material_delivery',
+      descriptionKey: 'activity.material_delivery.desc',
+      unlockLevel: 7,
+      cooldownSec: 15 * 60,
+      sender: 'buildingDept',
+      targetCount: { min: 3, max: 4 },
+      timeLimitSec: 60,
+      speedBonusFactor: 1.25,
+      costPerTarget: { wood: 30, stone: 15 },
+      rewardTiers: [
+        { minLevel: 7, money: 26_000, xp: 28 },
+        { minLevel: 9, money: 60_000, xp: 45 },
+        { minLevel: 11, money: 180_000, xp: 70 },
+        { minLevel: 13, money: 380_000, xp: 100 },
+      ],
+    },
+    // -- Inspection: visit flagged buildings, learn what's wrong, get paid ----
+    {
+      id: 'city_inspection',
+      type: 'inspection',
+      nameKey: 'activity.city_inspection',
+      descriptionKey: 'activity.city_inspection.desc',
+      unlockLevel: 6,
+      cooldownSec: 20 * 60,
+      sender: 'mayor',
+      targetCount: { min: 3, max: 5 },
+      rewardTiers: [
+        { minLevel: 6, money: 12_000, xp: 30 },
+        { minLevel: 8, money: 30_000, xp: 50 },
+        { minLevel: 10, money: 90_000, xp: 75 },
+        { minLevel: 12, money: 200_000, xp: 110 },
+      ],
+    },
+    // -- Mayor decisions: quick trade-offs with a face and a consequence ------
+    {
+      id: 'decision_farm_subsidy',
+      type: 'decision',
+      nameKey: 'activity.decision_farm_subsidy',
+      descriptionKey: 'activity.decision_farm_subsidy.desc',
+      unlockLevel: 6,
+      cooldownSec: 40 * 60,
+      sender: 'merchant',
+      options: [
+        { id: 'fund', cost: { money: 20_000 }, buff: { kind: 'production', amount: 1.3, durationSec: 10 * 60 }, reward: { xp: 25 } },
+        { id: 'decline', reward: { money: 5_000, xp: 8 }, buff: { kind: 'happiness', amount: -4, durationSec: 10 * 60 } },
+      ],
+      rewardTiers: [
+        { minLevel: 1, money: 0, xp: 5 },
+        { minLevel: 10, money: 0, xp: 15 },
+      ],
+    },
+    {
+      id: 'decision_street_party',
+      type: 'decision',
+      nameKey: 'activity.decision_street_party',
+      descriptionKey: 'activity.decision_street_party.desc',
+      unlockLevel: 7,
+      cooldownSec: 60 * 60,
+      sender: 'citizen',
+      options: [
+        { id: 'host', cost: { money: 30_000 }, buff: { kind: 'happiness', amount: 8, durationSec: 20 * 60 }, reward: { xp: 30 } },
+        { id: 'skip', reward: { money: 8_000, xp: 8 } },
+      ],
+      rewardTiers: [
+        { minLevel: 1, money: 0, xp: 5 },
+        { minLevel: 10, money: 0, xp: 15 },
+      ],
+    },
+    {
+      id: 'decision_overtime',
+      type: 'decision',
+      nameKey: 'activity.decision_overtime',
+      descriptionKey: 'activity.decision_overtime.desc',
+      unlockLevel: 8,
+      cooldownSec: 60 * 60,
+      sender: 'buildingDept',
+      options: [
+        { id: 'pay', cost: { money: 60_000 }, buff: { kind: 'production', amount: 1.2, durationSec: 30 * 60 }, reward: { xp: 40 } },
+        { id: 'refuse', reward: { money: 15_000, xp: 10 }, buff: { kind: 'happiness', amount: -6, durationSec: 15 * 60 } },
+      ],
+      rewardTiers: [
+        { minLevel: 1, money: 0, xp: 5 },
+        { minLevel: 11, money: 0, xp: 18 },
+      ],
+    },
+  ],
+
+  // -- Trade contracts (§ Handelsaufträge): rotating offers at the trading ----
+  // post. Fulfilling consumes the demanded goods and pays out well above the
+  // plain sell value — active trading beats dumping stock. Weights steer how
+  // often a template shows; the mega contracts are deliberately rare.
+  tradeContracts: [
+    { id: 'wood_small', minLevel: 5, demands: { wood: 150 }, rewardMoney: 2_600, rewardXp: 8, weight: 3 },
+    { id: 'stone_small', minLevel: 6, demands: { stone: 120 }, rewardMoney: 4_200, rewardXp: 10, weight: 3 },
+    { id: 'food_small', minLevel: 6, demands: { food: 400 }, rewardMoney: 3_400, rewardXp: 8, weight: 3 },
+    { id: 'wood_medium', minLevel: 8, demands: { wood: 600 }, rewardMoney: 11_000, rewardXp: 20, weight: 2 },
+    { id: 'stone_medium', minLevel: 8, demands: { stone: 500 }, rewardMoney: 17_000, rewardXp: 22, weight: 2 },
+    { id: 'mixed_medium', minLevel: 9, demands: { wood: 400, stone: 300, food: 600 }, rewardMoney: 21_000, rewardXp: 26, weight: 2 },
+    { id: 'food_large', minLevel: 10, demands: { food: 2_500 }, rewardMoney: 24_000, rewardXp: 30 },
+    { id: 'wood_large', minLevel: 10, demands: { wood: 1_500 }, rewardMoney: 28_000, rewardXp: 30 },
+    { id: 'stone_large', minLevel: 11, demands: { stone: 1_200 }, rewardMoney: 42_000, rewardXp: 34 },
+    { id: 'mixed_large', minLevel: 11, demands: { wood: 1_200, stone: 900, food: 1_500 }, rewardMoney: 60_000, rewardXp: 45 },
+    { id: 'mega_export', minLevel: 10, demands: { wood: 2_500, stone: 1_800 }, rewardMoney: 250_000, rewardXp: 90, rewardGold: 5, weight: 0.5 },
+    { id: 'mega_metropolis', minLevel: 12, demands: { wood: 4_000, stone: 3_000, food: 4_000 }, rewardMoney: 1_000_000, rewardXp: 200, rewardGold: 15, weight: 0.25 },
+  ],
+  tradeRotationSec: 30 * 60,
+  tradeOffersPerRotation: 3,
+};

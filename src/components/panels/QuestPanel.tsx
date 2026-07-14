@@ -106,5 +106,13 @@ function describeObjective(obj: QuestObjective): string {
       return t(`mayor.action.${obj.actionId}`);
     case 'happiness':
       return `${obj.amount} ${t('ui.happiness')}`;
+    case 'upgrade':
+      return obj.defId
+        ? t('ui.objective.upgrade_def', { building: t(`building.${obj.defId}`), count: obj.count })
+        : t('ui.objective.upgrade', { count: obj.count });
+    case 'activity':
+      return t('ui.objective.activity', { count: obj.count });
+    case 'tradeEarnings':
+      return t('ui.objective.trade_earnings', { amount: obj.amount });
   }
 }

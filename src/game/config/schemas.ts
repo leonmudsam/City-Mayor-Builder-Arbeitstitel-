@@ -37,7 +37,7 @@ const buildingEffect = z.discriminatedUnion('type', [
 
 export const buildingDefSchema = z.object({
   id: z.string().min(1),
-  category: z.enum(['roads', 'residential', 'production', 'services', 'leisure', 'economy', 'government', 'infrastructure', 'decoration', 'special']),
+  category: z.enum(['roads', 'residential', 'production', 'services', 'energy', 'leisure', 'economy', 'government', 'infrastructure', 'decoration', 'special']),
   nameKey: z.string(),
   size: z.object({ w: z.number().int().min(1).max(4), h: z.number().int().min(1).max(4) }),
   requiresRoad: z.boolean(),
@@ -63,6 +63,10 @@ export const buildingDefSchema = z.object({
   costScaling: z.number().positive().optional(),
   firstBuildDiscount: z.number().min(0).max(1).optional(),
   tradePost: z.boolean().optional(),
+  // Forward-looking visual metadata (v0.21) — optional, ignored by the current
+  // renderer; kept loose (passthrough) so future asset fields don't need a
+  // schema change. Logic never reads it.
+  visual: z.object({}).passthrough().optional(),
 });
 
 export const levelDefSchema = z.object({
@@ -87,6 +91,9 @@ export const questDefSchema = z.object({
       z.object({ type: z.literal('sectors'), count: z.number().int().positive() }),
       z.object({ type: z.literal('mayorAction'), actionId: z.string(), count: z.number().int().positive() }),
       z.object({ type: z.literal('happiness'), amount: z.number().positive() }),
+      z.object({ type: z.literal('upgrade'), defId: z.string().optional(), count: z.number().int().positive() }),
+      z.object({ type: z.literal('activity'), count: z.number().int().positive() }),
+      z.object({ type: z.literal('tradeEarnings'), amount: z.number().positive() }),
     ]),
   ),
   rewards: z.object({
@@ -99,6 +106,65 @@ export const questDefSchema = z.object({
   sender: z.enum(['citizen', 'buildingDept', 'fire', 'merchant', 'mayor']).optional(),
 });
 
+const activityBuff = z.object({
+  kind: z.enum(['happiness', 'tax', 'production', 'foodDistribution']),
+  amount: z.number(),
+  durationSec: z.number().positive(),
+});
+
+export const activityDefSchema = z.object({
+  id: z.string().min(1),
+  type: z.enum(['delivery', 'inspection', 'decision']),
+  nameKey: z.string(),
+  descriptionKey: z.string(),
+  unlockLevel: z.number().int().min(1),
+  cooldownSec: z.number().nonnegative(),
+  sender: z.enum(['citizen', 'buildingDept', 'fire', 'merchant', 'mayor']),
+  targetCount: z.object({ min: z.number().int().min(1), max: z.number().int().min(1) }).optional(),
+  timeLimitSec: z.number().positive().optional(),
+  speedBonusFactor: z.number().min(1).optional(),
+  costPerTarget: z.record(resourceId, z.number().nonnegative()).optional(),
+  options: z
+    .array(
+      z.object({
+        id: z.string().min(1),
+        cost: z.record(resourceId, z.number().nonnegative()).optional(),
+        reward: z.object({ money: z.number().optional(), xp: z.number().optional() }).optional(),
+        buff: activityBuff.optional(),
+      }),
+    )
+    .optional(),
+  rewardTiers: z
+    .array(
+      z.object({
+        minLevel: z.number().int().min(1),
+        money: z.number().nonnegative(),
+        xp: z.number().nonnegative(),
+        gold: z.number().optional(),
+        resources: z.record(resourceId, z.number()).optional(),
+        buff: activityBuff.optional(),
+      }),
+    )
+    .min(1),
+});
+
+export const tradeContractTemplateSchema = z.object({
+  id: z.string().min(1),
+  minLevel: z.number().int().min(1),
+  demands: z.record(resourceId, z.number().positive()),
+  rewardMoney: z.number().positive(),
+  rewardXp: z.number().nonnegative(),
+  rewardGold: z.number().optional(),
+  weight: z.number().positive().optional(),
+});
+
+export const activitiesConfigSchema = z.object({
+  activities: z.array(activityDefSchema),
+  tradeContracts: z.array(tradeContractTemplateSchema),
+  tradeRotationSec: z.number().positive(),
+  tradeOffersPerRotation: z.number().int().positive(),
+});
+
 export const mayorActionDefSchema = z.object({
   id: z.string(),
   nameKey: z.string(),
@@ -106,7 +172,7 @@ export const mayorActionDefSchema = z.object({
   unlockLevel: z.number().int().min(1),
   cooldownSec: z.number().positive(),
   effect: z.discriminatedUnion('type', [
-    z.object({ type: z.literal('buff'), kind: z.enum(['happiness', 'tax']), amount: z.number(), durationSec: z.number().positive() }),
+    z.object({ type: z.literal('buff'), kind: z.enum(['happiness', 'tax', 'production', 'foodDistribution']), amount: z.number(), durationSec: z.number().positive() }),
     z.object({ type: z.literal('resolveEvents'), eventType: z.literal('fire') }),
   ]),
 });
@@ -181,15 +247,31 @@ export const saveGameSchema = z.object({
     completed: z.array(z.string()),
     active: z.array(z.object({ questId: z.string(), progress: z.array(z.number()), claimable: z.boolean() })),
   }),
-  buffs: z.array(z.object({ id: z.string(), kind: z.enum(['happiness', 'tax']), amount: z.number(), endsAt: z.number() })),
+  buffs: z.array(z.object({ id: z.string(), kind: z.enum(['happiness', 'tax', 'production', 'foodDistribution']), amount: z.number(), endsAt: z.number() })),
   events: z.array(
     z.object({ id: z.string(), type: z.literal('fire'), buildingId: z.string(), startedAt: z.number(), endsAt: z.number() }),
   ),
+  activities: z.object({
+    active: z
+      .object({
+        defId: z.string(),
+        startedAt: z.number(),
+        expiresAt: z.number().optional(),
+        targets: z.array(z.object({ buildingId: z.string(), done: z.boolean() })),
+      })
+      .optional(),
+    cooldowns: z.record(z.string(), z.number()),
+    fulfilledContracts: z.array(z.string()),
+  }),
   stats: z.object({
     built: z.record(z.string(), z.number()),
     produced: z.record(resourceId, z.number()),
     mayorActions: z.record(z.string(), z.number()),
     sectorsUnlocked: z.number(),
+    upgradesCompleted: z.number(),
+    upgraded: z.record(z.string(), z.number()),
+    tradeEarnings: z.number(),
+    activitiesCompleted: z.number(),
   }),
   nextId: z.number().int(),
 });

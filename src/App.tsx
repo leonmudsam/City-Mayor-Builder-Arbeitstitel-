@@ -20,6 +20,8 @@ import { SectorDialog } from './components/panels/SectorDialog.tsx';
 import { SettingsPanel } from './components/panels/SettingsPanel.tsx';
 import { TradePanel } from './components/panels/TradePanel.tsx';
 import { DebugPanel } from './components/panels/DebugPanel.tsx';
+import { ActivityPanel } from './components/panels/ActivityPanel.tsx';
+import { formatMoney } from './i18n/index.ts';
 import { Toasts } from './components/common/Toasts.tsx';
 import { EventModal } from './components/common/EventModal.tsx';
 import { t } from './i18n/index.ts';
@@ -72,13 +74,26 @@ export function App() {
               params: unlocks ? { level, buildings: unlocks } : { level },
             });
             save();
+          } else if (event.type === 'activityCompleted') {
+            // Celebrate the finished Stadtarbeit run (§ Abschlussmeldung).
+            useUiStore.getState().pushEvent({
+              kind: 'activityDone',
+              titleKey: 'event.activity.title',
+              bodyKey: 'event.activity.body',
+              params: { name: t(`activity.${event.defId}`), money: formatMoney(event.money), xp: event.xp },
+            });
+            save();
           }
         });
         if (cancelled) return;
 
-        // Live foreground tick — enables active-player rewards (overflow export,
-        // §6). Offline catch-up (initial load, tab return) stays non-live.
-        tickTimer = setInterval(() => controller?.update(Date.now(), true), 1000);
+        // Foreground tick. The economy only runs while the tab is actually
+        // visible (§ no AFK farming) — a hidden tab still advances build
+        // timers via non-live ticks, same as offline catch-up.
+        tickTimer = setInterval(
+          () => controller?.update(Date.now(), document.visibilityState === 'visible'),
+          1000,
+        );
         saveTimer = setInterval(save, 30_000);
         document.addEventListener('visibilitychange', onVisibility);
         window.addEventListener('beforeunload', save);
@@ -165,6 +180,7 @@ function GameScreen({ onImport, onReset }: { onImport(json: string): boolean; on
         {openPanel === 'settings' && <SettingsPanel onImport={onImport} onReset={onReset} />}
         {openPanel === 'trade' && <TradePanel />}
         {openPanel === 'debug' && <DebugPanel />}
+        {openPanel === 'activities' && <ActivityPanel />}
         <FloatingBuildingSheet />
         <SectorDialog />
         {openPanel === 'build' && <BuildMenu />}

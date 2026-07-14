@@ -539,15 +539,15 @@ body {
 
 /* ---- v0.20: trade panel, debug cheats, tax warnings, overflow, upgrade note ---- */
 
-/* Active overflow-export line in the economy panel (§6). */
-.economy-overflow {
-  display: flex; align-items: center; gap: 8px;
+/* "Economy only runs while the game is open" note (§ no AFK). */
+.economy-live-note {
+  display: flex; align-items: flex-start; gap: 8px;
   margin-top: 8px; padding: 8px 10px;
-  font-size: 12.5px; font-weight: 600; color: var(--good);
-  background: color-mix(in srgb, var(--good) 12%, transparent);
+  font-size: 11.5px; font-weight: 500; color: var(--text-muted);
+  background: var(--surface-2);
   border-radius: 8px;
 }
-.economy-overflow svg { color: var(--good); }
+.economy-live-note svg { flex: 0 0 auto; margin-top: 1px; color: var(--text-muted); }
 
 /* Tax slider effect preview + high-rate warning tint (§9). */
 .economy-tax-effect { font-size: 11.5px; font-weight: 600; margin-top: 2px; display: flex; align-items: center; gap: 4px; }
@@ -582,3 +582,72 @@ body {
   border-radius: 8px; padding: 8px 10px; margin-bottom: 4px;
 }
 .debug-panel .btn-secondary { justify-content: flex-start; }
+
+/* ---- v0.21: Stadtarbeit activities, decisions, trade contracts ---- */
+
+.btn-tiny { padding: 4px 10px; font-size: 12px; }
+
+/* Running activity strip at the top of the panel. */
+.activity-running {
+  padding: 10px; margin-bottom: 10px;
+  background: color-mix(in srgb, #2fd4d4 12%, var(--surface-2));
+  border: 1px solid color-mix(in srgb, #2fd4d4 45%, transparent);
+  border-radius: 10px;
+}
+.activity-running-head { display: flex; align-items: center; gap: 6px; font-weight: 700; font-size: 13.5px; }
+.activity-running-head svg { color: #2fd4d4; }
+.activity-progress-bar { height: 8px; border-radius: 4px; background: var(--surface); overflow: hidden; margin: 8px 0 6px; }
+.activity-progress-fill { height: 100%; background: #2fd4d4; transition: width 0.25s ease; }
+.activity-running-foot { display: flex; justify-content: space-between; align-items: center; font-size: 12px; }
+.activity-hint { margin-top: 6px; font-size: 11px; }
+
+/* Activity cards list. */
+.activity-cards { display: flex; flex-direction: column; gap: 8px; }
+.activity-card { padding: 10px; background: var(--surface-2); border: 1px solid var(--border); border-radius: 9px; }
+.activity-card.is-disabled { opacity: 0.55; }
+.activity-card-head { display: flex; align-items: center; gap: 8px; }
+.activity-card-title { display: flex; flex-direction: column; }
+.activity-card-sender { font-size: 10.5px; color: var(--text-muted); }
+.activity-card-name { display: flex; align-items: center; gap: 5px; font-weight: 700; font-size: 13px; }
+.activity-card-desc { font-size: 11.5px; color: var(--text-muted); margin: 6px 0 8px; line-height: 1.35; }
+.activity-card-foot { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.activity-reward { display: flex; align-items: center; gap: 4px; font-size: 12px; font-weight: 600; color: var(--good); }
+.activity-cooldown { display: flex; align-items: center; gap: 4px; font-size: 11.5px; color: var(--text-muted); font-variant-numeric: tabular-nums; }
+.activity-note { margin-top: 10px; font-size: 11px; }
+
+/* Activity/decision cards reuse the quest sender avatars, but address the
+   sender by its raw id, so alias buildingDept onto the existing dept tint. */
+.avatar-buildingDept { background: #d99a3c; }
+
+/* Decision modal. */
+.decision-modal { display: flex; flex-direction: column; gap: 12px; }
+.decision-sender { display: flex; align-items: center; gap: 8px; font-size: 12px; }
+.decision-brief { font-size: 13px; line-height: 1.45; }
+.decision-options { display: flex; flex-direction: column; gap: 8px; }
+.decision-option {
+  display: flex; flex-direction: column; gap: 4px; text-align: left;
+  padding: 10px 12px; border-radius: 9px; cursor: pointer;
+  background: var(--surface-2); border: 1px solid var(--border); color: var(--text);
+}
+.decision-option:hover { border-color: var(--primary); background: color-mix(in srgb, var(--primary) 10%, var(--surface-2)); }
+.decision-option-label { font-weight: 700; font-size: 13px; }
+.decision-option-effect { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; font-size: 11.5px; }
+.decision-cost { display: inline-flex; align-items: center; gap: 3px; color: var(--bad); font-weight: 600; }
+
+/* Trade contracts. */
+.activity-subhead { display: flex; align-items: center; gap: 6px; margin: 14px 0 8px; font-size: 13px; }
+.activity-contracts { display: flex; flex-direction: column; gap: 8px; }
+.contract-card { padding: 9px 10px; background: var(--surface-2); border: 1px solid var(--border); border-radius: 9px; }
+.contract-card.is-done { opacity: 0.55; }
+.contract-demands { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 6px; font-size: 12.5px; font-weight: 600; }
+.contract-demand { display: inline-flex; align-items: center; gap: 4px; }
+.contract-demand.short { color: var(--bad); }
+.contract-foot { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.contract-reward { display: flex; align-items: center; gap: 4px; font-size: 11.5px; font-weight: 600; color: var(--good); }
+.contract-done { font-size: 11.5px; color: var(--text-muted); }
+
+/* Temporary-boost income line under the stable net (§20). */
+.economy-boost-line { font-size: 11.5px; font-weight: 600; color: var(--warn); margin: -4px 0 6px; }
+
+/* Coverage overlay summary counts (§21). */
+.coverage-legend-summary { font-size: 11.5px; font-weight: 600; margin: 2px 0 4px; color: var(--text); }

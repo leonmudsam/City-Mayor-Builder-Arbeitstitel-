@@ -14,7 +14,9 @@ describe('sector expansion (bounded world)', () => {
     controller.state.resources.money = 1_000_000;
     const cost1 = controller.getSectorCost(sectorId(1, 2));
     expect(controller.unlockSector(sectorId(1, 2))).toEqual({ ok: true });
-    expect(controller.state.stats.sectorsUnlocked).toBe(2);
+    // sectorsUnlocked counts only ADDITIONAL sectors now (§5): the free start
+    // sector doesn't count, so one purchase = 1.
+    expect(controller.state.stats.sectorsUnlocked).toBe(1);
     const cost2 = controller.getSectorCost(sectorId(1, 3));
     expect(cost2).toBeGreaterThan(cost1); // distance + count scaling
   });

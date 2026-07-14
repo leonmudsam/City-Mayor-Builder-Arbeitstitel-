@@ -106,7 +106,12 @@ export function recomputeDerived(state: GameState, config: GameConfig): Derived 
           if (eff.radius !== undefined) addCoverageSource(eff.need, { cx, cy, radius: eff.radius });
           break;
         case 'housing': {
-          const cap = eff.units * eff.maxResidentsPerUnit;
+          // Population scale (§9): each stated household holds populationScale×
+          // its per-unit size, so a Level-11 city reaches ~100k residents while
+          // the config keeps small, readable household numbers. Per-capita
+          // demands/taxes are divided by the same scale (balancing.config) so
+          // the economy stays balanced at the larger head count.
+          const cap = eff.units * eff.maxResidentsPerUnit * config.balancing.populationScale;
           capacity.housing += cap;
           housingHere += cap;
           housingUnits += eff.units;
@@ -127,7 +132,9 @@ export function recomputeDerived(state: GameState, config: GameConfig): Derived 
           break;
         case 'coverage':
           addCoverageSource(eff.need, { cx, cy, radius: eff.radius });
-          if (eff.capacity) coverageCapacity[eff.need] += eff.capacity;
+          // Served residents scale with the population scale (§9) so a station's
+          // reach keeps pace with the larger head count it now faces.
+          if (eff.capacity) coverageCapacity[eff.need] += eff.capacity * config.balancing.populationScale;
           break;
         case 'demand':
           extraDemand[eff.need] += eff.amount;

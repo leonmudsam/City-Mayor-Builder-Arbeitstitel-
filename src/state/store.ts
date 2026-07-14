@@ -38,13 +38,24 @@ export interface Toast {
 /** A staged, acknowledge-me moment shown in an EventModal (§9). */
 export interface GameEvent {
   id: number;
-  kind: 'levelUp' | 'sectorUnlocked' | 'fire' | 'celebrate';
+  kind: 'levelUp' | 'sectorUnlocked' | 'fire' | 'celebrate' | 'activityDone';
   titleKey: string;
   bodyKey: string;
   params?: Record<string, string | number>;
 }
 
-type PanelId = 'build' | 'mayor' | 'happiness' | 'status' | 'economy' | 'settings' | 'quests' | 'trade' | 'debug' | undefined;
+type PanelId =
+  | 'build'
+  | 'mayor'
+  | 'happiness'
+  | 'status'
+  | 'economy'
+  | 'settings'
+  | 'quests'
+  | 'trade'
+  | 'debug'
+  | 'activities'
+  | undefined;
 
 interface UiState {
   openPanel: PanelId;
