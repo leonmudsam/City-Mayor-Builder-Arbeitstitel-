@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { newController, setLevel, flattenTerrain, T0 } from './helpers.ts';
+import { overflowExportValue } from '../src/game/simulation/tick.ts';
 
 // §2 critical upgrade fix: a building keeps its CURRENT stage's effects for the
 // whole upgrade — it never drops to zero mid-upgrade. The new stage only becomes
@@ -54,9 +55,37 @@ describe('upgrade keeps old effects until it completes (§2)', () => {
   });
 });
 
+// §6 active overflow export: overflow becomes money only during live ticks.
+describe('active overflow export (§6)', () => {
+  it('prices overflow at the resource export rate', () => {
+    const { config } = newController();
+    expect(overflowExportValue(config.balancing, 'wood', 10)).toBe(20); // rate 2
+    expect(overflowExportValue(config.balancing, 'stone', 10)).toBe(40); // rate 4
+    expect(overflowExportValue(config.balancing, 'wood', 0)).toBe(0);
+  });
+
+  it('earns money from a full store live, but nothing offline', () => {
+    const { controller } = newController();
+    setLevel(controller, 7);
+    flattenTerrain(controller);
+    controller.placeBuilding('road', 26, 26);
+    controller.placeBuilding('sawmill', 26, 27);
+    controller.update(T0 + 40_000); // sawmill active
+    const cap = controller.derived.storageCaps.wood;
+
+    // Full store + live tick → overflow is exported.
+    controller.state.resources.wood = cap;
+    controller.update(T0 + 40_000 + 60_000, true);
+    expect(controller.lastOverflowExport).toBeGreaterThan(0);
+
+    // Full store + offline catch-up → no export money (no AFK printer).
+    controller.state.resources.wood = cap;
+    controller.update(T0 + 40_000 + 120_000, false);
+    expect(controller.lastOverflowExport).toBe(0);
+  });
+});
+
 // §7 Handelskontor: manual sell/buy, gated on a trading post, with a buy markup.
-// Since v0.21 the trading post is the ONLY way surplus becomes money (the passive
-// overflow export is gone) and sell rates were raised sharply.
 describe('trading post (§7)', () => {
   it('sells stored resources and buys them back at a markup', () => {
     const { controller } = newController();
@@ -67,20 +96,19 @@ describe('trading post (§7)', () => {
     expect(controller.hasTradePost()).toBe(true);
 
     const quote = controller.getTradeQuote('wood');
-    expect(quote.sell).toBe(10); // base rate, stage 0
-    expect(quote.buy).toBe(40); // 10 × markup 4
+    expect(quote.sell).toBe(2); // base rate, stage 0
+    expect(quote.buy).toBe(8); // 2 × markup 4
 
     controller.state.resources.wood = 100;
     const money0 = controller.state.resources.money;
     expect(controller.sellResource('wood', 50)).toEqual({ ok: true });
     expect(controller.state.resources.wood).toBe(50);
-    expect(controller.state.resources.money).toBe(money0 + 500); // 50 × 10
-    expect(controller.state.stats.tradeEarnings).toBe(500); // active earnings tracked
+    expect(controller.state.resources.money).toBe(money0 + 100); // 50 × 2
 
     const money1 = controller.state.resources.money;
     expect(controller.buyResource('wood', 10)).toEqual({ ok: true });
     expect(controller.state.resources.wood).toBe(60);
-    expect(controller.state.resources.money).toBe(money1 - 400); // 10 × 40
+    expect(controller.state.resources.money).toBe(money1 - 80); // 10 × 8
   });
 
   it('refuses trading without a trading post', () => {

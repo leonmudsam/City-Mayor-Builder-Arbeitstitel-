@@ -7,22 +7,15 @@ import { formatMoney, t } from '../../i18n/index.ts';
 import { CategoryIcon, ResourceIcon } from '../common/icons.tsx';
 import { BuildingPreview } from '../common/BuildingPreview.tsx';
 
-// Full tab order (§19). Previously `infrastructure` and the new `energy`
-// category were missing, so the coal plant / wind farm never appeared anywhere
-// — now every category a building can belong to has a tab. Empty tabs are
-// hidden below, so players only see categories that actually hold something.
 const CATEGORY_ORDER: BuildingCategory[] = [
   'roads',
   'residential',
   'production',
   'services',
-  'energy',
-  'economy',
   'leisure',
+  'economy',
   'government',
-  'infrastructure',
   'decoration',
-  'special',
 ];
 
 // Which build category best answers a struggling need (§8 problem badge on tabs).
@@ -34,7 +27,7 @@ const NEED_CATEGORY: Partial<Record<NeedId, BuildingCategory>> = {
   leisure: 'leisure',
   safety: 'services',
   health: 'services',
-  energy: 'energy',
+  energy: 'infrastructure',
 };
 
 export function BuildMenu() {
@@ -46,11 +39,6 @@ export function BuildMenu() {
     .filter((b) => b.category === category && b.buildable !== false)
     .sort((a, b) => a.unlockLevel - b.unlockLevel);
   const level = game.state.level.current;
-
-  // Only show tabs that actually hold at least one buildable building, so the
-  // added infrastructure/special tabs don't appear empty (§19).
-  const nonEmpty = new Set(game.config.buildingList.filter((b) => b.buildable !== false).map((b) => b.category));
-  const tabs = CATEGORY_ORDER.filter((cat) => nonEmpty.has(cat));
 
   // Categories that hold a freshly-unlocked building ("Neu" dot) or that would
   // fix a struggling need ("!" dot) — computed once, shown on the tabs.
@@ -69,7 +57,7 @@ export function BuildMenu() {
     <div className="panel build-menu">
       <div className="build-menu-head">
         <div className="build-tabs">
-          {tabs.map((cat) => (
+          {CATEGORY_ORDER.map((cat) => (
             <button
               key={cat}
               className={`btn-tab${category === cat ? ' active' : ''}`}
@@ -174,7 +162,7 @@ function BuildCard({ def, locked, onPick }: { def: BuildingDef; locked: boolean;
         {!locked && !affordable && !limitReached && !uniqueBuilt && major && (
           <div className="build-card-invest">
             {t('ui.major_project_hint', {
-              current: formatMoney(game.getStableIncome().net),
+              current: formatMoney(game.getIncome().net),
               recommended: formatMoney(game.recommendedIncomeFor(def.id)),
             })}
           </div>

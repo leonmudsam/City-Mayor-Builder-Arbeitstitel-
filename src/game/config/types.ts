@@ -186,29 +186,6 @@ export interface BuildingDef {
    * config so the mechanic stays config-driven.
    */
   tradePost?: boolean;
-  /**
-   * Optional visual metadata (v0.21, forward-looking): lets a later 2.5D/3D
-   * render pick assets and heights per building/stage WITHOUT any simulation
-   * change — the sim only ever reads logical fields (position, size, effects).
-   * All fields are optional and unused by the current programmatic renderer
-   * (which derives skyline height from upgradeLevel); they exist so upgrade
-   * visuals and iso/3D models can be swapped in per stage without a data
-   * migration. See docs/CONCEPT.md "visual layer".
-   */
-  visual?: BuildingVisual;
-}
-
-/** Forward-looking visual descriptor (see BuildingDef.visual). */
-export interface BuildingVisual {
-  /** Relative height class for a later 2.5D/3D render (0 = flat, higher = taller). */
-  heightClass?: number;
-  sprite2d?: string;
-  spriteIso?: string;
-  model3d?: string;
-  /** Where markers/overlays anchor, in footprint-relative tile units. */
-  overlayAnchor?: { x: number; y: number };
-  /** Optional per-upgrade-stage overrides, index = upgradeLevel. */
-  stages?: BuildingVisual[];
 }
 
 // ---- Resources & needs ----------------------------------------------------
@@ -255,13 +232,7 @@ export type QuestObjective =
   | { type: 'level'; level: number }
   | { type: 'sectors'; count: number }
   | { type: 'mayorAction'; actionId: MayorActionId; count: number }
-  | { type: 'happiness'; amount: number }
-  /** Completed building upgrades — a specific def, or any (§ active play). */
-  | { type: 'upgrade'; defId?: BuildingDefId; count: number }
-  /** Completed Stadtarbeit activities of any type. */
-  | { type: 'activity'; count: number }
-  /** Lifetime money earned through active trading/contracts. */
-  | { type: 'tradeEarnings'; amount: number };
+  | { type: 'happiness'; amount: number };
 
 /**
  * Who a quest comes from (§6/§14): reframes the level checklist as a living
@@ -297,89 +268,8 @@ export interface MayorActionDef {
   unlockLevel: number;
   cooldownSec: number;
   effect:
-    | { type: 'buff'; kind: 'happiness' | 'tax' | 'production' | 'foodDistribution'; amount: number; durationSec: number }
+    | { type: 'buff'; kind: 'happiness' | 'tax'; amount: number; durationSec: number }
     | { type: 'resolveEvents'; eventType: 'fire' };
-}
-
-// ---- Stadtarbeit / activities (v0.21, § aktives Stadtmanagement) -----------
-
-/**
- * Reward band for an activity, picked by player level (highest matching
- * `minLevel` wins). Keeps one activity definition rewarding across the whole
- * game: thousands early, tens of thousands mid-game, hundreds of thousands
- * late (§ Belohnungsskalierung).
- */
-export interface ActivityRewardTier {
-  minLevel: number;
-  money: number;
-  xp: number;
-  gold?: number;
-  resources?: Partial<Record<ResourceId, number>>;
-  /** Optional timed session bonus on completion (e.g. food distribution). */
-  buff?: { kind: 'happiness' | 'tax' | 'production' | 'foodDistribution'; amount: number; durationSec: number };
-}
-
-/** One choice in a mayor decision, with visible trade-offs. */
-export interface ActivityDecisionOption {
-  /** i18n: `activity.<activityId>.option.<id>` (+ `.effect`). */
-  id: string;
-  cost?: Partial<Record<ResourceId, number>>;
-  reward?: { money?: number; xp?: number };
-  buff?: { kind: 'happiness' | 'tax' | 'production' | 'foodDistribution'; amount: number; durationSec: number };
-}
-
-/**
- * A Stadtarbeit activity: a short, repeatable, hands-on mayor task that only
- * exists while the player is playing. `delivery` and `inspection` put clickable
- * targets on the map; `decision` opens a trade-off popup. Trade contracts are
- * separate templates (below) because they rotate instead of cooling down.
- */
-export interface ActivityDef {
-  id: string;
-  type: 'delivery' | 'inspection' | 'decision';
-  nameKey: string;
-  descriptionKey: string;
-  unlockLevel: number;
-  cooldownSec: number;
-  /** Who's asking — reuses the quest sender avatars (§ Stadtkommunikation). */
-  sender: QuestSender;
-  /** delivery/inspection: how many map targets are picked. */
-  targetCount?: { min: number; max: number };
-  /** delivery: beating this deadline pays the speed bonus. Never fails. */
-  timeLimitSec?: number;
-  /** delivery: reward multiplier when finished within the time limit. */
-  speedBonusFactor?: number;
-  /** delivery: resources consumed per delivered target (e.g. food per stop). */
-  costPerTarget?: Partial<Record<ResourceId, number>>;
-  /** decision: 2–3 options with trade-offs. */
-  options?: ActivityDecisionOption[];
-  rewardTiers: ActivityRewardTier[];
-}
-
-/**
- * A trade-contract template (§ Handelsaufträge). Each rotation window a
- * deterministic selection of these is offered; fulfilling one consumes the
- * demanded resources and pays out immediately. Big contracts are rare,
- * high-level and lucrative (up to ~1M).
- */
-export interface TradeContractTemplate {
-  id: string;
-  minLevel: number;
-  demands: Partial<Record<ResourceId, number>>;
-  rewardMoney: number;
-  rewardXp: number;
-  rewardGold?: number;
-  /** Relative selection weight within a rotation (default 1). */
-  weight?: number;
-}
-
-export interface ActivitiesConfig {
-  activities: ActivityDef[];
-  tradeContracts: TradeContractTemplate[];
-  /** Seconds per contract rotation window. */
-  tradeRotationSec: number;
-  /** Offers shown per rotation window. */
-  tradeOffersPerRotation: number;
 }
 
 // ---- World ----------------------------------------------------------------
@@ -394,15 +284,6 @@ export interface BiomeDef {
 // ---- Balancing ------------------------------------------------------------
 
 export interface BalancingConfig {
-  /**
-   * Global population multiplier (§9): every stated household holds this many
-   * times its per-unit residents, so cities reach believable head counts
-   * (~100k at L11) while configs keep small, readable numbers. Per-capita
-   * demands/taxes (food/water/work/tax) are divided by the same factor so the
-   * economy stays in balance at the larger scale, and coverage capacities and
-   * growth rates are multiplied by it.
-   */
-  populationScale: number;
   /** Residential income (property/residence tax) per citizen per minute. */
   taxPerCapitaPerMin: number;
   /** Happiness → income multiplier range (applies to every income source). */
@@ -483,16 +364,17 @@ export interface BalancingConfig {
    */
   majorProjectPaybackMinutes: number;
   /**
-   * Base sell price per unit at the trading post (§7) — the only way surplus
-   * becomes money since v0.21 (no passive overflow export). Scarcer/harder
-   * resources are worth more (stone > wood > food). Absent resources can't be
-   * sold. Selling is a manual player command, so it is inherently active.
+   * Money earned per unit of a resource that a full store overflows while the
+   * player is active (§6 active overflow export) — also the base sell price at
+   * the trading post (§7). Scarcer/harder resources are worth more (stone > wood
+   * > food). Absent resources aren't exported. Live-only: offline overflow is
+   * simply lost, so this never becomes an AFK money printer.
    */
   exportRates: Partial<Record<ResourceId, number>>;
   /**
    * Sell-rate bonus per completed trading-post stage (§7): a stage-1 Handelskontor
    * sells at `1 + tradeSellBonusPerLevel` × the base export rate, so upgrading it
-   * pays off.
+   * pays off. Only affects manual selling, not the passive overflow export.
    */
   tradeSellBonusPerLevel: number;
   /**

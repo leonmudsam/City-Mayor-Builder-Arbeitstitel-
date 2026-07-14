@@ -1,4 +1,4 @@
-import { Award, CheckCircle2, Flame, MapPin, PartyPopper, type LucideIcon } from 'lucide-react';
+import { Award, Flame, MapPin, PartyPopper, type LucideIcon } from 'lucide-react';
 import { Modal } from './Modal.tsx';
 import type { GameEvent } from '../../state/store.ts';
 import { t } from '../../i18n/index.ts';
@@ -13,7 +13,6 @@ const EVENT_META: Record<GameEvent['kind'], { icon: LucideIcon; tone: 'primary' 
   sectorUnlocked: { icon: MapPin, tone: 'good' },
   fire: { icon: Flame, tone: 'bad' },
   celebrate: { icon: PartyPopper, tone: 'good' },
-  activityDone: { icon: CheckCircle2, tone: 'good' },
 };
 
 export function EventModal({ event, onClose }: { event: GameEvent; onClose: () => void }) {

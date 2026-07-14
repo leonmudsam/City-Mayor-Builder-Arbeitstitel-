@@ -16,26 +16,21 @@ describe('simulation tick', () => {
     expect(controller.state.level.xp).toBe(xpBefore + 5);
   });
 
-  it('produces into storage only while playing live, never offline (§ no AFK)', () => {
+  it('produces directly into storage and stops at the storage cap (offline catch-up)', () => {
     const { controller } = newController();
     setLevel(controller, 2);
     flattenTerrain(controller); // no location bonus in this test
     controller.placeBuilding('road', 26, 26);
     controller.placeBuilding('sawmill', 26, 27); // 45 wood/min
-    controller.update(T0 + 31_000, true); // construction (30s) done
+    controller.update(T0 + 31_000); // construction (30s) done
     const woodAfterBuild = controller.state.resources.wood;
-
-    // Offline catch-up: build timers advance but NOTHING is produced (v0.21).
-    controller.update(T0 + 31_000 + 5 * MIN, false);
-    expect(controller.state.resources.wood).toBe(woodAfterBuild);
-
-    // Live play: production accrues into storage.
     const producedBefore = controller.state.stats.produced.wood;
-    controller.update(T0 + 31_000 + 10 * MIN, true);
+    controller.update(T0 + 31_000 + 5 * MIN);
     expect(controller.state.resources.wood).toBeCloseTo(woodAfterBuild + 225, 0);
     expect(controller.state.stats.produced.wood - producedBefore).toBeCloseTo(225, 0);
-    // Storage still caps hoarding even when live (town hall: 400 wood).
-    controller.update(T0 + 8 * 60 * MIN, true);
+    // 8 hours offline → tight storage cap (town hall: 400 wood): production runs
+    // hot but storage stays small, so AFK hoarding is capped fast (§ active play).
+    controller.update(T0 + 8 * 60 * MIN);
     expect(controller.state.resources.wood).toBe(400);
   });
 
@@ -48,10 +43,10 @@ describe('simulation tick', () => {
     // 4 forest tiles in radius 3 → +20 % (5 %/tile).
     paintTerrain(controller, [[30, 27], [30, 28], [23, 29], [24, 30]], 'forest');
     const sawmill = Object.values(controller.state.buildings).find((b) => b.defId === 'sawmill');
-    controller.update(T0 + 31_000, true); // construction done → bonus becomes active
+    controller.update(T0 + 31_000); // construction done → bonus becomes active
     expect(controller.derived.productionBonus[sawmill!.id]).toBe(20);
     const woodAfterBuild = controller.state.resources.wood;
-    controller.update(T0 + 31_000 + 5 * MIN, true); // 45/min × 1.2 × 5 min = 270
+    controller.update(T0 + 31_000 + 5 * MIN); // 45/min × 1.2 × 5 min = 270
     expect(controller.state.resources.wood).toBeCloseTo(woodAfterBuild + 270, 0);
   });
 
@@ -61,14 +56,14 @@ describe('simulation tick', () => {
     flattenTerrain(controller);
     controller.placeBuilding('road', 26, 26);
     controller.placeBuilding('house_small', 26, 27);
-    controller.update(T0 + 30_000 + 5 * MIN, true); // citizens move in
+    controller.update(T0 + 30_000 + 5 * MIN); // citizens move in
     // Well far away (>7 Chebyshev from the house center): capacity exists, coverage 0.
     expect(controller.placeBuilding('well', 18, 18)).toEqual({ ok: true });
-    controller.update(T0 + 30_000 + 6 * MIN, true);
+    controller.update(T0 + 30_000 + 6 * MIN);
     expect(controller.state.citizens.needs.water.fulfillment).toBe(0);
     // A well next to the house covers it fully.
     expect(controller.placeBuilding('well', 28, 26)).toEqual({ ok: true });
-    controller.update(T0 + 30_000 + 7 * MIN, true);
+    controller.update(T0 + 30_000 + 7 * MIN);
     expect(controller.state.citizens.needs.water.fulfillment).toBe(1);
   });
 
@@ -91,14 +86,14 @@ describe('simulation tick', () => {
     setLevel(controller, 7);
     controller.placeBuilding('road', 26, 26);
     controller.placeBuilding('house_small', 26, 27);
-    controller.update(T0 + 30_000 + 5 * MIN, true); // citizens settle in
+    controller.update(T0 + 30_000 + 5 * MIN); // citizens settle in
     const before = controller.state.citizens.happiness;
     expect(controller.derived.avgAmbience).toBe(0);
     // A tree next to the house (ambience +1, radius 3) — a pure ambience source.
     // Small houses weigh their surroundings more (sensitivity 1.4, §7).
     expect(controller.placeBuilding('deco_tree', 28, 27)).toEqual({ ok: true });
     expect(controller.derived.avgAmbience).toBeCloseTo(1.4, 5);
-    controller.update(T0 + 30_000 + 6 * MIN, true); // happiness recomputed with ambience
+    controller.update(T0 + 30_000 + 6 * MIN); // happiness recomputed with ambience
     expect(controller.state.citizens.happiness).toBeGreaterThan(before);
   });
 
@@ -148,7 +143,7 @@ describe('simulation tick', () => {
     controller.placeBuilding('house_small', 25, 27);
     expect(controller.placeBuilding('supermarket', 27, 27)).toEqual({ ok: true }); // distributes freshwater, r10
 
-    controller.update(T0 + 30 * MIN, true); // build + produce + distribute
+    controller.update(T0 + 30 * MIN); // build + produce + distribute
     expect(controller.derived.productionPerMin.freshwater).toBeGreaterThan(0); // waterworks producing
     expect(controller.state.resources.freshwater).toBeGreaterThan(0); // the product accumulates in storage
     expect(controller.derived.distributionCoverage.freshwater).toBe(1); // supermarket reaches the home
@@ -159,21 +154,20 @@ describe('simulation tick', () => {
     const { controller } = newController();
     controller.placeBuilding('road', 26, 26);
     controller.placeBuilding('house_small', 26, 27);
-    controller.update(T0 + 19_000, true); // house still under construction (20s)
+    controller.update(T0 + 19_000); // house still under construction (20s)
     expect(controller.state.citizens.population).toBe(0);
-    controller.update(T0 + 30_000 + 10 * MIN, true);
-    // Small house = 1 unit × 5 residents × populationScale 20 → cap 100; growth
-    // fills it then stops (§6/§9).
-    expect(controller.state.citizens.population).toBe(100);
+    controller.update(T0 + 30_000 + 10 * MIN);
+    // Small house = 1 unit × 5 residents → cap 5; growth fills then stops (§6).
+    expect(controller.state.citizens.population).toBe(5);
   });
 
   it('drops happiness when water is missing at level 3+', () => {
     const { controller } = newController();
     controller.placeBuilding('road', 26, 26);
     controller.placeBuilding('house_small', 26, 27);
-    controller.update(T0 + 30_000 + 5 * MIN, true); // population moved in at level 1
+    controller.update(T0 + 30_000 + 5 * MIN); // population moved in at level 1
     setLevel(controller, 3); // water need activates, no wells exist
-    controller.update(T0 + 30_000 + 6 * MIN, true);
+    controller.update(T0 + 30_000 + 6 * MIN);
     expect(controller.state.citizens.needs.water.fulfillment).toBe(0);
     expect(controller.state.citizens.happiness).toBeLessThan(75);
   });

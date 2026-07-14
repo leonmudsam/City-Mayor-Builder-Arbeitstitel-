@@ -5,11 +5,10 @@ import { needsConfig } from './needs.config.ts';
 import { levelsConfig } from './levels.config.ts';
 import { questsConfig } from './quests.config.ts';
 import { mayorActionsConfig } from './mayorActions.config.ts';
-import { activitiesConfig } from './activities.config.ts';
 import { balancingConfig, featuresConfig } from './balancing.config.ts';
 import { biomesConfig } from './biomes.config.ts';
-import { activitiesConfigSchema, buildingDefSchema, levelDefSchema, mayorActionDefSchema, questDefSchema } from './schemas.ts';
-import type { ActivitiesConfig, BuildingDef, LevelDef, MayorActionDef, NeedDef, QuestDef, ResourceDef } from './types.ts';
+import { buildingDefSchema, levelDefSchema, mayorActionDefSchema, questDefSchema } from './schemas.ts';
+import type { BuildingDef, LevelDef, MayorActionDef, NeedDef, QuestDef, ResourceDef } from './types.ts';
 import type { BuildingDefId, QuestId } from '../types.ts';
 
 export interface GameConfig {
@@ -21,7 +20,6 @@ export interface GameConfig {
   quests: Map<QuestId, QuestDef>;
   questList: QuestDef[];
   mayorActions: MayorActionDef[];
-  activities: ActivitiesConfig;
   balancing: typeof balancingConfig;
   features: typeof featuresConfig;
   biomes: typeof biomesConfig;
@@ -36,7 +34,6 @@ export function loadConfig(): GameConfig {
   z.array(levelDefSchema).parse(levelsConfig);
   z.array(questDefSchema).parse(questsConfig);
   z.array(mayorActionDefSchema).parse(mayorActionsConfig);
-  activitiesConfigSchema.parse(activitiesConfig);
 
   // Cross-reference checks: every unlock and quest target must exist.
   const buildingIds = new Set(buildingsConfig.map((b) => b.id));
@@ -62,7 +59,6 @@ export function loadConfig(): GameConfig {
     quests: new Map(questsConfig.map((q) => [q.id, q])),
     questList: questsConfig,
     mayorActions: mayorActionsConfig,
-    activities: activitiesConfig,
     // Fresh copies so a controller/test can override a value without leaking
     // into the shared singleton (e.g. tests toggling features.moveBuildings).
     balancing: { ...balancingConfig },

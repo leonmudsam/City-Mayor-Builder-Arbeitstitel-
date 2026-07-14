@@ -10,8 +10,6 @@ export function EconomyPanel() {
   const game = useGame();
   const setPanel = useUiStore((s) => s.setPanel);
   const income = game.getIncome();
-  const stable = game.getStableIncome();
-  const hasBoost = game.hasIncomeBuffs();
   const max = Math.max(income.residential, income.commercial, income.industrial, 1);
 
   const rows = [
@@ -30,6 +28,7 @@ export function EconomyPanel() {
   ];
   // Warn as the rate climbs into punishing territory (§9): amber ≥ 150 %, red ≥ 250 %.
   const taxTone = (rate: number) => (rate >= 2.5 ? 'danger' : rate >= 1.5 ? 'warn' : '');
+  const overflow = game.getOverflowExport();
 
   return (
     <aside className="panel side-panel economy-panel">
@@ -43,16 +42,9 @@ export function EconomyPanel() {
       </div>
 
       <div className={`economy-total${income.net < 0 ? ' negative' : ''}`}>
-        <span className="economy-total-label">{t('ui.finance.stable_net')}</span>
-        <span className="economy-total-value">{t('ui.finance.per_min', { amount: formatMoney(stable.net) })}</span>
+        <span className="economy-total-label">{t('ui.finance.net')}</span>
+        <span className="economy-total-value">{t('ui.finance.per_min', { amount: formatMoney(income.net) })}</span>
       </div>
-      {hasBoost && (
-        // §20: a temporary boost (festival tax buff) is shown separately so the
-        // stable figure above stays the honest baseline for planning.
-        <div className="economy-boost-line">
-          {t('ui.finance.with_boost', { amount: formatMoney(income.net) })}
-        </div>
-      )}
 
       <div className="economy-rows">
         {rows.map((row) => (
@@ -89,11 +81,14 @@ export function EconomyPanel() {
         <span>{t('ui.finance.employment', { pct: Math.round(income.employment * 100) })}</span>
       </div>
 
-      {/* § no AFK: the whole economy only runs while the game is open. */}
-      <div className="economy-live-note">
-        <PackageOpen size={15} />
-        <span>{t('ui.finance.live_only')}</span>
-      </div>
+      {overflow.active && (
+        // Active overflow export (§6): only shows while a full store is spilling
+        // into money — and only for a live, foreground session.
+        <div className="economy-overflow">
+          <PackageOpen size={15} />
+          <span>{t('ui.finance.overflow', { amount: formatMoney(overflow.perMin) })}</span>
+        </div>
+      )}
 
       {showTax && (
         <div className="economy-tax">

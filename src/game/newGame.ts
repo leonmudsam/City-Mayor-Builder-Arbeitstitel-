@@ -4,7 +4,7 @@ import type { GameState } from './types.ts';
 import { sectorId } from './types.ts';
 import { allWorldSectors, materializeSector, tileAt } from './map/world.ts';
 
-export const SCHEMA_VERSION = 9;
+export const SCHEMA_VERSION = 8;
 
 export function createNewGame(config: GameConfig, cityName: string, now: number): GameState {
   const state: GameState = {
@@ -37,19 +37,7 @@ export function createNewGame(config: GameConfig, cityName: string, now: number)
     quests: { completed: [], active: [] },
     buffs: [],
     events: [],
-    activities: { cooldowns: {}, fulfilledContracts: [] },
-    stats: {
-      built: {},
-      produced: { money: 0, wood: 0, stone: 0, food: 0, freshwater: 0 },
-      mayorActions: {},
-      // Counts only sectors the player actively unlocks — the start sector is
-      // free and does not count towards expansion quests (§5).
-      sectorsUnlocked: 0,
-      upgradesCompleted: 0,
-      upgraded: {},
-      tradeEarnings: 0,
-      activitiesCompleted: 0,
-    },
+    stats: { built: {}, produced: { money: 0, wood: 0, stone: 0, food: 0, freshwater: 0 }, mayorActions: {}, sectorsUnlocked: 1 },
     nextId: 0,
   };
 

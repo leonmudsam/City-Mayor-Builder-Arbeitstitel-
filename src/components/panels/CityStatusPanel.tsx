@@ -1,133 +1,187 @@
-import { BarChart3, Briefcase, ChevronRight, Droplets, Leaf, ShieldCheck, Smile, Wheat, type LucideIcon } from 'lucide-react';
+import { AlertTriangle, ChevronRight, Gift, Info, PackageX, Sparkles, TrendingUp, Users, X } from 'lucide-react';
 import { useGame, useUiStore } from '../../state/store.ts';
+import type { NeedId, ResourceId } from '../../game/types.ts';
+import { NeedIcon } from '../common/icons.tsx';
 import { t } from '../../i18n/index.ts';
 
-// Persistent city-status widget (mockup §3, top-left): one legible row per key
-// metric — icon · label · percent · bar · a concrete status line ("12 Gebäude
-// ohne Wasser"). "Details ansehen" opens the full control room (CityStatusDetail).
-// Every figure is read live off the derived simulation; nothing is stored here.
+// The city's control room (§10): actionable alerts first (each one clicks
+// through to the fix), then the full needs breakdown. This is the game's main
+// teaching surface — it always answers "what should I do next?". Alert
+// detection is presentation logic over derived data; no game state is mutated.
 
-interface StatusRow {
+interface Alert {
   id: string;
-  icon: LucideIcon;
-  label: string;
-  pct: number;
-  status: string;
+  severity: 'bad' | 'warn' | 'info';
+  text: string;
+  actionLabel?: string;
+  onAction?: () => void;
 }
 
-const clampPct = (n: number) => Math.max(0, Math.min(100, Math.round(n)));
+const NEED_SUGGESTION: Partial<Record<NeedId, string>> = {
+  housing: 'house_small',
+  water: 'well',
+  food: 'farm',
+  work: 'shop_small',
+  leisure: 'park',
+};
 
 export function CityStatusPanel() {
   const game = useGame();
-  const setPanel = useUiStore((s) => s.setPanel);
-  const { state, derived, config } = game;
+  const { setPanel, startPlacing } = useUiStore();
+  const { state } = game;
   const level = state.level.current;
-  const pop = state.citizens.population;
-  const needs = state.citizens.needs;
-  const unlocked = (id: string) => (config.needs.find((n) => n.id === id)?.unlockLevel ?? 0) <= level;
+  const activeNeeds = game.config.needs.filter((n) => n.unlockLevel <= level);
 
-  const residential = Object.values(state.buildings).filter(
-    (b) => b.status === 'active' && config.buildings.get(b.defId)?.category === 'residential',
-  ).length;
-  const incidents = Object.values(state.buildings).filter((b) => b.status === 'paused').length;
-  const labor = pop * config.balancing.laborParticipation;
+  const alerts: Alert[] = [];
 
-  const unserved = (fulfil: number) => (pop <= 0 ? 0 : Math.round((1 - fulfil) * residential));
+  // 1. Needs running low — the highest-value hint, links to the fix.
+  for (const need of activeNeeds) {
+    const ns = state.citizens.needs[need.id];
+    const pct = Math.round(ns.fulfillment * 100);
+    if (state.citizens.population > 0 && pct < 80) {
+      const suggestion = NEED_SUGGESTION[need.id];
+      const def = suggestion ? game.config.buildings.get(suggestion) : undefined;
+      const canBuild = def && def.unlockLevel <= level;
+      alerts.push({
+        id: `need_${need.id}`,
+        severity: pct < 50 ? 'bad' : 'warn',
+        text: t('ui.status.need_low', { need: t(need.nameKey), pct }),
+        ...(canBuild && suggestion
+          ? { actionLabel: t('building.' + suggestion), onAction: () => startPlacing(suggestion) }
+          : {}),
+      });
+    }
+  }
 
-  const rows: StatusRow[] = [];
-  rows.push({
-    id: 'happy',
-    icon: Smile,
-    label: t('ui.happiness'),
-    pct: clampPct(state.citizens.happiness),
-    status: t(happinessKey(state.citizens.happiness)),
-  });
-  if (unlocked('water')) {
-    const n = unserved(needs.water.fulfillment);
-    rows.push({
-      id: 'water',
-      icon: Droplets,
-      label: t('ui.status.water'),
-      pct: clampPct(needs.water.fulfillment * 100),
-      status: n > 0 ? t('ui.status.without_water', { count: n }) : t('ui.status.fully_supplied'),
-    });
+  // 2. Storage full — production is being wasted.
+  for (const resId of ['wood', 'stone', 'food'] as ResourceId[]) {
+    const cap = game.derived.storageCaps[resId];
+    if (cap > 0 && state.resources[resId] >= cap && game.derived.productionPerMin[resId] > 0) {
+      alerts.push({
+        id: `full_${resId}`,
+        severity: 'warn',
+        text: t('ui.status.storage_full', { resource: t(`resource.${resId}`) }),
+      });
+    }
   }
-  if (unlocked('food')) {
-    const n = unserved(needs.food.fulfillment);
-    rows.push({
-      id: 'food',
-      icon: Wheat,
-      label: t('ui.status.food'),
-      pct: clampPct(needs.food.fulfillment * 100),
-      status: n > 0 ? t('ui.status.without_food', { count: n }) : t('ui.status.fully_supplied'),
-    });
-  }
-  if (unlocked('work')) {
-    const unemployed = Math.max(0, Math.round(labor * (1 - needs.work.fulfillment)));
-    rows.push({
-      id: 'work',
-      icon: Briefcase,
-      label: t('ui.status.jobs'),
-      pct: clampPct(needs.work.fulfillment * 100),
-      status: unemployed > 0 ? t('ui.status.unemployed', { count: unemployed }) : t('ui.status.full_employment'),
-    });
-  }
-  // Environment maps the housing-weighted ambience score onto a 0..100 readout.
-  const envPct = clampPct(60 + derived.avgAmbience * 6);
-  rows.push({
-    id: 'env',
-    icon: Leaf,
-    label: t('ui.status.environment'),
-    pct: envPct,
-    status: t(derived.avgAmbience >= 0 ? 'ui.status.air_clean' : 'ui.status.air_polluted'),
-  });
-  if (unlocked('safety')) {
-    rows.push({
-      id: 'safety',
-      icon: ShieldCheck,
-      label: t('ui.status.safety'),
-      pct: clampPct(needs.safety.fulfillment * 100),
-      status: incidents > 0 ? t('ui.status.incidents', { count: incidents }) : t('ui.status.no_incidents'),
+
+  // 3. A quest reward is waiting to be claimed.
+  if (state.quests.active.some((q) => q.claimable)) {
+    alerts.push({
+      id: 'quest_claim',
+      severity: 'info',
+      text: t('ui.status.quest_ready'),
+      actionLabel: t('ui.quests'),
+      onAction: () => setPanel('quests'),
     });
   }
 
   return (
-    <aside className="hud-panel city-status">
-      <div className="hud-panel-head">
+    <aside className="panel side-panel status-panel">
+      <div className="panel-head">
         <h3>
-          <BarChart3 size={16} /> {t('ui.status.title')}
+          <Sparkles size={17} /> {t('ui.status.title')}
         </h3>
+        <button className="btn-icon" onClick={() => setPanel(undefined)} title={t('ui.close')}>
+          <X size={16} />
+        </button>
       </div>
-      <div className="status-rows">
-        {rows.map((row) => {
-          const Icon = row.icon;
-          const tone = row.pct < 60 ? 'bad' : row.pct < 85 ? 'warn' : 'good';
+
+      <div className="status-happiness">
+        <span>{t('ui.happiness')}</span>
+        <strong>{Math.round(state.citizens.happiness)}/100</strong>
+      </div>
+
+      <GrowthRow />
+
+      <div className="status-alerts">
+        {alerts.length === 0 ? (
+          <div className="status-ok">
+            <Sparkles size={15} /> {t('ui.status.all_good')}
+          </div>
+        ) : (
+          alerts.map((a) => <AlertRow key={a.id} alert={a} />)
+        )}
+      </div>
+
+      <div className="status-needs">
+        <h4>{t('ui.status.needs')}</h4>
+        {activeNeeds.map((need) => {
+          const pct = Math.round(state.citizens.needs[need.id].fulfillment * 100);
           return (
-            <div key={row.id} className="status-line">
-              <span className="status-line-icon">
-                <Icon size={15} />
+            <div key={need.id} className="status-need">
+              <span className="status-need-name">
+                <NeedIcon id={need.id} size={13} />
+                {t(need.nameKey)}
               </span>
-              <div className="status-line-body">
-                <div className="status-line-top">
-                  <span className="status-line-label">{row.label}</span>
-                  <span className={`status-line-pct text-${tone}`}>{row.pct}%</span>
-                </div>
-                <div className="status-line-bar">
-                  <div className={`status-line-fill ${tone}`} style={{ width: `${row.pct}%` }} />
-                </div>
-                <span className="status-line-note">{row.status}</span>
+              <div className="status-need-bar">
+                <div
+                  className={`status-need-fill ${pct < 60 ? 'bad' : pct < 90 ? 'warn' : 'good'}`}
+                  style={{ width: `${pct}%` }}
+                />
               </div>
+              <span className={`status-need-pct ${pct < 60 ? 'text-bad' : pct < 90 ? 'text-warn' : 'text-good'}`}>{pct}%</span>
             </div>
           );
         })}
       </div>
-      <button className="hud-panel-more" onClick={() => setPanel('status')}>
-        {t('ui.status.details')} <ChevronRight size={14} />
-      </button>
     </aside>
   );
 }
 
-function happinessKey(h: number): string {
-  return h >= 80 ? 'ui.happy.great' : h >= 55 ? 'ui.happy.ok' : h >= 35 ? 'ui.happy.meh' : 'ui.happy.bad';
+/**
+ * Population & move-in explainer (§15/§19): shows occupancy and, crucially, WHY
+ * the city is or isn't growing — so "99 % happy but stuck far below capacity"
+ * is never a mystery. Reads the same growth model the tick uses (getGrowthStatus).
+ */
+function GrowthRow() {
+  const game = useGame();
+  const fmt = (n: number) => Math.round(n).toLocaleString('de-DE');
+  const g = game.getGrowthStatus();
+  const reasonKey =
+    g.reason === 'no_housing'
+      ? 'ui.growth.no_housing'
+      : g.reason === 'housing_full'
+        ? 'ui.growth.full'
+        : g.reason === 'unhappy'
+          ? 'ui.growth.unhappy'
+          : undefined;
+  return (
+    <div className="status-growth">
+      <div className="status-growth-head">
+        <span className="status-need-name">
+          <Users size={14} /> {t('ui.population')}
+        </span>
+        <strong>
+          {fmt(g.population)} <span className="muted">/ {fmt(g.capacity)}</span>
+        </strong>
+      </div>
+      {g.growing ? (
+        <div className="status-growth-line text-good">
+          <TrendingUp size={13} /> {t('ui.growth.moving_in', { rate: fmt(g.ratePerMin) })}
+        </div>
+      ) : (
+        <div className={`status-growth-line ${g.reason === 'unhappy' ? 'text-bad' : 'text-warn'}`}>
+          <Info size={13} /> {reasonKey ? t(reasonKey) : ''}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function AlertRow({ alert }: { alert: Alert }) {
+  const Icon = alert.severity === 'info' ? Info : alert.id.startsWith('full_') ? PackageX : AlertTriangle;
+  return (
+    <div className={`status-alert status-alert-${alert.severity}`}>
+      <Icon size={15} />
+      <span className="status-alert-text">{alert.text}</span>
+      {alert.onAction && alert.actionLabel && (
+        <button className="status-alert-action" onClick={alert.onAction}>
+          {alert.id === 'quest_claim' ? <Gift size={13} /> : null}
+          {alert.actionLabel}
+          <ChevronRight size={13} />
+        </button>
+      )}
+    </div>
+  );
 }

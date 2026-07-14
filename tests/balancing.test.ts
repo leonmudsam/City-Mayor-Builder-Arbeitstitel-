@@ -77,15 +77,14 @@ describe('big-city scaling (v0.16)', () => {
     for (let x = 26; x <= 33; x++) controller.placeBuilding('road', x, 26);
     controller.placeBuilding('house_small', 26, 27);
     expect(controller.placeBuilding('police_station', 29, 27)).toEqual({ ok: true });
-    controller.update(T0 + 25_000 + 380_000, true); // house + station finish, citizens settle
-    // Served-resident capacity scales with the ×20 population scale (§9): 8 000 × 20.
-    expect(controller.derived.coverageCapacity.safety).toBe(160_000);
+    controller.update(T0 + 25_000 + 380_000); // house + station finish
+    expect(controller.derived.coverageCapacity.safety).toBe(8_000);
     // A small population sits well inside the served capacity → fully covered.
     expect(controller.state.citizens.needs.safety.fulfillment).toBeGreaterThan(0.9);
     // Simulate a metropolis: far more residents than one station can serve.
-    controller.state.citizens.population = 400_000;
-    controller.update(T0 + 25_000 + 380_000 + 1_000, true);
-    // Radius still reaches every home, but capacity (160 000) can't serve 400 000,
+    controller.state.citizens.population = 20_000;
+    controller.update(T0 + 25_000 + 380_000 + 1_000);
+    // Radius still reaches every home, but capacity (8 000) can't serve 20 000,
     // so safety is only partially fulfilled — reach isn't the bottleneck, capacity is.
     const fulfillment = controller.state.citizens.needs.safety.fulfillment;
     expect(fulfillment).toBeGreaterThan(0.3);

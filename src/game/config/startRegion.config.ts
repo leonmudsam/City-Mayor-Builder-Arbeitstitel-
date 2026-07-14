@@ -18,11 +18,7 @@ export const startRegionConfig = {
    * than the hand-designed start region: the extra eastern columns hold the coast
    * and the southern row more plains, giving room for every biome to read.
    */
-  // v0.21 (§17): the board grew two sector-columns west (minSx 0 → −2) into a
-  // mountain range cut by valley paths, so expansion toward the mountains is
-  // attractive and the quarry's rock bonus matters more. Behind the far-west
-  // wall lies unreachable land — a future biome goal for a later MVP.
-  worldBounds: { minSx: -2, minSy: 0, maxSx: 5, maxSy: 4 },
+  worldBounds: { minSx: 0, minSy: 0, maxSx: 5, maxSy: 4 },
   startSector: { sx: 1, sy: 1 },
   townHall: { x: 23, y: 23 }, // world tile coords (3×3 footprint)
   /** Pre-placed road tiles below the town hall so the tutorial has an anchor. */
@@ -50,22 +46,6 @@ export const lakeConfig = { cx: 10, cy: 42, rx: 4.2, ry: 3.2 };
  * so expansion beyond the start region keeps a coherent landscape (open end).
  */
 export function terrainAt(x: number, y: number): TerrainType {
-  // Western mountain range (§17): the two negative-x sector columns are a rocky
-  // massif cut by two valley corridors (grass, with fertile pockets) that let
-  // roads — and later a Fernstraße — thread through. The far-west column is a
-  // near-solid wall; behind it is the next biome's land, unreachable for now.
-  if (x < 0) {
-    const inValley = (y >= 20 && y <= 25) || (y >= 51 && y <= 56);
-    if (inValley) {
-      // A passable valley floor with the odd fertile patch to reward settling it.
-      if (tileHash(x * 11, y * 13) > 0.82) return 'fertile';
-      if (tileHash(x * 7, y * 5) > 0.9) return 'mountain'; // stray boulders
-      return 'grass';
-    }
-    if (x <= -28) return 'mountain'; // solid far-west wall
-    return tileHash(x * 3, y * 5) > 0.12 ? 'mountain' : 'grass';
-  }
-
   // Eastern sea: the far-east coast biome (§ bounded world, all biomes on show).
   // A sandy beach gives way to open water at the world's east edge — the seaside
   // district goal (harbour/beach in a later MVP).

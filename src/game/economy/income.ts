@@ -28,19 +28,12 @@ export interface IncomeBreakdown {
   employment: number;
 }
 
-/**
- * @param includeBuffs when false, timed tax buffs (e.g. a festival's ×1.25) are
- * ignored, giving the *stable* income the city earns without temporary boosts.
- * The tick uses the real (buffed) income; the UI uses the stable figure for the
- * major-project recommendation so a fleeting boost doesn't flatter the advice
- * (§20). Defaults to true so existing callers keep their behaviour.
- */
-export function computeIncome(state: GameState, config: GameConfig, derived: Derived, includeBuffs = true): IncomeBreakdown {
+export function computeIncome(state: GameState, config: GameConfig, derived: Derived): IncomeBreakdown {
   const bal = config.balancing;
   const pop = state.citizens.population;
   const taxFactor = bal.taxFactorMin + (bal.taxFactorMax - bal.taxFactorMin) * (state.citizens.happiness / 100);
   let taxBuff = 1;
-  if (includeBuffs) for (const buff of state.buffs) if (buff.kind === 'tax') taxBuff *= buff.amount;
+  for (const buff of state.buffs) if (buff.kind === 'tax') taxBuff *= buff.amount;
   const factor = taxFactor * taxBuff;
 
   const jobs = derived.capacity.work;

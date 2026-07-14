@@ -10,7 +10,6 @@ import { startRegionConfig } from '../game/config/startRegion.config.ts';
 import { t } from '../i18n/index.ts';
 import {
   CATEGORY_COLORS,
-  COLOR_ACTIVITY,
   COLOR_ASPHALT,
   COLOR_BONUS,
   COLOR_CONSTRUCTION,
@@ -55,16 +54,7 @@ export interface RendererCallbacks {
   /** A sector just went from locked → unlocked (central "new area" popup). */
   onSectorUnlocked(id: string): void;
   /** Coverage overlay is active (or cleared) — UI shows/hides the legend (§1). */
-  onCoverageInfo(
-    info:
-      | {
-          label: string;
-          underCapacity: boolean;
-          counts: { supplied: number; partial: number; unsupplied: number };
-          capacity?: { servable: number; used: number };
-        }
-      | undefined,
-  ): void;
+  onCoverageInfo(info: { label: string; underCapacity: boolean; capacity?: { servable: number; used: number } } | undefined): void;
 }
 
 /** Short-lived visual effect (demolish dust, sector-unlock flash). */
@@ -170,17 +160,6 @@ export class MapRenderer {
     this.focusTarget = {
       x: this.app.screen.width / 2 - centerPx.x * scale,
       y: this.app.screen.height / 2 - centerPx.y * scale,
-    };
-  }
-
-  /** Re-centre the camera on the town hall (Quick-action "Karte"). Public so the
-   *  HUD can recall a lost camera without touching renderer internals. */
-  centerOnCity(): void {
-    const th = startRegionConfig.townHall;
-    const scale = this.world.scale.x;
-    this.focusTarget = {
-      x: this.app.screen.width / 2 - (th.x + 1.5) * TILE * scale,
-      y: this.app.screen.height / 2 - (th.y + 1.5) * TILE * scale,
     };
   }
 
@@ -398,13 +377,10 @@ export class MapRenderer {
       g.roundRect(s.x * TILE + 2, s.y * TILE + 2, s.w * TILE - 4, s.h * TILE - 4, 5)
         .stroke({ width: s.selected ? 3 : 2, color: COVERAGE_COLORS.source, alpha: s.selected ? 1 : 0.6 });
     }
-    // Consumers: a SimCity-style status fill on each affected footprint plus a
-    // dot, so served/partial/unsupplied buildings read at a glance (§21).
+    // Consumers: a clear status dot + border, no map-wide flood of color.
     for (const c of overlay.consumers) {
       const color = COVERAGE_COLORS[c.state];
-      g.roundRect(c.x * TILE + 2, c.y * TILE + 2, c.w * TILE - 4, c.h * TILE - 4, 5)
-        .fill({ color, alpha: c.state === 'unsupplied' ? 0.28 : 0.16 })
-        .stroke({ width: 2, color, alpha: 0.9 });
+      g.roundRect(c.x * TILE + 2, c.y * TILE + 2, c.w * TILE - 4, c.h * TILE - 4, 5).stroke({ width: 2, color, alpha: 0.9 });
       const dotX = (c.x + c.w / 2) * TILE;
       const dotY = (c.y + c.h / 2) * TILE;
       g.circle(dotX, dotY, 5).fill({ color, alpha: 0.95 }).stroke({ width: 1.5, color: 0x10151c, alpha: 0.6 });
@@ -412,7 +388,6 @@ export class MapRenderer {
     this.callbacks.onCoverageInfo({
       label: t(overlay.labelKey),
       underCapacity: overlay.underCapacity,
-      counts: overlay.counts,
       ...(overlay.capacity ? { capacity: overlay.capacity } : {}),
     });
   }
@@ -578,9 +553,6 @@ export class MapRenderer {
       }
     }
 
-    // Open Stadtarbeit targets get a bright objective ring (§ aktive Karte).
-    const activityTargets = new Set(this.controller.getActivityTargets().filter((tg) => !tg.done).map((tg) => tg.buildingId));
-
     for (const b of Object.values(state.buildings)) {
       const def = this.controller.config.buildings.get(b.defId);
       if (!def) continue;
@@ -631,9 +603,6 @@ export class MapRenderer {
         const marker = this.controller.getBuildingMarker(b.id);
         if (marker) this.drawBuildingMarker(container, w, marker);
       }
-      // Activity target: a pulsing objective ring + downward arrow, drawn on top
-      // so it stands out over any status marker while the run is going.
-      if (activityTargets.has(b.id)) this.drawActivityTarget(container, w, h);
       if (b.id === this.movingId) container.alpha = 0.35;
       this.buildingLayer.addChild(container);
     }
@@ -659,25 +628,6 @@ export class MapRenderer {
       g.poly([cx - 4.5, cy + 1.5, cx, cy - 4, cx + 4.5, cy + 1.5]).stroke({ width: 2.2, color: 0xffffff });
       g.poly([cx - 4.5, cy + 5, cx, cy - 0.5, cx + 4.5, cy + 5]).stroke({ width: 2.2, color: 0xffffff });
     }
-    container.addChild(g);
-  }
-
-  /**
-   * Objective ring for a running Stadtarbeit target (§ aktive Karte): a bright
-   * cyan double ring around the footprint plus a bobbing down-arrow above it, so
-   * the next place to click reads at a glance. Purely programmatic like the
-   * other markers.
-   */
-  private drawActivityTarget(container: Container, w: number, h: number): void {
-    const g = new Graphics();
-    const cx = w / 2;
-    const cy = h / 2;
-    const r = Math.max(w, h) / 2 + 5;
-    g.circle(cx, cy, r).stroke({ width: 3, color: COLOR_ACTIVITY, alpha: 0.95 });
-    g.circle(cx, cy, r + 4).stroke({ width: 1.5, color: COLOR_ACTIVITY, alpha: 0.5 });
-    // Down-arrow pointing at the building from above.
-    const ay = -14;
-    g.poly([cx - 6, ay, cx + 6, ay, cx, ay + 9]).fill(COLOR_ACTIVITY).stroke({ width: 1.5, color: 0xffffff, alpha: 0.9 });
     container.addChild(g);
   }
 

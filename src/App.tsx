@@ -8,23 +8,18 @@ import { DEFAULT_SLOT } from './game/storage/saveAdapter.ts';
 import { importSave } from './game/storage/exportImport.ts';
 import { setController, useUiStore } from './state/store.ts';
 import { MapView } from './components/MapView.tsx';
-import { GameHud } from './components/hud/GameHud.tsx';
-import { QuickActionBar } from './components/hud/QuickActionBar.tsx';
+import { TopBar } from './components/hud/TopBar.tsx';
+import { BottomBar } from './components/hud/BottomBar.tsx';
 import { BuildMenu } from './components/panels/BuildMenu.tsx';
 import { FloatingBuildingSheet } from './components/panels/FloatingBuildingSheet.tsx';
-import { CitizenRequestsPanel } from './components/panels/CitizenRequestsPanel.tsx';
+import { QuestPanel } from './components/panels/QuestPanel.tsx';
 import { MayorPanel } from './components/panels/MayorPanel.tsx';
 import { CityStatusPanel } from './components/panels/CityStatusPanel.tsx';
-import { CityStatusDetail } from './components/panels/CityStatusDetail.tsx';
-import { CityWorkPanel } from './components/panels/CityWorkPanel.tsx';
 import { EconomyPanel } from './components/panels/EconomyPanel.tsx';
 import { SectorDialog } from './components/panels/SectorDialog.tsx';
 import { SettingsPanel } from './components/panels/SettingsPanel.tsx';
 import { TradePanel } from './components/panels/TradePanel.tsx';
 import { DebugPanel } from './components/panels/DebugPanel.tsx';
-import { ActivityPanel } from './components/panels/ActivityPanel.tsx';
-import { MenuPanel } from './components/panels/MenuPanel.tsx';
-import { formatMoney } from './i18n/index.ts';
 import { Toasts } from './components/common/Toasts.tsx';
 import { EventModal } from './components/common/EventModal.tsx';
 import { t } from './i18n/index.ts';
@@ -77,26 +72,13 @@ export function App() {
               params: unlocks ? { level, buildings: unlocks } : { level },
             });
             save();
-          } else if (event.type === 'activityCompleted') {
-            // Celebrate the finished Stadtarbeit run (§ Abschlussmeldung).
-            useUiStore.getState().pushEvent({
-              kind: 'activityDone',
-              titleKey: 'event.activity.title',
-              bodyKey: 'event.activity.body',
-              params: { name: t(`activity.${event.defId}`), money: formatMoney(event.money), xp: event.xp },
-            });
-            save();
           }
         });
         if (cancelled) return;
 
-        // Foreground tick. The economy only runs while the tab is actually
-        // visible (§ no AFK farming) — a hidden tab still advances build
-        // timers via non-live ticks, same as offline catch-up.
-        tickTimer = setInterval(
-          () => controller?.update(Date.now(), document.visibilityState === 'visible'),
-          1000,
-        );
+        // Live foreground tick — enables active-player rewards (overflow export,
+        // §6). Offline catch-up (initial load, tab return) stays non-live.
+        tickTimer = setInterval(() => controller?.update(Date.now(), true), 1000);
         saveTimer = setInterval(save, 30_000);
         document.addEventListener('visibilitychange', onVisibility);
         window.addEventListener('beforeunload', save);
@@ -126,7 +108,7 @@ export function App() {
     ui.stopMoving();
     ui.selectBuilding(undefined);
     ui.openSectorDialog(undefined);
-    ui.setPanel(undefined);
+    ui.setPanel('quests');
     controller.resetTo(next);
     void adapter.save(DEFAULT_SLOT, next);
     controller.update(Date.now());
@@ -173,31 +155,21 @@ function GameScreen({ onImport, onReset }: { onImport(json: string): boolean; on
 
   return (
     <div className="app">
-      <GameHud />
+      <TopBar />
       <main className="main">
         <MapView />
-
-        {/* Persistent HUD frame (mockup): status left-top, city work left-bottom,
-            citizen requests right, quick actions right-bottom. */}
-        <CityStatusPanel />
-        <CityWorkPanel />
-        <CitizenRequestsPanel />
-        <QuickActionBar />
-
-        {/* Overlay panels, opened from the HUD / menu — only one at a time. */}
+        {openPanel === 'quests' && <QuestPanel />}
         {openPanel === 'mayor' && <MayorPanel />}
-        {openPanel === 'status' && <CityStatusDetail />}
+        {openPanel === 'status' && <CityStatusPanel />}
         {openPanel === 'economy' && <EconomyPanel />}
         {openPanel === 'settings' && <SettingsPanel onImport={onImport} onReset={onReset} />}
         {openPanel === 'trade' && <TradePanel />}
         {openPanel === 'debug' && <DebugPanel />}
-        {openPanel === 'activities' && <ActivityPanel />}
-        {openPanel === 'menu' && <MenuPanel />}
-
         <FloatingBuildingSheet />
         <SectorDialog />
         {openPanel === 'build' && <BuildMenu />}
       </main>
+      <BottomBar />
       <Toasts />
       {currentEvent && <EventModal event={currentEvent} onClose={() => dismissEvent(currentEvent.id)} />}
     </div>

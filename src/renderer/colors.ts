@@ -18,7 +18,6 @@ export const CATEGORY_COLORS: Record<BuildingCategory, number> = {
   residential: 0xe2a24b,
   production: 0xa9743c,
   services: 0x5fa8d3,
-  energy: 0xf2c14e,
   leisure: 0x6fc276,
   economy: 0xba68c8,
   government: 0xe3627a,
@@ -34,7 +33,6 @@ export const COLOR_SELECTION = 0xffffff;
 export const COLOR_CONSTRUCTION = 0xc9b458;
 export const COLOR_FIRE = 0xff5722;
 export const COLOR_BONUS = 0x58c470;
-export const COLOR_ACTIVITY = 0x2fd4d4;
 
 // Roads: sidewalk frame + asphalt body + lane markings.
 export const COLOR_SIDEWALK = 0x9aa1ab;
