@@ -1,5 +1,55 @@
 # Patch Notes
 
+## v0.23 — „Cartoon-Artwork: illustrierte UI statt SVG-Icons"
+
+Umsetzung der ausdrücklichen Vorgabe „generierte/cartoonartige Bilder statt
+einfacher SVG-Icons". Die sichtbaren UI-Flächen zeigen jetzt kleine illustrierte
+Spielgrafiken — Ressourcenobjekte, Gebäudebilder und Bürgerporträts — statt
+Line-Icons. Alles ist cel-schattiertes SVG (keine externen Assets), aber bewusst
+bildhaft gebaut (Dächer, Fenster, Gesichter, Kleidung, Schattierung) und sitzt in
+austauschbaren Komponenten, sodass später echte Sprites an denselben Aufrufstellen
+eingesetzt werden können. Karte bleibt 2D-Prototyp; Spiellogik unverändert.
+
+**Neues Artwork-System (`src/components/art/`)**
+- `ResourceArt` — bildhafte Ressourcen: Münzstapel (Geld), Goldbarren (Gold),
+  Holzstapel mit Jahresringen (Holz), facettierter Felsblock (Stein), Obst-/
+  Brotkiste (Nahrung), glänzender Wassertropfen (Wasser), Bürgergruppe
+  (Einwohner), freundliches Medaillen-Emblem (Zufriedenheit).
+- `BuildingArt` — pro Gebäude-ID eine eigene Cartoon-Illustration auf einem
+  begrünten Grundstück: Häuschen mit Satteldach & Schornstein, Reihenhaus,
+  Apartmentblock, Wohnturm, Rathaus/Verwaltung mit Säulen & Fahne, Farm mit Silo
+  & Feld, Sägewerk mit Sägeblatt, Steinbruch, Brunnen, Wasserturm, Lagerhalle,
+  Läden mit Markise & Emblem (Markt/Bäckerei/Büro/Handelskontor), Notdienste mit
+  Wappen (Feuerwehr/Polizei/Krankenhaus), Kraftwerk mit Kühltürmen, Windrad,
+  Park, Baum, Blumenbeet, Brunnen, Bank, Straße. Fallback pro Kategorie.
+- `CitizenPortrait` / `AdvisorPortrait` — Cartoon-Figuren mit Gesicht, Frisur,
+  Kleidung und Rollen-Kopfbedeckung (Bauhelm, Feuerwehrhelm, Händlerkappe,
+  Bürgermeister-Krone) auf rollengefärbtem Hintergrund. Deterministisch aus einem
+  Seed: gleiches Anliegen → gleiche Person, verschiedene Anliegen → sichtbar
+  unterschiedliche Bürger (Haut-, Haar-, Kleidungsvarianten).
+
+**Wo das Artwork eingebunden ist**
+- HUD-Ressourcenkarten (`GameHud`) zeigen `ResourceArt` statt Lucide-Icons.
+- Baumenü-Karten (`BuildMenu`) und Gebäude-Info-Sheet (`FloatingBuildingSheet`,
+  neuer Bild-Hero oben links) zeigen `BuildingArt`.
+- Bürgeranliegen (`CitizenRequestsPanel`), Stadtarbeit (`CityWorkPanel`),
+  Aktivitätsboard (`ActivityPanel`) und Entscheidungs-Popup (`DecisionModal`)
+  zeigen Porträts statt Avatar-Icons.
+- **Level-Up-Popup** (`EventModal`) zeigt jetzt für jede neu freigeschaltete
+  Gebäudeart eine Artwork-Karte plus die Levelbelohnung (Geld/Gold mit
+  Ressourcen-Artwork) und einen „Zum Baumenü"-Button — statt einer reinen
+  Textzeile (Mockup §8).
+
+**Was noch Platzhalter/2D bleibt**
+- Alle Grafiken sind stilisierte SVG-Platzhalter im einheitlichen Cartoon-Stil,
+  keine gerenderten Raster-Assets — die Komponenten sind aber so gebaut, dass
+  finale Sprites 1:1 an denselben Stellen eingesetzt werden können.
+- Die Karte selbst bleibt der 2D-Prototyp; nur die UI-Grafiken wurden ersetzt.
+
+**Verifikation:** `tsc -b --force`, `eslint`, `vite build` und `vitest run`
+(97 Tests) grün; Playwright-Smoke bestätigt fehlerfreies Rendern von HUD,
+Baumenü und Wohn-Thumbnails.
+
 ## v0.22 — „UI-Überarbeitung: hochwertiges City-Builder-Interface nach Mockup"
 
 Komplette Neugestaltung von HUD, Panels, Baumenü, Gebäude-Sheet und Overlays

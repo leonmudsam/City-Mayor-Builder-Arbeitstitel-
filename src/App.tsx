@@ -68,13 +68,16 @@ export function App() {
         controller.subscribe((event) => {
           if (event.type === 'levelUp') {
             const level = controller!.state.level.current;
-            // Announce what the new level unlocks (§7) so new buildings aren't missed.
-            const unlocks = controller!.unlocksAtLevel(level).map((id) => t(`building.${id}`)).join(', ');
+            // Announce what the new level unlocks (§9 Level-Up-Popup) so new
+            // buildings aren't missed — pass the ids so the modal can show a
+            // card with each building's artwork, not just a name list.
+            const unlockIds = controller!.unlocksAtLevel(level);
+            const unlocks = unlockIds.map((id) => t(`building.${id}`)).join(', ');
             useUiStore.getState().pushEvent({
               kind: 'levelUp',
               titleKey: 'event.level_up.title',
               bodyKey: unlocks ? 'event.level_up.body_unlocks' : 'event.level_up.body',
-              params: unlocks ? { level, buildings: unlocks } : { level },
+              params: unlocks ? { level, buildings: unlocks, buildingIds: unlockIds.join(',') } : { level },
             });
             save();
           } else if (event.type === 'activityCompleted') {

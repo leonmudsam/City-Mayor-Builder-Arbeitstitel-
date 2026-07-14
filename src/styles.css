@@ -908,3 +908,53 @@ body {
 }
 .build-card-body { width: 100%; }
 .build-card-info { gap: 4px; }
+
+/* ===== v0.23 Cartoon-Artwork-System (§11) ===== */
+/* Illustrated resource/building/character art replaces the icon-first look on
+   the visible HUD surfaces. All cel-shaded SVG; call sites accept sprites later. */
+.art-shadow { fill: rgba(0, 0, 0, 0.16); }
+.res-art, .bld-art, .portrait { display: block; }
+.bld-art-tile { fill: #cfe3b8; }
+
+/* Resource cards: artwork fills the accent-tinted chip */
+.res-card-icon { width: 36px; height: 36px; border-radius: 10px; }
+.res-card-icon .res-art { width: 30px; height: 30px; }
+
+/* Build-menu building thumbnails */
+.build-card-media .bld-art { display: block; border-radius: 10px; }
+.build-card-media { background: linear-gradient(180deg, rgba(255, 255, 255, 0.05), rgba(0, 0, 0, 0.14)); }
+
+/* Building sheet hero (mockup §2: artwork top-left, name + status beside it) */
+.sheet-hero { display: flex; align-items: center; gap: 11px; min-width: 0; }
+.sheet-hero .bld-art { flex-shrink: 0; border-radius: 12px; box-shadow: var(--shadow); }
+.sheet-hero-text { min-width: 0; }
+.sheet-hero-text h3 { font-size: 16px; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.sheet-hero-text .sheet-substatus { margin: 4px 0 0; }
+
+/* Portraits replace the flat avatar chips in panels + modals */
+.request-avatar, .work-avatar {
+  background: none; box-shadow: none; width: auto; height: auto; border-radius: 0;
+}
+.request-avatar .portrait, .work-avatar .portrait,
+.activity-card-head .portrait, .decision-sender .portrait {
+  border-radius: 11px; box-shadow: 0 2px 5px rgba(0, 0, 0, 0.32); flex-shrink: 0;
+}
+.decision-sender .portrait { border-radius: 13px; }
+
+/* Level-up popup (mockup §8): unlocked-building artwork cards + reward */
+.levelup-body { display: flex; flex-direction: column; gap: 13px; }
+.levelup-lead { font-size: 13px; color: var(--text-muted); margin: 0; }
+.levelup-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(84px, 1fr)); gap: 10px; }
+.levelup-card {
+  display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 10px 6px;
+  border-radius: 12px; background: var(--panel-bg-2); border: 1px solid var(--panel-border);
+}
+.levelup-card .bld-art { border-radius: 10px; }
+.levelup-card-name { font-size: 11px; font-weight: 700; text-align: center; line-height: 1.2; }
+.levelup-reward {
+  display: flex; align-items: center; gap: 14px; padding: 10px 13px; border-radius: 12px;
+  background: color-mix(in srgb, var(--primary) 14%, transparent);
+  border: 1px solid color-mix(in srgb, var(--primary) 35%, transparent);
+}
+.levelup-reward-label { font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.05em; color: var(--primary); }
+.levelup-reward-item { display: inline-flex; align-items: center; gap: 6px; font-weight: 800; font-size: 15px; font-variant-numeric: tabular-nums; }

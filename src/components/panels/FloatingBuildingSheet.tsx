@@ -2,7 +2,6 @@ import {
   AlertTriangle,
   ArrowUp,
   BriefcaseBusiness,
-  Building2,
   CheckCircle2,
   Clock,
   Coins,
@@ -31,6 +30,7 @@ import type { BuildingInstance } from '../../game/types.ts';
 import type { Diagnosis } from '../../game/buildings/diagnostics.ts';
 import { ActionBubble } from '../common/ActionBubble.tsx';
 import { ConfirmModal } from '../common/ConfirmModal.tsx';
+import { BuildingArt } from '../art/index.ts';
 import { formatDuration, formatMoney, t } from '../../i18n/index.ts';
 
 /** Money costs use the compact format; materials stay plain integers. */
@@ -81,25 +81,28 @@ export function FloatingBuildingSheet() {
     <>
       <div className="floating-sheet" onClick={(e) => e.stopPropagation()}>
         <div className="floating-sheet-head">
-          <h3>
-            <Building2 size={17} />
-            {t(stageNameKey)}
-            {maxLevel > 0 && (
-              <span className="level-pips" title={`${t('ui.building_level')} ${b.upgradeLevel + 1}/${maxLevel + 1}`}>
-                {Array.from({ length: maxLevel + 1 }, (_, i) => (
-                  <span key={i} className={`pip${i <= b.upgradeLevel ? ' filled' : ''}`} />
-                ))}
-              </span>
-            )}
-          </h3>
+          <div className="sheet-hero">
+            <BuildingArt id={def.id} category={def.category} px={58} />
+            <div className="sheet-hero-text">
+              <h3>
+                {t(stageNameKey)}
+                {maxLevel > 0 && (
+                  <span className="level-pips" title={`${t('ui.building_level')} ${b.upgradeLevel + 1}/${maxLevel + 1}`}>
+                    {Array.from({ length: maxLevel + 1 }, (_, i) => (
+                      <span key={i} className={`pip${i <= b.upgradeLevel ? ' filled' : ''}`} />
+                    ))}
+                  </span>
+                )}
+              </h3>
+              <div className="sheet-substatus">
+                <span className="sheet-category">{t(`category.${def.category}`)}</span>
+                <span className={`sheet-status-badge ${status.tone}`}>{t(status.key)}</span>
+              </div>
+            </div>
+          </div>
           <button className="btn-icon" onClick={close} title={t('ui.close')}>
             <X size={18} />
           </button>
-        </div>
-
-        <div className="sheet-substatus">
-          <span className="sheet-category">{t(`category.${def.category}`)}</span>
-          <span className={`sheet-status-badge ${status.tone}`}>{t(status.key)}</span>
         </div>
 
         {b.status === 'constructing' && b.constructionEndsAt !== undefined && (

@@ -1,8 +1,8 @@
-import { Menu, Users } from 'lucide-react';
+import { Menu } from 'lucide-react';
 import { useGame, useUiStore } from '../../state/store.ts';
 import { xpForNextLevel } from '../../game/progression/levels.ts';
 import { formatMoney, t } from '../../i18n/index.ts';
-import { GoldIcon, NeedIcon, ResourceIcon } from '../common/icons.tsx';
+import { ResourceArt } from '../art/index.ts';
 import { ResourceCard } from './ResourceCard.tsx';
 import { ResourceDetailPopover } from './ResourceDetailPopover.tsx';
 
@@ -49,7 +49,7 @@ export function GameHud() {
 
       <div className="hud-resources">
         <ResourceCard
-          icon={<ResourceIcon id="money" size={18} />}
+          icon={<ResourceArt id="money" size={30} />}
           value={formatMoney(res.money)}
           sub={perMin(income)}
           subTone={income < 0 ? 'bad' : 'good'}
@@ -60,14 +60,14 @@ export function GameHud() {
         />
         {game.config.features.goldSystem && (
           <ResourceCard
-            icon={<GoldIcon size={18} />}
+            icon={<ResourceArt id="gold" size={30} />}
             value={int(state.gold.balance)}
             accent="var(--res-gold)"
             title={t('ui.gold')}
           />
         )}
         <ResourceCard
-          icon={<ResourceIcon id="wood" size={18} />}
+          icon={<ResourceArt id="wood" size={30} />}
           value={int(res.wood)}
           sub={perMin(prod.wood)}
           warn={caps.wood > 0 && res.wood >= caps.wood}
@@ -76,7 +76,7 @@ export function GameHud() {
           detail={<ResourceDetailPopover id="wood" />}
         />
         <ResourceCard
-          icon={<ResourceIcon id="stone" size={18} />}
+          icon={<ResourceArt id="stone" size={30} />}
           value={int(res.stone)}
           sub={perMin(prod.stone)}
           warn={caps.stone > 0 && res.stone >= caps.stone}
@@ -85,7 +85,7 @@ export function GameHud() {
           detail={<ResourceDetailPopover id="stone" />}
         />
         <ResourceCard
-          icon={<ResourceIcon id="food" size={18} />}
+          icon={<ResourceArt id="food" size={30} />}
           value={int(res.food)}
           sub={perMin(prod.food)}
           warn={caps.food > 0 && res.food >= caps.food}
@@ -95,7 +95,7 @@ export function GameHud() {
         />
         {hasFreshwater ? (
           <ResourceCard
-            icon={<ResourceIcon id="freshwater" size={18} />}
+            icon={<ResourceArt id="freshwater" size={30} />}
             value={int(res.freshwater)}
             sub={perMin(prod.freshwater)}
             warn={res.freshwater >= caps.freshwater}
@@ -105,7 +105,7 @@ export function GameHud() {
         ) : (
           level >= 3 && (
             <ResourceCard
-              icon={<NeedIcon id="water" size={18} />}
+              icon={<ResourceArt id="freshwater" size={30} />}
               value={`${waterFulfil}%`}
               sub={t('ui.water.coverage')}
               subTone="muted"
@@ -116,7 +116,7 @@ export function GameHud() {
           )
         )}
         <ResourceCard
-          icon={<Users size={18} />}
+          icon={<ResourceArt id="population" size={30} />}
           value={int(state.citizens.population)}
           sub={growth.growing ? perMin(growth.ratePerMin) : undefined}
           subTone="good"
@@ -124,7 +124,7 @@ export function GameHud() {
           title={t('ui.population')}
         />
         <ResourceCard
-          icon={<HappyGlyph happiness={happiness} />}
+          icon={<ResourceArt id="happiness" size={30} />}
           value={`${happiness}%`}
           sub={happinessLabel(happiness)}
           subTone={happiness >= 65 ? 'good' : happiness >= 40 ? 'muted' : 'bad'}
@@ -143,24 +143,4 @@ export function GameHud() {
 
 function happinessLabel(h: number): string {
   return t(h >= 80 ? 'ui.happy.great' : h >= 55 ? 'ui.happy.ok' : h >= 35 ? 'ui.happy.meh' : 'ui.happy.bad');
-}
-
-function HappyGlyph({ happiness }: { happiness: number }) {
-  // Reuse the need icon vocabulary is wrong here (leisure), so draw a simple
-  // dot-face whose colour tracks mood — cheap, on-brand, no emoji.
-  const tone = happiness >= 65 ? 'var(--good)' : happiness >= 40 ? 'var(--warn)' : 'var(--bad)';
-  return (
-    <svg width={18} height={18} viewBox="0 0 24 24" aria-hidden>
-      <circle cx="12" cy="12" r="10" fill="none" stroke={tone} strokeWidth="2" />
-      <circle cx="8.5" cy="10" r="1.3" fill={tone} />
-      <circle cx="15.5" cy="10" r="1.3" fill={tone} />
-      {happiness >= 55 ? (
-        <path d="M8 14.5 Q12 17.5 16 14.5" fill="none" stroke={tone} strokeWidth="1.8" strokeLinecap="round" />
-      ) : happiness >= 35 ? (
-        <path d="M8.5 15 H15.5" fill="none" stroke={tone} strokeWidth="1.8" strokeLinecap="round" />
-      ) : (
-        <path d="M8 16 Q12 13 16 16" fill="none" stroke={tone} strokeWidth="1.8" strokeLinecap="round" />
-      )}
-    </svg>
-  );
 }

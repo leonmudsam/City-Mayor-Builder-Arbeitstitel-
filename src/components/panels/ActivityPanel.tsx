@@ -1,25 +1,19 @@
 import { useState } from 'react';
-import { ClipboardList, Crown, Gift, HardHat, MapPin, PackageCheck, Search, Store, Timer, User, X, type LucideIcon } from 'lucide-react';
+import { ClipboardList, Gift, MapPin, PackageCheck, Search, Store, Timer, X } from 'lucide-react';
 import { useGame, useUiStore } from '../../state/store.ts';
 import { DecisionModal } from '../common/DecisionModal.tsx';
 import { RESOURCE_ICON } from '../common/icons.tsx';
+import { CitizenPortrait } from '../art/index.ts';
 import { rewardTierFor } from '../../game/simulation/activities.ts';
 import { formatDuration, formatMoney, t } from '../../i18n/index.ts';
 import { playFeedback } from '../../services/feedback.ts';
-import type { ActivityDef, QuestSender } from '../../game/config/types.ts';
+import type { ActivityDef } from '../../game/config/types.ts';
 import type { ResourceId } from '../../game/types.ts';
 
 // Stadtarbeit panel (§ aktives Stadtmanagement): the player's to-do board when
 // they can't build. Delivery/inspection activities put targets on the map;
 // decisions open a trade-off modal; trade contracts rotate. Everything is a
 // controller command — the panel just renders state and dispatches.
-const SENDER_ICON: Record<QuestSender, LucideIcon> = {
-  citizen: User,
-  buildingDept: HardHat,
-  fire: Crown,
-  merchant: Store,
-  mayor: Crown,
-};
 const TYPE_ICON = { delivery: PackageCheck, inspection: Search, decision: ClipboardList } as const;
 
 export function ActivityPanel() {
@@ -69,7 +63,6 @@ export function ActivityPanel() {
       <div className="activity-cards">
         {defs.map((def) => {
           const Icon = TYPE_ICON[def.type];
-          const Avatar = SENDER_ICON[def.sender];
           const tier = rewardTierFor(def, game.state.level.current);
           const readyAt = game.activityReadyAt(def.id);
           const onCooldown = now < readyAt;
@@ -91,9 +84,7 @@ export function ActivityPanel() {
           return (
             <div key={def.id} className={`activity-card${disabled ? ' is-disabled' : ''}`}>
               <div className="activity-card-head">
-                <span className={`quest-avatar avatar-${def.sender}`}>
-                  <Avatar size={16} />
-                </span>
+                <CitizenPortrait role={def.sender} seed={def.id} size={40} />
                 <div className="activity-card-title">
                   <span className="activity-card-sender">{t(`quest.sender.${def.sender}`)}</span>
                   <span className="activity-card-name">

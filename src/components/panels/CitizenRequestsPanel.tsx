@@ -1,21 +1,14 @@
 import { useState } from 'react';
-import { Check, Crown, Flame, Gift, HardHat, Store, User, type LucideIcon } from 'lucide-react';
+import { Check, Gift, User } from 'lucide-react';
 import { useGame, useUiStore } from '../../state/store.ts';
 import { objectiveTarget } from '../../game/simulation/quests.ts';
 import { formatMoney, t } from '../../i18n/index.ts';
-import type { QuestSender } from '../../game/config/types.ts';
+import { CitizenPortrait } from '../art/index.ts';
 
 // Bürgeranliegen (mockup §5, right column): the city's open requests as living
-// citizen cards — a portrait, a spoken wish (speech bubble), the concrete task
-// with a progress bar, and the reward. Reframes the quest system as "you helped
-// someone", nothing more; reward & progress still come from the quest engine.
-const SENDER_META: Record<QuestSender, { icon: LucideIcon; tone: string }> = {
-  citizen: { icon: User, tone: 'citizen' },
-  buildingDept: { icon: HardHat, tone: 'dept' },
-  fire: { icon: Flame, tone: 'fire' },
-  merchant: { icon: Store, tone: 'merchant' },
-  mayor: { icon: Crown, tone: 'mayor' },
-};
+// citizen cards — an illustrated portrait, a spoken wish (speech bubble), the
+// concrete task with a progress bar, and the reward. Reframes the quest system
+// as "you helped someone"; reward & progress still come from the quest engine.
 
 export function CitizenRequestsPanel() {
   const game = useGame();
@@ -45,13 +38,11 @@ export function CitizenRequestsPanel() {
           const def = game.config.quests.get(quest.questId);
           if (!def) return null;
           const sender = def.sender ?? 'citizen';
-          const meta = SENDER_META[sender];
-          const Avatar = meta.icon;
           return (
             <div key={quest.questId} className={`request-card${quest.claimable ? ' is-claimable' : ''}`}>
               <div className="request-top">
-                <span className={`request-avatar avatar-${meta.tone}`}>
-                  <Avatar size={19} />
+                <span className="request-avatar">
+                  <CitizenPortrait role={sender} seed={quest.questId} size={42} />
                 </span>
                 <div className="request-bubble">{t(def.descriptionKey)}</div>
               </div>
