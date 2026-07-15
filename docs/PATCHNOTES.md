@@ -1,5 +1,42 @@
 # Patch Notes
 
+## v0.33 — „Drop-in 3D-Modelle für die ganze Welt (Renderer-Anbindung)"
+
+Bisher las der 3D-Renderer nur **Gebäude**-Modelle ein; alles andere war rein
+prozedural und ignorierte eingelegte `.glb`. Jetzt konsumiert der Renderer die
+**gesamte** Drop-in-Pipeline — du kannst für **Gebirge/Terrain, Straßen, Brücken,
+Props/Vegetation, Fahrzeuge, Marker und Effekte** eigene Modelle entwickeln, in den
+passenden Ordner legen und siehst sie sofort. Fehlt ein Modell, bleibt der
+prozedurale Fallback — das Spiel bricht nie. Gameplay/Savegames unberührt.
+
+**Neu automatisch geladen (Dateiname = Schlüssel, rekursiv):**
+- **Terrain/Gebirge** (`models/terrain/…`): Kachelmodell je Terraintyp ersetzt die
+  farbige Basis-Kachel (`grass_tile`/`grass`, `forest_ground_tile`/`forest`,
+  `ocean_tile`/`water`, `river_straight`/`river`, `mountain_ground_tile`/`mountain`,
+  `sand_tile`/`sand`, `fertile_ground_tile`/`fertile`). Auf Gebirgs-Kacheln werden
+  zusätzlich Gipfel/Felsen gestreut (`mountain_peak_medium`/`_large`/`rock_large`).
+- **Straßen** (`models/roads/…`): Segment nach Nachbar-Maske gewählt und gedreht —
+  `road_straight`, `road_curve`, `road_t_intersection`, `road_cross_intersection`,
+  `road_end` (Kanonik: gerade = N–S, Kurve = N+E; Klassenvarianten
+  `road_main_*` bevorzugt). **Brücken** (`models/bridges/…`) über Wasser/Fluss:
+  `bridge_medium_road`, `bridge_small_stone`, … (sonst prozeduraler Deck-Fallback).
+- **Props/Vegetation** (`models/props/nature/…`): Bäume/Büsche gecullt (nie auf
+  Stadt/Straße) — `pine_tree`/`tree`, `bush_small`/`bush`.
+- **Fahrzeuge** (`models/vehicles/…`): Verkehr `car`/`car_small`, Missions-Van
+  `service_van`/`car_van` (Ausrichtung: Front +z).
+- **Marker** (`models/markers/…`): schwebendes 3D-Modell statt Billboard —
+  `marker_task`/`marker_problem`/`marker_construction`/`marker_upgrade` (+ Aliasse).
+- **Effekte** (`models/effects/…`): Schornstein-Rauch `smoke_chimney` (sonst
+  prozeduraler Sprite-Puff).
+
+**Robustheit:** Modelle werden gecacht und pro Nutzung geklont; viele gleiche
+Modelle (Terrain/Props) laufen als eine `InstancedMesh` (ein Draw-Call, gedeckelt).
+Geteilte Cache-Ressourcen werden beim Neuaufbau **nicht** disposed — behebt einen
+latenten Bug, der auch Gebäudemodelle nach dem ersten Rebuild leer gerendert hätte.
+
+Exakte Namen, Aliasse und Ausrichtungs-Konventionen: **`docs/3D_MODEL_MANIFEST.md`
+§0**.
+
 ## v0.32 — „3D-Welt-Asset-Struktur nach Referenzbild (Drop-in-Pipeline)"
 
 Struktur- und Doku-Slice: die komplette 3D-Welt (wie im Referenzbild — Küstenwelt
