@@ -11,7 +11,16 @@
 // Camera pan/zoom is handled by the Pixi `world` container's position/scale, so
 // projection only ever converts within world space — pan/zoom stay mode-agnostic.
 
-export type RenderMode = 'flat2d' | 'isometric2d';
+// flat2d / isometric2d are 2D Pixi projections handled here. true3d is a real
+// three.js scene (tile = 1 world unit, its own camera) — it never calls the 2D
+// helpers below; it only shares the RenderMode enum and the persisted setting.
+export type RenderMode = 'flat2d' | 'isometric2d' | 'true3d';
+
+/** The 2D Pixi renderer handles these; true3d is a separate engine (§ true3d). */
+export type RenderEngine = 'pixi' | 'three';
+export function engineFor(mode: RenderMode): RenderEngine {
+  return mode === 'true3d' ? 'three' : 'pixi';
+}
 
 /** Flat-grid tile size in world px (unchanged from the original renderer). */
 export const TILE = 32;

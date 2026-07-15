@@ -1,6 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
 import { AlertTriangle, CheckCircle2, Move, Sparkles } from 'lucide-react';
-import { MapRenderer, type HoverInfo } from '../renderer/MapRenderer.ts';
+import { MapRenderer, type HoverInfo, type RendererCallbacks } from '../renderer/MapRenderer.ts';
+import { ThreeMapRenderer } from '../renderer/three/ThreeMapRenderer.ts';
+import type { IMapRenderer } from '../renderer/IMapRenderer.ts';
+import { engineFor, type RenderEngine, type RenderMode } from '../renderer/projection.ts';
 import { getController, setMapApi, useUiStore } from '../state/store.ts';
 import { ServiceOverlayBanner } from './hud/ServiceOverlayBanner.tsx';
 import { t } from '../i18n/index.ts';
@@ -12,9 +15,18 @@ interface CoverageInfo {
   capacity?: { servable: number; used: number };
 }
 
+/** Instantiate the right renderer for a mode's engine (Pixi 2D / three.js 3D). */
+function createRenderer(mode: RenderMode, callbacks: RendererCallbacks): IMapRenderer {
+  const controller = getController();
+  const renderer: IMapRenderer =
+    engineFor(mode) === 'three' ? new ThreeMapRenderer(controller, callbacks) : new MapRenderer(controller, callbacks);
+  renderer.setRenderMode(mode);
+  return renderer;
+}
+
 export function MapView() {
   const hostRef = useRef<HTMLDivElement>(null);
-  const rendererRef = useRef<MapRenderer>(undefined);
+  const rendererRef = useRef<IMapRenderer>(undefined);
   const [hoverInfo, setHoverInfo] = useState<HoverInfo | undefined>(undefined);
   const [coverage, setCoverage] = useState<CoverageInfo | undefined>(undefined);
 
@@ -24,7 +36,7 @@ export function MapView() {
     const controller = getController();
     const ui = useUiStore.getState();
 
-    const renderer = new MapRenderer(controller, {
+    const callbacks: RendererCallbacks = {
       onSelectBuilding: (id) => {
         // While a Stadtarbeit run is active, clicking one of its map targets
         // delivers/inspects it instead of opening the building sheet (§ aktive
@@ -84,21 +96,32 @@ export function MapView() {
           ui.pushToast(placementErrorText(defId, result.error), 'error');
         }
       },
-    });
+    };
+
+    // Build the renderer for the persisted mode; expose the camera to the HUD.
+    let renderer = createRenderer(ui.renderMode, callbacks);
+    let engine: RenderEngine = engineFor(ui.renderMode);
     rendererRef.current = renderer;
-    // Apply the persisted render mode before the first frame (§3).
-    renderer.setRenderMode(ui.renderMode);
     void renderer.init(host);
-    // Expose the camera to the HUD (Quick-action "Karte") without leaking the
-    // renderer instance.
     setMapApi({ centerOnCity: () => renderer.centerOnCity() });
 
-    // Mirror UI state (placement/move/selection/render mode) into the renderer.
+    // Mirror UI state into the renderer. Switching between 2D and 3D swaps the
+    // whole engine (Pixi ↔ three.js) — a within-family change (flat2d ↔ iso)
+    // just re-projects. The savegame is never touched either way.
     const unsubscribe = useUiStore.subscribe((s) => {
+      if (engineFor(s.renderMode) !== engine) {
+        renderer.destroy();
+        renderer = createRenderer(s.renderMode, callbacks);
+        engine = engineFor(s.renderMode);
+        rendererRef.current = renderer;
+        void renderer.init(host);
+        setMapApi({ centerOnCity: () => renderer.centerOnCity() });
+      } else {
+        renderer.setRenderMode(s.renderMode);
+      }
       renderer.setPlacing(s.placingDefId);
       renderer.setMoving(s.movingBuildingId);
       renderer.setSelected(s.selectedBuildingId);
-      renderer.setRenderMode(s.renderMode);
     });
 
     const onKey = (e: KeyboardEvent) => {
