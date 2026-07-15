@@ -9,7 +9,9 @@ import type { RenderMode } from '../renderer/projection.ts';
 const RENDER_MODE_KEY = 'cmb.renderMode';
 function loadRenderMode(): RenderMode {
   try {
-    return localStorage.getItem(RENDER_MODE_KEY) === 'isometric2d' ? 'isometric2d' : 'flat2d';
+    const v = localStorage.getItem(RENDER_MODE_KEY);
+    if (v === 'isometric2d' || v === 'true3d') return v;
+    return 'flat2d';
   } catch {
     return 'flat2d';
   }

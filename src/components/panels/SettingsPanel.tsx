@@ -1,4 +1,4 @@
-import { Boxes, Bug, Download, Gift, Grid3x3, RefreshCw, Upload, X } from 'lucide-react';
+import { Box, Boxes, Bug, Download, Gift, Grid3x3, RefreshCw, Upload, X } from 'lucide-react';
 import { useGame, useUiStore } from '../../state/store.ts';
 import { exportSave, importSave } from '../../game/storage/exportImport.ts';
 import { t } from '../../i18n/index.ts';
@@ -43,6 +43,12 @@ export function SettingsPanel({
             onClick={() => setRenderMode('isometric2d')}
           >
             <Boxes size={15} /> {t('ui.render.isometric2d')}
+          </button>
+          <button
+            className={`settings-seg${renderMode === 'true3d' ? ' active' : ''}`}
+            onClick={() => setRenderMode('true3d')}
+          >
+            <Box size={15} /> {t('ui.render.true3d')}
           </button>
         </div>
         <span className="settings-group-hint">{t('ui.render.hint')}</span>

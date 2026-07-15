@@ -120,6 +120,65 @@ export function terrainIsoImage(id: string): string | undefined {
   return TERRAIN_ISO_IMAGES[id];
 }
 
+// ---- 3D models (v0.29, true3d render mode) --------------------------------
+// glTF-binary (.glb) models are the drop-in point for the real 3D map. As with
+// the image folders above, any `.glb` placed in these folders is picked up at
+// build time via import.meta.glob (as a URL the GLTFLoader fetches) — no wiring
+// per file. When a model is missing the 3D renderer draws a procedural block, so
+// the game keeps working with zero models and reaches the full look purely by
+// adding files. Naming, scale and pivot rules live in docs/3D_MODELS.md.
+//
+//   src/assets/models/buildings/<id>.glb          base model (all stages)
+//   src/assets/models/buildings/<id>_stage2.glb   optional per-upgrade variant
+//   src/assets/models/terrain/<name>.glb           e.g. grass.glb, water.glb
+//   src/assets/models/vehicles/<name>.glb          e.g. car.glb, truck_food.glb
+const BUILDING_MODELS = keyedExt(
+  import.meta.glob('./models/buildings/*.glb', { eager: true, query: '?url', import: 'default' }) as UrlMap,
+);
+const TERRAIN_MODELS = keyedExt(
+  import.meta.glob('./models/terrain/*.glb', { eager: true, query: '?url', import: 'default' }) as UrlMap,
+);
+const VEHICLE_MODELS = keyedExt(
+  import.meta.glob('./models/vehicles/*.glb', { eager: true, query: '?url', import: 'default' }) as UrlMap,
+);
+
+/** `./models/buildings/house_small.glb` → `house_small`. */
+function keyedExt(glob: UrlMap): UrlMap {
+  const out: UrlMap = {};
+  for (const [path, url] of Object.entries(glob)) {
+    const file = path.split('/').pop() ?? '';
+    out[file.replace(/\.glb$/i, '')] = url;
+  }
+  return out;
+}
+
+/**
+ * 3D model URL for a building. When `stage > 0` and a per-stage variant
+ * `<id>_stage<stage+1>.glb` exists it is preferred (so upgrades can look
+ * different); otherwise the base `<id>.glb` is used for every stage. Returns
+ * undefined → the renderer falls back to a procedural block.
+ */
+export function buildingModel(id: string | undefined, stage = 0): string | undefined {
+  if (!id) return undefined;
+  if (stage > 0) {
+    const staged = BUILDING_MODELS[`${id}_stage${stage + 1}`];
+    if (staged) return staged;
+  }
+  return BUILDING_MODELS[id];
+}
+/** 3D terrain model for a terrain type, e.g. `grass`, `water`, `mountain`. */
+export function terrainModel(name: string): string | undefined {
+  return TERRAIN_MODELS[name];
+}
+/** 3D vehicle model, e.g. `car`, `truck_food`, `firetruck`. */
+export function vehicleModel(name: string): string | undefined {
+  return VEHICLE_MODELS[name];
+}
+/** Whether ANY building model has been supplied (drives a first-run hint). */
+export function hasAnyBuildingModel(): boolean {
+  return Object.keys(BUILDING_MODELS).length > 0;
+}
+
 /** How many generic `citizen_N.png` portraits were supplied (for seed spread). */
 const CITIZEN_KEYS = Object.keys(PORTRAIT_IMAGES)
   .filter((k) => /^citizen_\d+$/.test(k))

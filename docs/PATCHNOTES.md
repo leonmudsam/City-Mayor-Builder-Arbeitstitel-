@@ -1,5 +1,57 @@
 # Patch Notes
 
+## v0.29 — „Echte 3D-Karte (three.js) mit Live-Effekten"
+
+Die Karte kann jetzt **wirklich in 3D** gerendert werden — ein neuer, echter
+three.js-Renderer neben 2D-Raster und Isometrie. Einstellungen → Kartenansicht →
+**3D**. Spiellogik, Platzierung, Ressourcen, Bedürfnisse, Stadtarbeit, Sektoren
+und Spielstände bleiben unangetastet; 3D ist reine Darstellung (in localStorage,
+nicht im Save).
+
+**Neuer 3D-Rendermodus (`true3d`)**
+- Vollständige three.js-Szene: perspektivische Kamera, Sonnenlicht + weiche
+  **Schatten**, Hemisphären-Licht, Himmel/Nebel.
+- **Kamera:** Ziehen/Rechtsklick = schwenken, Mausrad = zoomen, Umschalt+Ziehen =
+  drehen/neigen. „Karte zentrieren" und Fokus-auf-Auswahl funktionieren wie in 2D.
+- **Terrain** als instanziierte Kacheln mit leichtem Relief (Berge höher, Wasser
+  tiefer, Wald mit Low-Poly-Bäumen); gesperrte Sektoren abgedunkelt.
+- **Gebäude** als echte 3D-Körper: Modell aus `.glb`, falls vorhanden, sonst
+  prozeduraler Block (Wände + Sattel-/Flachdach, Kanten, Kategorie-Farbe mit
+  leichter Variation). **Ausbaustufen** wachsen in Höhe/Größe.
+- **Auswahl** per Raycast-Klick + Boden-Ring; **Bauen** per Boden-Raycast mit
+  grün/rotem Ghost (nutzt dieselbe Platzierungs-Prüfung wie 2D).
+
+**Live-Effekte in 3D**
+- **Fahrender Straßenverkehr:** Autos fahren automatisch über zusammenhängende
+  Straßen (gedeckelt, prozedural; echte Fahrzeug-Modelle über `vehicles/*.glb`).
+- **Bauarbeiten:** Gebäude im Bau transparent + gelber Gerüst-Käfig.
+- **Schornsteinrauch** über aktiven Produktions-/Energiegebäuden, **Windrad-Rotor**
+  dreht sich (auch über einen `rotor`-Node in echten Modellen).
+
+**Drop-in-3D-Assets (keine Migration, kein Pflicht-Asset)**
+- Neue Registry-Loader `buildingModel(id, stage)`, `terrainModel(name)`,
+  `vehicleModel(name)` binden jede `.glb` unter `src/assets/models/{buildings,
+  terrain,vehicles}/` automatisch ein. Fehlt ein Modell → Platzhalter, nie ein
+  Absturz.
+- **Ausbaustufen** brauchen standardmäßig 0 Extra-Dateien (Auto-Skalierung);
+  optionale Varianten je Stufe über `<id>_stage<N>.glb`.
+- **Benannte Nodes** `rotor`/`chimney` treiben Live-Effekte in echten Modellen.
+
+**Doku `docs/3D_MODELS.md` komplett neu**
+- Genaue **Ordnerstruktur** (wo welche Datei hinkommt), **Modell-Aufbau** (Format,
+  Pivot, Maßstab 1 Tile = 1 Einheit, Achsen, Poly-/Material-Vorgaben), Umgang mit
+  **Versionen/Upgrades**, **Live-Ansichten** (Bau/Verkehr) und die „wenige
+  Dateien"-Strategie (~40 Dateien für den vollen Look, UI teilt sich Assets).
+- Vollständige **Prompt-Liste** für Text-zu-3D-Tools (Gebäude, Terrain, Fahrzeuge)
+  inkl. Stil-Prefix und Checkliste vor dem Export.
+
+**Technik**
+- Neuer Renderer `src/renderer/three/ThreeMapRenderer.ts`, gemeinsames Interface
+  `IMapRenderer`; `MapView` wechselt die Engine (Pixi ↔ three.js) automatisch beim
+  Umschalten zwischen 2D/Iso und 3D. `RenderMode` um `true3d` erweitert.
+- Abhängigkeit `three` (+ Typen) ergänzt. `tsc -b --force`, ESLint, 101 Tests und
+  `vite build` grün; 3D-Ansicht per Screenshot einer ausgebauten Stadt verifiziert.
+
 ## v0.28 — „Iso-Ausbau: Dächer, Bäume, Straßen, Schornsteinrauch + 3D-Modell-Doku"
 
 Grafischer Ausbau der isometrischen Karte und Vorbereitung echter 3D-Modelle.
