@@ -1,5 +1,70 @@
 # Patch Notes
 
+## v0.30 — „3D-Kamera & Navigation: hochwertige Steuerung, nur noch 3D"
+
+Kompletter Umbau der 3D-Navigation zu einer Steuerung, die sich wie in modernen
+Aufbauspielen anfühlt — und die Karte läuft für Spieler jetzt **ausschließlich in
+3D**. Gameplay, Wirtschaft, Gebäude, Missionen und Spielstände sind unverändert.
+
+**Probleme der alten Kamera**
+- Steuerung inline & verstreut im Renderer, kein zentraler Controller.
+- Linksklick-Ziehen pannte immer (auch heikel im Baumodus), Rotation lag auf
+  Shift, Rechtsklick-Ziehen pannte (kollidierte mit „Abbrechen").
+- Kein Smoothing/Inertia, keine Pan-Weltgrenzen (man flog aus der Welt), nur grobe
+  Zoom/Pitch-Limits. Keine Tastatur, keine Presets, keine Touch-Gesten, kein
+  Cursor-Feedback, keine Einstellungen.
+
+**Neue Kamera-Architektur**
+- Zentraler, three-freier **`CameraController3D`** (Zielpunkt + Distanz/Yaw/Pitch,
+  Clamping, Smoothing, Inertia, Presets, Fokus) — **unit-getestet** (9 Tests).
+- **`CameraInputController`** bündelt Maus/Rad/Tastatur/Touch, gated den Baumodus
+  und gibt Cursor-Feedback. **`cameraSettings`** speichert die Feineinstellungen.
+
+**Maussteuerung**
+- Linksklick-Ziehen = **schwenken** ("Karte greifen"). STRG+Links oder
+  **Mittelklick** = **drehen + neigen**. Mausrad = **Zoom zum Cursor**.
+- Rechtsklick bleibt **Abbrechen** und pannt nie. Klick (ohne Ziehen) wählt aus.
+
+**Tastatur:** WASD/Pfeile bewegen, Q/E drehen, Bild↑/↓ neigen, +/- zoomen,
+Leertaste = Zentrum, F = Auswahl fokussieren, Shift = schneller, ESC = abbrechen.
+
+**Touch (vorbereitet):** 1 Finger schwenken, Pinch zoomen, 2-Finger-Twist drehen,
+2 Finger vertikal neigen, Tippen auswählen.
+
+**Grenzen & Bediengefühl**
+- Zoom 10–200, Pitch 28°–84° (nie überkopf), Schwenk an die endliche Welt
+  geklemmt — man kann nicht mehr aus der Karte fliegen.
+- Weiche Übergänge + leichte Pan-Inertia; direkte Eingabe bleibt erhalten.
+  Abschaltbar über „Weiche Kamera".
+
+**Nur noch ein Kartenmodus — 3D als Standard**
+- Kein sichtbarer 2D/Iso/3D-Umschalter mehr. 3D ist der einzige Spielermodus;
+  `flat2d`/`isometric2d` überleben nur als **Debug-Fallback** (Einstellungen →
+  Debug → Render-Engine). Kein Savegame-Risiko (Einstellung in localStorage).
+
+**Kamera-Presets statt Moduswechsel** (unten mittig auf der Karte)
+- **Stadtansicht** (schräg), **Bauansicht** (fast top-down für Straßen/
+  Platzierung), **Übersicht** (weit raus), **Zentrum** (aufs Rathaus).
+- Im Baumodus zusätzlich ein prominenter **„Bauansicht"**-Knopf. Dazu **Kompass**
+  (Ausrichtung zurücksetzen) und **Zoom +/−**.
+
+**Einstellungen (gespeichert):** Bewegungs-/Zoom-/Drehtempo, Drehen/Zoom umkehren,
+weiche Kamera, Randscrollen, Reset — ersetzen den alten Kartenmodus-Schalter.
+
+**Konflikte vermieden:** Kamera-Eingaben hängen nur am Canvas → UI-Klicks/-Scrolls
+bewegen die Kamera nicht. Baumodus: Linksklick platziert/malt, Kamera bewegt sich
+per Mittelklick/Tastatur; Rotation nur bewusst (STRG/Mittelklick).
+
+**Marker in 3D:** Stadtarbeit-Ziele sind **Billboard-Sprites** — immer zur Kamera
+gerichtet, bleiben bei Drehung/Neigung korrekt und lesbar.
+
+**Technik & Doku**
+- 2D/Iso-Renderer unangetastet und weiter lauffähig (Debug). `IMapRenderer` um
+  optionale Kamera-Methoden erweitert; MapView swappt die Engine weiterhin sauber.
+- Neu: **`docs/3D_CAMERA_CONTROLS.md`** (Maus/Tastatur/Touch/Presets/Einstellungen/
+  Konfliktregeln/Struktur/Grenzen). `tsc -b --force`, ESLint, **110 Tests** und
+  `vite build` grün; 3D-Standard + Stadt-/Bauansicht per Screenshot verifiziert.
+
 ## v0.29 — „Echte 3D-Karte (three.js) mit Live-Effekten"
 
 Die Karte kann jetzt **wirklich in 3D** gerendert werden — ein neuer, echter

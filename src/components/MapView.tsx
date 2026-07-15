@@ -4,7 +4,7 @@ import { MapRenderer, type HoverInfo, type RendererCallbacks } from '../renderer
 import { ThreeMapRenderer } from '../renderer/three/ThreeMapRenderer.ts';
 import type { IMapRenderer } from '../renderer/IMapRenderer.ts';
 import { engineFor, type RenderEngine, type RenderMode } from '../renderer/projection.ts';
-import { getController, setMapApi, useUiStore } from '../state/store.ts';
+import { getController, setMapApi, useUiStore, type MapApi } from '../state/store.ts';
 import { ServiceOverlayBanner } from './hud/ServiceOverlayBanner.tsx';
 import { t } from '../i18n/index.ts';
 
@@ -22,6 +22,19 @@ function createRenderer(mode: RenderMode, callbacks: RendererCallbacks): IMapRen
     engineFor(mode) === 'three' ? new ThreeMapRenderer(controller, callbacks) : new MapRenderer(controller, callbacks);
   renderer.setRenderMode(mode);
   return renderer;
+}
+
+/** Imperative camera surface exposed to the HUD; guards the 3D-only methods so
+ *  the 2D/iso debug renderer (which lacks them) is safe. */
+function makeMapApi(r: IMapRenderer): MapApi {
+  return {
+    centerOnCity: () => r.centerOnCity(),
+    applyPreset: (p) => r.applyPreset?.(p),
+    focusSelected: () => r.focusSelected?.(),
+    resetNorth: () => r.resetNorth?.(),
+    zoomStep: (d) => r.zoomStep?.(d),
+    getYaw: () => r.getYaw?.() ?? 0,
+  };
 }
 
 export function MapView() {
@@ -98,12 +111,14 @@ export function MapView() {
       },
     };
 
-    // Build the renderer for the persisted mode; expose the camera to the HUD.
+    // Build the renderer for the persisted mode; expose the camera to the HUD
+    // and apply the player's current camera preset (§ presets).
     let renderer = createRenderer(ui.renderMode, callbacks);
     let engine: RenderEngine = engineFor(ui.renderMode);
     rendererRef.current = renderer;
     void renderer.init(host);
-    setMapApi({ centerOnCity: () => renderer.centerOnCity() });
+    setMapApi(makeMapApi(renderer));
+    renderer.applyPreset?.(ui.cameraPreset);
 
     // Mirror UI state into the renderer. Switching between 2D and 3D swaps the
     // whole engine (Pixi ↔ three.js) — a within-family change (flat2d ↔ iso)
@@ -115,7 +130,8 @@ export function MapView() {
         engine = engineFor(s.renderMode);
         rendererRef.current = renderer;
         void renderer.init(host);
-        setMapApi({ centerOnCity: () => renderer.centerOnCity() });
+        setMapApi(makeMapApi(renderer));
+        renderer.applyPreset?.(s.cameraPreset);
       } else {
         renderer.setRenderMode(s.renderMode);
       }
