@@ -40,6 +40,13 @@ verweist darauf.
 **Fallbacks** für jeden Typ definiert (Gebäude/Terrain/Wasser/Straße/Brücke/Prop/
 Fahrzeug/Marker/Hero) — immer spielbar, klar als Platzhalter erkennbar.
 
+**Master-Manifest `docs/3D_MODEL_MANIFEST.md` (neu)** — die eine, verbindliche
+Namensliste **aller** 3D-Modelle mit exakten Dateinamen (Gebäude aus der Config
+abgeleitet: ID, Datei, Footprint, Level, Stufen; dazu Terrain/Straßen/Brücken/
+Props/Fahrzeuge/Marker/Effekte). Ein Test (`tests/manifest.test.ts`) hält die Liste
+synchron: kommt ein Gebäude in `buildings.config.ts` dazu, schlägt der Test fehl,
+bis es im Manifest steht.
+
 ## v0.31 — „3D-Quality-Pass: Straßen, Verkehr, Marker, Vegetation, aktive Missionen"
 
 Gezielter Politur-Durchgang für die 3D-Stadt — lesbarer, glaubwürdiger, lebendiger.
