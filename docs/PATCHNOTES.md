@@ -1,5 +1,45 @@
 # Patch Notes
 
+## v0.32 — „3D-Welt-Asset-Struktur nach Referenzbild (Drop-in-Pipeline)"
+
+Struktur- und Doku-Slice: die komplette 3D-Welt (wie im Referenzbild — Küstenwelt
+mit Gebirge, Wald, Fluss, See, Meer, Stadtzentrum, Landmarken) lässt sich künftig
+Modell für Modell als `.glb` einlegen, ohne Code-Änderung. Gameplay/Savegames
+unberührt.
+
+**Referenzbild analysiert** in Zonen (West Gebirge/Minen/Wasserfälle · Mitte
+Stadtzentrum/Wohnviertel/Markt/Build-Zonen · Nord Felder/Fluss/Brücke · Ost Küste/
+Leuchtturm/Hafen/Schiff · Süd See/Wald) → daraus eine vollständige Modellstruktur
+für Terrain, Gebirge, Wasser, Küste, Gebäude, Landmarken, **Hero-Modelle**, Props,
+Fahrzeuge, Marker und Effekte abgeleitet.
+
+**Rekursive Drop-in-Pipeline** — Modelle werden jetzt **rekursiv** aus den
+Unterordnern jeder Kategorie erkannt (`models/<kat>/**/*.glb`, Key = Dateiname).
+Damit funktioniert die verschachtelte Ordnerstruktur als reines Drop-in.
+
+**Neue Ordnerstruktur** angelegt:
+`buildings/{housing,administration,economy,services,resources,energy,leisure,landmarks}`,
+`terrain/{tiles,cliffs,mountains,water,coast,biome,hero}`, `roads`, `bridges`,
+`props/{nature,city,construction,harbor,farm}`, `vehicles`, `markers`, `effects`.
+Neuer Loader `bridgeModel()`; `roadModel/propModel/markerModel/effectModel/
+vehicleModel/terrainModel/buildingModel` decken den Rest ab.
+
+**BuildingDef.visual erweitert** (alle optional, honoriert vom 3D-Renderer):
+`model3d` (explizite Datei), `model3dLod`, `fallbackModel`, `scale`,
+`rotationOffset`, `footprintVisualOffset`, `sizeClass`. Auflösung: `model3d` →
+`<id>[_stage<N>]` → `fallbackModel` → prozeduraler Platzhalter.
+
+**Doku `docs/3D_WORLD_ASSETS.md` (neu)** — verbindliche Bauanleitung: Zonen-Analyse,
+Modellstandard (Stil, Format, Pivot, 1 Tile = 1 Einheit, Größenrichtwerte),
+Poly-/Textur-Budget + LOD/Instancing, komplette Modelllisten mit Dateinamen je
+Kategorie inkl. **Hero-Modellen**, Fallback-Regeln, Marker-Arten (3D/Billboard/UI),
+Effekte (Partikel vs. `.glb`), „Welt nicht statisch"-Leitlinien + Terrain-Daten-
+Konzept, Prompt-Vorlagen und empfohlene Startreihenfolge. `docs/3D_MODELS.md`
+verweist darauf.
+
+**Fallbacks** für jeden Typ definiert (Gebäude/Terrain/Wasser/Straße/Brücke/Prop/
+Fahrzeug/Marker/Hero) — immer spielbar, klar als Platzhalter erkennbar.
+
 ## v0.31 — „3D-Quality-Pass: Straßen, Verkehr, Marker, Vegetation, aktive Missionen"
 
 Gezielter Politur-Durchgang für die 3D-Stadt — lesbarer, glaubwürdiger, lebendiger.

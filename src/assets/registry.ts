@@ -132,32 +132,37 @@ export function terrainIsoImage(id: string): string | undefined {
 //   src/assets/models/buildings/<id>_stage2.glb   optional per-upgrade variant
 //   src/assets/models/terrain/<name>.glb           e.g. grass.glb, water.glb
 //   src/assets/models/vehicles/<name>.glb          e.g. car.glb, truck_food.glb
+// v0.32: models are discovered RECURSIVELY (`**`), so the documented nested
+// structure — buildings/housing/, terrain/mountains/, props/nature/, … — is pure
+// drop-in: put a correctly named `.glb` ANYWHERE under the category folder and it
+// is picked up, keyed by its filename. See docs/3D_WORLD_ASSETS.md. All categories
+// have a procedural fallback, so a missing model never breaks the game.
 const BUILDING_MODELS = keyedExt(
-  import.meta.glob('./models/buildings/*.glb', { eager: true, query: '?url', import: 'default' }) as UrlMap,
+  import.meta.glob('./models/buildings/**/*.glb', { eager: true, query: '?url', import: 'default' }) as UrlMap,
 );
 const TERRAIN_MODELS = keyedExt(
-  import.meta.glob('./models/terrain/*.glb', { eager: true, query: '?url', import: 'default' }) as UrlMap,
+  import.meta.glob('./models/terrain/**/*.glb', { eager: true, query: '?url', import: 'default' }) as UrlMap,
 );
 const VEHICLE_MODELS = keyedExt(
-  import.meta.glob('./models/vehicles/*.glb', { eager: true, query: '?url', import: 'default' }) as UrlMap,
+  import.meta.glob('./models/vehicles/**/*.glb', { eager: true, query: '?url', import: 'default' }) as UrlMap,
 );
-// v0.31 world-detail model folders: road segments, world props (trees, bushes,
-// fences, crates …), 3D map markers and effect meshes. All drop-in, all with a
-// procedural fallback — see docs/3D_WORLD_ASSETS.md.
 const ROAD_MODELS = keyedExt(
-  import.meta.glob('./models/roads/*.glb', { eager: true, query: '?url', import: 'default' }) as UrlMap,
+  import.meta.glob('./models/roads/**/*.glb', { eager: true, query: '?url', import: 'default' }) as UrlMap,
+);
+const BRIDGE_MODELS = keyedExt(
+  import.meta.glob('./models/bridges/**/*.glb', { eager: true, query: '?url', import: 'default' }) as UrlMap,
 );
 const PROP_MODELS = keyedExt(
-  import.meta.glob('./models/props/*.glb', { eager: true, query: '?url', import: 'default' }) as UrlMap,
+  import.meta.glob('./models/props/**/*.glb', { eager: true, query: '?url', import: 'default' }) as UrlMap,
 );
 const MARKER_MODELS = keyedExt(
-  import.meta.glob('./models/markers/*.glb', { eager: true, query: '?url', import: 'default' }) as UrlMap,
+  import.meta.glob('./models/markers/**/*.glb', { eager: true, query: '?url', import: 'default' }) as UrlMap,
 );
 const EFFECT_MODELS = keyedExt(
-  import.meta.glob('./models/effects/*.glb', { eager: true, query: '?url', import: 'default' }) as UrlMap,
+  import.meta.glob('./models/effects/**/*.glb', { eager: true, query: '?url', import: 'default' }) as UrlMap,
 );
 
-/** `./models/buildings/house_small.glb` → `house_small`. */
+/** `./models/buildings/housing/house_small.glb` → `house_small` (filename key). */
 function keyedExt(glob: UrlMap): UrlMap {
   const out: UrlMap = {};
   for (const [path, url] of Object.entries(glob)) {
@@ -192,6 +197,10 @@ export function vehicleModel(name: string): string | undefined {
 /** 3D road segment model, e.g. `road_straight`, `road_cross`, `road_t`, `road_end`. */
 export function roadModel(name: string): string | undefined {
   return ROAD_MODELS[name];
+}
+/** 3D bridge model, e.g. `bridge_small_stone`, `bridge_medium_road`. */
+export function bridgeModel(name: string): string | undefined {
+  return BRIDGE_MODELS[name];
 }
 /** 3D world prop model, e.g. `tree_pine`, `bush`, `fence`, `crate`, `rock`. */
 export function propModel(name: string): string | undefined {
