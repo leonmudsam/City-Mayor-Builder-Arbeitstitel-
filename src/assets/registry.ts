@@ -141,6 +141,21 @@ const TERRAIN_MODELS = keyedExt(
 const VEHICLE_MODELS = keyedExt(
   import.meta.glob('./models/vehicles/*.glb', { eager: true, query: '?url', import: 'default' }) as UrlMap,
 );
+// v0.31 world-detail model folders: road segments, world props (trees, bushes,
+// fences, crates …), 3D map markers and effect meshes. All drop-in, all with a
+// procedural fallback — see docs/3D_WORLD_ASSETS.md.
+const ROAD_MODELS = keyedExt(
+  import.meta.glob('./models/roads/*.glb', { eager: true, query: '?url', import: 'default' }) as UrlMap,
+);
+const PROP_MODELS = keyedExt(
+  import.meta.glob('./models/props/*.glb', { eager: true, query: '?url', import: 'default' }) as UrlMap,
+);
+const MARKER_MODELS = keyedExt(
+  import.meta.glob('./models/markers/*.glb', { eager: true, query: '?url', import: 'default' }) as UrlMap,
+);
+const EFFECT_MODELS = keyedExt(
+  import.meta.glob('./models/effects/*.glb', { eager: true, query: '?url', import: 'default' }) as UrlMap,
+);
 
 /** `./models/buildings/house_small.glb` → `house_small`. */
 function keyedExt(glob: UrlMap): UrlMap {
@@ -170,9 +185,29 @@ export function buildingModel(id: string | undefined, stage = 0): string | undef
 export function terrainModel(name: string): string | undefined {
   return TERRAIN_MODELS[name];
 }
-/** 3D vehicle model, e.g. `car`, `truck_food`, `firetruck`. */
+/** 3D vehicle model, e.g. `car`, `car_small`, `van_service`, `truck_delivery`. */
 export function vehicleModel(name: string): string | undefined {
   return VEHICLE_MODELS[name];
+}
+/** 3D road segment model, e.g. `road_straight`, `road_cross`, `road_t`, `road_end`. */
+export function roadModel(name: string): string | undefined {
+  return ROAD_MODELS[name];
+}
+/** 3D world prop model, e.g. `tree_pine`, `bush`, `fence`, `crate`, `rock`. */
+export function propModel(name: string): string | undefined {
+  return PROP_MODELS[name];
+}
+/** 3D map-marker model, e.g. `marker_problem`, `marker_mission`. */
+export function markerModel(name: string): string | undefined {
+  return MARKER_MODELS[name];
+}
+/** 3D effect model, e.g. `crane`, `dust`, `sparkle`. */
+export function effectModel(name: string): string | undefined {
+  return EFFECT_MODELS[name];
+}
+/** First available road model (drives whether the procedural road is used). */
+export function hasAnyRoadModel(): boolean {
+  return Object.keys(ROAD_MODELS).length > 0;
 }
 /** Whether ANY building model has been supplied (drives a first-run hint). */
 export function hasAnyBuildingModel(): boolean {

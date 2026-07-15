@@ -1,5 +1,46 @@
 # Patch Notes
 
+## v0.31 — „3D-Quality-Pass: Straßen, Verkehr, Marker, Vegetation, aktive Missionen"
+
+Gezielter Politur-Durchgang für die 3D-Stadt — lesbarer, glaubwürdiger, lebendiger.
+Kein Gameplay-Umbau, Savegames unberührt, alles additiv mit Platzhalter-Fallbacks.
+
+**Straßen (§3)** — statt „dunkler Platten mit Punkten" jetzt ein echtes, auto-getiltes
+Straßennetz: dunkle Fahrbahn + heller **Bordstein/Gehweg** an offenen Kanten +
+**Mittelmarkierung** (nur größere Klassen), mit sauberen Kreuzungen, T-Stücken,
+Kurven und Enden aus dem Nachbar-Muster. **Straßentyp-Hierarchie** vorbereitet
+(residential/main/wide/industrial/boulevard) — künftige Straßen-IDs greifen ohne
+Renderer-Änderung. Neuer Ordner `models/roads/` + `roadModel()`-Fallback.
+
+**Verkehr (§4)** — Autos fahren nicht mehr kreuz und quer: **Momentum** (fahren
+geradeaus durch, biegen nur an Kreuzungen ab, kein U-Turn außer an Sackgassen),
+**Rechts-Spur-Versatz**, geformte Auto-Meshes (Karosserie + Kabine) und ein
+**moderater Cap** (glaubwürdig statt massenhaft). Verschwinden sauber, wenn ihre
+Straße abgerissen wird.
+
+**Marker (§5)** — die diffusen transparenten Kästen sind weg. Jetzt **ein
+farbcodierter Prioritäts-Pin pro Gebäude** (Aktiv-Mission > Baustelle > Problem >
+Upgrade bereit), als kamera-zugewandtes Billboard mit Symbol, Umriss und Puls
+(nur Missionsziele). Nie gestapelt.
+
+**Vegetation-Culling (§7)** — Bäume/Büsche stehen **nie mehr auf Gebäuden oder
+Straßen**: eigene, aus der Belegung gecullte Vegetations-Ebene (Instancing, gecappt),
+mit Größen-/Rotationsvariation; nach Abriss wächst Natur auf freien Feldern nach.
+Dazu leichte Gras-Farbvariation gegen die flache Sheet-Optik.
+
+**Aktive Stadtarbeit in 3D (§6)** — „Essen verteilen" nutzt jetzt die Welt: bei
+Missionsstart **fokussiert die Kamera** das erste Ziel, ein **Lieferwagen** startet
+an Farm/Markt/Lager und **fährt per Wegfindung (BFS über das Straßennetz) zu den
+Zielhäusern**, Ziele tragen deutliche Aktiv-Marker. Abschluss weiter per Klick.
+
+**Platzierung & Auswahl (§10/§11)** — schönerer Bau-Ghost (klare grüne/rote
+Footprint-Fläche + leuchtender Umriss + Volumen-Andeutung statt weißem Kasten);
+kräftigerer, leicht leuchtender Auswahl-Ring.
+
+**Pipeline (§14)** — neue Modellordner `models/{roads,props,markers,effects}/` mit
+`roadModel()`/`propModel()`/`markerModel()`/`effectModel()` — Drop-in wie gehabt,
+Fallback prozedural. Umfassende Welt-Asset-Doku folgt in v0.32.
+
 ## v0.30.1 — „3D-Fixes: sichtbare Straßen, Pan-Richtung, 2D für Prototyp"
 
 - **Straßen waren im 3D-Modus unsichtbar**, weil sie unter den erhöhten

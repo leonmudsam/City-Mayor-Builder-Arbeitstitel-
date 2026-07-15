@@ -128,13 +128,18 @@ export class ThreeMapRenderer implements IMapRenderer {
 
   private buildingGroup = new Group();
   private terrainGroup = new Group();
+  private vegetationGroup = new Group();
   private liveGroup = new Group();
   private overlayGroup = new Group();
   private markerGroup = new Group();
   private ground: Mesh | undefined; // invisible pick plane
   private ghost: Group | undefined;
-  private markerTex: CanvasTexture | undefined;
+  private markerTex = new Map<string, CanvasTexture>();
   private markers: { s: Sprite; baseY: number }[] = [];
+  /** Tiles covered by ANY building footprint (roads included) — vegetation &
+   *  car pathing read this so nothing spawns on top of the city. */
+  private occupied = new Set<string>();
+  private vegKey = '';
 
   private nodes = new Map<string, BuildingNode>();
   private lastVersion = -1;
@@ -150,6 +155,10 @@ export class ThreeMapRenderer implements IMapRenderer {
   private cars: Car[] = [];
   private roadTiles: { x: number; y: number }[] = [];
   private roadSet = new Set<string>();
+  // Active Stadtarbeit (§6): a delivery van routes along roads to the mission's
+  // target houses; the camera focuses the first target when a mission starts.
+  private missionKey = '';
+  private missionVan: { mesh: Object3D; path: { x: number; y: number }[]; idx: number; t: number } | undefined;
 
   private destroyed = false;
 
@@ -202,8 +211,14 @@ export class ThreeMapRenderer implements IMapRenderer {
     this.scene.add(ground);
     this.ground = ground;
 
-    this.scene.add(this.terrainGroup, this.buildingGroup, this.liveGroup, this.overlayGroup, this.markerGroup);
-    this.markerTex = makeMarkerTexture();
+    this.scene.add(
+      this.terrainGroup,
+      this.vegetationGroup,
+      this.buildingGroup,
+      this.liveGroup,
+      this.overlayGroup,
+      this.markerGroup,
+    );
 
     this.cam.snap();
     this.writeCamera();
@@ -225,10 +240,11 @@ export class ThreeMapRenderer implements IMapRenderer {
     }
     this.disposeGroup(this.buildingGroup);
     this.disposeGroup(this.terrainGroup);
+    this.disposeGroup(this.vegetationGroup);
     this.disposeGroup(this.liveGroup);
     this.disposeGroup(this.overlayGroup);
     for (const m of this.markers) m.s.material.dispose();
-    this.markerTex?.dispose();
+    for (const t of this.markerTex.values()) t.dispose();
   }
 
   setRenderMode(): void {
@@ -414,18 +430,36 @@ export class ThreeMapRenderer implements IMapRenderer {
     const bonusPct = error ? 0 : locationBonusPct(this.controller.state, def, x, y);
     this.callbacks.onHoverInfo({ defId: def.id, error, bonusPct });
 
-    if (this.ghost) this.overlayGroup.remove(this.ghost);
+    if (this.ghost) {
+      this.overlayGroup.remove(this.ghost);
+      this.disposeGroup(this.ghost);
+    }
     const w = def.size.w;
     const h = def.size.h;
-    const col = error ? 0xe53935 : bonusPct > 0 ? 0x58c470 : 0x4caf50;
-    const geo = new BoxGeometry(w * 0.94, 0.4, h * 0.94);
-    const mat = new MeshStandardMaterial({ color: col, transparent: true, opacity: 0.5 });
-    const box = new Mesh(geo, mat);
-    box.position.set(x + w / 2, 0.2, y + h / 2);
-    const ring = new Mesh(new BoxGeometry(w, 0.02, h), new MeshStandardMaterial({ color: col }));
-    ring.position.set(x + w / 2, 0.02, y + h / 2);
+    const col = error ? 0xe5533b : bonusPct > 0 ? 0x58c470 : 0x49b7ff;
     const grp = new Group();
-    grp.add(box, ring);
+    grp.position.set(x + w / 2, 0, y + h / 2);
+    // Footprint pad (clear green/red validity) sitting just above the ground.
+    const pad = new Mesh(
+      new BoxGeometry(w, 0.04, h),
+      new MeshStandardMaterial({ color: col, transparent: true, opacity: 0.35, emissive: col, emissiveIntensity: 0.4 }),
+    );
+    pad.position.y = 0.27;
+    grp.add(pad);
+    // Bright footprint outline so the exact tiles are unmistakable.
+    const outline = new LineSegments(
+      new EdgesGeometry(new BoxGeometry(w, 0.5, h)),
+      new LineBasicMaterial({ color: col }),
+    );
+    outline.position.y = 0.5;
+    grp.add(outline);
+    // A translucent massing box hinting at the building volume.
+    const box = new Mesh(
+      new BoxGeometry(w * 0.86, 0.9, h * 0.86),
+      new MeshStandardMaterial({ color: col, transparent: true, opacity: 0.22 }),
+    );
+    box.position.y = 0.7;
+    grp.add(box);
     this.overlayGroup.add(grp);
     this.ghost = grp;
   }
@@ -470,13 +504,11 @@ export class ThreeMapRenderer implements IMapRenderer {
           const tile = s.tiles[ly * SECTOR_SIZE + lx];
           if (!tile) continue;
           tiles.push({ x: ox + lx, y: oy + ly, terrain: tile.terrain, locked: s.status === 'locked' });
-          if (tile.terrain === 'forest' && s.status === 'unlocked' && ((lx + ly) % 2 === 0)) {
-            treeTiles.push({ x: ox + lx, y: oy + ly });
-          }
         }
       }
     }
 
+    // Slight per-tile colour variation so the grass/ground isn't a flat sheet.
     const geo = new BoxGeometry(1, 1, 1);
     const mat = new MeshLambertMaterial();
     const inst = new InstancedMesh(geo, mat, tiles.length);
@@ -490,31 +522,89 @@ export class ThreeMapRenderer implements IMapRenderer {
       dummy.updateMatrix();
       inst.setMatrixAt(i, dummy.matrix);
       c.set(TERRAIN_COLORS[tl.terrain]);
+      c.offsetHSL(0, 0, (hash01(`${tl.x},${tl.y}`) - 0.5) * 0.07);
       if (tl.locked) c.multiplyScalar(0.4);
       inst.setColorAt(i, c);
     }
     inst.instanceMatrix.needsUpdate = true;
     if (inst.instanceColor) inst.instanceColor.needsUpdate = true;
     this.terrainGroup.add(inst);
+    void treeTiles;
+  }
 
-    // Forest trees as a second instanced mesh (cones), capped.
-    const n = Math.min(treeTiles.length, 500);
-    if (n > 0) {
-      const tGeo = new ConeGeometry(0.34, 1.1, 6);
-      const tMat = new MeshLambertMaterial({ color: 0x2f6b34 });
-      const trees = new InstancedMesh(tGeo, tMat, n);
-      trees.castShadow = true;
-      for (let i = 0; i < n; i++) {
-        const tt = treeTiles[i]!;
-        dummy.position.set(tt.x + 0.5, 0.62, tt.y + 0.5);
-        dummy.scale.set(1, 1, 1);
-        dummy.rotation.set(0, hash01(`${tt.x},${tt.y}`) * Math.PI, 0);
-        dummy.updateMatrix();
-        trees.setMatrixAt(i, dummy.matrix);
+  /** Vegetation is a separate, culled pass (§7): trees/bushes only on FREE tiles
+   *  (never on a building or road footprint), rebuilt when the city changes. */
+  private rebuildVegetation(): void {
+    const sectors = Object.values(this.controller.state.world.sectors).filter((s) => s.status === 'unlocked');
+    // Only rebuild when the occupancy or sector set actually changed.
+    const key = `${sectors.map((s) => s.id).join(',')}|${this.occupied.size}|${[...this.occupied].join(',')}`;
+    if (key === this.vegKey) return;
+    this.vegKey = key;
+    this.disposeGroup(this.vegetationGroup);
+    this.vegetationGroup.clear();
+
+    const dummy = new Object3D();
+    const trees: { x: number; y: number }[] = [];
+    const bushes: { x: number; y: number }[] = [];
+    for (const s of sectors) {
+      const ox = s.sx * SECTOR_SIZE;
+      const oy = s.sy * SECTOR_SIZE;
+      for (let ly = 0; ly < SECTOR_SIZE; ly++) {
+        for (let lx = 0; lx < SECTOR_SIZE; lx++) {
+          const tile = s.tiles[ly * SECTOR_SIZE + lx];
+          if (!tile) continue;
+          const x = ox + lx;
+          const y = oy + ly;
+          if (this.occupied.has(`${x},${y}`)) continue; // never on the city
+          const h = hash01(`${x},${y}`);
+          if (tile.terrain === 'forest' && (lx + ly) % 2 === 0) trees.push({ x, y });
+          else if (tile.terrain === 'grass' && h > 0.86) bushes.push({ x, y });
+        }
       }
-      dummy.rotation.set(0, 0, 0);
-      trees.instanceMatrix.needsUpdate = true;
-      this.terrainGroup.add(trees);
+    }
+
+    const nT = Math.min(trees.length, 600);
+    if (nT > 0) {
+      const trunkG = new CylinderGeometry(0.06, 0.09, 0.5, 5);
+      const crownG = new ConeGeometry(0.36, 1.0, 6);
+      const trunkM = new MeshLambertMaterial({ color: 0x7a5230 });
+      const crownM = new MeshLambertMaterial({ color: 0x2f6b34 });
+      const trunks = new InstancedMesh(trunkG, trunkM, nT);
+      const crowns = new InstancedMesh(crownG, crownM, nT);
+      crowns.castShadow = true;
+      for (let i = 0; i < nT; i++) {
+        const t = trees[i]!;
+        const jt = hash01(`${t.x}.${t.y}`);
+        const sc = 0.8 + jt * 0.5;
+        dummy.rotation.set(0, jt * Math.PI * 2, 0);
+        dummy.position.set(t.x + 0.5, 0.25 * sc, t.y + 0.5);
+        dummy.scale.set(sc, sc, sc);
+        dummy.updateMatrix();
+        trunks.setMatrixAt(i, dummy.matrix);
+        dummy.position.set(t.x + 0.5, 0.75 * sc, t.y + 0.5);
+        dummy.updateMatrix();
+        crowns.setMatrixAt(i, dummy.matrix);
+      }
+      trunks.instanceMatrix.needsUpdate = true;
+      crowns.instanceMatrix.needsUpdate = true;
+      this.vegetationGroup.add(trunks, crowns);
+    }
+
+    const nB = Math.min(bushes.length, 300);
+    if (nB > 0) {
+      const bG = new ConeGeometry(0.28, 0.42, 6);
+      const bM = new MeshLambertMaterial({ color: 0x4f8f45 });
+      const bush = new InstancedMesh(bG, bM, nB);
+      for (let i = 0; i < nB; i++) {
+        const b = bushes[i]!;
+        dummy.rotation.set(0, hash01(`b${b.x},${b.y}`) * Math.PI, 0);
+        dummy.position.set(b.x + 0.5, 0.34, b.y + 0.5);
+        dummy.scale.set(1, 1, 1);
+        dummy.updateMatrix();
+        bush.setMatrixAt(i, dummy.matrix);
+      }
+      bush.instanceMatrix.needsUpdate = true;
+      this.vegetationGroup.add(bush);
     }
   }
 
@@ -525,23 +615,37 @@ export class ThreeMapRenderer implements IMapRenderer {
     const seen = new Set<string>();
     this.roadTiles = [];
     this.roadSet = new Set<string>();
+    this.occupied = new Set<string>();
 
+    // Pass 1: occupancy + road set (needed for road auto-tiling, car pathing and
+    // vegetation culling before any mesh is built).
     for (const b of Object.values(state.buildings)) {
       const def = this.controller.config.buildings.get(b.defId);
       if (!def) continue;
-      seen.add(b.id);
+      for (let dx = 0; dx < def.size.w; dx++) {
+        for (let dy = 0; dy < def.size.h; dy++) this.occupied.add(`${b.x + dx},${b.y + dy}`);
+      }
       if (def.category === 'roads') {
         this.roadTiles.push({ x: b.x, y: b.y });
         this.roadSet.add(`${b.x},${b.y}`);
       }
-      const sig = `${b.defId}|${b.upgradeLevel}|${b.status}|${b.id === this.selectedId ? 'sel' : ''}`;
+    }
+
+    // Pass 2: build/update meshes. Road sigs carry the neighbour mask so a road
+    // re-renders when an adjacent road is added/removed (junction shape changes).
+    for (const b of Object.values(state.buildings)) {
+      const def = this.controller.config.buildings.get(b.defId);
+      if (!def) continue;
+      seen.add(b.id);
+      const roadMask = def.category === 'roads' ? this.roadNeighborMask(b.x, b.y) : -1;
+      const sig = `${b.defId}|${b.upgradeLevel}|${b.status}|${b.id === this.selectedId ? 'sel' : ''}|${roadMask}`;
       const existing = this.nodes.get(b.id);
       if (existing && existing.sig === sig) continue;
       if (existing) {
         this.buildingGroup.remove(existing.group);
         this.disposeGroup(existing.group);
       }
-      const node = this.buildNode(def, b);
+      const node = this.buildNode(def, b, sig, roadMask);
       this.buildingGroup.add(node.group);
       this.nodes.set(b.id, node);
     }
@@ -552,10 +656,21 @@ export class ThreeMapRenderer implements IMapRenderer {
       this.disposeGroup(node.group);
       this.nodes.delete(id);
     }
+    this.rebuildVegetation();
     this.seedCars();
   }
 
-  private buildNode(def: BuildingDef, b: BuildingInstance): BuildingNode {
+  /** 4-bit road-neighbour mask: 1=N(-y) 2=E(+x) 4=S(+y) 8=W(-x). */
+  private roadNeighborMask(x: number, y: number): number {
+    let m = 0;
+    if (this.roadSet.has(`${x},${y - 1}`)) m |= 1;
+    if (this.roadSet.has(`${x + 1},${y}`)) m |= 2;
+    if (this.roadSet.has(`${x},${y + 1}`)) m |= 4;
+    if (this.roadSet.has(`${x - 1},${y}`)) m |= 8;
+    return m;
+  }
+
+  private buildNode(def: BuildingDef, b: BuildingInstance, sig: string, roadMask: number): BuildingNode {
     const group = new Group();
     group.userData['buildingId'] = b.id;
     const cx = b.x + def.size.w / 2;
@@ -563,31 +678,36 @@ export class ThreeMapRenderer implements IMapRenderer {
     group.position.set(cx, 0, cz);
 
     const constructing = b.status === 'constructing' && b.targetUpgradeLevel === undefined;
-    const node: BuildingNode = { group, sig: `${def.id}|${b.upgradeLevel}|${b.status}|${b.id === this.selectedId ? 'sel' : ''}` };
+    const node: BuildingNode = { group, sig };
 
-    // Selection ring on the ground.
-    if (b.id === this.selectedId) {
-      const ringGeo = new BoxGeometry(def.size.w + 0.4, 0.05, def.size.h + 0.4);
-      const ring = new Mesh(ringGeo, new MeshStandardMaterial({ color: 0xffffff, emissive: 0x88ccff, emissiveIntensity: 0.6 }));
-      ring.position.y = 0.03;
-      group.add(ring);
-    }
+    // Selection highlight: a bright, glowing ground ring (§11).
+    if (b.id === this.selectedId) group.add(this.selectionRing(def.size.w, def.size.h));
 
     const url = buildingModel(def.id, b.upgradeLevel);
     if (url) {
       // Placeholder block until the model streams in (keeps the scene stable).
-      const ph = this.proceduralBuilding(def, b, constructing);
+      const ph = this.proceduralBuilding(def, b, constructing, roadMask);
       group.add(ph.group);
       if (ph.rotor) node.rotor = ph.rotor;
       if (ph.smoke) node.smoke = ph.smoke;
       void this.attachModel(url, def, group, ph.group, node, b.status === 'active');
     } else {
-      const p = this.proceduralBuilding(def, b, constructing);
+      const p = this.proceduralBuilding(def, b, constructing, roadMask);
       group.add(p.group);
       if (p.rotor) node.rotor = p.rotor;
       if (p.smoke) node.smoke = p.smoke;
     }
     return node;
+  }
+
+  /** A bright, slightly glowing ring hugging the footprint for the selection. */
+  private selectionRing(w: number, h: number): Mesh {
+    const ring = new Mesh(
+      new BoxGeometry(w + 0.5, 0.06, h + 0.5),
+      new MeshStandardMaterial({ color: 0xffffff, emissive: 0x8ad0ff, emissiveIntensity: 0.9, transparent: true, opacity: 0.9 }),
+    );
+    ring.position.y = 0.33;
+    return ring;
   }
 
   private async attachModel(
@@ -644,11 +764,72 @@ export class ThreeMapRenderer implements IMapRenderer {
     }
   }
 
+  /**
+   * Auto-tiled procedural road (§3): a dark asphalt cross/strip connecting to
+   * road neighbours (mask), light kerb/sidewalk strips on the open edges, and a
+   * subtle centreline for the bigger road classes — so straight/curve/T/cross/end
+   * all read correctly and it no longer looks like a dark plate with dots. When a
+   * real `road_*.glb` exists it can replace this later (roadModel(), fallback here).
+   */
+  private buildRoadTile(g: Group, mask: number, cls: RoadClass): void {
+    const spec = ROAD_SPECS[cls];
+    const yAsph = 0.24;
+    const yKerb = 0.25;
+    const yMark = 0.262;
+    const asphMat = new MeshStandardMaterial({ color: spec.color, roughness: 0.95 });
+    const kerbMat = new MeshStandardMaterial({ color: spec.kerb, roughness: 1 });
+    const half = spec.half;
+
+    // Central junction pad.
+    const core = new Mesh(new BoxGeometry(half * 2, 0.06, half * 2), asphMat);
+    core.position.y = yAsph;
+    core.receiveShadow = true;
+    g.add(core);
+
+    const dirs = [
+      { bit: 1, dx: 0, dz: -1 },
+      { bit: 2, dx: 1, dz: 0 },
+      { bit: 4, dx: 0, dz: 1 },
+      { bit: 8, dx: -1, dz: 0 },
+    ];
+    for (const { bit, dx, dz } of dirs) {
+      if (mask & bit) {
+        // Asphalt arm reaching to the tile edge in that direction.
+        const arm = new Mesh(
+          new BoxGeometry(dx !== 0 ? 0.5 : half * 2, 0.06, dz !== 0 ? 0.5 : half * 2),
+          asphMat,
+        );
+        arm.position.set(dx * 0.25, yAsph, dz * 0.25);
+        arm.receiveShadow = true;
+        g.add(arm);
+        // Centreline dash for bigger classes (not residential/back streets).
+        if (spec.centerline) {
+          const mark = new Mesh(
+            new BoxGeometry(dx !== 0 ? 0.34 : 0.05, 0.02, dz !== 0 ? 0.34 : 0.05),
+            new MeshStandardMaterial({ color: 0xe4d98f, roughness: 1 }),
+          );
+          mark.position.set(dx * 0.28, yMark, dz * 0.28);
+          g.add(mark);
+        }
+      } else {
+        // Open edge → raised kerb / sidewalk strip.
+        const kerb = new Mesh(
+          new BoxGeometry(dx !== 0 ? 0.1 : 0.98, 0.1, dz !== 0 ? 0.1 : 0.98),
+          kerbMat,
+        );
+        kerb.position.set(dx * 0.45, yKerb, dz * 0.45);
+        kerb.receiveShadow = true;
+        g.add(kerb);
+      }
+    }
+  }
+
   /** Procedural block: body + roof (+ rotor/scaffold), sized by footprint & stage. */
   private proceduralBuilding(
     def: BuildingDef,
     b: BuildingInstance,
     constructing: boolean,
+    roadMask: number,
   ): { group: Group; rotor?: TObject3D; smoke?: Vector3 } {
     const g = new Group();
     const w = def.size.w * 0.86;
@@ -663,22 +844,7 @@ export class ThreeMapRenderer implements IMapRenderer {
     let smoke: Vector3 | undefined;
 
     if (def.category === 'roads') {
-      // Terrain tiles rise to y≈0.20, so the road must sit ON TOP of them
-      // (bottom flush at 0.20) — otherwise it's buried and looks "missing".
-      const road = new Mesh(
-        new BoxGeometry(0.98, 0.08, 0.98),
-        new MeshStandardMaterial({ color: 0x444a54, roughness: 0.95 }),
-      );
-      road.position.y = 0.24;
-      road.receiveShadow = true;
-      g.add(road);
-      // Faint centre marking so roads read clearly from above.
-      const line = new Mesh(
-        new BoxGeometry(0.12, 0.02, 0.12),
-        new MeshStandardMaterial({ color: 0xd9cf9e, roughness: 1 }),
-      );
-      line.position.y = 0.29;
-      g.add(line);
+      this.buildRoadTile(g, roadMask, roadClassFor(def.id));
       return { group: g };
     }
 
@@ -814,7 +980,8 @@ export class ThreeMapRenderer implements IMapRenderer {
   }
 
   private seedCars(): void {
-    // Drop cars from roads that no longer exist; top up to the cap.
+    // Drop cars whose current road tile is gone; top up to a modest cap so the
+    // traffic reads as "believable", not "massive" (§4).
     for (let i = this.cars.length - 1; i >= 0; i--) {
       const car = this.cars[i]!;
       if (!this.roadSet.has(`${car.tile.x},${car.tile.y}`)) {
@@ -823,33 +990,39 @@ export class ThreeMapRenderer implements IMapRenderer {
         this.cars.splice(i, 1);
       }
     }
-    while (this.cars.length < Math.min(MAX_CARS, Math.floor(this.roadTiles.length / 4)) && this.roadTiles.length > 1) {
+    const cap = Math.min(MAX_CARS, Math.floor(this.roadTiles.length / 6));
+    let guard = 40;
+    while (this.cars.length < cap && this.roadTiles.length > 1 && guard-- > 0) {
       const start = this.roadTiles[Math.floor(Math.random() * this.roadTiles.length)]!;
-      const next = this.roadNeighbor(start, start);
-      if (!next) break;
-      const body = new Mesh(
-        new BoxGeometry(0.34, 0.18, 0.5),
-        new MeshStandardMaterial({ color: CAR_COLORS[Math.floor(Math.random() * CAR_COLORS.length)]! }),
-      );
-      body.position.y = 0.28;
-      body.castShadow = true;
-      const car: Car = { mesh: body, tile: { ...start }, next, t: 0, speed: 0.7 + Math.random() * 0.6 };
-      this.liveGroup.add(body);
+      const nbs = this.roadNeighbors(start);
+      if (nbs.length === 0) continue;
+      const next = nbs[Math.floor(Math.random() * nbs.length)]!;
+      const mesh = makeCarMesh();
+      const car: Car = { mesh, tile: { ...start }, next, t: 0, speed: 0.85 + Math.random() * 0.5 };
+      this.liveGroup.add(mesh);
       this.cars.push(car);
     }
   }
 
-  private roadNeighbor(tile: { x: number; y: number }, avoid: { x: number; y: number }): { x: number; y: number } | undefined {
-    const dirs = [
+  private roadNeighbors(tile: { x: number; y: number }): { x: number; y: number }[] {
+    return [
       { x: tile.x + 1, y: tile.y },
       { x: tile.x - 1, y: tile.y },
       { x: tile.x, y: tile.y + 1 },
       { x: tile.x, y: tile.y - 1 },
     ].filter((n) => this.roadSet.has(`${n.x},${n.y}`));
-    const fwd = dirs.filter((n) => !(n.x === avoid.x && n.y === avoid.y));
-    const pool = fwd.length > 0 ? fwd : dirs;
-    if (pool.length === 0) return undefined;
-    return pool[Math.floor(Math.random() * pool.length)];
+  }
+
+  /** Momentum-based next tile: prefer going straight through, turn at junctions,
+   *  never U-turn unless it's a dead end (§4 — no chaotic direction changes). */
+  private nextRoadTile(from: { x: number; y: number }, to: { x: number; y: number }): { x: number; y: number } {
+    const dx = Math.sign(to.x - from.x);
+    const dy = Math.sign(to.y - from.y);
+    const cands = this.roadNeighbors(to).filter((n) => !(n.x === from.x && n.y === from.y));
+    if (cands.length === 0) return { ...from }; // dead end → turn around
+    const straight = cands.find((n) => n.x - to.x === dx && n.y - to.y === dy);
+    if (straight && (cands.length === 1 || Math.random() < 0.7)) return straight;
+    return cands[Math.floor(Math.random() * cands.length)]!;
   }
 
   private animateCars(dt: number): void {
@@ -860,16 +1033,170 @@ export class ThreeMapRenderer implements IMapRenderer {
       while (car.t >= 1) {
         car.t -= 1;
         car.tile = { ...car.next };
-        const nb = this.roadNeighbor(car.tile, from);
-        car.next = nb ?? { ...car.tile };
+        car.next = this.nextRoadTile(from, car.tile);
       }
-      const x = MathUtils.lerp(from.x + 0.5, to.x + 0.5, car.t);
-      const z = MathUtils.lerp(from.y + 0.5, to.y + 0.5, car.t);
-      car.mesh.position.set(x, 0.28, z);
-      if (to.x !== from.x || to.y !== from.y) {
-        car.mesh.rotation.y = Math.atan2(to.x - from.x, to.y - from.y);
+      const cx = MathUtils.lerp(from.x + 0.5, to.x + 0.5, car.t);
+      const cz = MathUtils.lerp(from.y + 0.5, to.y + 0.5, car.t);
+      // Drive on the right: offset perpendicular to travel direction.
+      const hx = to.x - from.x;
+      const hz = to.y - from.y;
+      const rx = hz * 0.16;
+      const rz = -hx * 0.16;
+      car.mesh.position.set(cx + rx, 0.3, cz + rz);
+      if (hx !== 0 || hz !== 0) car.mesh.rotation.y = Math.atan2(hx, hz);
+    }
+  }
+
+  // ---- active Stadtarbeit: mission van + camera focus (§6) -------------------
+
+  private updateMission(): void {
+    const active = this.controller.state.activities.active;
+    if (!active || active.targets.length === 0) {
+      this.clearMissionVan();
+      this.missionKey = '';
+      return;
+    }
+    const def = this.controller.config.activities.activities.find((a) => a.id === active.defId);
+    const key = `${active.defId}|${active.startedAt}`;
+    if (key !== this.missionKey) {
+      this.missionKey = key;
+      // Focus the camera on the first target so the mission location is obvious.
+      const first = active.targets[0];
+      const b0 = first && this.controller.state.buildings[first.buildingId];
+      const def0 = b0 && this.controller.config.buildings.get(b0.defId);
+      if (b0 && def0) this.cam.focusGround(b0.x + def0.size.w / 2, b0.y + def0.size.h / 2, Math.min(this.cam.getDist(), 58));
+    }
+    // A visible delivery van only for delivery-type runs (others just focus).
+    if (def?.type !== 'delivery') {
+      this.clearMissionVan();
+      return;
+    }
+    this.retargetVan(active.targets);
+  }
+
+  private retargetVan(targets: { buildingId: string; done: boolean }[]): void {
+    const undone = targets.filter((t) => !t.done);
+    if (undone.length === 0) {
+      this.clearMissionVan();
+      return;
+    }
+    const start = this.missionVan ? this.vanTile() : this.deliverySourceTile() ?? this.roadTiles[0];
+    if (!start) return;
+    let bestPath: { x: number; y: number }[] | undefined;
+    for (const t of undone) {
+      const b = this.controller.state.buildings[t.buildingId];
+      const def = b && this.controller.config.buildings.get(b.defId);
+      if (!b || !def) continue;
+      const goal = this.roadTileAdjacent(b.x, b.y, def.size.w, def.size.h);
+      if (!goal) continue;
+      const path = this.roadPath(start, goal);
+      if (path.length > 0 && (!bestPath || path.length < bestPath.length)) bestPath = path;
+    }
+    if (!bestPath) {
+      this.clearMissionVan();
+      return;
+    }
+    if (!this.missionVan) {
+      const mesh = makeVanMesh();
+      this.liveGroup.add(mesh);
+      this.missionVan = { mesh, path: [], idx: 0, t: 0 };
+    }
+    this.missionVan.path = bestPath;
+    this.missionVan.idx = 0;
+    this.missionVan.t = 0;
+  }
+
+  private vanTile(): { x: number; y: number } | undefined {
+    const p = this.missionVan?.mesh.position;
+    return p ? { x: Math.floor(p.x), y: Math.floor(p.z) } : undefined;
+  }
+
+  private clearMissionVan(): void {
+    if (this.missionVan) {
+      this.liveGroup.remove(this.missionVan.mesh);
+      this.disposeGroup(this.missionVan.mesh);
+      this.missionVan = undefined;
+    }
+  }
+
+  /** A road tile orthogonally adjacent to a footprint (the van's drop-off spot). */
+  private roadTileAdjacent(x: number, y: number, w: number, h: number): { x: number; y: number } | undefined {
+    for (let dx = 0; dx < w; dx++) {
+      for (const t of [{ x: x + dx, y: y - 1 }, { x: x + dx, y: y + h }]) {
+        if (this.roadSet.has(`${t.x},${t.y}`)) return t;
       }
     }
+    for (let dy = 0; dy < h; dy++) {
+      for (const t of [{ x: x - 1, y: y + dy }, { x: x + w, y: y + dy }]) {
+        if (this.roadSet.has(`${t.x},${t.y}`)) return t;
+      }
+    }
+    return undefined;
+  }
+
+  private deliverySourceTile(): { x: number; y: number } | undefined {
+    const sources = new Set(['farm', 'market', 'supermarket', 'warehouse', 'depot', 'bakery', 'trading_post']);
+    for (const b of Object.values(this.controller.state.buildings)) {
+      const def = this.controller.config.buildings.get(b.defId);
+      if (!def || !sources.has(b.defId)) continue;
+      const t = this.roadTileAdjacent(b.x, b.y, def.size.w, def.size.h);
+      if (t) return t;
+    }
+    return undefined;
+  }
+
+  /** BFS over the road network for a tile path from → to (empty if unreachable). */
+  private roadPath(from: { x: number; y: number }, to: { x: number; y: number }): { x: number; y: number }[] {
+    const key = (t: { x: number; y: number }) => `${t.x},${t.y}`;
+    if (key(from) === key(to)) return [from];
+    const prev = new Map<string, { x: number; y: number }>();
+    const seen = new Set<string>([key(from)]);
+    let frontier = [from];
+    let guard = 4000;
+    while (frontier.length > 0 && guard-- > 0) {
+      const nextFrontier: { x: number; y: number }[] = [];
+      for (const t of frontier) {
+        for (const n of this.roadNeighbors(t)) {
+          const nk = key(n);
+          if (seen.has(nk)) continue;
+          seen.add(nk);
+          prev.set(nk, t);
+          if (nk === key(to)) {
+            const path = [to];
+            let cur: { x: number; y: number } | undefined = t;
+            while (cur) {
+              path.push(cur);
+              cur = prev.get(key(cur));
+            }
+            return path.reverse();
+          }
+          nextFrontier.push(n);
+        }
+      }
+      frontier = nextFrontier;
+    }
+    return [];
+  }
+
+  private animateMission(dt: number): void {
+    const v = this.missionVan;
+    if (!v || v.path.length < 2) return;
+    v.t += dt * 1.25;
+    while (v.t >= 1 && v.idx < v.path.length - 2) {
+      v.t -= 1;
+      v.idx++;
+    }
+    const a = v.path[v.idx]!;
+    const b = v.path[Math.min(v.idx + 1, v.path.length - 1)]!;
+    const tt = v.idx >= v.path.length - 1 ? 1 : v.t;
+    const hx = b.x - a.x;
+    const hz = b.y - a.y;
+    v.mesh.position.set(
+      MathUtils.lerp(a.x + 0.5, b.x + 0.5, tt) + hz * 0.16,
+      0.32,
+      MathUtils.lerp(a.y + 0.5, b.y + 0.5, tt) - hx * 0.16,
+    );
+    if (hx !== 0 || hz !== 0) v.mesh.rotation.y = Math.atan2(hx, hz);
   }
 
   // ---- markers (camera-facing billboards, §15) ------------------------------
@@ -880,25 +1207,47 @@ export class ThreeMapRenderer implements IMapRenderer {
     return Math.max(0.4, hc * 0.95 * (1 + upgradeLevel * 0.5));
   }
 
-  /** Pulsing markers over active Stadtarbeit targets. Sprites always face the
-   *  camera, so they stay readable under any rotation/tilt. */
+  private markerTexture(kind: MarkerKind): CanvasTexture {
+    let tex = this.markerTex.get(kind);
+    if (!tex) {
+      tex = makeMarkerTexture(kind);
+      this.markerTex.set(kind, tex);
+    }
+    return tex;
+  }
+
+  /**
+   * ONE priority billboard per building (§5): activity target > construction >
+   * problem > upgrade-ready. Colour-coded, camera-facing sprites that float above
+   * the building — clearer than the old translucent boxes and never stacked.
+   */
   private rebuildMarkers(): void {
     for (const m of this.markers) {
       this.markerGroup.remove(m.s);
       m.s.material.dispose();
     }
     this.markers = [];
-    if (!this.markerTex) return;
-    const targets = this.controller.getActivityTargets().filter((tg) => !tg.done);
-    for (const tg of targets) {
-      const b = this.controller.state.buildings[tg.buildingId];
-      const def = b && this.controller.config.buildings.get(b.defId);
-      if (!b || !def) continue;
-      const s = new Sprite(new SpriteMaterial({ map: this.markerTex, transparent: true, depthTest: false }));
-      const baseY = this.approxHeight(def, b.upgradeLevel) + 1.5;
+    const targets = new Set(this.controller.getActivityTargets().filter((tg) => !tg.done).map((tg) => tg.buildingId));
+
+    for (const b of Object.values(this.controller.state.buildings)) {
+      const def = this.controller.config.buildings.get(b.defId);
+      if (!def || def.category === 'roads' || def.category === 'decoration') continue;
+      let kind: MarkerKind | undefined;
+      if (targets.has(b.id)) kind = 'activity';
+      else if (b.status === 'constructing') kind = 'construction';
+      else {
+        const marker = this.controller.getBuildingMarker(b.id);
+        if (marker === 'problem') kind = 'problem';
+        else if (marker === 'upgrade') kind = 'upgrade';
+      }
+      if (!kind) continue;
+      const big = kind === 'activity';
+      const s = new Sprite(new SpriteMaterial({ map: this.markerTexture(kind), transparent: true, depthTest: false }));
+      const baseY = this.approxHeight(def, b.upgradeLevel) + (big ? 1.4 : 1.0);
       s.position.set(b.x + def.size.w / 2, baseY, b.y + def.size.h / 2);
-      s.scale.setScalar(1.7);
+      s.scale.setScalar(big ? 1.7 : 1.25);
       s.renderOrder = 10;
+      s.userData['pulse'] = big; // activity markers pulse; status markers stay calm
       this.markerGroup.add(s);
       this.markers.push({ s, baseY });
     }
@@ -907,11 +1256,11 @@ export class ThreeMapRenderer implements IMapRenderer {
   private animateMarkers(): void {
     if (this.markers.length === 0) return;
     const t = performance.now() / 1000;
-    const bob = Math.sin(t * 3) * 0.18;
-    const scale = 1.6 + Math.sin(t * 3) * 0.18;
     for (const m of this.markers) {
-      m.s.position.y = m.baseY + bob;
-      m.s.scale.setScalar(scale);
+      if (m.s.userData['pulse']) {
+        m.s.position.y = m.baseY + Math.sin(t * 3) * 0.18;
+        m.s.scale.setScalar(1.6 + Math.sin(t * 3) * 0.18);
+      }
     }
   }
 
@@ -926,6 +1275,7 @@ export class ThreeMapRenderer implements IMapRenderer {
       this.rebuildTerrainIfNeeded();
       this.rebuildBuildings();
       this.rebuildMarkers();
+      this.updateMission();
     }
 
     // Advance camera: apply held keys/edge-scroll, ease toward goals, write pose.
@@ -938,6 +1288,7 @@ export class ThreeMapRenderer implements IMapRenderer {
     }
     this.animateSmoke(dt);
     this.animateCars(dt);
+    this.animateMission(dt);
     this.animateMarkers();
 
     this.renderer.render(this.scene, this.camera);
@@ -975,31 +1326,122 @@ export class ThreeMapRenderer implements IMapRenderer {
 
 const CAR_COLORS = [0xd94f4f, 0x4f7fd9, 0xe0b03a, 0xf2f2f2, 0x5fb35f, 0x333a44];
 
-/** A cyan target pin (ring + downward arrow) drawn once to a canvas texture. */
-function makeMarkerTexture(): CanvasTexture {
+/** A small shaped car (body + cabin + tinted windows) — clearer than a bare box.
+ *  A real `vehicles/car.glb` can replace this later via vehicleModel(). */
+function makeCarMesh(): Group {
+  const g = new Group();
+  const color = CAR_COLORS[Math.floor(Math.random() * CAR_COLORS.length)]!;
+  const body = new Mesh(new BoxGeometry(0.32, 0.16, 0.52), new MeshStandardMaterial({ color, roughness: 0.5, metalness: 0.2 }));
+  body.position.y = 0.08;
+  body.castShadow = true;
+  const cabin = new Mesh(new BoxGeometry(0.28, 0.14, 0.28), new MeshStandardMaterial({ color: 0x223042, roughness: 0.3 }));
+  cabin.position.set(0, 0.2, -0.02);
+  g.add(body, cabin);
+  return g;
+}
+
+/** A delivery van for the active "Essen verteilen" mission (white box + cab). */
+function makeVanMesh(): Group {
+  const g = new Group();
+  const body = new Mesh(new BoxGeometry(0.4, 0.3, 0.66), new MeshStandardMaterial({ color: 0xf2f2f2, roughness: 0.5 }));
+  body.position.y = 0.18;
+  body.castShadow = true;
+  const cab = new Mesh(new BoxGeometry(0.4, 0.22, 0.2), new MeshStandardMaterial({ color: 0xe0a03a, roughness: 0.5 }));
+  cab.position.set(0, 0.14, 0.3);
+  const stripe = new Mesh(new BoxGeometry(0.42, 0.06, 0.4), new MeshStandardMaterial({ color: 0xe0a03a }));
+  stripe.position.set(0, 0.2, -0.05);
+  g.add(body, cab, stripe);
+  return g;
+}
+
+/** Road-type hierarchy (§3, prepared): the current `road` maps to a residential
+ *  street; future ids (road_main, road_wide, …) slot in here without renderer
+ *  changes. `half` = asphalt half-width; kerb = sidewalk colour. */
+export type RoadClass = 'residential' | 'main' | 'wide' | 'industrial' | 'boulevard';
+const ROAD_SPECS: Record<RoadClass, { half: number; color: number; kerb: number; centerline: boolean }> = {
+  residential: { half: 0.3, color: 0x474d57, kerb: 0x929aa4, centerline: false },
+  main: { half: 0.37, color: 0x3c424b, kerb: 0x9aa1ab, centerline: true },
+  wide: { half: 0.43, color: 0x3a4049, kerb: 0x9aa1ab, centerline: true },
+  industrial: { half: 0.4, color: 0x41464f, kerb: 0x7d838d, centerline: false },
+  boulevard: { half: 0.45, color: 0x393f48, kerb: 0xa7aeb8, centerline: true },
+};
+function roadClassFor(defId: string): RoadClass {
+  if (defId.includes('boulevard') || defId.includes('allee')) return 'boulevard';
+  if (defId.includes('wide') || defId.includes('breit')) return 'wide';
+  if (defId.includes('main') || defId.includes('haupt')) return 'main';
+  if (defId.includes('industrial') || defId.includes('zufahrt')) return 'industrial';
+  return 'residential';
+}
+
+type MarkerKind = 'activity' | 'construction' | 'problem' | 'upgrade';
+
+const MARKER_STYLE: Record<MarkerKind, { color: string; glyph: 'exclaim' | 'up' | 'wrench' | 'box' }> = {
+  activity: { color: '#2fd4d4', glyph: 'box' },
+  construction: { color: '#f2c14e', glyph: 'wrench' },
+  problem: { color: '#e5533b', glyph: 'exclaim' },
+  upgrade: { color: '#5fbf62', glyph: 'up' },
+};
+
+/** A colour-coded rounded pin with a downward tail + glyph, drawn to a texture. */
+function makeMarkerTexture(kind: MarkerKind): CanvasTexture {
   const size = 128;
   const cv = document.createElement('canvas');
   cv.width = cv.height = size;
   const ctx = cv.getContext('2d');
+  const st = MARKER_STYLE[kind];
   if (ctx) {
     ctx.translate(size / 2, size / 2);
-    ctx.strokeStyle = '#2fd4d4';
-    ctx.fillStyle = 'rgba(47,212,212,0.28)';
-    ctx.lineWidth = 9;
+    // Pin body: filled circle + downward tail, white outline for contrast.
+    ctx.fillStyle = st.color;
+    ctx.strokeStyle = '#ffffff';
+    ctx.lineWidth = 6;
     ctx.beginPath();
-    ctx.arc(0, -14, 34, 0, Math.PI * 2);
+    ctx.arc(0, -16, 36, 0, Math.PI * 2);
     ctx.fill();
     ctx.stroke();
-    ctx.fillStyle = '#2fd4d4';
     ctx.beginPath();
-    ctx.moveTo(-16, 24);
-    ctx.lineTo(16, 24);
-    ctx.lineTo(0, 52);
+    ctx.moveTo(-16, 12);
+    ctx.lineTo(16, 12);
+    ctx.lineTo(0, 46);
     ctx.closePath();
     ctx.fill();
+    ctx.stroke();
+    // Glyph.
+    ctx.fillStyle = '#ffffff';
+    ctx.strokeStyle = '#ffffff';
+    ctx.lineWidth = 8;
+    ctx.lineCap = 'round';
+    if (st.glyph === 'exclaim') {
+      ctx.fillRect(-5, -34, 10, 26);
+      ctx.beginPath();
+      ctx.arc(0, -0, 6, 0, Math.PI * 2);
+      ctx.fill();
+    } else if (st.glyph === 'up') {
+      ctx.beginPath();
+      ctx.moveTo(0, -36);
+      ctx.lineTo(18, -12);
+      ctx.lineTo(-18, -12);
+      ctx.closePath();
+      ctx.fill();
+      ctx.fillRect(-6, -14, 12, 16);
+    } else if (st.glyph === 'wrench') {
+      ctx.beginPath();
+      ctx.moveTo(-16, -30);
+      ctx.lineTo(12, -2);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.arc(-16, -30, 8, 0, Math.PI * 2);
+      ctx.stroke();
+    } else {
+      // box / delivery target
+      ctx.strokeRect(-16, -32, 32, 26);
+      ctx.beginPath();
+      ctx.moveTo(-16, -22);
+      ctx.lineTo(16, -22);
+      ctx.stroke();
+    }
   }
-  const tex = new CanvasTexture(cv);
-  return tex;
+  return new CanvasTexture(cv);
 }
 
 /** Slight per-terrain relief so the ground isn't a flat sheet. Returns the box
