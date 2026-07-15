@@ -1,5 +1,11 @@
 # Spielkonzept „Stadt & Bürgermeister" (Arbeitstitel) — Planungsdokument v2
 
+> **Hinweis (ab v0.35):** Die verbindliche Projektrichtung ist inzwischen ein
+> **natives PC-Spiel (Tauri)** aus einer Codebasis — siehe
+> **[PROJECT_STRATEGY.md](PROJECT_STRATEGY.md)** und **[ARCHITECTURE.md](ARCHITECTURE.md)**.
+> Dieses Konzeptdokument bleibt als Spiel-/Design-Grundlage gültig; bei
+> Plattform-/Architekturfragen gilt die Strategie.
+
 > **Status:** Reines Konzept, keine Implementierung. Grundlage für spätere MVP-1-Umsetzung.
 > **Repo:** leonmudsam/City-Mayor-Builder-Arbeitstitel- (aktuell leer, grüne Wiese)
 > **Branch:** claude/city-builder-concept-w2f70y

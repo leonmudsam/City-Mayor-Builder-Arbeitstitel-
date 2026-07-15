@@ -1,0 +1,7 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "default",
+  "description": "Default capability for the main window. Extend this when adding native features (files, dialogs, updater).",
+  "windows": ["main"],
+  "permissions": ["core:default"]
+}

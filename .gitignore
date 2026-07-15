@@ -3,3 +3,11 @@ dist/
 *.local
 .DS_Store
 scratchpad/
+
+# Tauri (native desktop build) — generated artifacts, never committed.
+src-tauri/target/
+src-tauri/gen/
+# Generated icon binaries (create locally with `npx tauri icon`, see src-tauri/icons/README.md).
+src-tauri/icons/*.png
+src-tauri/icons/*.ico
+src-tauri/icons/*.icns

@@ -1,5 +1,70 @@
 # Patch Notes
 
+## v0.35 — „Plattform-Pivot: natives PC-Spiel (Tauri), eine Codebasis"
+
+**Was wurde geändert.** City Mayor Builder wird ab sofort als **natives PC-Spiel**
+entwickelt (Windows zuerst, später Steam/macOS/Linux, danach Mobile) — aus **einer**
+Codebasis. Der Browser bleibt reine Dev-/Test-Umgebung; **GitHub Pages ist kein
+Zielplattform mehr**. Konkret:
+- **Tauri 2** als Desktop-Wrapper eingerichtet: neues `src-tauri/` (Rust-Crate +
+  `tauri.conf.json` mit fester `devUrl`, Fenster 1280×800, strikter CSP,
+  Windows-Bundle nsis/msi), Deps `@tauri-apps/api`/`@tauri-apps/cli`, Skripte
+  `tauri:dev`/`tauri:build`.
+- **Vite Dual-Mode:** `base` von `/City-Mayor-Builder-Arbeitstitel-/` auf `'/'`
+  (Root-Origin für Dev, Preview und Tauri gleichermaßen), fester Dev-Port 5173
+  (`strictPort`), Build-Target für WebView2/WKWebView.
+- **CI ohne Pages:** `deploy.yml` → `ci.yml` (nur Lint/Typecheck/Test/Build, kein
+  Deploy). GitHub = nur Versionsverwaltung/Backup/Zusammenarbeit.
+- **Verbindliche Doku:** neu `CLAUDE.md` (Arbeitsregeln), `docs/PROJECT_STRATEGY.md`
+  (kanonische Strategie), `docs/ARCHITECTURE.md` (Seam/Modi/Assets/Migration),
+  gefülltes `README.md`; `docs/CONCEPT.md` verweist auf den Pivot.
+
+**Warum.** Die Zielplattform ist ein vollwertiges Spiel, kein Browser-Tab. Die
+Grundlage (Desktop-Wrapper + verbindliche Regeln) sollte **einmal sauber** stehen,
+bevor 3D-Welt und Gameplay weiter ausgebaut werden — statt später ein Komplettumbau.
+
+**Welche Architektur wurde gewählt.** Bewusst **minimal-invasiv**: Die Simulation
+(`src/game/`) ist bereits vollständig vom Rendering getrennt (verifiziert: keine
+`three`/`pixi`/`react`/`zustand`/Renderer/UI-Imports unter `src/game/**`; Seam =
+`GameController` + `IMapRenderer` + Zustand-Bridge, config-getrieben mit Zod, lineare
+Save-Migrationen bis `SCHEMA_VERSION 9`). Deshalb war für Tauri **kein** Umbau der
+Spiellogik nötig — nur Infrastruktur. Tauri 2 wurde gewählt, weil dieselbe Basis
+später Android/iOS trägt (gleiche Simulation, nur UI/Kamera/Touch angepasst). Der
+Rust-Wrapper ist bewusst dünn (nur Fenster + Frontend laden).
+
+**Auswirkungen.**
+- `npm run dev` läuft jetzt auf `http://localhost:5173/` (statt Unterpfad); Assets
+  werden unter `/assets/…` ausgeliefert. Da alle Asset-URLs aus
+  `import.meta.glob('?url')` stammen und `base` automatisch erben, war **ein** Wert
+  ausreichend — kein Pfad-Refactor, kein Code an Registry/Renderer.
+- Savegames: unverändert `localStorage` (`cmb.save.*`) — funktioniert in der
+  Tauri-WebView. Der Origin unterscheidet sich von der alten Pages-URL, daher wandern
+  bestehende Browser-Saves nicht automatisch mit; Übertragung via Export/Import im
+  Einstellungen-Panel.
+- Kein GitHub-Pages-Deploy mehr; die öffentliche Pages-URL wird nicht weiter bespielt.
+
+**Was wird dadurch später einfacher.** Native Datei-Saves (Tauri-`fs`), Auto-Updater,
+Installer/Steam und die **Mobile-Version** (Tauri 2 Android/iOS) docken jetzt an eine
+bestehende native Struktur an, ohne die Spiellogik anzufassen.
+
+**Geänderte/neue Dateien.**
+- Neu: `src-tauri/{Cargo.toml,build.rs,tauri.conf.json,src/main.rs,src/lib.rs,
+  capabilities/default.json,icons/README.md}`, `CLAUDE.md`,
+  `docs/PROJECT_STRATEGY.md`, `docs/ARCHITECTURE.md`, `.github/workflows/ci.yml`.
+- Geändert: `vite.config.ts`, `package.json`, `package-lock.json`, `.gitignore`,
+  `README.md`, `docs/CONCEPT.md`, `docs/PATCHNOTES.md`.
+- Entfernt: `.github/workflows/deploy.yml`.
+
+**Neue Ordner/Assets nötig.** `src-tauri/icons/` muss vor dem ersten Desktop-Build
+lokal mit `npx tauri icon <quelle-1024.png>` befüllt werden (Icon-Binaries sind
+gitignored; siehe `src-tauri/icons/README.md`). `src-tauri/target` und
+`src-tauri/gen` sind generiert und gitignored.
+
+**Hinweis zur Verifikation.** Der Windows-Build (`npm run tauri:build`) läuft nur auf
+einem Windows-Host mit Rust + WebView2 — nicht in der Linux-Cloud-Umgebung. Verifiziert
+wurde der Browser-Pfad (tsc/eslint/Tests/Build/3D-Screenshot) sowie die Gültigkeit der
+Tauri-Konfiguration; die Desktop-Build-Schritte stehen im `README.md`.
+
 ## v0.34 — „Pro-Ordner-Modellisten, Upgrade-Stufen, Baustellen- & Welt-UI-Modelle"
 
 Baut auf v0.33 auf und macht das Entwickeln eigener Modelle noch geführter.
