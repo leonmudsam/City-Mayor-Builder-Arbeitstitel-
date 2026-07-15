@@ -1,4 +1,4 @@
-import { Bug, Download, Gift, RefreshCw, Upload, X } from 'lucide-react';
+import { Boxes, Bug, Download, Gift, Grid3x3, RefreshCw, Upload, X } from 'lucide-react';
 import { useGame, useUiStore } from '../../state/store.ts';
 import { exportSave, importSave } from '../../game/storage/exportImport.ts';
 import { t } from '../../i18n/index.ts';
@@ -15,6 +15,8 @@ export function SettingsPanel({
   const game = useGame();
   const { setPanel, pushToast } = useUiStore();
   const debugTools = game.config.features.debugTools;
+  const renderMode = useUiStore((s) => s.renderMode);
+  const setRenderMode = useUiStore((s) => s.setRenderMode);
 
   return (
     <aside className="panel side-panel">
@@ -24,6 +26,28 @@ export function SettingsPanel({
           <X size={16} />
         </button>
       </div>
+
+      {/* Map render mode (§3): flat top-down grid vs isometric 2.5D. Purely a
+          view choice — the city, buildings and savegame are identical. */}
+      <div className="settings-group">
+        <span className="settings-group-label">{t('ui.render.mode')}</span>
+        <div className="settings-segmented">
+          <button
+            className={`settings-seg${renderMode === 'flat2d' ? ' active' : ''}`}
+            onClick={() => setRenderMode('flat2d')}
+          >
+            <Grid3x3 size={15} /> {t('ui.render.flat2d')}
+          </button>
+          <button
+            className={`settings-seg${renderMode === 'isometric2d' ? ' active' : ''}`}
+            onClick={() => setRenderMode('isometric2d')}
+          >
+            <Boxes size={15} /> {t('ui.render.isometric2d')}
+          </button>
+        </div>
+        <span className="settings-group-hint">{t('ui.render.hint')}</span>
+      </div>
+
       <button
         className="btn-secondary"
         onClick={() => {

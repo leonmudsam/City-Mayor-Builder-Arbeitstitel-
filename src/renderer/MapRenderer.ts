@@ -1,8 +1,20 @@
-import { Application, Container, Graphics, Text, type TextStyleOptions } from 'pixi.js';
+import { Application, Assets, Container, Graphics, Sprite, Text, type TextStyleOptions } from 'pixi.js';
 import type { GameController } from '../game/commands/controller.ts';
 import type { BuildingInstance, SectorState } from '../game/types.ts';
 import type { BuildingDef } from '../game/config/types.ts';
 import { SECTOR_SIZE } from '../game/map/world.ts';
+import { buildingIsoImage } from '../assets/registry.ts';
+import {
+  ISO,
+  TILE,
+  isoDepth,
+  isoFootprintDiamond,
+  isoTileDiamond,
+  pickTile,
+  tileCenterWorld,
+  footprintCenterWorld,
+  type RenderMode,
+} from './projection.ts';
 import { validatePlacement, type PlacementError } from '../game/buildings/placement.ts';
 import { locationBonusPct } from '../game/buildings/location.ts';
 import { effectiveEffects } from '../game/buildings/effects.ts';
@@ -26,7 +38,6 @@ import {
   TERRAIN_COLORS,
 } from './colors.ts';
 
-const TILE = 32;
 const MIN_ZOOM = 0.35;
 const MAX_ZOOM = 3;
 /** Press-and-hold this long on a building to pick it up for moving. */
@@ -106,8 +117,11 @@ export class MapRenderer {
   private coverageKey = '';
   private hasCoverage = false;
   private destroyed = false;
+  private ready = false;
   /** Target for the world container while easing the camera onto a building (§13). */
   private focusTarget: { x: number; y: number } | undefined;
+  /** Active map projection (§3). flat2d is the original grid; isometric2d is 2.5D. */
+  private mode: RenderMode = 'flat2d';
 
   constructor(
     private controller: GameController,
@@ -123,18 +137,42 @@ export class MapRenderer {
     host.appendChild(this.app.canvas);
     this.world.addChild(this.terrainLayer, this.buildingLayer, this.fxLayer, this.overlayLayer);
     this.overlayLayer.addChild(this.coverageLayer, this.ghostRadius, this.selectionBox, this.ghost);
+    // Iso needs painter's-order by depth (§5); harmless in flat (zIndex stays 0).
+    this.buildingLayer.sortableChildren = true;
     this.app.stage.addChild(this.world);
 
     // Center the camera on the town hall.
-    const th = startRegionConfig.townHall;
     this.world.scale.set(1);
-    this.world.position.set(
-      this.app.screen.width / 2 - (th.x + 1.5) * TILE,
-      this.app.screen.height / 2 - (th.y + 1.5) * TILE,
-    );
+    this.centerCameraInstant();
 
     this.bindInput();
+    this.ready = true;
     this.app.ticker.add(() => this.frame());
+  }
+
+  /** Snap (no easing) the camera onto the town hall — used on init & mode switch. */
+  private centerCameraInstant(): void {
+    const th = startRegionConfig.townHall;
+    const c = footprintCenterWorld(this.mode, th.x, th.y, 3, 3);
+    const scale = this.world.scale.x;
+    this.world.position.set(this.app.screen.width / 2 - c.x * scale, this.app.screen.height / 2 - c.y * scale);
+  }
+
+  /**
+   * Switch map projection (§3). Rebuilds terrain and buildings from the same
+   * game data — logic and savegame are untouched — and recentres the camera so
+   * the switch never leaves the player looking at empty space.
+   */
+  setRenderMode(mode: RenderMode): void {
+    if (this.mode === mode || this.destroyed) return;
+    this.mode = mode;
+    if (!this.ready) return; // set before init(): init() will centre & draw
+    // Drop cached terrain views so they rebuild in the new projection.
+    for (const { container } of this.sectorViews.values()) container.destroy({ children: true });
+    this.sectorViews.clear();
+    this.coverageKey = '';
+    this.lastVersion = -1; // force a building redraw next frame
+    this.centerCameraInstant();
   }
 
   destroy(): void {
@@ -166,7 +204,7 @@ export class MapRenderer {
     const def = b && this.controller.config.buildings.get(b.defId);
     if (!b || !def) return;
     const scale = this.world.scale.x;
-    const centerPx = { x: (b.x + def.size.w / 2) * TILE, y: (b.y + def.size.h / 2) * TILE };
+    const centerPx = footprintCenterWorld(this.mode, b.x, b.y, def.size.w, def.size.h);
     this.focusTarget = {
       x: this.app.screen.width / 2 - centerPx.x * scale,
       y: this.app.screen.height / 2 - centerPx.y * scale,
@@ -178,9 +216,10 @@ export class MapRenderer {
   centerOnCity(): void {
     const th = startRegionConfig.townHall;
     const scale = this.world.scale.x;
+    const c = footprintCenterWorld(this.mode, th.x, th.y, 3, 3);
     this.focusTarget = {
-      x: this.app.screen.width / 2 - (th.x + 1.5) * TILE * scale,
-      y: this.app.screen.height / 2 - (th.y + 1.5) * TILE * scale,
+      x: this.app.screen.width / 2 - c.x * scale,
+      y: this.app.screen.height / 2 - c.y * scale,
     };
   }
 
@@ -298,10 +337,9 @@ export class MapRenderer {
   }
 
   private screenToTile(sx: number, sy: number): { x: number; y: number } {
-    return {
-      x: Math.floor((sx - this.world.position.x) / this.world.scale.x / TILE),
-      y: Math.floor((sy - this.world.position.y) / this.world.scale.y / TILE),
-    };
+    const wx = (sx - this.world.position.x) / this.world.scale.x;
+    const wy = (sy - this.world.position.y) / this.world.scale.y;
+    return pickTile(this.mode, wx, wy);
   }
 
   /** Center the footprint under the cursor. */
@@ -381,33 +419,46 @@ export class MapRenderer {
     }
     const groupColor = RADIUS_COLORS[overlay.colorKey] ?? COLOR_SELECTION;
     const g = this.coverageLayer;
+    const iso = this.mode === 'isometric2d';
+    // Reach square (flat) / diamond (iso) covering the radius tiles of a source.
+    const reach = (s: { x: number; y: number; w: number; h: number; radius: number }): void => {
+      if (iso) {
+        g.poly(isoFootprintDiamond(s.x - s.radius, s.y - s.radius, s.w + 2 * s.radius, s.h + 2 * s.radius));
+      } else {
+        const cx = (s.x + s.w / 2) * TILE;
+        const cy = (s.y + s.h / 2) * TILE;
+        const half = s.radius * TILE;
+        g.roundRect(cx - half, cy - half, half * 2, half * 2, 10);
+      }
+    };
+    const foot = (c: { x: number; y: number; w: number; h: number }): void => {
+      if (iso) g.poly(isoFootprintDiamond(c.x, c.y, c.w, c.h));
+      else g.roundRect(c.x * TILE + 2, c.y * TILE + 2, c.w * TILE - 4, c.h * TILE - 4, 5);
+    };
 
     // Combined reach of every source (low alpha so overlaps stay readable).
     for (const s of overlay.sources) {
-      const cx = (s.x + s.w / 2) * TILE;
-      const cy = (s.y + s.h / 2) * TILE;
-      const half = s.radius * TILE;
-      g.roundRect(cx - half, cy - half, half * 2, half * 2, 10).fill({ color: groupColor, alpha: 0.06 });
+      reach(s);
+      g.fill({ color: groupColor, alpha: 0.06 });
     }
     for (const s of overlay.sources) {
-      const cx = (s.x + s.w / 2) * TILE;
-      const cy = (s.y + s.h / 2) * TILE;
-      const half = s.radius * TILE;
-      g.roundRect(cx - half, cy - half, half * 2, half * 2, 10).stroke({ width: s.selected ? 2.5 : 1.5, color: groupColor, alpha: s.selected ? 0.85 : 0.4 });
+      reach(s);
+      g.stroke({ width: s.selected ? 2.5 : 1.5, color: groupColor, alpha: s.selected ? 0.85 : 0.4 });
       // Source footprint marker.
-      g.roundRect(s.x * TILE + 2, s.y * TILE + 2, s.w * TILE - 4, s.h * TILE - 4, 5)
-        .stroke({ width: s.selected ? 3 : 2, color: COVERAGE_COLORS.source, alpha: s.selected ? 1 : 0.6 });
+      foot(s);
+      g.stroke({ width: s.selected ? 3 : 2, color: COVERAGE_COLORS.source, alpha: s.selected ? 1 : 0.6 });
     }
     // Consumers: a SimCity-style status fill on each affected footprint plus a
     // dot, so served/partial/unsupplied buildings read at a glance (§21).
     for (const c of overlay.consumers) {
       const color = COVERAGE_COLORS[c.state];
-      g.roundRect(c.x * TILE + 2, c.y * TILE + 2, c.w * TILE - 4, c.h * TILE - 4, 5)
-        .fill({ color, alpha: c.state === 'unsupplied' ? 0.28 : 0.16 })
+      foot(c);
+      g.fill({ color, alpha: c.state === 'unsupplied' ? 0.28 : 0.16 })
         .stroke({ width: 2, color, alpha: 0.9 });
-      const dotX = (c.x + c.w / 2) * TILE;
-      const dotY = (c.y + c.h / 2) * TILE;
-      g.circle(dotX, dotY, 5).fill({ color, alpha: 0.95 }).stroke({ width: 1.5, color: 0x10151c, alpha: 0.6 });
+      const dot = iso
+        ? tileCenterWorld('isometric2d', c.x + (c.w - 1) / 2, c.y + (c.h - 1) / 2)
+        : { x: (c.x + c.w / 2) * TILE, y: (c.y + c.h / 2) * TILE };
+      g.circle(dot.x, dot.y, 5).fill({ color, alpha: 0.95 }).stroke({ width: 1.5, color: 0x10151c, alpha: 0.6 });
     }
     this.callbacks.onCoverageInfo({
       label: t(overlay.labelKey),
@@ -458,24 +509,41 @@ export class MapRenderer {
     for (const [ox, oy, r] of [[-9, -3, 8], [9, -1, 7], [0, -11, 7], [-5, 7, 6], [7, 7, 6], [0, 2, 8]] as const) {
       g.circle(ox, oy, r).fill({ color: 0xd8d2c6, alpha: 0.92 });
     }
-    g.position.set((x + w / 2) * TILE, (y + h / 2) * TILE);
+    const c = footprintCenterWorld(this.mode, x, y, w, h);
+    g.position.set(c.x, c.y);
     this.fxLayer.addChild(g);
     this.fx.push({ gfx: g, age: 0, ttl: 520, kind: 'puff' });
   }
 
   private spawnSectorFlash(sx: number, sy: number): void {
     const g = new Graphics();
-    const size = SECTOR_SIZE * TILE;
-    g.roundRect(2, 2, size - 4, size - 4, 10)
-      .fill({ color: 0xffffff, alpha: 1 })
-      .stroke({ width: 4, color: 0x8fe388, alpha: 1 });
-    g.position.set(sx * size, sy * size);
+    if (this.mode === 'isometric2d') {
+      // Flash the sector's iso diamond outline.
+      const x0 = sx * SECTOR_SIZE;
+      const y0 = sy * SECTOR_SIZE;
+      g.poly(isoFootprintDiamond(x0, y0, SECTOR_SIZE, SECTOR_SIZE))
+        .fill({ color: 0xffffff, alpha: 1 })
+        .stroke({ width: 4, color: 0x8fe388, alpha: 1 });
+    } else {
+      const size = SECTOR_SIZE * TILE;
+      g.roundRect(2, 2, size - 4, size - 4, 10)
+        .fill({ color: 0xffffff, alpha: 1 })
+        .stroke({ width: 4, color: 0x8fe388, alpha: 1 });
+      g.position.set(sx * size, sy * size);
+    }
     this.fxLayer.addChild(g);
     this.fx.push({ gfx: g, age: 0, ttl: 1400, kind: 'flash' });
   }
 
   /** Show only sectors intersecting the viewport (open-end performance, §8). */
   private cullSectors(): void {
+    if (this.mode === 'isometric2d') {
+      // Iso sector footprints are rotated diamonds; a tight cull needs the
+      // projected bounds. For the MVP world size we keep it simple and show all
+      // built sectors (still culled per-sector by the terrain layer's own draw).
+      for (const { container } of this.sectorViews.values()) container.visible = true;
+      return;
+    }
     const view = this.app.screen;
     const scale = this.world.scale.x;
     const minX = (-this.world.position.x / scale / TILE / SECTOR_SIZE) - 1;
@@ -505,6 +573,7 @@ export class MapRenderer {
   }
 
   private buildSectorView(sector: SectorState): Container {
+    if (this.mode === 'isometric2d') return this.buildSectorViewIso(sector);
     const container = new Container();
     container.position.set(sector.sx * SECTOR_SIZE * TILE, sector.sy * SECTOR_SIZE * TILE);
     const g = new Graphics();
@@ -544,6 +613,7 @@ export class MapRenderer {
   }
 
   private redrawBuildings(): void {
+    if (this.mode === 'isometric2d') return this.redrawBuildingsIso();
     this.buildingLayer.removeChildren().forEach((c) => c.destroy({ children: true }));
     const state = this.controller.state;
     const now = state.meta.lastSimTime;
@@ -637,6 +707,209 @@ export class MapRenderer {
       if (b.id === this.movingId) container.alpha = 0.35;
       this.buildingLayer.addChild(container);
     }
+  }
+
+  // ---- Isometric render path (§3-§5) -----------------------------------------
+
+  /** Iso terrain: one Graphics of coloured diamonds per sector, drawn in world
+   *  space; iso tiles carry a little relief (forest/mountain/water hints). */
+  private buildSectorViewIso(sector: SectorState): Container {
+    const container = new Container();
+    const g = new Graphics();
+    const ox = sector.sx * SECTOR_SIZE;
+    const oy = sector.sy * SECTOR_SIZE;
+    for (let ly = 0; ly < SECTOR_SIZE; ly++) {
+      for (let lx = 0; lx < SECTOR_SIZE; lx++) {
+        const tile = sector.tiles[ly * SECTOR_SIZE + lx];
+        if (!tile) continue;
+        const tx = ox + lx;
+        const ty = oy + ly;
+        const color = TERRAIN_COLORS[tile.terrain];
+        g.poly(isoTileDiamond(tx, ty)).fill(color).stroke({ width: 1, color: 0x000000, alpha: 0.06 });
+        const c = tileCenterWorld('isometric2d', tx, ty);
+        if (tile.terrain === 'forest') {
+          g.poly([c.x - 5, c.y + 3, c.x + 5, c.y + 3, c.x, c.y - 9]).fill({ color: 0x2e6b32, alpha: 0.85 });
+        } else if (tile.terrain === 'mountain') {
+          g.poly([c.x - 8, c.y + 4, c.x, c.y - 12, c.x + 8, c.y + 4]).fill({ color: 0x6f6f78, alpha: 0.95 });
+        } else if (tile.terrain === 'water' || tile.terrain === 'river') {
+          g.poly([c.x - 6, c.y, c.x, c.y - 3, c.x + 6, c.y, c.x, c.y + 3]).fill({ color: 0xffffff, alpha: 0.15 });
+        }
+      }
+    }
+    if (sector.status === 'locked') {
+      g.poly(isoFootprintDiamond(ox, oy, SECTOR_SIZE, SECTOR_SIZE))
+        .fill({ color: COLOR_LOCKED_OVERLAY, alpha: 0.5 })
+        .stroke({ width: 2, color: 0xffffff, alpha: 0.22 });
+      const label = new Text({ text: '+', style: lockStyle });
+      label.anchor.set(0.5);
+      const c = footprintCenterWorld('isometric2d', ox, oy, SECTOR_SIZE, SECTOR_SIZE);
+      label.position.set(c.x, c.y);
+      container.addChild(g, label);
+      return container;
+    }
+    container.addChild(g);
+    return container;
+  }
+
+  /** Iso buildings: depth-sorted extruded diamonds (or iso sprites when present). */
+  private redrawBuildingsIso(): void {
+    this.buildingLayer.removeChildren().forEach((c) => c.destroy({ children: true }));
+    const state = this.controller.state;
+    const now = state.meta.lastSimTime;
+
+    // Demolition puffs — same bookkeeping as the flat path so switching modes
+    // doesn't double-puff.
+    const current = new Map<string, { x: number; y: number; w: number; h: number }>();
+    for (const b of Object.values(state.buildings)) {
+      const def = this.controller.config.buildings.get(b.defId);
+      if (def) current.set(b.id, { x: b.x, y: b.y, w: def.size.w, h: def.size.h });
+    }
+    for (const [id, fp] of this.prevFootprints) {
+      if (!current.has(id)) this.spawnPuff(fp.x, fp.y, fp.w, fp.h);
+    }
+    this.prevFootprints = current;
+
+    const activityTargets = new Set(this.controller.getActivityTargets().filter((tg) => !tg.done).map((tg) => tg.buildingId));
+
+    for (const b of Object.values(state.buildings)) {
+      const def = this.controller.config.buildings.get(b.defId);
+      if (!def) continue;
+      const { w, h } = def.size;
+      const container = new Container();
+      container.zIndex = isoDepth(b.x, b.y, w, h);
+      const base = footprintCenterWorld('isometric2d', b.x, b.y, w, h);
+      const isoUrl = buildingIsoImage(def.id);
+
+      if (def.category === 'roads') {
+        const g = new Graphics();
+        g.poly(isoFootprintDiamond(b.x, b.y, w, h)).fill(COLOR_ASPHALT).stroke({ width: 1, color: COLOR_SIDEWALK, alpha: 0.7 });
+        container.addChild(g);
+      } else if (isoUrl) {
+        // Real iso sprite (drop-in): show a placeholder base until it loads, then
+        // anchor the sprite's base at the footprint centre.
+        this.drawIsoPlaceholder(container, def, b, base);
+        void this.attachIsoSprite(container, isoUrl, b.x, b.y, w, h, base);
+      } else {
+        this.drawIsoPlaceholder(container, def, b, base);
+        const label = new Text({ text: t(def.nameKey).slice(0, 2), style: labelStyle });
+        label.anchor.set(0.5);
+        const height = this.isoHeight(def, b.upgradeLevel);
+        label.position.set(base.x, base.y - height - ISO.tileH / 2);
+        container.addChild(label);
+      }
+
+      // Status chrome, anchored to the building's top point.
+      const topY = base.y - this.isoHeight(def, b.upgradeLevel) - ISO.tileH / 2;
+      if (b.status === 'constructing' && b.constructionEndsAt !== undefined) {
+        const total = (b.upgradeLevel > 0 ? def.upgrades?.[b.upgradeLevel - 1]?.constructionSec ?? def.constructionSec : def.constructionSec) * 1000;
+        const progress = total > 0 ? Math.min(1, 1 - (b.constructionEndsAt - now) / total) : 1;
+        const bar = new Graphics();
+        bar.rect(base.x - 18, base.y - 4, 36, 5).fill({ color: 0x000000, alpha: 0.5 });
+        bar.rect(base.x - 18, base.y - 4, 36 * progress, 5).fill(COLOR_CONSTRUCTION);
+        container.addChild(bar);
+        container.alpha = 0.85;
+      }
+      if (b.status === 'paused') {
+        const flame = new Graphics();
+        flame.circle(base.x, topY - 4, 7).fill(COLOR_FIRE);
+        container.addChild(flame);
+      }
+      if (b.status === 'active') {
+        const marker = this.controller.getBuildingMarker(b.id);
+        if (marker) this.drawIsoMarker(container, base.x, topY, marker);
+      }
+      if (activityTargets.has(b.id)) this.drawIsoActivityTarget(container, base, def, b.upgradeLevel);
+      if (b.id === this.movingId) container.alpha = 0.35;
+      this.buildingLayer.addChild(container);
+    }
+  }
+
+  /** Height (world px) of an iso building's extrusion, by category + upgrade. */
+  private isoHeight(def: BuildingDef, upgradeLevel: number): number {
+    const byCategory: Partial<Record<string, number>> = {
+      residential: 1.4, government: 2.2, economy: 1.3, services: 1.3, production: 1.1,
+      energy: 1.7, infrastructure: 1.0, leisure: 0.45, decoration: 0.2, special: 1.8,
+    };
+    const hc = def.visual?.heightClass ?? byCategory[def.category] ?? 1;
+    return ISO.elevation * (hc + upgradeLevel * 0.55);
+  }
+
+  /** Extruded diamond box placeholder: top face + two shaded walls (§Slice 1). */
+  private drawIsoPlaceholder(container: Container, def: BuildingDef, b: BuildingInstance, base: { x: number; y: number }): void {
+    const g = new Graphics();
+    if (def.category === 'decoration') {
+      g.poly(isoFootprintDiamond(b.x, b.y, def.size.w, def.size.h)).fill(CATEGORY_COLORS[def.category]);
+      container.addChild(g);
+      return;
+    }
+    const H = this.isoHeight(def, b.upgradeLevel);
+    const d = isoFootprintDiamond(b.x, b.y, def.size.w, def.size.h);
+    const [tX, tY, rX, rY, bX, bY, lX, lY] = d as [number, number, number, number, number, number, number, number];
+    const top = CATEGORY_COLORS[def.category];
+    const left = shade(top, 0.72);
+    const right = shade(top, 0.55);
+    // walls first (behind the top face)
+    g.poly([lX, lY, bX, bY, bX, bY - H, lX, lY - H]).fill(left);
+    g.poly([rX, rY, bX, bY, bX, bY - H, rX, rY - H]).fill(right);
+    // top face lifted by H
+    g.poly([tX, tY - H, rX, rY - H, bX, bY - H, lX, lY - H]).fill(top).stroke({ width: 1, color: 0x000000, alpha: 0.25 });
+    // upgrade pips on the top face
+    for (let i = 0; i < b.upgradeLevel; i++) {
+      g.circle(base.x - 8 + i * 7, base.y - H - ISO.tileH / 2, 2.4).fill(0xffffff).stroke({ width: 0.8, color: 0x000000, alpha: 0.35 });
+    }
+    container.addChild(g);
+  }
+
+  /** Load and place a real iso sprite (async, guarded against redraws/teardown). */
+  private async attachIsoSprite(
+    container: Container,
+    url: string,
+    x: number,
+    y: number,
+    w: number,
+    h: number,
+    base: { x: number; y: number },
+  ): Promise<void> {
+    try {
+      const texture = await Assets.load(url);
+      if (this.destroyed || container.destroyed) return;
+      const sprite = new Sprite(texture);
+      sprite.anchor.set(0.5, 1);
+      const d = isoFootprintDiamond(x, y, w, h);
+      const spanW = (d[2] ?? 0) - (d[6] ?? 0) + ISO.tileW; // left→right corner span
+      if (texture.width) sprite.scale.set((spanW * 1.05) / texture.width);
+      sprite.position.set(base.x, base.y + ISO.tileH / 2);
+      container.removeChildren().forEach((c) => c.destroy());
+      container.addChild(sprite);
+    } catch {
+      /* keep the placeholder if the sprite fails to load */
+    }
+  }
+
+  private drawIsoMarker(container: Container, cx: number, topY: number, kind: 'problem' | 'upgrade'): void {
+    const g = new Graphics();
+    const cy = topY - 12;
+    const color = kind === 'problem' ? 0xe53935 : 0xf0a020;
+    g.poly([cx - 5, cy + 7, cx + 5, cy + 7, cx, cy + 14]).fill(color);
+    g.circle(cx, cy, 10).fill(color).stroke({ width: 2, color: 0xffffff, alpha: 0.95 });
+    if (kind === 'problem') {
+      g.roundRect(cx - 1.6, cy - 5.5, 3.2, 6.5, 1.5).fill(0xffffff);
+      g.circle(cx, cy + 4, 1.7).fill(0xffffff);
+    } else {
+      g.poly([cx - 4.5, cy + 1.5, cx, cy - 4, cx + 4.5, cy + 1.5]).stroke({ width: 2.2, color: 0xffffff });
+      g.poly([cx - 4.5, cy + 5, cx, cy - 0.5, cx + 4.5, cy + 5]).stroke({ width: 2.2, color: 0xffffff });
+    }
+    container.addChild(g);
+  }
+
+  private drawIsoActivityTarget(container: Container, base: { x: number; y: number }, def: BuildingDef, lvl: number): void {
+    const g = new Graphics();
+    const topY = base.y - this.isoHeight(def, lvl) - ISO.tileH;
+    // A bright ground ellipse hugging the footprint + a bobbing down-arrow above.
+    g.ellipse(base.x, base.y, (ISO.tileW / 2) * def.size.w * 0.6 + 6, (ISO.tileH / 2) * def.size.h * 0.6 + 6)
+      .stroke({ width: 3, color: COLOR_ACTIVITY, alpha: 0.95 });
+    g.poly([base.x - 6, topY - 8, base.x + 6, topY - 8, base.x, topY + 1]).fill(COLOR_ACTIVITY).stroke({ width: 1.5, color: 0xffffff, alpha: 0.9 });
+    container.addChild(g);
   }
 
   /**
@@ -768,10 +1041,17 @@ export class MapRenderer {
     const color = error ? COLOR_GHOST_BAD : bonusPct > 0 ? COLOR_BONUS : COLOR_GHOST_OK;
 
     this.ghost.clear();
-    this.ghost
-      .roundRect(x * TILE + 1, y * TILE + 1, def.size.w * TILE - 2, def.size.h * TILE - 2, 4)
-      .fill({ color, alpha: 0.35 })
-      .stroke({ width: 2, color });
+    if (this.mode === 'isometric2d') {
+      this.ghost
+        .poly(isoFootprintDiamond(x, y, def.size.w, def.size.h))
+        .fill({ color, alpha: 0.35 })
+        .stroke({ width: 2, color });
+    } else {
+      this.ghost
+        .roundRect(x * TILE + 1, y * TILE + 1, def.size.w * TILE - 2, def.size.h * TILE - 2, 4)
+        .fill({ color, alpha: 0.35 })
+        .stroke({ width: 2, color });
+    }
 
     this.ghostRadius.clear();
     if (!error) this.drawEffectRadii(this.ghostRadius, def, x, y);
@@ -783,7 +1063,7 @@ export class MapRenderer {
     }
   }
 
-  /** Chebyshev radii render as squares around the footprint center. */
+  /** Chebyshev radii render as squares (flat) or diamonds (iso) around the footprint. */
   private drawEffectRadii(g: Graphics, def: BuildingDef, x: number, y: number, upgradeLevel = 0): void {
     const cx = (x + def.size.w / 2) * TILE;
     const cy = (y + def.size.h / 2) * TILE;
@@ -805,10 +1085,17 @@ export class MapRenderer {
       }
       if (radius === undefined || !colorKey) continue;
       const color = RADIUS_COLORS[colorKey] ?? COLOR_SELECTION;
-      const half = radius * TILE;
-      g.roundRect(cx - half, cy - half, half * 2, half * 2, 8)
-        .fill({ color, alpha: 0.08 })
-        .stroke({ width: 2, color, alpha: 0.55 });
+      if (this.mode === 'isometric2d') {
+        // The radius square becomes an iso diamond covering the same tiles.
+        g.poly(isoFootprintDiamond(x - radius, y - radius, def.size.w + 2 * radius, def.size.h + 2 * radius))
+          .fill({ color, alpha: 0.08 })
+          .stroke({ width: 2, color, alpha: 0.55 });
+      } else {
+        const half = radius * TILE;
+        g.roundRect(cx - half, cy - half, half * 2, half * 2, 8)
+          .fill({ color, alpha: 0.08 })
+          .stroke({ width: 2, color, alpha: 0.55 });
+      }
     }
   }
 
@@ -818,13 +1105,27 @@ export class MapRenderer {
     const b = this.controller.state.buildings[this.selectedId];
     const def = b && this.controller.config.buildings.get(b.defId);
     if (!b || !def) return;
-    this.selectionBox
-      .roundRect(b.x * TILE - 2, b.y * TILE - 2, def.size.w * TILE + 4, def.size.h * TILE + 4, 6)
-      .stroke({ width: 2.5, color: COLOR_SELECTION, alpha: 0.9 });
+    if (this.mode === 'isometric2d') {
+      this.selectionBox
+        .poly(isoFootprintDiamond(b.x, b.y, def.size.w, def.size.h))
+        .stroke({ width: 2.5, color: COLOR_SELECTION, alpha: 0.9 });
+    } else {
+      this.selectionBox
+        .roundRect(b.x * TILE - 2, b.y * TILE - 2, def.size.w * TILE + 4, def.size.h * TILE + 4, 6)
+        .stroke({ width: 2.5, color: COLOR_SELECTION, alpha: 0.9 });
+    }
     // The coverage overlay already shows a supply building's reach in full; for
     // everything else, fall back to the simple radius outlines.
     if (!this.hasCoverage) this.drawEffectRadii(this.selectionBox, def, b.x, b.y, b.upgradeLevel);
   }
+}
+
+/** Darken a 0xRRGGBB colour by `factor` (0..1) — used for iso wall shading. */
+function shade(color: number, factor: number): number {
+  const r = Math.round(((color >> 16) & 0xff) * factor);
+  const g = Math.round(((color >> 8) & 0xff) * factor);
+  const b = Math.round((color & 0xff) * factor);
+  return (r << 16) | (g << 8) | b;
 }
 
 const labelStyle: TextStyleOptions = {

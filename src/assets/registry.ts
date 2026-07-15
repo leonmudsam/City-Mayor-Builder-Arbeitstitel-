@@ -68,6 +68,14 @@ const VEHICLE_IMAGES = keyed(
 const OVERLAY_IMAGES = keyed(
   import.meta.glob('./overlays/*.{png,webp,jpg,jpeg}', { eager: true, query: '?url', import: 'default' }) as UrlMap,
 );
+// Isometric map assets (v0.27): building sprites for the isometric render mode
+// and isometric terrain tiles. Keyed by `<id>_iso` filename → `<id>_iso`.
+const BUILDING_ISO_IMAGES = keyed(
+  import.meta.glob('./buildings/iso/*.{png,webp,jpg,jpeg}', { eager: true, query: '?url', import: 'default' }) as UrlMap,
+);
+const TERRAIN_ISO_IMAGES = keyed(
+  import.meta.glob('./terrain/*.{png,webp,jpg,jpeg}', { eager: true, query: '?url', import: 'default' }) as UrlMap,
+);
 
 export function resourceImage(id: string): string | undefined {
   return RESOURCE_IMAGES[id];
@@ -100,6 +108,16 @@ export function vehicleImage(id: string): string | undefined {
 }
 export function overlayImage(id: string): string | undefined {
   return OVERLAY_IMAGES[id];
+}
+
+/** Isometric map sprite for a building. Looks up `<id>_iso` first, then `<id>`. */
+export function buildingIsoImage(id: string | undefined): string | undefined {
+  if (!id) return undefined;
+  return BUILDING_ISO_IMAGES[`${id}_iso`] ?? BUILDING_ISO_IMAGES[id];
+}
+/** Isometric terrain tile, e.g. `grass_iso`, `water_river_iso`. */
+export function terrainIsoImage(id: string): string | undefined {
+  return TERRAIN_ISO_IMAGES[id];
 }
 
 /** How many generic `citizen_N.png` portraits were supplied (for seed spread). */
