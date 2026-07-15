@@ -161,6 +161,11 @@ const MARKER_MODELS = keyedExt(
 const EFFECT_MODELS = keyedExt(
   import.meta.glob('./models/effects/**/*.glb', { eager: true, query: '?url', import: 'default' }) as UrlMap,
 );
+// World-space 3D UI (v0.34): selection ring, floating upgrade/build buttons and
+// level badges the true3d renderer floats above buildings.
+const UI_MODELS = keyedExt(
+  import.meta.glob('./models/ui/**/*.glb', { eager: true, query: '?url', import: 'default' }) as UrlMap,
+);
 
 /** `./models/buildings/housing/house_small.glb` → `house_small` (filename key). */
 function keyedExt(glob: UrlMap): UrlMap {
@@ -213,6 +218,15 @@ export function markerModel(name: string): string | undefined {
 /** 3D effect model, e.g. `crane`, `dust`, `sparkle`. */
 export function effectModel(name: string): string | undefined {
   return EFFECT_MODELS[name];
+}
+/** World-space 3D UI model, e.g. `ui_selection_ring`, `ui_upgrade_button`. */
+export function uiModel(name: string): string | undefined {
+  return UI_MODELS[name];
+}
+/** Per-building construction-site model, e.g. `sawmill_construction`. Shown while
+ *  the building is built or upgraded (else a generic prop / procedural scaffold). */
+export function buildingConstructionModel(id: string | undefined): string | undefined {
+  return id ? BUILDING_MODELS[`${id}_construction`] : undefined;
 }
 /** First available road model (drives whether the procedural road is used). */
 export function hasAnyRoadModel(): boolean {
