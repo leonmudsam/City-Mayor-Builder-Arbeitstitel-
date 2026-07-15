@@ -11,6 +11,7 @@ import { setController, useUiStore } from './state/store.ts';
 import { MapView } from './components/MapView.tsx';
 import { GameHud } from './components/hud/GameHud.tsx';
 import { QuickActionBar } from './components/hud/QuickActionBar.tsx';
+import { CameraControls } from './components/hud/CameraControls.tsx';
 import { BuildMenu } from './components/panels/BuildMenu.tsx';
 import { FloatingBuildingSheet } from './components/panels/FloatingBuildingSheet.tsx';
 import { CitizenRequestsPanel } from './components/panels/CitizenRequestsPanel.tsx';
@@ -217,6 +218,7 @@ function GameScreen({ onImport, onReset }: { onImport(json: string): boolean; on
         <CityStatusPanel />
         <CityWorkPanel />
         {!rightSheetOpen && <CitizenRequestsPanel />}
+        <CameraControls />
         <QuickActionBar />
 
         {/* Large right-docked detail sheets (§5) — one at a time. */}

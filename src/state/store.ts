@@ -3,18 +3,20 @@ import { useSyncExternalStore } from 'react';
 import type { GameController } from '../game/commands/controller.ts';
 import type { SectorId } from '../game/types.ts';
 import type { RenderMode } from '../renderer/projection.ts';
+import type { CameraPreset } from '../renderer/three/CameraConfig.ts';
 
-// Render mode is a pure presentation choice (§3): persisted in localStorage, not
-// in the savegame, so switching flat2d ↔ isometric2d never touches game data.
-const RENDER_MODE_KEY = 'cmb.renderMode';
+// v0.30: 3D is the only player-facing map. The 2D/iso engines survive only as a
+// developer fallback behind a debug key — there is no user-visible mode switch.
+// The setting is presentation-only (localStorage, never the savegame).
+const DEBUG_RENDER_KEY = 'cmb.debugRenderMode';
 function loadRenderMode(): RenderMode {
   try {
-    const v = localStorage.getItem(RENDER_MODE_KEY);
-    if (v === 'isometric2d' || v === 'true3d') return v;
-    return 'flat2d';
+    const v = localStorage.getItem(DEBUG_RENDER_KEY);
+    if (v === 'flat2d' || v === 'isometric2d') return v; // dev fallback only
   } catch {
-    return 'flat2d';
+    /* ignore storage failures */
   }
+  return 'true3d';
 }
 
 // The React side never mutates game state directly: it reads snapshots off
@@ -38,6 +40,13 @@ export function getController(): GameController {
 
 export interface MapApi {
   centerOnCity(): void;
+  /** Apply a 3D camera preset (Stadt/Bau/Übersicht/Zentrum). No-op in 2D debug. */
+  applyPreset(preset: CameraPreset): void;
+  focusSelected(): void;
+  resetNorth(): void;
+  zoomStep(dir: number): void;
+  /** Current camera yaw in radians (for the compass). */
+  getYaw(): number;
 }
 
 let mapApi: MapApi | undefined;
@@ -102,9 +111,13 @@ interface UiState {
    *  a small restore button stays visible to bring the chrome back. */
   uiHidden: boolean;
   toggleUiHidden(): void;
-  /** Map render mode (§3): flat top-down grid vs isometric 2.5D. */
+  /** Effective map render mode. Players always get 'true3d'; 'flat2d'/'isometric2d'
+   *  are a developer fallback set from the debug panel (§ 3D-only). */
   renderMode: RenderMode;
   setRenderMode(mode: RenderMode): void;
+  /** Player-facing 3D camera preset (replaces the old mode switch). */
+  cameraPreset: CameraPreset;
+  setCameraPreset(preset: CameraPreset): void;
   placingDefId: string | undefined;
   /** Building currently being relocated (hold-drag or "Verschieben" button). */
   movingBuildingId: string | undefined;
@@ -138,12 +151,19 @@ export const useUiStore = create<UiState>((set) => ({
   setRenderMode: (mode) =>
     set(() => {
       try {
-        localStorage.setItem(RENDER_MODE_KEY, mode);
+        // Only 2D/iso are persisted (dev fallback); 3D clears the override.
+        if (mode === 'true3d') localStorage.removeItem(DEBUG_RENDER_KEY);
+        else localStorage.setItem(DEBUG_RENDER_KEY, mode);
       } catch {
         /* ignore storage failures */
       }
       return { renderMode: mode };
     }),
+  cameraPreset: 'city',
+  setCameraPreset: (preset) => {
+    getMapApi()?.applyPreset(preset);
+    set({ cameraPreset: preset });
+  },
   placingDefId: undefined,
   movingBuildingId: undefined,
   selectedBuildingId: undefined,

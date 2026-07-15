@@ -1,6 +1,13 @@
 import { Bug, CheckCheck, Coins, Hammer, PackageOpen, X } from 'lucide-react';
 import { useGame, useUiStore } from '../../state/store.ts';
+import type { RenderMode } from '../../renderer/projection.ts';
 import { t } from '../../i18n/index.ts';
+
+const RENDER_MODES: { id: RenderMode; label: string }[] = [
+  { id: 'true3d', label: '3D' },
+  { id: 'isometric2d', label: 'Iso' },
+  { id: 'flat2d', label: '2D' },
+];
 
 // Prototype cheats (§10): a clearly-labelled debug area for balancing tests,
 // gated behind the debugTools feature flag. Every action routes through a
@@ -9,6 +16,8 @@ import { t } from '../../i18n/index.ts';
 export function DebugPanel() {
   const game = useGame();
   const { setPanel, pushToast } = useUiStore();
+  const renderMode = useUiStore((s) => s.renderMode);
+  const setRenderMode = useUiStore((s) => s.setRenderMode);
 
   if (!game.config.features.debugTools) return null;
 
@@ -72,6 +81,21 @@ export function DebugPanel() {
       >
         <CheckCheck size={16} /> {t('ui.debug.finish_upgrades')}
       </button>
+
+      {/* Render-engine fallback (v0.30): 3D is the normal mode; 2D/iso survive
+          only here for debugging the legacy Pixi renderer. */}
+      <span className="settings-group-label">{t('ui.debug.renderEngine')}</span>
+      <div className="settings-segmented">
+        {RENDER_MODES.map((m) => (
+          <button
+            key={m.id}
+            className={`settings-seg${renderMode === m.id ? ' active' : ''}`}
+            onClick={() => setRenderMode(m.id)}
+          >
+            {m.label}
+          </button>
+        ))}
+      </div>
     </aside>
   );
 }

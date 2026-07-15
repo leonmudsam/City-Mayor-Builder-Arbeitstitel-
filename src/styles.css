@@ -1069,3 +1069,55 @@ body {
 
 /* Build-menu category tab artwork sits a touch larger than the old glyph. */
 .btn-tab .ui-art-category { flex-shrink: 0; }
+
+/* ---- 3D camera view controls (v0.30) ------------------------------------- */
+.camera-controls {
+  position: absolute; left: 50%; bottom: var(--hud-gap); transform: translateX(-50%); z-index: 6;
+  display: flex; flex-direction: column; align-items: center; gap: 8px; pointer-events: none;
+}
+.camera-controls > * { pointer-events: auto; }
+.camera-buildview {
+  display: flex; align-items: center; gap: 7px; padding: 9px 16px; border-radius: 12px;
+  background: linear-gradient(180deg, #6db5e6, var(--info, #4a90cf)); color: #06283b;
+  font-weight: 800; font-size: 13px; box-shadow: 0 4px 14px rgba(74, 144, 207, 0.4);
+}
+.camera-buildview:hover { filter: brightness(1.06); }
+.camera-buildview.active { outline: 2px solid rgba(255, 255, 255, 0.6); }
+.camera-presets {
+  display: flex; gap: 5px; padding: 6px; border-radius: 14px;
+  background: var(--panel-bg); border: 1px solid var(--panel-border); box-shadow: var(--shadow);
+}
+.camera-preset {
+  display: flex; flex-direction: column; align-items: center; gap: 3px; width: 66px; padding: 6px 3px;
+  border-radius: 9px; color: var(--text-muted); font-size: 10px; font-weight: 700; line-height: 1.1; text-align: center;
+}
+.camera-preset:hover { background: rgba(255, 255, 255, 0.06); color: var(--text); }
+.camera-preset.active { background: rgba(232, 163, 61, 0.18); color: var(--primary); outline: 1px solid rgba(232, 163, 61, 0.5); }
+.camera-tools { display: flex; align-items: center; gap: 6px; }
+.camera-compass {
+  width: 40px; height: 40px; border-radius: 50%; display: grid; place-items: center;
+  background: var(--panel-bg); border: 1px solid var(--panel-border); box-shadow: var(--shadow); color: var(--text);
+}
+.camera-compass:hover { color: var(--primary); }
+.camera-compass-needle { display: grid; place-items: center; transition: transform 90ms linear; }
+.camera-zoom {
+  display: flex; flex-direction: column; border-radius: 10px; overflow: hidden;
+  background: var(--panel-bg); border: 1px solid var(--panel-border); box-shadow: var(--shadow);
+}
+.camera-zoom button { width: 34px; height: 26px; display: grid; place-items: center; color: var(--text); }
+.camera-zoom button:hover { background: rgba(255, 255, 255, 0.08); color: var(--primary); }
+.camera-zoom button:first-child { border-bottom: 1px solid var(--panel-border); }
+
+/* Camera settings (§12): sliders + toggles in the settings panel. */
+.settings-slider { display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 4px 8px; font-size: 12px; color: var(--text-muted); margin: 4px 0; }
+.settings-slider > span:first-child { grid-column: 1; }
+.settings-slider-val { grid-column: 2; font-weight: 700; color: var(--text); font-variant-numeric: tabular-nums; }
+.settings-slider input[type="range"] { grid-column: 1 / -1; width: 100%; accent-color: var(--primary); }
+.settings-toggle { display: flex; align-items: center; gap: 8px; font-size: 12.5px; color: var(--text); margin: 5px 0; cursor: pointer; }
+.settings-toggle input { accent-color: var(--primary); width: 16px; height: 16px; }
+.settings-camera-reset { margin-top: 6px; }
+
+@media (max-width: 720px) {
+  .camera-preset span { display: none; }
+  .camera-preset { width: 40px; }
+}

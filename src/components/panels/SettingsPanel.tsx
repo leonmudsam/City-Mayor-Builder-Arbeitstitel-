@@ -1,9 +1,22 @@
-import { Box, Boxes, Bug, Download, Gift, Grid3x3, RefreshCw, Upload, X } from 'lucide-react';
+import { useSyncExternalStore } from 'react';
+import { Bug, Download, Gift, RefreshCw, RotateCcw, Upload, X } from 'lucide-react';
 import { useGame, useUiStore } from '../../state/store.ts';
 import { exportSave, importSave } from '../../game/storage/exportImport.ts';
+import {
+  getCameraSettings,
+  resetCameraSettings,
+  setCameraSettings,
+  subscribeCameraSettings,
+  type CameraSettings,
+} from '../../renderer/three/cameraSettings.ts';
 import { t } from '../../i18n/index.ts';
 
 declare const __APP_VERSION__: string;
+
+/** Live view of the framework-agnostic camera settings store. */
+function useCameraSettings(): CameraSettings {
+  return useSyncExternalStore(subscribeCameraSettings, getCameraSettings, getCameraSettings);
+}
 
 export function SettingsPanel({
   onImport,
@@ -15,8 +28,6 @@ export function SettingsPanel({
   const game = useGame();
   const { setPanel, pushToast } = useUiStore();
   const debugTools = game.config.features.debugTools;
-  const renderMode = useUiStore((s) => s.renderMode);
-  const setRenderMode = useUiStore((s) => s.setRenderMode);
 
   return (
     <aside className="panel side-panel">
@@ -27,32 +38,7 @@ export function SettingsPanel({
         </button>
       </div>
 
-      {/* Map render mode (§3): flat top-down grid vs isometric 2.5D. Purely a
-          view choice — the city, buildings and savegame are identical. */}
-      <div className="settings-group">
-        <span className="settings-group-label">{t('ui.render.mode')}</span>
-        <div className="settings-segmented">
-          <button
-            className={`settings-seg${renderMode === 'flat2d' ? ' active' : ''}`}
-            onClick={() => setRenderMode('flat2d')}
-          >
-            <Grid3x3 size={15} /> {t('ui.render.flat2d')}
-          </button>
-          <button
-            className={`settings-seg${renderMode === 'isometric2d' ? ' active' : ''}`}
-            onClick={() => setRenderMode('isometric2d')}
-          >
-            <Boxes size={15} /> {t('ui.render.isometric2d')}
-          </button>
-          <button
-            className={`settings-seg${renderMode === 'true3d' ? ' active' : ''}`}
-            onClick={() => setRenderMode('true3d')}
-          >
-            <Box size={15} /> {t('ui.render.true3d')}
-          </button>
-        </div>
-        <span className="settings-group-hint">{t('ui.render.hint')}</span>
-      </div>
+      <CameraSettingsControls />
 
       <button
         className="btn-secondary"
@@ -119,5 +105,52 @@ export function SettingsPanel({
       )}
       <p className="muted version">v{__APP_VERSION__}</p>
     </aside>
+  );
+}
+
+/** 3D-camera feel settings (§12): speeds, invert, smoothing, edge scrolling. */
+function CameraSettingsControls() {
+  const s = useCameraSettings();
+  return (
+    <div className="settings-group">
+      <span className="settings-group-label">{t('ui.camera.settings')}</span>
+      <SettingSlider label={t('ui.camera.panSpeed')} value={s.panSpeed} onChange={(v) => setCameraSettings({ panSpeed: v })} />
+      <SettingSlider label={t('ui.camera.zoomSpeed')} value={s.zoomSpeed} onChange={(v) => setCameraSettings({ zoomSpeed: v })} />
+      <SettingSlider label={t('ui.camera.rotateSpeed')} value={s.rotateSpeed} onChange={(v) => setCameraSettings({ rotateSpeed: v })} />
+      <SettingToggle label={t('ui.camera.smooth')} checked={s.smooth} onChange={(v) => setCameraSettings({ smooth: v })} />
+      <SettingToggle label={t('ui.camera.invertRotate')} checked={s.invertRotate} onChange={(v) => setCameraSettings({ invertRotate: v })} />
+      <SettingToggle label={t('ui.camera.invertZoom')} checked={s.invertZoom} onChange={(v) => setCameraSettings({ invertZoom: v })} />
+      <SettingToggle label={t('ui.camera.edgeScroll')} checked={s.edgeScroll} onChange={(v) => setCameraSettings({ edgeScroll: v })} />
+      <button className="btn-secondary settings-camera-reset" onClick={() => resetCameraSettings()}>
+        <RotateCcw size={15} /> {t('ui.camera.reset')}
+      </button>
+      <span className="settings-group-hint">{t('ui.camera.hint')}</span>
+    </div>
+  );
+}
+
+function SettingSlider({ label, value, onChange }: { label: string; value: number; onChange(v: number): void }) {
+  return (
+    <label className="settings-slider">
+      <span>{label}</span>
+      <input
+        type="range"
+        min={0.3}
+        max={3}
+        step={0.1}
+        value={value}
+        onChange={(e) => onChange(Number(e.target.value))}
+      />
+      <span className="settings-slider-val">{value.toFixed(1)}×</span>
+    </label>
+  );
+}
+
+function SettingToggle({ label, checked, onChange }: { label: string; checked: boolean; onChange(v: boolean): void }) {
+  return (
+    <label className="settings-toggle">
+      <input type="checkbox" checked={checked} onChange={(e) => onChange(e.target.checked)} />
+      <span>{label}</span>
+    </label>
   );
 }

@@ -17,6 +17,7 @@ import {
   AmbientLight,
   Box3,
   BoxGeometry,
+  CanvasTexture,
   Clock,
   Color,
   ConeGeometry,
@@ -47,20 +48,20 @@ import {
   type Object3D as TObject3D,
 } from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
+import { CameraController3D } from './CameraController3D.ts';
+import { CameraInputController, type CameraInputHost } from './CameraInputController.ts';
+import { worldCameraBounds, type CameraPreset } from './CameraConfig.ts';
+import { getCameraSettings } from './cameraSettings.ts';
 import type { GameController } from '../../game/commands/controller.ts';
 import type { BuildingDef } from '../../game/config/types.ts';
 import type { BuildingInstance, TerrainType } from '../../game/types.ts';
 import { SECTOR_SIZE } from '../../game/map/world.ts';
-import { startRegionConfig } from '../../game/config/startRegion.config.ts';
 import { validatePlacement } from '../../game/buildings/placement.ts';
 import { locationBonusPct } from '../../game/buildings/location.ts';
 import { buildingModel } from '../../assets/registry.ts';
 import { CATEGORY_COLORS, TERRAIN_COLORS } from '../colors.ts';
 import type { IMapRenderer, RendererCallbacks } from '../IMapRenderer.ts';
 
-const MIN_DIST = 9;
-const MAX_DIST = 240;
-const DRAG_THRESHOLD = 5; // px before a press counts as a drag, not a click
 const MAX_SMOKE = 40;
 const MAX_CARS = 10;
 
@@ -121,19 +122,19 @@ export class ThreeMapRenderer implements IMapRenderer {
   private clock = new Clock();
   private raycaster = new Raycaster();
 
-  // Camera orbit rig: a target point on the ground + spherical offset.
-  private target = new Vector3();
-  private targetGoal = new Vector3();
-  private dist = 60;
-  private yaw = Math.PI * 0.25;
-  private pitch = MathUtils.degToRad(52);
+  // Central camera + input (v0.30): the renderer only reads the pose each frame.
+  private cam = new CameraController3D(worldCameraBounds(), getCameraSettings);
+  private input: CameraInputController | undefined;
 
   private buildingGroup = new Group();
   private terrainGroup = new Group();
   private liveGroup = new Group();
   private overlayGroup = new Group();
+  private markerGroup = new Group();
   private ground: Mesh | undefined; // invisible pick plane
   private ghost: Group | undefined;
+  private markerTex: CanvasTexture | undefined;
+  private markers: { s: Sprite; baseY: number }[] = [];
 
   private nodes = new Map<string, BuildingNode>();
   private lastVersion = -1;
@@ -151,10 +152,6 @@ export class ThreeMapRenderer implements IMapRenderer {
   private roadSet = new Set<string>();
 
   private destroyed = false;
-
-  // Pointer state.
-  private down: { x: number; y: number; button: number; shift: boolean } | undefined;
-  private dragging = false;
 
   constructor(
     private controller: GameController,
@@ -205,12 +202,13 @@ export class ThreeMapRenderer implements IMapRenderer {
     this.scene.add(ground);
     this.ground = ground;
 
-    this.scene.add(this.terrainGroup, this.buildingGroup, this.liveGroup, this.overlayGroup);
+    this.scene.add(this.terrainGroup, this.buildingGroup, this.liveGroup, this.overlayGroup, this.markerGroup);
+    this.markerTex = makeMarkerTexture();
 
-    this.centerOnCity();
-    this.target.copy(this.targetGoal); // snap on first frame
-    this.applyCamera();
-    this.bindInput();
+    this.cam.snap();
+    this.writeCamera();
+    this.input = new CameraInputController(renderer.domElement, this.cam, this.inputHost());
+    this.input.attach();
     this.observeResize();
     renderer.setAnimationLoop(() => this.frame());
   }
@@ -218,6 +216,7 @@ export class ThreeMapRenderer implements IMapRenderer {
   destroy(): void {
     this.destroyed = true;
     this.resizeObs?.disconnect();
+    this.input?.detach();
     const r = this.renderer;
     if (r) {
       r.setAnimationLoop(null);
@@ -228,6 +227,8 @@ export class ThreeMapRenderer implements IMapRenderer {
     this.disposeGroup(this.terrainGroup);
     this.disposeGroup(this.liveGroup);
     this.disposeGroup(this.overlayGroup);
+    for (const m of this.markers) m.s.material.dispose();
+    this.markerTex?.dispose();
   }
 
   setRenderMode(): void {
@@ -252,129 +253,108 @@ export class ThreeMapRenderer implements IMapRenderer {
     this.lastVersion = -1; // refresh selection ring
   }
 
+  /** MapApi "Karte zentrieren" / Zentrum-preset. */
   centerOnCity(): void {
-    const th = startRegionConfig.townHall;
-    this.targetGoal.set(th.x + 1.5, 0, th.y + 1.5);
-    this.dist = 70;
-    this.yaw = Math.PI * 0.25;
-    this.pitch = MathUtils.degToRad(52);
+    this.cam.applyPreset('center');
+  }
+
+  /** Camera-preset from the view controls (§ Presets). */
+  applyPreset(preset: CameraPreset): void {
+    this.cam.applyPreset(preset);
+  }
+
+  /** Focus the currently selected building (F / focus button). */
+  focusSelected(): void {
+    if (this.selectedId) this.focusBuilding(this.selectedId);
+    else this.cam.focusCity();
+  }
+
+  /** Reset the compass to the default viewing direction. */
+  resetNorth(): void {
+    this.cam.resetNorth();
+  }
+
+  /** Stepwise zoom for the +/- HUD buttons (dir > 0 = zoom in). */
+  zoomStep(dir: number): void {
+    this.cam.zoomBy(dir > 0 ? 0.8 : 1.25);
+  }
+
+  /** Current yaw in radians — the compass reads this each frame. */
+  getYaw(): number {
+    return this.cam.getYaw();
   }
 
   private focusBuilding(id: string): void {
     const b = this.controller.state.buildings[id];
     const def = b && this.controller.config.buildings.get(b.defId);
     if (!b || !def) return;
-    this.targetGoal.set(b.x + def.size.w / 2, 0, b.y + def.size.h / 2);
-    if (this.dist > 90) this.dist = 90;
+    const dist = Math.min(this.cam.getDist(), 70);
+    this.cam.focusGround(b.x + def.size.w / 2, b.y + def.size.h / 2, dist);
   }
 
-  // ---- camera ---------------------------------------------------------------
+  // ---- camera write-out -----------------------------------------------------
 
-  private applyCamera(): void {
-    const p = this.pitch;
-    const y = this.yaw;
-    const off = new Vector3(
-      Math.sin(y) * Math.cos(p) * this.dist,
-      Math.sin(p) * this.dist,
-      Math.cos(y) * Math.cos(p) * this.dist,
-    );
-    this.camera.position.copy(this.target).add(off);
-    this.camera.lookAt(this.target);
+  /** Push the controller's pose into the three.js camera (called each frame). */
+  private writeCamera(): void {
+    const p = this.cam.pose();
+    this.camera.position.set(p.posX, p.posY, p.posZ);
+    this.camera.lookAt(p.targetX, p.targetY, p.targetZ);
   }
 
-  private bindInput(): void {
-    const el = this.renderer?.domElement;
-    if (!el) return;
-    el.addEventListener('pointerdown', (e) => {
-      el.setPointerCapture(e.pointerId);
-      this.down = { x: e.clientX, y: e.clientY, button: e.button, shift: e.shiftKey };
-      this.dragging = false;
-    });
-    el.addEventListener('pointermove', (e) => this.onMove(e));
-    el.addEventListener('pointerup', (e) => {
-      const d = this.down;
-      this.down = undefined;
-      try {
-        el.releasePointerCapture(e.pointerId);
-      } catch {
-        /* pointer already released */
-      }
-      if (!d || this.dragging) return;
-      this.onClick(e);
-    });
-    el.addEventListener(
-      'wheel',
-      (e) => {
-        e.preventDefault();
-        const factor = Math.exp(e.deltaY * 0.0012);
-        this.dist = MathUtils.clamp(this.dist * factor, MIN_DIST, MAX_DIST);
-        this.applyCamera();
+  /** The input controller talks to the renderer through this small surface. */
+  private inputHost(): CameraInputHost {
+    return {
+      isPlacing: () => this.placingDefId !== undefined,
+      placingPaints: () => {
+        const def = this.placingDefId ? this.controller.config.buildings.get(this.placingDefId) : undefined;
+        return def?.category === 'roads' || def?.category === 'decoration';
       },
-      { passive: false },
-    );
-    el.addEventListener('contextmenu', (e) => e.preventDefault());
+      place: (cx, cy) => {
+        const t = this.pickTileAt(cx, cy);
+        if (t && this.placingDefId) this.callbacks.onPlace(this.placingDefId, t.x, t.y);
+      },
+      paint: (cx, cy) => {
+        const t = this.pickTileAt(cx, cy);
+        if (t && this.placingDefId) this.callbacks.onDragPlace(this.placingDefId, t.x, t.y);
+      },
+      selectAt: (cx, cy) => this.selectAt(cx, cy),
+      ghostMove: (cx, cy) => this.updateGhostAt(cx, cy),
+      cancel: () => this.callbacks.onCancelPlacement(),
+      focusCity: () => this.cam.focusCity(),
+      focusSelected: () => this.focusSelected(),
+      groundAt: (cx, cy) => this.groundPointAt(cx, cy),
+    };
   }
 
-  private onMove(e: PointerEvent): void {
-    const d = this.down;
-    if (d) {
-      const dx = e.clientX - d.x;
-      const dy = e.clientY - d.y;
-      if (!this.dragging && Math.hypot(dx, dy) > DRAG_THRESHOLD) this.dragging = true;
-      if (this.dragging) {
-        d.x = e.clientX;
-        d.y = e.clientY;
-        // Shift+drag orbits (rotate/tilt); any plain drag pans across the ground.
-        if (d.shift) this.orbit(dx, dy);
-        else this.pan(dx, dy);
-      }
-      return;
-    }
-    // No button held: update the placement ghost.
-    if (this.placingDefId) this.updateGhost(e);
-  }
-
-  private orbit(dx: number, dy: number): void {
-    this.yaw -= dx * 0.005;
-    this.pitch = MathUtils.clamp(this.pitch + dy * 0.005, MathUtils.degToRad(18), MathUtils.degToRad(82));
-    this.applyCamera();
-  }
-
-  private pan(dx: number, dy: number): void {
-    // Move the target across the ground, screen-relative. Scale with distance so
-    // panning feels the same when zoomed in or out.
-    const k = this.dist * 0.0016;
-    const forward = new Vector3(-Math.sin(this.yaw), 0, -Math.cos(this.yaw));
-    const right = new Vector3(Math.cos(this.yaw), 0, -Math.sin(this.yaw));
-    this.targetGoal.addScaledVector(right, -dx * k).addScaledVector(forward, -dy * k);
-    this.target.addScaledVector(right, -dx * k).addScaledVector(forward, -dy * k);
-    this.applyCamera();
-  }
-
-  /** Screen point → { world hit, tile } via the invisible ground plane. */
-  private pickGround(e: PointerEvent): { tile: { x: number; y: number } } | undefined {
-    const el = this.renderer?.domElement;
-    if (!el || !this.ground) return undefined;
-    const rect = el.getBoundingClientRect();
-    const ndc = new Vector2(
-      ((e.clientX - rect.left) / rect.width) * 2 - 1,
-      -((e.clientY - rect.top) / rect.height) * 2 + 1,
-    );
-    this.raycaster.setFromCamera(ndc, this.camera);
-    const hit = this.raycaster.intersectObject(this.ground, false)[0];
-    if (!hit) return undefined;
-    return { tile: { x: Math.floor(hit.point.x), y: Math.floor(hit.point.z) } };
-  }
-
-  /** Screen point → building id via a raycast against the building meshes. */
-  private pickBuilding(e: PointerEvent): string | undefined {
+  private ndc(clientX: number, clientY: number): Vector2 | undefined {
     const el = this.renderer?.domElement;
     if (!el) return undefined;
     const rect = el.getBoundingClientRect();
-    const ndc = new Vector2(
-      ((e.clientX - rect.left) / rect.width) * 2 - 1,
-      -((e.clientY - rect.top) / rect.height) * 2 + 1,
+    return new Vector2(
+      ((clientX - rect.left) / rect.width) * 2 - 1,
+      -((clientY - rect.top) / rect.height) * 2 + 1,
     );
+  }
+
+  /** Screen point → world ground point (x,z) via the invisible pick plane. */
+  private groundPointAt(clientX: number, clientY: number): { x: number; z: number } | undefined {
+    const ndc = this.ndc(clientX, clientY);
+    if (!ndc || !this.ground) return undefined;
+    this.raycaster.setFromCamera(ndc, this.camera);
+    const hit = this.raycaster.intersectObject(this.ground, false)[0];
+    return hit ? { x: hit.point.x, z: hit.point.z } : undefined;
+  }
+
+  /** Screen point → integer tile. */
+  private pickTileAt(clientX: number, clientY: number): { x: number; y: number } | undefined {
+    const g = this.groundPointAt(clientX, clientY);
+    return g ? { x: Math.floor(g.x), y: Math.floor(g.z) } : undefined;
+  }
+
+  /** Screen point → building id via a raycast against the building meshes. */
+  private pickBuildingAt(clientX: number, clientY: number): string | undefined {
+    const ndc = this.ndc(clientX, clientY);
+    if (!ndc) return undefined;
     this.raycaster.setFromCamera(ndc, this.camera);
     const hits = this.raycaster.intersectObjects(this.buildingGroup.children, true);
     for (const h of hits) {
@@ -388,22 +368,16 @@ export class ThreeMapRenderer implements IMapRenderer {
     return undefined;
   }
 
-  private onClick(e: PointerEvent): void {
-    if (this.placingDefId) {
-      const g = this.pickGround(e);
-      if (g) this.callbacks.onPlace(this.placingDefId, g.tile.x, g.tile.y);
-      return;
-    }
-    const id = this.pickBuilding(e);
+  private selectAt(clientX: number, clientY: number): void {
+    const id = this.pickBuildingAt(clientX, clientY);
     if (id) {
       this.callbacks.onSelectBuilding(id);
       return;
     }
-    // Empty ground: a locked sector opens the unlock dialog; else deselect.
-    const g = this.pickGround(e);
-    if (g) {
-      const sx = Math.floor(g.tile.x / SECTOR_SIZE);
-      const sy = Math.floor(g.tile.y / SECTOR_SIZE);
+    const t = this.pickTileAt(clientX, clientY);
+    if (t) {
+      const sx = Math.floor(t.x / SECTOR_SIZE);
+      const sy = Math.floor(t.y / SECTOR_SIZE);
       const sector = this.controller.state.world.sectors[`${sx}:${sy}`];
       if (sector && sector.status === 'locked') {
         this.callbacks.onClickLockedSector(sector.id);
@@ -415,15 +389,15 @@ export class ThreeMapRenderer implements IMapRenderer {
 
   // ---- placement ghost ------------------------------------------------------
 
-  private updateGhost(e: PointerEvent): void {
+  private updateGhostAt(clientX: number, clientY: number): void {
     const defId = this.placingDefId;
     const def = defId ? this.controller.config.buildings.get(defId) : undefined;
-    const g = this.pickGround(e);
-    if (!def || !g) {
+    const t = this.pickTileAt(clientX, clientY);
+    if (!def || !t) {
       this.clearGhost();
       return;
     }
-    const { x, y } = g.tile;
+    const { x, y } = t;
     const key = `${defId}|${x}|${y}`;
     if (key === this.lastHoverKey) return;
     this.lastHoverKey = key;
@@ -889,6 +863,49 @@ export class ThreeMapRenderer implements IMapRenderer {
     }
   }
 
+  // ---- markers (camera-facing billboards, §15) ------------------------------
+
+  /** Approximate a building's top height (for anchoring markers/smoke). */
+  private approxHeight(def: BuildingDef, upgradeLevel: number): number {
+    const hc = def.visual?.heightClass ?? CATEGORY_HEIGHT[def.category] ?? 1;
+    return Math.max(0.4, hc * 0.95 * (1 + upgradeLevel * 0.5));
+  }
+
+  /** Pulsing markers over active Stadtarbeit targets. Sprites always face the
+   *  camera, so they stay readable under any rotation/tilt. */
+  private rebuildMarkers(): void {
+    for (const m of this.markers) {
+      this.markerGroup.remove(m.s);
+      m.s.material.dispose();
+    }
+    this.markers = [];
+    if (!this.markerTex) return;
+    const targets = this.controller.getActivityTargets().filter((tg) => !tg.done);
+    for (const tg of targets) {
+      const b = this.controller.state.buildings[tg.buildingId];
+      const def = b && this.controller.config.buildings.get(b.defId);
+      if (!b || !def) continue;
+      const s = new Sprite(new SpriteMaterial({ map: this.markerTex, transparent: true, depthTest: false }));
+      const baseY = this.approxHeight(def, b.upgradeLevel) + 1.5;
+      s.position.set(b.x + def.size.w / 2, baseY, b.y + def.size.h / 2);
+      s.scale.setScalar(1.7);
+      s.renderOrder = 10;
+      this.markerGroup.add(s);
+      this.markers.push({ s, baseY });
+    }
+  }
+
+  private animateMarkers(): void {
+    if (this.markers.length === 0) return;
+    const t = performance.now() / 1000;
+    const bob = Math.sin(t * 3) * 0.18;
+    const scale = 1.6 + Math.sin(t * 3) * 0.18;
+    for (const m of this.markers) {
+      m.s.position.y = m.baseY + bob;
+      m.s.scale.setScalar(scale);
+    }
+  }
+
   // ---- frame ----------------------------------------------------------------
 
   private frame(): void {
@@ -899,19 +916,20 @@ export class ThreeMapRenderer implements IMapRenderer {
       this.lastVersion = this.controller.version;
       this.rebuildTerrainIfNeeded();
       this.rebuildBuildings();
+      this.rebuildMarkers();
     }
 
-    // Ease the camera target toward its goal (smooth focus / recenter).
-    if (this.target.distanceToSquared(this.targetGoal) > 0.0001) {
-      this.target.lerp(this.targetGoal, Math.min(1, dt * 6));
-      this.applyCamera();
-    }
+    // Advance camera: apply held keys/edge-scroll, ease toward goals, write pose.
+    this.input?.update(dt);
+    this.cam.update(dt);
+    this.writeCamera();
 
     for (const node of this.nodes.values()) {
       if (node.rotor) node.rotor.rotation.z += dt * 1.6;
     }
     this.animateSmoke(dt);
     this.animateCars(dt);
+    this.animateMarkers();
 
     this.renderer.render(this.scene, this.camera);
   }
@@ -947,6 +965,33 @@ export class ThreeMapRenderer implements IMapRenderer {
 }
 
 const CAR_COLORS = [0xd94f4f, 0x4f7fd9, 0xe0b03a, 0xf2f2f2, 0x5fb35f, 0x333a44];
+
+/** A cyan target pin (ring + downward arrow) drawn once to a canvas texture. */
+function makeMarkerTexture(): CanvasTexture {
+  const size = 128;
+  const cv = document.createElement('canvas');
+  cv.width = cv.height = size;
+  const ctx = cv.getContext('2d');
+  if (ctx) {
+    ctx.translate(size / 2, size / 2);
+    ctx.strokeStyle = '#2fd4d4';
+    ctx.fillStyle = 'rgba(47,212,212,0.28)';
+    ctx.lineWidth = 9;
+    ctx.beginPath();
+    ctx.arc(0, -14, 34, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+    ctx.fillStyle = '#2fd4d4';
+    ctx.beginPath();
+    ctx.moveTo(-16, 24);
+    ctx.lineTo(16, 24);
+    ctx.lineTo(0, 52);
+    ctx.closePath();
+    ctx.fill();
+  }
+  const tex = new CanvasTexture(cv);
+  return tex;
+}
 
 /** Slight per-terrain relief so the ground isn't a flat sheet. Returns the box
  *  centre Y and Y-scale for a 1×1×1 unit box (default thin tile at y≈0). */

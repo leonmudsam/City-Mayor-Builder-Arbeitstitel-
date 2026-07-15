@@ -6,6 +6,7 @@
 
 import type { RenderMode } from './projection.ts';
 import type { RendererCallbacks } from './MapRenderer.ts';
+import type { CameraPreset } from './three/CameraConfig.ts';
 
 export interface IMapRenderer {
   init(host: HTMLElement): Promise<void>;
@@ -15,6 +16,14 @@ export interface IMapRenderer {
   setMoving(id: string | undefined): void;
   setSelected(id: string | undefined): void;
   centerOnCity(): void;
+  // 3D-only camera controls (§ camera). Optional so the 2D/iso debug renderer
+  // needn't implement them; the MapApi wiring guards for their absence.
+  applyPreset?(preset: CameraPreset): void;
+  focusSelected?(): void;
+  resetNorth?(): void;
+  zoomStep?(dir: number): void;
+  getYaw?(): number;
 }
 
 export type { RendererCallbacks };
+export type { CameraPreset };
