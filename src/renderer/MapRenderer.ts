@@ -98,6 +98,7 @@ export class MapRenderer {
   private terrainLayer = new Container();
   private buildingLayer = new Container();
   private fxLayer = new Container();
+  private liveLayer = new Container();
   private overlayLayer = new Container();
   private coverageLayer = new Graphics();
   private ghost = new Graphics();
@@ -122,6 +123,10 @@ export class MapRenderer {
   private focusTarget: { x: number; y: number } | undefined;
   /** Active map projection (§3). flat2d is the original grid; isometric2d is 2.5D. */
   private mode: RenderMode = 'flat2d';
+  /** Live-effect state (iso, §Live-Effekte): chimney anchors + smoke particles. */
+  private smokeSources: { x: number; y: number }[] = [];
+  private smoke: { g: Graphics; vy: number; drift: number; age: number; ttl: number }[] = [];
+  private smokeTimer = 0;
 
   constructor(
     private controller: GameController,
@@ -135,7 +140,7 @@ export class MapRenderer {
       return;
     }
     host.appendChild(this.app.canvas);
-    this.world.addChild(this.terrainLayer, this.buildingLayer, this.fxLayer, this.overlayLayer);
+    this.world.addChild(this.terrainLayer, this.buildingLayer, this.fxLayer, this.liveLayer, this.overlayLayer);
     this.overlayLayer.addChild(this.coverageLayer, this.ghostRadius, this.selectionBox, this.ghost);
     // Iso needs painter's-order by depth (§5); harmless in flat (zIndex stays 0).
     this.buildingLayer.sortableChildren = true;
@@ -170,6 +175,7 @@ export class MapRenderer {
     // Drop cached terrain views so they rebuild in the new projection.
     for (const { container } of this.sectorViews.values()) container.destroy({ children: true });
     this.sectorViews.clear();
+    this.clearLive();
     this.coverageKey = '';
     this.lastVersion = -1; // force a building redraw next frame
     this.centerCameraInstant();
@@ -392,9 +398,53 @@ export class MapRenderer {
       this.redrawBuildings();
     }
     this.updateFx();
+    this.animateLive();
     this.drawGhost();
     this.drawCoverage();
     this.drawSelection();
+  }
+
+  /**
+   * Cheap always-on "living city" layer (§Live-Effekte): puffs of chimney smoke
+   * drifting up from production/energy buildings in the iso view. Particle-pooled
+   * and capped, so 200+ buildings stay smooth. Only runs in isometric2d.
+   */
+  private animateLive(): void {
+    const dt = this.app.ticker.deltaMS;
+    // Advance + retire existing puffs.
+    if (this.smoke.length > 0) {
+      for (const p of this.smoke) {
+        p.age += dt;
+        const k = p.age / p.ttl;
+        p.g.position.y -= (p.vy * dt) / 1000;
+        p.g.position.x += (p.drift * dt) / 1000;
+        p.g.alpha = Math.max(0, 0.5 * (1 - k));
+        p.g.scale.set(0.6 + k * 1.1);
+      }
+      this.smoke = this.smoke.filter((p) => {
+        if (p.age < p.ttl) return true;
+        p.g.destroy();
+        return false;
+      });
+    }
+    // Spawn from a random chimney on a timer, capped.
+    if (this.mode !== 'isometric2d' || this.smokeSources.length === 0) return;
+    this.smokeTimer -= dt;
+    if (this.smokeTimer <= 0 && this.smoke.length < 40) {
+      this.smokeTimer = 220;
+      const src = this.smokeSources[Math.floor(Math.random() * this.smokeSources.length)]!;
+      const g = new Graphics();
+      g.circle(0, 0, 4).fill({ color: 0xd8d2c6, alpha: 1 });
+      g.position.set(src.x + (Math.random() - 0.5) * 4, src.y);
+      this.liveLayer.addChild(g);
+      this.smoke.push({ g, vy: 10 + Math.random() * 6, drift: -3 + Math.random() * 2, age: 0, ttl: 2600 });
+    }
+  }
+
+  private clearLive(): void {
+    for (const p of this.smoke) p.g.destroy();
+    this.smoke = [];
+    this.smokeSources = [];
   }
 
   /**
@@ -614,6 +664,7 @@ export class MapRenderer {
 
   private redrawBuildings(): void {
     if (this.mode === 'isometric2d') return this.redrawBuildingsIso();
+    this.smokeSources = []; // no chimney smoke in the flat top-down view
     this.buildingLayer.removeChildren().forEach((c) => c.destroy({ children: true }));
     const state = this.controller.state;
     const now = state.meta.lastSimTime;
@@ -770,6 +821,7 @@ export class MapRenderer {
     this.prevFootprints = current;
 
     const activityTargets = new Set(this.controller.getActivityTargets().filter((tg) => !tg.done).map((tg) => tg.buildingId));
+    const smokeSources: { x: number; y: number }[] = [];
 
     for (const b of Object.values(state.buildings)) {
       const def = this.controller.config.buildings.get(b.defId);
@@ -779,23 +831,26 @@ export class MapRenderer {
       container.zIndex = isoDepth(b.x, b.y, w, h);
       const base = footprintCenterWorld('isometric2d', b.x, b.y, w, h);
       const isoUrl = buildingIsoImage(def.id);
+      // Chimney smoke source for active factories / power plants (§Live-Effekte).
+      if (b.status === 'active' && (def.category === 'production' || def.category === 'energy')) {
+        smokeSources.push({ x: base.x + ISO.tileW * 0.18, y: base.y - this.isoHeight(def, b.upgradeLevel) - ISO.tileH });
+      }
 
       if (def.category === 'roads') {
+        // Asphalt diamond with a sidewalk rim + a lighter centre so it reads as
+        // a paved road rather than a dark tile.
         const g = new Graphics();
-        g.poly(isoFootprintDiamond(b.x, b.y, w, h)).fill(COLOR_ASPHALT).stroke({ width: 1, color: COLOR_SIDEWALK, alpha: 0.7 });
+        g.poly(isoFootprintDiamond(b.x, b.y, w, h)).fill(COLOR_SIDEWALK);
+        g.poly(isoFootprintDiamond(b.x + 0.12, b.y + 0.12, w - 0.24, h - 0.24)).fill(COLOR_ASPHALT);
+        const c = tileCenterWorld('isometric2d', b.x, b.y);
+        g.circle(c.x, c.y, 1.6).fill({ color: COLOR_LANE, alpha: 0.5 });
         container.addChild(g);
       } else if (isoUrl) {
-        // Real iso sprite (drop-in): show a placeholder base until it loads, then
-        // anchor the sprite's base at the footprint centre.
-        this.drawIsoPlaceholder(container, def, b, base);
+        // Real iso sprite (drop-in): placeholder base until it loads, then anchor.
+        this.drawIsoBuilding(container, def, b);
         void this.attachIsoSprite(container, isoUrl, b.x, b.y, w, h, base);
       } else {
-        this.drawIsoPlaceholder(container, def, b, base);
-        const label = new Text({ text: t(def.nameKey).slice(0, 2), style: labelStyle });
-        label.anchor.set(0.5);
-        const height = this.isoHeight(def, b.upgradeLevel);
-        label.position.set(base.x, base.y - height - ISO.tileH / 2);
-        container.addChild(label);
+        this.drawIsoBuilding(container, def, b);
       }
 
       // Status chrome, anchored to the building's top point.
@@ -822,6 +877,7 @@ export class MapRenderer {
       if (b.id === this.movingId) container.alpha = 0.35;
       this.buildingLayer.addChild(container);
     }
+    this.smokeSources = smokeSources;
   }
 
   /** Height (world px) of an iso building's extrusion, by category + upgrade. */
@@ -834,30 +890,111 @@ export class MapRenderer {
     return ISO.elevation * (hc + upgradeLevel * 0.55);
   }
 
-  /** Extruded diamond box placeholder: top face + two shaded walls (§Slice 1). */
-  private drawIsoPlaceholder(container: Container, def: BuildingDef, b: BuildingInstance, base: { x: number; y: number }): void {
+  /**
+   * A richer extruded building (§Slice 1 polish): shaded walls + a pitched roof
+   * in a category tint, window rows on the sunlit wall, and a per-building colour
+   * jitter so a street of the same type isn't monotone. Decorations render as
+   * little props (tree/flower/fountain/bench). Upgrade stages read as extra roof
+   * tiers + height (handled via isoHeight). Real iso sprites replace all of this.
+   */
+  private drawIsoBuilding(container: Container, def: BuildingDef, b: BuildingInstance): void {
     const g = new Graphics();
+    const { w, h } = def.size;
     if (def.category === 'decoration') {
-      g.poly(isoFootprintDiamond(b.x, b.y, def.size.w, def.size.h)).fill(CATEGORY_COLORS[def.category]);
+      this.drawIsoDecoration(g, def, b);
       container.addChild(g);
       return;
     }
     const H = this.isoHeight(def, b.upgradeLevel);
-    const d = isoFootprintDiamond(b.x, b.y, def.size.w, def.size.h);
+    const d = isoFootprintDiamond(b.x, b.y, w, h);
     const [tX, tY, rX, rY, bX, bY, lX, lY] = d as [number, number, number, number, number, number, number, number];
-    const top = CATEGORY_COLORS[def.category];
-    const left = shade(top, 0.72);
-    const right = shade(top, 0.55);
-    // walls first (behind the top face)
+    const jitter = 0.9 + (hashStr(b.id) % 20) / 100; // 0.90..1.09
+    const wall = tint(CATEGORY_COLORS[def.category], jitter);
+    const left = shade(wall, 0.7);
+    const right = shade(wall, 0.55);
+
+    // Walls (behind the top face).
     g.poly([lX, lY, bX, bY, bX, bY - H, lX, lY - H]).fill(left);
     g.poly([rX, rY, bX, bY, bX, bY - H, rX, rY - H]).fill(right);
-    // top face lifted by H
-    g.poly([tX, tY - H, rX, rY - H, bX, bY - H, lX, lY - H]).fill(top).stroke({ width: 1, color: 0x000000, alpha: 0.25 });
-    // upgrade pips on the top face
-    for (let i = 0; i < b.upgradeLevel; i++) {
-      g.circle(base.x - 8 + i * 7, base.y - H - ISO.tileH / 2, 2.4).fill(0xffffff).stroke({ width: 0.8, color: 0x000000, alpha: 0.35 });
+    // Windows on the two visible walls for taller buildings.
+    if (H > ISO.elevation) {
+      this.drawIsoWindows(g, [lX, lY], [bX, bY], H, 0.6);
+      this.drawIsoWindows(g, [bX, bY], [rX, rY], H, 0.75);
     }
+    // Top face (wall tint) lifted by H, then a pitched roof on top.
+    const topY = (yy: number) => yy - H;
+    g.poly([tX, topY(tY), rX, topY(rY), bX, topY(bY), lX, topY(lY)]).fill(wall).stroke({ width: 1, color: 0x000000, alpha: 0.22 });
+    this.drawIsoRoof(g, def, b, [tX, topY(tY)], [rX, topY(rY)], [bX, topY(bY)], [lX, topY(lY)]);
     container.addChild(g);
+  }
+
+  /** A pitched roof: an inset ridge diamond raised a touch, category-coloured,
+   *  with an extra tier per upgrade stage so growth is visible (§stages). */
+  private drawIsoRoof(
+    g: Graphics,
+    def: BuildingDef,
+    b: BuildingInstance,
+    top: [number, number],
+    right: [number, number],
+    bottom: [number, number],
+    left: [number, number],
+  ): void {
+    const cx = (left[0] + right[0]) / 2;
+    const cy = (top[1] + bottom[1]) / 2;
+    const roof = ROOF_COLORS[def.category] ?? shade(CATEGORY_COLORS[def.category], 0.85);
+    const tiers = 1 + Math.min(3, b.upgradeLevel);
+    for (let i = 0; i < tiers; i++) {
+      const k = 0.34 + i * 0.16; // shrink toward the centre each tier
+      const rise = 4 + i * 3;
+      const p = (pt: [number, number]) => [cx + (pt[0] - cx) * (1 - k), cy + (pt[1] - cy) * (1 - k) - rise] as [number, number];
+      const [t, r, bo, l] = [p(top), p(right), p(bottom), p(left)];
+      g.poly([t[0], t[1], r[0], r[1], bo[0], bo[1], l[0], l[1]])
+        .fill(i === tiers - 1 ? tint(roof, 1.08) : roof)
+        .stroke({ width: 1, color: 0x000000, alpha: 0.2 });
+    }
+  }
+
+  /** A small grid of lit windows along a wall's ground edge, up to height H. */
+  private drawIsoWindows(g: Graphics, c0: [number, number], c1: [number, number], H: number, alpha: number): void {
+    const cols = 3;
+    const rows = Math.max(1, Math.min(4, Math.round(H / 12)));
+    for (let r = 0; r < rows; r++) {
+      const v = (r + 0.6) / (rows + 0.2);
+      for (let c = 0; c < cols; c++) {
+        const u = (c + 1) / (cols + 1);
+        const x = c0[0] + (c1[0] - c0[0]) * u;
+        const y = c0[1] + (c1[1] - c0[1]) * u - v * H;
+        g.rect(x - 1.3, y - 1.6, 2.6, 3.2).fill({ color: 0xffe7a8, alpha });
+      }
+    }
+  }
+
+  /** Decoration props drawn in world space at the footprint centre. */
+  private drawIsoDecoration(g: Graphics, def: BuildingDef, b: BuildingInstance): void {
+    const c = footprintCenterWorld('isometric2d', b.x, b.y, def.size.w, def.size.h);
+    if (def.id === 'deco_fountain') {
+      g.ellipse(c.x, c.y, 12, 6).fill(0x9aa3af);
+      g.ellipse(c.x, c.y - 1, 9, 4.5).fill(0x2f9be0);
+      g.circle(c.x, c.y - 10, 2.4).fill(0xcdeeff);
+      return;
+    }
+    if (def.id === 'deco_flowerbed') {
+      g.ellipse(c.x, c.y, 11, 5.5).fill(0x8a5a30);
+      for (const [dx, dy, col] of [[-4, -1, 0xe0503a], [3, -2, 0xffcf57], [0, 1, 0xc86bd6], [-2, 2, 0x4a8fd6]] as const) {
+        g.circle(c.x + dx, c.y + dy, 1.8).fill(col);
+      }
+      return;
+    }
+    if (def.id === 'deco_bench') {
+      g.ellipse(c.x, c.y, 9, 4.5).fill(0x6f9e42);
+      g.rect(c.x - 6, c.y - 6, 12, 2).fill(0xa9713f);
+      return;
+    }
+    // default: a tree — trunk + layered canopy.
+    g.rect(c.x - 1.5, c.y - 8, 3, 10).fill(0x7a4a25);
+    g.circle(c.x, c.y - 12, 8).fill(0x4c9040);
+    g.circle(c.x - 4, c.y - 10, 6).fill(0x6fb85c);
+    g.circle(c.x + 4, c.y - 9, 5).fill(0x57a24a);
   }
 
   /** Load and place a real iso sprite (async, guarded against redraws/teardown). */
@@ -1127,6 +1264,34 @@ function shade(color: number, factor: number): number {
   const b = Math.round((color & 0xff) * factor);
   return (r << 16) | (g << 8) | b;
 }
+
+/** Scale a colour by `factor` (may brighten, clamped to 0xff per channel). */
+function tint(color: number, factor: number): number {
+  const r = Math.min(255, Math.round(((color >> 16) & 0xff) * factor));
+  const g = Math.min(255, Math.round(((color >> 8) & 0xff) * factor));
+  const b = Math.min(255, Math.round((color & 0xff) * factor));
+  return (r << 16) | (g << 8) | b;
+}
+
+/** Deterministic string hash for per-building colour jitter. */
+function hashStr(s: string): number {
+  let h = 0;
+  for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) >>> 0;
+  return h;
+}
+
+/** Category roof tints for iso buildings (pitched roof on the top face). */
+const ROOF_COLORS: Record<string, number> = {
+  residential: 0xb6552f,
+  government: 0xcfc7b2,
+  services: 0xe6e9ee,
+  economy: 0xd9a441,
+  production: 0x8f877a,
+  energy: 0x9aa3af,
+  leisure: 0x4c9040,
+  infrastructure: 0x8f877a,
+  special: 0xc9a227,
+};
 
 const labelStyle: TextStyleOptions = {
   fontFamily: 'system-ui, sans-serif',

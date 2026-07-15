@@ -1,5 +1,46 @@
 # Patch Notes
 
+## v0.28 — „Iso-Ausbau: Dächer, Bäume, Straßen, Schornsteinrauch + 3D-Modell-Doku"
+
+Grafischer Ausbau der isometrischen Karte und Vorbereitung echter 3D-Modelle.
+
+**Karte hübscher (§ „grafisch ansprechender")**
+- Gebäude bekommen **Satteldächer** in Kategorie-Tönung (rot=Wohnen, weiß=Dienste,
+  gold=Wirtschaft, grau=Produktion, …), **Fensterreihen** an den besonnten Wänden
+  und eine **leichte Farb-Variation pro Gebäude**, damit eine Straße gleicher
+  Häuser nicht monoton wirkt. Die klobigen 2-Buchstaben-Labels sind im Iso-Modus
+  weg — die Stadt liest sich über Form/Farbe/Dach.
+- **Ausbaustufen sichtbar (§ verschiedene Stufen):** höhere `upgradeLevel`
+  wachsen in Höhe **und** bekommen zusätzliche Dach-Etagen — Haus → Doppelhaus →
+  … liest sich als echtes Wachstum.
+- **Dekorationen** sind jetzt echte kleine Props (Baum mit Krone, Blumenbeet,
+  Brunnen, Bank) statt flacher beschrifteter Kacheln.
+- **Straßen** haben Bordstein-Rand + helleren Belag + Mittelpunkt → lesen sich als
+  Straßen, nicht als dunkle Tiles.
+
+**Erste Live-Effekte (§ Live-Effekte)**
+- **Schornsteinrauch** steigt über aktiven Produktions-/Energiegebäuden auf —
+  gepoolte, gecappte Partikel im neuen `liveLayer`, nur im Iso-Modus, performant
+  auch bei 250+ Gebäuden. Zusammen mit Bau-/Upgrade-Balken und Aktivitäts-Ringen
+  wirkt die Stadt lebendig.
+- Struktur für **fahrende Fahrzeuge/Routen** (Liefermissionen, Einsätze) ist über
+  `liveLayer` + `vehicles/`-Ordner + `vehicleImage()` vorbereitet (nächster Slice).
+
+**Echte 3D-Modelle — neue Doku `docs/3D_MODELS.md`**
+- **Wo:** Iso-Sprites nach `src/assets/buildings/iso/<id>_iso.png` (sofort nutzbar),
+  echte Modelle nach `src/assets/models/{buildings,terrain,vehicles}/<id>.glb`.
+- **Wie:** Stufe A = 3D-Modell einmalig als transparentes Iso-PNG rendern (nutzt
+  die bestehende Drop-in-Pipeline, kein Browser-3D nötig); Stufe B = späterer
+  `true3d`-RenderMode mit three.js/Babylon lädt `.glb` (Projektion/Anker sind schon
+  vorbereitet). Verknüpfung je Gebäude über `BuildingDef.visual`
+  (`isoSprite`/`model3dRef`/`heightClass`/`anchor`), mit Fallback-Kette ohne Crash.
+- **Prompts:** vollständige Modell-/Sprite-Liste (alle Gebäude) plus Iso-Kamera-/
+  Licht-/Format-Vorgaben und Prompt-Präfix für Text-zu-3D-Tools (Meshy/Rodin/Tripo/…)
+  bzw. gerenderte Iso-Frames.
+
+**Verifikation:** tsc/eslint/vitest (101) grün, vite build ok, Iso-Screenshot einer
+ausgebauten 267-Gebäude-Stadt geprüft (Dächer, Bäume, Straßen, Depth-Sorting).
+
 ## v0.27 — „Isometrie Slice 1: RenderMode, Iso-Projektion, extrudierte Gebäude"
 
 Erster sauberer Schritt vom 2D-Raster zur isometrischen 2.5D-Karte (Iso-Mockup als
