@@ -12,7 +12,48 @@ automatisch (rekursive Erkennung, Key = Dateiname). Fehlt es, greift ein
 - Stil-/Technik-Standard, Größen, Prompts, Hero-/Welt-Modelle: siehe
   **`docs/3D_WORLD_ASSETS.md`**. Gebäude-Grundlagen/Stufen: `docs/3D_MODELS.md`.
 
-**Stand:** Noch keine `.glb` abgelegt → überall Platzhalter aktiv.
+**Stand:** Noch keine `.glb` abgelegt → überall Platzhalter aktiv. Die
+Renderer-Anbindung ist **live** (v0.33): sobald eine korrekt benannte Datei im
+Ordner liegt, nutzt der 3D-Renderer sie automatisch. Welche Namen der Renderer
+aktuell akzeptiert, steht in **§0**.
+
+---
+
+## 0. Renderer-Anbindung — was JETZT automatisch geladen wird (v0.33)
+
+Der 3D-Renderer liest diese Kategorien direkt aus der Drop-in-Pipeline. **Erster
+passender Name gewinnt** (Präzis vor Alias). Alles ohne Modell bleibt prozedural.
+
+| Kategorie | Ordner | Akzeptierte Dateinamen (Priorität → ) | Ausrichtung / Hinweis |
+|---|---|---|---|
+| Terrain-Kachel Gras | `terrain/…` | `grass_tile` → `grass` | 1×1, ersetzt farbige Kachel |
+| Terrain-Kachel Wald | `terrain/…` | `forest_ground_tile` → `forest` | 1×1 |
+| Terrain-Kachel Meer | `terrain/…` | `ocean_tile` → `water` | 1×1 |
+| Terrain-Kachel Fluss | `terrain/…` | `river_straight` → `river` → `water` | 1×1 |
+| Terrain-Kachel Gebirge | `terrain/…` | `mountain_ground_tile` → `rock_ground_tile` → `mountain` | 1×1 |
+| Terrain-Kachel Sand | `terrain/…` | `sand_tile` → `shore_tile` → `sand` | 1×1 |
+| Terrain-Kachel fruchtbar | `terrain/…` | `fertile_ground_tile` → `fertile` | 1×1 |
+| Gebirgs-Feature | `terrain/…` | `mountain_peak_medium` → `mountain_peak_large` → `rock_large` → `mountain_peak` | auf ~⅓ der Gebirgs-Kacheln gestreut |
+| Straße gerade | `roads/…` | `road_<klasse>_straight` → `road_straight` | **kanonisch N–S**, wird 90°-weise gedreht |
+| Straße Kurve | `roads/…` | `road_<klasse>_curve` → `road_curve` | **kanonisch N+E** |
+| Straße T-Kreuzung | `roads/…` | `road_<klasse>_t_intersection` → `road_t_intersection` | kanonisch offen nach W |
+| Straße Kreuzung | `roads/…` | `road_<klasse>_cross_intersection` → `road_cross_intersection` | symmetrisch |
+| Straße Ende/Stich | `roads/…` | `road_<klasse>_end` → `road_end` | Arm nach N |
+| Brücke (über Wasser) | `bridges/…` | `bridge_medium_road` → `bridge_small_stone` → `bridge_small_wood` → `bridge_large_road` → `bridge_road` → `bridge` | entlang Straßenachse gedreht |
+| Baum | `props/nature/…` | `pine_tree` → `tree_pine` → `tree` → `tree_deciduous` | gecullt, nie auf Stadt/Straße |
+| Busch | `props/nature/…` | `bush_small` → `bush` → `bush_medium` | gecullt |
+| Verkehrsauto | `vehicles/…` | `car` → `car_small` → `car_sedan` → `car_van` | **Front +z** |
+| Liefer-Van (Stadtarbeit) | `vehicles/…` | `service_van` → `car_van` → `van` → `delivery_van` → `truck_food` | **Front +z** |
+| Marker Aufgabe/Ziel | `markers/…` | `marker_task` → `marker_activity` → `marker_target` | schwebt + rotiert |
+| Marker Bau | `markers/…` | `marker_construction` → `marker_build` | |
+| Marker Problem | `markers/…` | `marker_problem` → `marker_alert` | |
+| Marker Upgrade | `markers/…` | `marker_upgrade` → `marker_bonus` → `marker_arrow` | |
+| Effekt Rauch | `effects/…` | `smoke_chimney` → `smoke` → `steam` → `smoke_puff` | Schornstein aktiver Produktion |
+
+`<klasse>` ist die Straßenklasse (`main`, `wide`, `industrial`, `boulevard`) —
+für die Standard-Wohnstraße (`residential`) gibt es keinen Klassen-Präfix, nur der
+generische Name greift. **Gebäude** siehe §1 (`buildingModel`, Dateiname = ID).
+Modelle werden gecacht & instanziert; ein fehlendes/defektes Modell = Fallback.
 
 **Legende**
 - **Datei** = exakter Dateiname (ohne Ordner ist der Name der Schlüssel).

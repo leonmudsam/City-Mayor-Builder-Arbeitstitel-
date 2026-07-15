@@ -58,7 +58,16 @@ import type { BuildingInstance, TerrainType } from '../../game/types.ts';
 import { SECTOR_SIZE } from '../../game/map/world.ts';
 import { validatePlacement } from '../../game/buildings/placement.ts';
 import { locationBonusPct } from '../../game/buildings/location.ts';
-import { buildingModel } from '../../assets/registry.ts';
+import {
+  buildingModel,
+  terrainModel,
+  roadModel,
+  bridgeModel,
+  propModel,
+  markerModel,
+  effectModel,
+  vehicleModel,
+} from '../../assets/registry.ts';
 import { CATEGORY_COLORS, TERRAIN_COLORS } from '../colors.ts';
 import type { IMapRenderer, RendererCallbacks } from '../IMapRenderer.ts';
 
@@ -83,10 +92,24 @@ const CATEGORY_HEIGHT: Record<string, number> = {
 const gltfLoader = new GLTFLoader();
 /** URL → loaded scene, so a model is fetched at most once and cloned per use. */
 const modelCache = new Map<string, Promise<TObject3D>>();
+/** Geometries/materials owned by a cached model. `Object3D.clone(true)` SHARES
+ *  these with the cache, so disposeGroup must never dispose them or later clones
+ *  would render blank. Per-use resources we create ourselves are NOT registered
+ *  here and are disposed normally. */
+const cacheOwned = new WeakSet<object>();
 function loadModel(url: string): Promise<TObject3D> {
   let p = modelCache.get(url);
   if (!p) {
-    p = gltfLoader.loadAsync(url).then((g) => g.scene);
+    p = gltfLoader.loadAsync(url).then((g) => {
+      g.scene.traverse((o) => {
+        const m = o as Mesh;
+        if (m.geometry) cacheOwned.add(m.geometry);
+        const mat = (m as unknown as { material?: Material | Material[] }).material;
+        if (Array.isArray(mat)) mat.forEach((x) => cacheOwned.add(x));
+        else if (mat) cacheOwned.add(mat);
+      });
+      return g.scene;
+    });
     modelCache.set(url, p);
   }
   return p;
@@ -135,7 +158,9 @@ export class ThreeMapRenderer implements IMapRenderer {
   private ground: Mesh | undefined; // invisible pick plane
   private ghost: Group | undefined;
   private markerTex = new Map<string, CanvasTexture>();
-  private markers: { s: Sprite; baseY: number }[] = [];
+  /** One marker per building. `obj` is a camera-facing sprite billboard OR a
+   *  dropped-in 3D marker model; `pulse`/`spin` drive the idle animation. */
+  private markers: { obj: Object3D; baseY: number; pulse: boolean; spin: boolean }[] = [];
   /** Tiles covered by ANY building footprint (roads included) — vegetation &
    *  car pathing read this so nothing spawns on top of the city. */
   private occupied = new Set<string>();
@@ -145,13 +170,20 @@ export class ThreeMapRenderer implements IMapRenderer {
   private lastVersion = -1;
   private terrainKey = '';
   private sectorStatus = new Map<string, string>();
+  /** Terrain type per tile "x,y" — lets roads detect water (→ bridge) and lets
+   *  the mountain/feature pass know where to drop hero terrain models. */
+  private terrainAt = new Map<string, TerrainType>();
 
   private placingDefId: string | undefined;
   private selectedId: string | undefined;
   private lastHoverKey = '';
 
-  private smoke: { s: Sprite; vy: number; age: number; ttl: number }[] = [];
+  private smoke: { obj: Object3D; mat: SpriteMaterial | undefined; vy: number; age: number; ttl: number }[] = [];
   private smokeTimer = 0;
+  // Optional drop-in smoke effect model (§ Effekte). Loaded once; while absent the
+  // procedural sprite puff is used. 'none'→not tried, then loading/ready/fail.
+  private smokeSrc: TObject3D | undefined;
+  private smokeSrcState: 'none' | 'loading' | 'ready' | 'fail' = 'none';
   private cars: Car[] = [];
   private roadTiles: { x: number; y: number }[] = [];
   private roadSet = new Set<string>();
@@ -243,7 +275,7 @@ export class ThreeMapRenderer implements IMapRenderer {
     this.disposeGroup(this.vegetationGroup);
     this.disposeGroup(this.liveGroup);
     this.disposeGroup(this.overlayGroup);
-    for (const m of this.markers) m.s.material.dispose();
+    for (const m of this.markers) this.disposeGroup(m.obj);
     for (const t of this.markerTex.values()) t.dispose();
   }
 
@@ -492,10 +524,10 @@ export class ThreeMapRenderer implements IMapRenderer {
 
     this.disposeGroup(this.terrainGroup);
     this.terrainGroup.clear();
+    this.terrainAt.clear();
 
     const dummy = new Object3D();
     const tiles: { x: number; y: number; terrain: TerrainType; locked: boolean }[] = [];
-    const treeTiles: { x: number; y: number }[] = [];
     for (const s of sectors) {
       const ox = s.sx * SECTOR_SIZE;
       const oy = s.sy * SECTOR_SIZE;
@@ -503,7 +535,10 @@ export class ThreeMapRenderer implements IMapRenderer {
         for (let lx = 0; lx < SECTOR_SIZE; lx++) {
           const tile = s.tiles[ly * SECTOR_SIZE + lx];
           if (!tile) continue;
-          tiles.push({ x: ox + lx, y: oy + ly, terrain: tile.terrain, locked: s.status === 'locked' });
+          const x = ox + lx;
+          const y = oy + ly;
+          tiles.push({ x, y, terrain: tile.terrain, locked: s.status === 'locked' });
+          this.terrainAt.set(`${x},${y}`, tile.terrain);
         }
       }
     }
@@ -529,7 +564,57 @@ export class ThreeMapRenderer implements IMapRenderer {
     inst.instanceMatrix.needsUpdate = true;
     if (inst.instanceColor) inst.instanceColor.needsUpdate = true;
     this.terrainGroup.add(inst);
-    void treeTiles;
+
+    // Drop-in terrain models on top of the coloured base (§ Gebirge/Map): any
+    // `.glb` in models/terrain/… replaces the flat tile for its type. Runs async
+    // so a slow model never blocks the frame; aborts if the world changed.
+    void this.decorateTerrain(key, tiles);
+  }
+
+  /** Terrain type → candidate model names (first match wins). Lets you drop in a
+   *  precise `grass_tile.glb` OR just `grass.glb`; mountains additionally get a
+   *  raised peak feature. Keep in sync with docs/3D_MODEL_MANIFEST.md §2. */
+  private async decorateTerrain(
+    key: string,
+    tiles: { x: number; y: number; terrain: TerrainType; locked: boolean }[],
+  ): Promise<void> {
+    const stale = () => this.terrainKey !== key;
+    // Group unlocked tiles by terrain type (locked stays a dimmed flat tile).
+    const byType = new Map<TerrainType, { x: number; y: number }[]>();
+    for (const t of tiles) {
+      if (t.locked) continue;
+      (byType.get(t.terrain) ?? byType.set(t.terrain, []).get(t.terrain)!).push({ x: t.x, y: t.y });
+    }
+    for (const [type, list] of byType) {
+      const relief = terrainRelief(type);
+      const top = relief.y + relief.h / 2; // sit models on the coloured base tile
+      const tileUrl = firstModel(terrainModel, TERRAIN_TILE_MODELS[type]);
+      if (tileUrl) {
+        await this.placeModelInstances(
+          tileUrl,
+          this.terrainGroup,
+          list,
+          { footprint: 1, jitterRot: false, castShadow: false, yBase: top },
+          stale,
+        );
+        if (stale()) return;
+      }
+      // Mountains: scatter a raised peak/rock feature on a subset of tiles.
+      if (type === 'mountain') {
+        const peakUrl = firstModel(terrainModel, MOUNTAIN_FEATURE_MODELS);
+        if (peakUrl) {
+          const peaks = list.filter((t) => (t.x * 7 + t.y * 3) % 3 === 0);
+          await this.placeModelInstances(
+            peakUrl,
+            this.terrainGroup,
+            peaks,
+            { footprint: 1.6, jitterRot: true, jitterScale: 0.5, yBase: top },
+            stale,
+          );
+          if (stale()) return;
+        }
+      }
+    }
   }
 
   /** Vegetation is a separate, culled pass (§7): trees/bushes only on FREE tiles
@@ -563,7 +648,33 @@ export class ThreeMapRenderer implements IMapRenderer {
       }
     }
 
-    const nT = Math.min(trees.length, 600);
+    // Drop-in props (§ Props): a `pine_tree.glb` / `bush_small.glb` (etc.) in
+    // models/props/nature/ replaces the procedural cones. Fire-and-forget so a
+    // slow model never blocks a frame; the staleness guard drops it if the city
+    // changed meanwhile. Falls back to the instanced procedural greenery below.
+    const stale = () => this.vegKey !== key;
+    const treeUrl = firstModel(propModel, TREE_MODELS);
+    const bushUrl = firstModel(propModel, BUSH_MODELS);
+    if (treeUrl && trees.length) {
+      void this.placeModelInstances(
+        treeUrl,
+        this.vegetationGroup,
+        trees,
+        { footprint: 0.9, jitterRot: true, jitterScale: 0.5, cap: 500, yBase: 0.35 },
+        stale,
+      );
+    }
+    if (bushUrl && bushes.length) {
+      void this.placeModelInstances(
+        bushUrl,
+        this.vegetationGroup,
+        bushes,
+        { footprint: 0.55, jitterRot: true, jitterScale: 0.4, cap: 300, yBase: 0.2 },
+        stale,
+      );
+    }
+
+    const nT = treeUrl ? 0 : Math.min(trees.length, 600);
     if (nT > 0) {
       const trunkG = new CylinderGeometry(0.06, 0.09, 0.5, 5);
       const crownG = new ConeGeometry(0.36, 1.0, 6);
@@ -590,7 +701,7 @@ export class ThreeMapRenderer implements IMapRenderer {
       this.vegetationGroup.add(trunks, crowns);
     }
 
-    const nB = Math.min(bushes.length, 300);
+    const nB = bushUrl ? 0 : Math.min(bushes.length, 300);
     if (nB > 0) {
       const bG = new ConeGeometry(0.28, 0.42, 6);
       const bM = new MeshLambertMaterial({ color: 0x4f8f45 });
@@ -679,6 +790,13 @@ export class ThreeMapRenderer implements IMapRenderer {
 
     const constructing = b.status === 'constructing' && b.targetUpgradeLevel === undefined;
     const node: BuildingNode = { group, sig };
+
+    // Roads/bridges have their own drop-in path (segment model by neighbour mask,
+    // bridge model over water), so they never touch the building-model resolution.
+    if (def.category === 'roads') {
+      this.buildRoad(group, def, b, roadMask);
+      return node;
+    }
 
     // Selection highlight: a bright, glowing ground ring (§11).
     if (b.id === this.selectedId) group.add(this.selectionRing(def.size.w, def.size.h));
@@ -772,6 +890,183 @@ export class ThreeMapRenderer implements IMapRenderer {
     } catch {
       // Model failed to load — the procedural placeholder stays. Never crash.
     }
+  }
+
+  /**
+   * Generic drop-in swap for the non-building categories (terrain single tiles,
+   * roads, bridges, vehicles, markers, effects). `holder` starts life holding the
+   * procedural stand-in; when the `.glb` finishes loading its children are
+   * replaced by the fitted model. If loading fails the procedural version stays,
+   * so a missing/broken model never breaks the scene. See docs/3D_WORLD_ASSETS.md.
+   */
+  private async swapInModel(url: string, holder: Group, opts: FitOpts): Promise<void> {
+    try {
+      const src = await loadModel(url);
+      if (this.destroyed || !holder.parent) return;
+      const model = src.clone(true);
+      fitObject(model, opts);
+      model.traverse((o) => {
+        if ((o as Mesh).isMesh) {
+          o.castShadow = opts.castShadow ?? true;
+          o.receiveShadow = true;
+        }
+      });
+      // Replace the procedural stand-in with the real model.
+      for (let i = holder.children.length - 1; i >= 0; i--) {
+        const c = holder.children[i]!;
+        holder.remove(c);
+        this.disposeGroup(c);
+      }
+      holder.add(model);
+    } catch {
+      // Keep the procedural stand-in.
+    }
+  }
+
+  /**
+   * Place ONE shared model across many tiles (terrain tiles, mountains, trees,
+   * bushes). The model is fetched once and either turned into a single
+   * InstancedMesh (when it is a lone mesh — cheapest) or cloned per tile. Runs as
+   * a fire-and-forget pass after the procedural base; `stale()` aborts if the
+   * world changed while the model was still loading, so nothing leaks. Capped so a
+   * huge map can't spawn thousands of clones.
+   */
+  private async placeModelInstances(
+    url: string,
+    group: Group,
+    tiles: { x: number; y: number }[],
+    opts: FitOpts & { cap?: number; jitterScale?: number; jitterRot?: boolean; yBase?: number },
+    stale: () => boolean,
+  ): Promise<void> {
+    if (tiles.length === 0) return;
+    let src: TObject3D;
+    try {
+      src = await loadModel(url);
+    } catch {
+      return; // procedural base already drawn — just skip the model layer.
+    }
+    if (this.destroyed || stale()) return;
+    const cap = opts.cap ?? 400;
+    const list = tiles.length > cap ? tiles.filter((_, i) => i % Math.ceil(tiles.length / cap) === 0) : tiles;
+    const yBase = opts.yBase ?? 0;
+
+    // Fast path: a single-mesh model → one InstancedMesh (one draw call).
+    const meshes: Mesh[] = [];
+    src.traverse((o) => {
+      if ((o as Mesh).isMesh) meshes.push(o as Mesh);
+    });
+    const probe = src.clone(true);
+    fitObject(probe, opts);
+    const dummy = new Object3D();
+    if (meshes.length === 1) {
+      // Derive geometry/material from the fitted single mesh → one InstancedMesh.
+      let gm: Mesh | undefined;
+      probe.traverse((o) => {
+        if ((o as Mesh).isMesh) gm = o as Mesh;
+      });
+      if (!gm) return;
+      gm.updateWorldMatrix(true, false);
+      const geo = gm.geometry.clone();
+      geo.applyMatrix4(gm.matrixWorld); // bake the fit transform into the geometry
+      const mat = gm.material as Material;
+      const inst = new InstancedMesh(geo, mat, list.length);
+      inst.castShadow = opts.castShadow ?? true;
+      inst.receiveShadow = true;
+      for (let i = 0; i < list.length; i++) {
+        const t = list[i]!;
+        const j = hash01(`${t.x}.${t.y}`);
+        const sc = opts.jitterScale ? 1 - opts.jitterScale / 2 + j * opts.jitterScale : 1;
+        dummy.position.set(t.x + 0.5, yBase, t.y + 0.5);
+        dummy.rotation.set(0, opts.jitterRot ? j * Math.PI * 2 : (opts.rotationY ?? 0), 0);
+        dummy.scale.setScalar(sc);
+        dummy.updateMatrix();
+        inst.setMatrixAt(i, dummy.matrix);
+      }
+      inst.instanceMatrix.needsUpdate = true;
+      if (this.destroyed || stale()) {
+        geo.dispose();
+        return;
+      }
+      group.add(inst);
+      return;
+    }
+
+    // General path: clone the fitted model per tile.
+    for (let i = 0; i < list.length; i++) {
+      const t = list[i]!;
+      const j = hash01(`${t.x}.${t.y}`);
+      const clone = probe.clone(true);
+      const sc = opts.jitterScale ? 1 - opts.jitterScale / 2 + j * opts.jitterScale : 1;
+      clone.position.set(t.x + 0.5, yBase, t.y + 0.5);
+      clone.rotation.y = opts.jitterRot ? j * Math.PI * 2 : (opts.rotationY ?? 0);
+      clone.scale.multiplyScalar(sc);
+      clone.traverse((o) => {
+        if ((o as Mesh).isMesh) {
+          o.castShadow = opts.castShadow ?? true;
+          o.receiveShadow = true;
+        }
+      });
+      group.add(clone);
+    }
+    if (this.destroyed || stale()) this.disposeGroup(group);
+  }
+
+  /**
+   * A road/bridge tile (§ Straßen/Brücken drop-in). The procedural auto-tiled
+   * asphalt (or a raised deck over water) is drawn immediately into a holder; if a
+   * matching `.glb` exists it replaces it: a road segment picked by the neighbour
+   * mask (straight/curve/T/cross/end + rotation), or a bridge model over
+   * water/river. See docs/3D_MODEL_MANIFEST.md §3.
+   */
+  private buildRoad(group: Group, def: BuildingDef, b: BuildingInstance, mask: number): void {
+    const holder = new Group();
+    group.add(holder);
+    const cls = roadClassFor(def.id);
+    const terrain = this.terrainAt.get(`${b.x},${b.y}`);
+    const overWater = terrain === 'water' || terrain === 'river';
+
+    if (overWater) {
+      // Bridge: procedural deck now, swap a bridge model in when present.
+      const rot = mask & 2 || mask & 8 ? (mask & 1 || mask & 4 ? 0 : Math.PI / 2) : 0;
+      this.buildBridgeDeck(holder, rot);
+      const url = firstModel(bridgeModel, BRIDGE_MODELS);
+      if (url) void this.swapInModel(url, holder, { footprint: 1, rotationY: rot });
+      return;
+    }
+
+    // Regular road: procedural auto-tile now, swap a segment model in when present.
+    this.buildRoadTile(holder, mask, cls);
+    const seg = roadSegment(mask);
+    const url = firstModel(roadModel, roadSegmentNames(seg.base, cls));
+    if (url) void this.swapInModel(url, holder, { footprint: 1, rotationY: seg.rotationY, castShadow: false });
+  }
+
+  /** A simple raised bridge deck (fallback when no bridge model is supplied). */
+  private buildBridgeDeck(g: Group, rotationY: number): void {
+    const deck = new Group();
+    deck.rotation.y = rotationY;
+    const yTop = 0.5;
+    const road = new Mesh(
+      new BoxGeometry(0.7, 0.1, 1.02),
+      new MeshStandardMaterial({ color: 0x4a5058, roughness: 0.95 }),
+    );
+    road.position.y = yTop;
+    road.castShadow = true;
+    road.receiveShadow = true;
+    deck.add(road);
+    const railMat = new MeshStandardMaterial({ color: 0x9aa1ab, roughness: 0.9 });
+    for (const sx of [-0.36, 0.36]) {
+      const rail = new Mesh(new BoxGeometry(0.06, 0.16, 1.02), railMat);
+      rail.position.set(sx, yTop + 0.12, 0);
+      deck.add(rail);
+    }
+    const pileMat = new MeshStandardMaterial({ color: 0x6d747d, roughness: 1 });
+    for (const sz of [-0.32, 0.32]) {
+      const pile = new Mesh(new BoxGeometry(0.6, 0.5, 0.1), pileMat);
+      pile.position.set(0, 0.25, sz);
+      deck.add(pile);
+    }
+    g.add(deck);
   }
 
   /**
@@ -959,31 +1254,65 @@ export class ThreeMapRenderer implements IMapRenderer {
 
   // ---- live effects: smoke + cars ------------------------------------------
 
+  /** Lazily fetch the drop-in smoke effect model (once). No-op if none supplied. */
+  private ensureSmokeSrc(): void {
+    if (this.smokeSrcState !== 'none') return;
+    const url = firstModel(effectModel, SMOKE_EFFECT_MODELS);
+    if (!url) {
+      this.smokeSrcState = 'fail';
+      return;
+    }
+    this.smokeSrcState = 'loading';
+    loadModel(url)
+      .then((src) => {
+        this.smokeSrc = src;
+        this.smokeSrcState = 'ready';
+      })
+      .catch(() => {
+        this.smokeSrcState = 'fail';
+      });
+  }
+
   private animateSmoke(dt: number): void {
     const sources: Vector3[] = [];
     for (const node of this.nodes.values()) if (node.smoke) sources.push(node.smoke);
+    if (sources.length > 0) this.ensureSmokeSrc();
     this.smokeTimer -= dt;
     if (this.smokeTimer <= 0 && sources.length > 0 && this.smoke.length < MAX_SMOKE) {
       this.smokeTimer = 0.5;
       const src = sources[Math.floor(Math.random() * sources.length)]!;
-      const mat = new SpriteMaterial({ color: 0xdadada, transparent: true, opacity: 0.5, depthWrite: false });
-      const s = new Sprite(mat);
-      s.position.copy(src);
-      s.scale.setScalar(0.6);
-      this.liveGroup.add(s);
-      this.smoke.push({ s, vy: 0.6 + Math.random() * 0.4, age: 0, ttl: 2.6 });
+      if (this.smokeSrcState === 'ready' && this.smokeSrc) {
+        // Model puff: clone, small, rises + grows (opaque models simply pop out).
+        const puff = this.smokeSrc.clone(true);
+        fitObject(puff, { targetHeight: 0.5 });
+        puff.position.set(src.x, src.y, src.z);
+        this.liveGroup.add(puff);
+        this.smoke.push({ obj: puff, mat: undefined, vy: 0.6 + Math.random() * 0.4, age: 0, ttl: 2.6 });
+      } else {
+        const mat = new SpriteMaterial({ color: 0xdadada, transparent: true, opacity: 0.5, depthWrite: false });
+        const s = new Sprite(mat);
+        s.position.copy(src);
+        s.scale.setScalar(0.6);
+        this.liveGroup.add(s);
+        this.smoke.push({ obj: s, mat, vy: 0.6 + Math.random() * 0.4, age: 0, ttl: 2.6 });
+      }
     }
     for (let i = this.smoke.length - 1; i >= 0; i--) {
       const p = this.smoke[i]!;
       p.age += dt;
-      p.s.position.y += p.vy * dt;
-      p.s.position.x += dt * 0.2;
+      p.obj.position.y += p.vy * dt;
+      p.obj.position.x += dt * 0.2;
       const k = p.age / p.ttl;
-      p.s.scale.setScalar(0.6 + k * 1.1);
-      (p.s.material as SpriteMaterial).opacity = 0.5 * (1 - k);
+      if (p.mat) {
+        p.obj.scale.setScalar(0.6 + k * 1.1);
+        p.mat.opacity = 0.5 * (1 - k);
+      } else {
+        // Model puff: grow then shrink away near the end of its life.
+        p.obj.scale.setScalar((0.8 + k * 0.8) * (k > 0.7 ? (1 - k) / 0.3 : 1));
+      }
       if (p.age >= p.ttl) {
-        this.liveGroup.remove(p.s);
-        p.s.material.dispose();
+        this.liveGroup.remove(p.obj);
+        this.disposeGroup(p.obj);
         this.smoke.splice(i, 1);
       }
     }
@@ -1011,6 +1340,10 @@ export class ThreeMapRenderer implements IMapRenderer {
       const car: Car = { mesh, tile: { ...start }, next, t: 0, speed: 0.85 + Math.random() * 0.5 };
       this.liveGroup.add(mesh);
       this.cars.push(car);
+      // Drop-in vehicle model (§ Fahrzeuge): a `car.glb` in models/vehicles/
+      // replaces the procedural car. Author facing +z. Fallback stays otherwise.
+      const carUrl = firstModel(vehicleModel, VEHICLE_CAR_MODELS);
+      if (carUrl) void this.swapInModel(carUrl, mesh, { targetHeight: 0.34 });
     }
   }
 
@@ -1110,6 +1443,9 @@ export class ThreeMapRenderer implements IMapRenderer {
       const mesh = makeVanMesh();
       this.liveGroup.add(mesh);
       this.missionVan = { mesh, path: [], idx: 0, t: 0 };
+      // Drop-in delivery-van model (§ Fahrzeuge). Author facing +z.
+      const vanUrl = firstModel(vehicleModel, VAN_MODELS);
+      if (vanUrl) void this.swapInModel(vanUrl, mesh, { targetHeight: 0.42 });
     }
     this.missionVan.path = bestPath;
     this.missionVan.idx = 0;
@@ -1233,8 +1569,8 @@ export class ThreeMapRenderer implements IMapRenderer {
    */
   private rebuildMarkers(): void {
     for (const m of this.markers) {
-      this.markerGroup.remove(m.s);
-      m.s.material.dispose();
+      this.markerGroup.remove(m.obj);
+      this.disposeGroup(m.obj);
     }
     this.markers = [];
     const targets = new Set(this.controller.getActivityTargets().filter((tg) => !tg.done).map((tg) => tg.buildingId));
@@ -1252,14 +1588,29 @@ export class ThreeMapRenderer implements IMapRenderer {
       }
       if (!kind) continue;
       const big = kind === 'activity';
-      const s = new Sprite(new SpriteMaterial({ map: this.markerTexture(kind), transparent: true, depthTest: false }));
+      const cx = b.x + def.size.w / 2;
+      const cz = b.y + def.size.h / 2;
       const baseY = this.approxHeight(def, b.upgradeLevel) + (big ? 1.4 : 1.0);
-      s.position.set(b.x + def.size.w / 2, baseY, b.y + def.size.h / 2);
+
+      // Drop-in 3D marker (§ Marker): a `marker_problem.glb` etc. in
+      // models/markers/ replaces the flat billboard with a floating model that
+      // bobs and spins. Falls back to the camera-facing canvas sprite.
+      const modelUrl = firstModel(markerModel, MARKER_MODEL_NAMES[kind]);
+      if (modelUrl) {
+        const holder = new Group();
+        holder.position.set(cx, baseY, cz);
+        this.markerGroup.add(holder);
+        void this.swapInModel(modelUrl, holder, { targetHeight: big ? 1.0 : 0.75 });
+        this.markers.push({ obj: holder, baseY, pulse: big, spin: true });
+        continue;
+      }
+
+      const s = new Sprite(new SpriteMaterial({ map: this.markerTexture(kind), transparent: true, depthTest: false }));
+      s.position.set(cx, baseY, cz);
       s.scale.setScalar(big ? 1.7 : 1.25);
       s.renderOrder = 10;
-      s.userData['pulse'] = big; // activity markers pulse; status markers stay calm
       this.markerGroup.add(s);
-      this.markers.push({ s, baseY });
+      this.markers.push({ obj: s, baseY, pulse: big, spin: false });
     }
   }
 
@@ -1267,10 +1618,11 @@ export class ThreeMapRenderer implements IMapRenderer {
     if (this.markers.length === 0) return;
     const t = performance.now() / 1000;
     for (const m of this.markers) {
-      if (m.s.userData['pulse']) {
-        m.s.position.y = m.baseY + Math.sin(t * 3) * 0.18;
-        m.s.scale.setScalar(1.6 + Math.sin(t * 3) * 0.18);
+      if (m.pulse) {
+        m.obj.position.y = m.baseY + Math.sin(t * 3) * 0.18;
+        if (!m.spin) m.obj.scale.setScalar(1.6 + Math.sin(t * 3) * 0.18);
       }
+      if (m.spin) m.obj.rotation.y = t * 1.2;
     }
   }
 
@@ -1326,13 +1678,76 @@ export class ThreeMapRenderer implements IMapRenderer {
   private disposeGroup(obj: TObject3D): void {
     obj.traverse((o) => {
       const mesh = o as Mesh;
-      if (mesh.geometry) mesh.geometry.dispose();
+      // Never dispose geometry/materials owned by a cached model — they are
+      // shared with the cache and every future clone (see cacheOwned/loadModel).
+      if (mesh.geometry && !cacheOwned.has(mesh.geometry)) mesh.geometry.dispose();
       const mat = (mesh as unknown as { material?: Material | Material[] }).material;
-      if (Array.isArray(mat)) mat.forEach((m) => m.dispose());
-      else if (mat) mat.dispose();
+      if (Array.isArray(mat)) mat.forEach((m) => !cacheOwned.has(m) && m.dispose());
+      else if (mat && !cacheOwned.has(mat)) mat.dispose();
     });
   }
 }
+
+/** How a dropped-in model is fitted into the world before use. Either scale so
+ *  the footprint (max of x/z extent) spans `footprint` world units, or scale to a
+ *  fixed `targetHeight`. The model is then centred on XZ with its base at y=0. */
+interface FitOpts {
+  footprint?: number;
+  targetHeight?: number;
+  scaleMul?: number;
+  rotationY?: number;
+  castShadow?: boolean;
+}
+
+/** Scale + centre a loaded model per FitOpts (mutates it). Rotation is applied
+ *  before centring so 90°-rotated road/tile pieces still sit dead-centre. */
+function fitObject(model: TObject3D, opts: FitOpts): void {
+  const box = new Box3().setFromObject(model);
+  const size = new Vector3();
+  box.getSize(size);
+  const mul = opts.scaleMul ?? 1;
+  let scale = mul;
+  if (opts.targetHeight) scale = (opts.targetHeight / (size.y || 1)) * mul;
+  else if (opts.footprint) scale = (opts.footprint / (Math.max(size.x, size.z) || 1)) * mul;
+  model.scale.setScalar(scale);
+  if (opts.rotationY !== undefined) model.rotation.y = opts.rotationY;
+  const box2 = new Box3().setFromObject(model);
+  const c = new Vector3();
+  box2.getCenter(c);
+  model.position.x -= c.x;
+  model.position.z -= c.z;
+  model.position.y -= box2.min.y;
+}
+
+/** Return the first candidate name that resolves to a model URL, else undefined.
+ *  Lets a category accept both a precise name and a short alias (drop-in ease). */
+function firstModel(loader: (name: string) => string | undefined, names: readonly string[]): string | undefined {
+  for (const n of names) {
+    const url = loader(n);
+    if (url) return url;
+  }
+  return undefined;
+}
+
+/** Terrain type → drop-in tile model candidates (models/terrain/…), precise name
+ *  first then short alias. See docs/3D_MODEL_MANIFEST.md §2. */
+const TERRAIN_TILE_MODELS: Record<TerrainType, readonly string[]> = {
+  grass: ['grass_tile', 'grass'],
+  forest: ['forest_ground_tile', 'forest'],
+  water: ['ocean_tile', 'water'],
+  river: ['river_straight', 'river', 'water'],
+  mountain: ['mountain_ground_tile', 'rock_ground_tile', 'mountain'],
+  sand: ['sand_tile', 'shore_tile', 'sand'],
+  fertile: ['fertile_ground_tile', 'fertile'],
+};
+/** Raised mountain feature scattered on mountain tiles (models/terrain/mountains/). */
+const MOUNTAIN_FEATURE_MODELS = ['mountain_peak_medium', 'mountain_peak_large', 'rock_large', 'mountain_peak'] as const;
+/** Prop candidates for the culled vegetation pass (models/props/nature/). */
+const TREE_MODELS = ['pine_tree', 'tree_pine', 'tree', 'tree_deciduous'] as const;
+const BUSH_MODELS = ['bush_small', 'bush', 'bush_medium'] as const;
+/** Traffic-car and delivery-van candidates (models/vehicles/). Author facing +z. */
+const VEHICLE_CAR_MODELS = ['car', 'car_small', 'car_sedan', 'car_van'] as const;
+const VAN_MODELS = ['service_van', 'car_van', 'van', 'delivery_van', 'truck_food'] as const;
 
 const CAR_COLORS = [0xd94f4f, 0x4f7fd9, 0xe0b03a, 0xf2f2f2, 0x5fb35f, 0x333a44];
 
@@ -1383,7 +1798,67 @@ function roadClassFor(defId: string): RoadClass {
   return 'residential';
 }
 
+const BRIDGE_MODELS = [
+  'bridge_medium_road',
+  'bridge_small_stone',
+  'bridge_small_wood',
+  'bridge_large_road',
+  'bridge_road',
+  'bridge',
+] as const;
+
+/** Rotate a 4-bit neighbour mask one step clockwise (N→E→S→W). One step equals a
+ *  +90° yaw of the tile piece (see fitObject/three.js Y-rotation). */
+function rotMask(m: number): number {
+  return ((m << 1) | (m >> 3)) & 15;
+}
+/** Steps (0..3) to rotate `canonical` onto `actual`; ×90° gives the yaw. */
+function rotSteps(canonical: number, actual: number): number {
+  let m = canonical;
+  for (let k = 0; k < 4; k++) {
+    if (m === actual) return k;
+    m = rotMask(m);
+  }
+  return 0;
+}
+
+type RoadSegment = 'straight' | 'curve' | 't_intersection' | 'cross_intersection' | 'end';
+
+/** Neighbour mask → segment shape + yaw (canonical: straight=N-S, curve=N+E,
+ *  T=absent-W, end=arm-to-N). Matches the road model names in the manifest. */
+function roadSegment(mask: number): { base: RoadSegment; rotationY: number } {
+  const bits = (mask & 1) + ((mask >> 1) & 1) + ((mask >> 2) & 1) + ((mask >> 3) & 1);
+  const q = Math.PI / 2;
+  if (bits >= 4) return { base: 'cross_intersection', rotationY: 0 };
+  if (bits === 3) return { base: 't_intersection', rotationY: rotSteps(7, mask) * q };
+  if (bits === 2) {
+    if (mask === 5 || mask === 10) return { base: 'straight', rotationY: rotSteps(5, mask) * q };
+    return { base: 'curve', rotationY: rotSteps(3, mask) * q };
+  }
+  if (bits === 1) return { base: 'end', rotationY: rotSteps(1, mask) * q };
+  return { base: 'end', rotationY: 0 };
+}
+
+/** Candidate road model names for a segment + class: class-specific first
+ *  (`road_main_straight`), then the generic (`road_straight`). */
+function roadSegmentNames(base: RoadSegment, cls: RoadClass): string[] {
+  const generic = `road_${base}`;
+  if (cls === 'residential') return [generic];
+  return [`road_${cls}_${base}`, generic];
+}
+
 type MarkerKind = 'activity' | 'construction' | 'problem' | 'upgrade';
+
+/** Drop-in smoke effect model candidates (models/effects/). */
+const SMOKE_EFFECT_MODELS = ['smoke_chimney', 'smoke', 'steam', 'smoke_puff'] as const;
+
+/** Drop-in 3D marker model candidates per kind (models/markers/). */
+const MARKER_MODEL_NAMES: Record<MarkerKind, readonly string[]> = {
+  activity: ['marker_task', 'marker_activity', 'marker_target'],
+  construction: ['marker_construction', 'marker_build'],
+  problem: ['marker_problem', 'marker_alert'],
+  upgrade: ['marker_upgrade', 'marker_bonus', 'marker_arrow'],
+};
 
 const MARKER_STYLE: Record<MarkerKind, { color: string; glyph: 'exclaim' | 'up' | 'wrench' | 'box' }> = {
   activity: { color: '#2fd4d4', glyph: 'box' },
