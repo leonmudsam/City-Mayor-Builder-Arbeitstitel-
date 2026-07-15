@@ -683,7 +683,13 @@ export class ThreeMapRenderer implements IMapRenderer {
     // Selection highlight: a bright, glowing ground ring (§11).
     if (b.id === this.selectedId) group.add(this.selectionRing(def.size.w, def.size.h));
 
-    const url = buildingModel(def.id, b.upgradeLevel);
+    // Model resolution (v0.32): explicit visual.model3d → id/stage lookup →
+    // visual.fallbackModel → procedural block.
+    const v = def.visual;
+    const url =
+      (v?.model3d ? buildingModel(v.model3d) : undefined) ??
+      buildingModel(def.id, b.upgradeLevel) ??
+      (v?.fallbackModel ? buildingModel(v.fallbackModel) : undefined);
     if (url) {
       // Placeholder block until the model streams in (keeps the scene stable).
       const ph = this.proceduralBuilding(def, b, constructing, roadMask);
@@ -727,7 +733,7 @@ export class ThreeMapRenderer implements IMapRenderer {
       const size = new Vector3();
       box.getSize(size);
       const span = Math.max(size.x, size.z) || 1;
-      const scale = (Math.max(def.size.w, def.size.h) * 0.92) / span;
+      const scale = ((Math.max(def.size.w, def.size.h) * 0.92) / span) * (def.visual?.scale ?? 1);
       model.scale.setScalar(scale);
       const box2 = new Box3().setFromObject(model);
       const c = new Vector3();
@@ -735,6 +741,10 @@ export class ThreeMapRenderer implements IMapRenderer {
       model.position.x -= c.x;
       model.position.z -= c.z;
       model.position.y -= box2.min.y;
+      // Optional per-model fine-tuning (§ world-asset pipeline).
+      if (def.visual?.rotationOffset) model.rotation.y += def.visual.rotationOffset;
+      const off = def.visual?.footprintVisualOffset;
+      if (off) model.position.set(model.position.x + off.x, model.position.y + off.y, model.position.z + off.z);
       model.traverse((o) => {
         if ((o as Mesh).isMesh) {
           o.castShadow = true;

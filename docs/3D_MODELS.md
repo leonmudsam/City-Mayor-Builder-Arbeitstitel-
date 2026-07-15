@@ -14,6 +14,13 @@ in den richtigen Ordner legen, sonst nichts.** Der Spielstand und die Spiellogik
 
 Steuerung im 3D-Modus: **Ziehen / Rechtsklick-Ziehen = schwenken**, **Mausrad =
 zoomen**, **Umschalt + Ziehen = drehen/neigen**, **Klick auf Gebäude = auswählen**.
+(Ausführliche Kamera-Doku: `docs/3D_CAMERA_CONTROLS.md`.)
+
+> **Ganze 3D-Welt (Terrain, Gebirge, Wasser, Küste, Landmarken, Hero-Modelle,
+> Props, Fahrzeuge, Marker, Effekte):** siehe **`docs/3D_WORLD_ASSETS.md`** — die
+> vollständige Ordner-/Modellstruktur, Prompts und Fallbacks in Richtung des
+> Referenzbildes. Modelle werden ab v0.32 **rekursiv** aus den Unterordnern von
+> `src/assets/models/<kategorie>/…` erkannt (Key = Dateiname).
 
 ---
 

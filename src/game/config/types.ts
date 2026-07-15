@@ -219,6 +219,19 @@ export interface BuildingVisual {
   mapSprite2d?: string;
   isoPreview?: string;
   model3dRef?: string;
+  /** Low-poly LOD + fallback model, plus fine-tuning for how the model sits on
+   *  its footprint (v0.32 world-asset pipeline — optional, honoured by the 3D
+   *  renderer). `model3d` (above) is the explicit model filename override. */
+  model3dLod?: string;
+  fallbackModel?: string;
+  /** Uniform scale multiplier applied after the auto-fit to the footprint. */
+  scale?: number;
+  /** Extra Y-rotation in radians (front-facing correction for a model). */
+  rotationOffset?: number;
+  /** Small visual nudge in world units so a model lines up with its footprint. */
+  footprintVisualOffset?: { x: number; y: number; z: number };
+  /** Coarse size bucket for a later renderer (does not affect logic). */
+  sizeClass?: 'flat' | 'low' | 'medium' | 'high' | 'landmark' | 'hero';
   /** Where markers/overlays anchor, in footprint-relative tile units. */
   overlayAnchor?: { x: number; y: number };
   /** Optional per-upgrade-stage overrides, index = upgradeLevel. */
