@@ -1,6 +1,7 @@
 import { useSyncExternalStore } from 'react';
-import { Bug, Download, Gift, RefreshCw, RotateCcw, Upload, X } from 'lucide-react';
+import { Box, Boxes, Bug, Download, Gift, Grid3x3, RefreshCw, RotateCcw, Upload, X } from 'lucide-react';
 import { useGame, useUiStore } from '../../state/store.ts';
+import type { RenderMode } from '../../renderer/projection.ts';
 import { exportSave, importSave } from '../../game/storage/exportImport.ts';
 import {
   getCameraSettings,
@@ -38,6 +39,7 @@ export function SettingsPanel({
         </button>
       </div>
 
+      <MapViewControls />
       <CameraSettingsControls />
 
       <button
@@ -105,6 +107,37 @@ export function SettingsPanel({
       )}
       <p className="muted version">v{__APP_VERSION__}</p>
     </aside>
+  );
+}
+
+const MAP_MODES: { id: RenderMode; icon: typeof Box; key: string }[] = [
+  { id: 'true3d', icon: Box, key: 'ui.render.true3d' },
+  { id: 'isometric2d', icon: Boxes, key: 'ui.render.isometric2d' },
+  { id: 'flat2d', icon: Grid3x3, key: 'ui.render.flat2d' },
+];
+
+/** Map-view selector (prototype): 3D is the default & long-term mode, but 2D/iso
+ *  stay selectable during prototyping — easier testing & telling building types
+ *  apart. Purely presentation; the savegame is identical in every mode. */
+function MapViewControls() {
+  const renderMode = useUiStore((s) => s.renderMode);
+  const setRenderMode = useUiStore((s) => s.setRenderMode);
+  return (
+    <div className="settings-group">
+      <span className="settings-group-label">{t('ui.render.mode')}</span>
+      <div className="settings-segmented">
+        {MAP_MODES.map(({ id, icon: Icon, key }) => (
+          <button
+            key={id}
+            className={`settings-seg${renderMode === id ? ' active' : ''}`}
+            onClick={() => setRenderMode(id)}
+          >
+            <Icon size={15} /> {t(key)}
+          </button>
+        ))}
+      </div>
+      <span className="settings-group-hint">{t('ui.render.protohint')}</span>
+    </div>
   );
 }
 

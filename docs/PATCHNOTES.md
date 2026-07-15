@@ -1,5 +1,19 @@
 # Patch Notes
 
+## v0.30.1 — „3D-Fixes: sichtbare Straßen, Pan-Richtung, 2D für Prototyp"
+
+- **Straßen waren im 3D-Modus unsichtbar**, weil sie unter den erhöhten
+  Terrain-Kacheln lagen. Sie sitzen jetzt bündig **auf** dem Boden (mit feiner
+  Mittelmarkierung) und bilden ein klar lesbares Straßennetz.
+- **Schwenken vertikal invertiert:** Ziehen nach oben/unten war getauscht (links/
+  rechts war korrekt). „Karte greifen und schieben" funktioniert jetzt in beide
+  Richtungen konsistent.
+- **2D/Isometrie im Prototyp wieder wählbar:** In den Einstellungen gibt es einen
+  Kartenansicht-Schalter (3D / Isometrisch / 2D-Raster). **3D bleibt Standard**
+  (und langfristig der einzige Modus); 2D/Iso sind fürs Testen und zum leichteren
+  Unterscheiden von Gebäudetypen gedacht. Rein optisch — Spielstand identisch.
+  (Der doppelte Debug-Schalter im Debug-Panel entfällt.)
+
 ## v0.30 — „3D-Kamera & Navigation: hochwertige Steuerung, nur noch 3D"
 
 Kompletter Umbau der 3D-Navigation zu einer Steuerung, die sich wie in modernen

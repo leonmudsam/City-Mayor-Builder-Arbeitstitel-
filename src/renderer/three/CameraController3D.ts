@@ -73,8 +73,10 @@ export class CameraController3D {
     const rz = -Math.sin(this.yaw);
     const fx = -Math.sin(this.yaw);
     const fz = -Math.cos(this.yaw);
-    const wx = -dx * k * rx + -dy * k * fx;
-    const wz = -dx * k * rz + -dy * k * fz;
+    // "Grab the map": dragging down moves the world down (target += forward), so
+    // the vertical term is +dy (horizontal stays -dx). Fixes inverted up/down pan.
+    const wx = -dx * k * rx + dy * k * fx;
+    const wz = -dx * k * rz + dy * k * fz;
     this.gTargetX += wx;
     this.gTargetZ += wz;
     this.velX = wx * 55;

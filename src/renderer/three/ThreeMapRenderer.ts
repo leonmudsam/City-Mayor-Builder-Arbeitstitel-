@@ -663,13 +663,22 @@ export class ThreeMapRenderer implements IMapRenderer {
     let smoke: Vector3 | undefined;
 
     if (def.category === 'roads') {
+      // Terrain tiles rise to y≈0.20, so the road must sit ON TOP of them
+      // (bottom flush at 0.20) — otherwise it's buried and looks "missing".
       const road = new Mesh(
-        new BoxGeometry(1, 0.06, 1),
-        new MeshStandardMaterial({ color: 0x3f444c }),
+        new BoxGeometry(0.98, 0.08, 0.98),
+        new MeshStandardMaterial({ color: 0x444a54, roughness: 0.95 }),
       );
-      road.position.y = 0.14;
+      road.position.y = 0.24;
       road.receiveShadow = true;
       g.add(road);
+      // Faint centre marking so roads read clearly from above.
+      const line = new Mesh(
+        new BoxGeometry(0.12, 0.02, 0.12),
+        new MeshStandardMaterial({ color: 0xd9cf9e, roughness: 1 }),
+      );
+      line.position.y = 0.29;
+      g.add(line);
       return { group: g };
     }
 

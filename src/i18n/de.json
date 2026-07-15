@@ -208,7 +208,7 @@
   "ui.render.true3d": "3D",
   "ui.render.hint": "Rein optisch — Stadt, Gebäude und Spielstand bleiben identisch. Isometrie und 3D sind im Aufbau; fehlt ein Bild/3D-Modell, wird ein Platzhalter (farbiger Block) gezeigt.",
   "ui.render.threehint": "Echte 3D-Ansicht (three.js). Ziehen/Rechtsklick = schwenken, Mausrad = zoomen, Umschalt+Ziehen = drehen. Ohne .glb-Modelle werden farbige Blöcke gerendert — siehe docs/3D_MODELS.md.",
-  "ui.debug.renderEngine": "Render-Engine (Debug)",
+  "ui.render.protohint": "Standard ist 3D (und langfristig der einzige Modus). Für den Prototyp bleiben 2D-Raster und Isometrie wählbar — praktisch zum Testen und um Gebäudetypen leichter zu unterscheiden. Rein optisch: Stadt, Gebäude und Spielstand sind in jedem Modus identisch.",
   "ui.camera.settings": "Kamerasteuerung",
   "ui.camera.panSpeed": "Bewegungstempo",
   "ui.camera.zoomSpeed": "Zoomtempo",

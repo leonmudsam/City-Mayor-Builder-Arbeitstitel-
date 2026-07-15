@@ -5,10 +5,11 @@ import type { SectorId } from '../game/types.ts';
 import type { RenderMode } from '../renderer/projection.ts';
 import type { CameraPreset } from '../renderer/three/CameraConfig.ts';
 
-// v0.30: 3D is the only player-facing map. The 2D/iso engines survive only as a
-// developer fallback behind a debug key — there is no user-visible mode switch.
-// The setting is presentation-only (localStorage, never the savegame).
-const DEBUG_RENDER_KEY = 'cmb.debugRenderMode';
+// v0.30: 3D is the default (and the long-term single mode). During the prototype
+// the 2D/iso engines stay user-selectable in Settings — easier testing & telling
+// building types apart — persisted via this override key (3D clears it). The
+// setting is presentation-only (localStorage, never the savegame).
+const DEBUG_RENDER_KEY = 'cmb.mapMode';
 function loadRenderMode(): RenderMode {
   try {
     const v = localStorage.getItem(DEBUG_RENDER_KEY);
