@@ -60,6 +60,7 @@ import { validatePlacement } from '../../game/buildings/placement.ts';
 import { locationBonusPct } from '../../game/buildings/location.ts';
 import {
   buildingModel,
+  buildingConstructionModel,
   terrainModel,
   roadModel,
   bridgeModel,
@@ -67,7 +68,23 @@ import {
   markerModel,
   effectModel,
   vehicleModel,
+  uiModel,
 } from '../../assets/registry.ts';
+import {
+  TERRAIN_TILE_MODELS,
+  MOUNTAIN_FEATURE_MODELS,
+  TREE_MODELS,
+  BUSH_MODELS,
+  VEHICLE_CAR_MODELS,
+  VAN_MODELS,
+  SMOKE_EFFECT_MODELS,
+  BRIDGE_MODELS,
+  MARKER_MODELS,
+  CONSTRUCTION_MODELS,
+  UI_SELECTION_RING_MODELS,
+  UI_UPGRADE_BUTTON_MODELS,
+  UI_BUILD_BUTTON_MODELS,
+} from '../../assets/modelManifest.ts';
 import { CATEGORY_COLORS, TERRAIN_COLORS } from '../colors.ts';
 import type { IMapRenderer, RendererCallbacks } from '../IMapRenderer.ts';
 
@@ -798,11 +815,15 @@ export class ThreeMapRenderer implements IMapRenderer {
       return node;
     }
 
-    // Selection highlight: a bright, glowing ground ring (§11).
-    if (b.id === this.selectedId) group.add(this.selectionRing(def.size.w, def.size.h));
+    // Selection highlight + floating world-UI for the selected building (§ Welt-UI).
+    if (b.id === this.selectedId) {
+      group.add(this.selectionRing(def.size.w, def.size.h));
+      this.addSelectionUi(group, def, b);
+    }
 
     // Model resolution (v0.32): explicit visual.model3d → id/stage lookup →
-    // visual.fallbackModel → procedural block.
+    // visual.fallbackModel → procedural block. Stage models (`<id>_stage<N>.glb`)
+    // are chosen automatically by upgradeLevel via buildingModel(id, level).
     const v = def.visual;
     const url =
       (v?.model3d ? buildingModel(v.model3d) : undefined) ??
@@ -821,17 +842,63 @@ export class ThreeMapRenderer implements IMapRenderer {
       if (p.rotor) node.rotor = p.rotor;
       if (p.smoke) node.smoke = p.smoke;
     }
+
+    // Construction site during BOTH new build and upgrade (§ Baustelle): a
+    // per-building `<id>_construction.glb`, else a generic construction prop, else
+    // a procedural scaffold. Upgrades keep showing the current stage underneath.
+    if (b.status === 'constructing') this.addConstructionSite(group, def, b);
     return node;
   }
 
-  /** A bright, slightly glowing ring hugging the footprint for the selection. */
-  private selectionRing(w: number, h: number): Mesh {
+  /** A bright glowing ground ring under the selection, swappable for a
+   *  `ui_selection_ring.glb` drop-in (§ Welt-UI). */
+  private selectionRing(w: number, h: number): Group {
+    const holder = new Group();
     const ring = new Mesh(
       new BoxGeometry(w + 0.5, 0.06, h + 0.5),
       new MeshStandardMaterial({ color: 0xffffff, emissive: 0x8ad0ff, emissiveIntensity: 0.9, transparent: true, opacity: 0.9 }),
     );
     ring.position.y = 0.33;
-    return ring;
+    holder.add(ring);
+    const url = firstModel(uiModel, UI_SELECTION_RING_MODELS);
+    if (url) void this.swapInModel(url, holder, { footprint: Math.max(w, h) + 0.5, castShadow: false });
+    return holder;
+  }
+
+  /** Floating 3D action button above the selected building (§ Welt-UI): shows the
+   *  upgrade button when an upgrade is ready, otherwise a generic action button.
+   *  Only rendered when the matching `ui_*.glb` is supplied (no procedural clutter). */
+  private addSelectionUi(group: Group, def: BuildingDef, b: BuildingInstance): void {
+    if (b.status !== 'active') return;
+    const upgradeReady = this.controller.getBuildingMarker(b.id) === 'upgrade';
+    const url = firstModel(uiModel, upgradeReady ? UI_UPGRADE_BUTTON_MODELS : UI_BUILD_BUTTON_MODELS);
+    if (!url) return;
+    const holder = new Group();
+    holder.position.set(0, this.approxHeight(def, b.upgradeLevel) + 1.9, 0);
+    group.add(holder);
+    void this.swapInModel(url, holder, { targetHeight: 0.9, castShadow: false });
+  }
+
+  /** Add the construction stand-in (model or procedural scaffold) over a footprint. */
+  private addConstructionSite(group: Group, def: BuildingDef, b: BuildingInstance): void {
+    const holder = new Group();
+    group.add(holder);
+    const url =
+      buildingConstructionModel(def.id) ?? firstModel(propModel, CONSTRUCTION_MODELS);
+    if (url) {
+      void this.swapInModel(url, holder, { footprint: Math.max(def.size.w, def.size.h) * 0.9 });
+      return;
+    }
+    // Procedural scaffold cage sized by footprint + approx height.
+    const w = def.size.w * 0.86;
+    const d = def.size.h * 0.86;
+    const height = this.approxHeight(def, b.targetUpgradeLevel ?? b.upgradeLevel);
+    const cage = new LineSegments(
+      new EdgesGeometry(new BoxGeometry(w + 0.1, height + 0.2, d + 0.1)),
+      new LineBasicMaterial({ color: 0xffd54f }),
+    );
+    cage.position.y = (height + 0.2) / 2;
+    holder.add(cage);
   }
 
   private async attachModel(
@@ -1232,15 +1299,8 @@ export class ThreeMapRenderer implements IMapRenderer {
       smoke = new Vector3(this.pxFromGroup(def, b, chx), height + 0.7, this.pzFromGroup(def, b, chz));
     }
 
-    // Construction scaffold (wireframe cage) while building.
-    if (constructing) {
-      const cage = new LineSegments(
-        new EdgesGeometry(new BoxGeometry(w + 0.1, height + 0.2, d + 0.1)),
-        new LineBasicMaterial({ color: 0xffd54f }),
-      );
-      cage.position.y = (height + 0.2) / 2;
-      g.add(cage);
-    }
+    // (Construction scaffold is added centrally by addConstructionSite so it also
+    // covers upgrades — see buildNode.)
 
     return { group: g, ...(rotor ? { rotor } : {}), ...(smoke ? { smoke } : {}) };
   }
@@ -1595,7 +1655,7 @@ export class ThreeMapRenderer implements IMapRenderer {
       // Drop-in 3D marker (§ Marker): a `marker_problem.glb` etc. in
       // models/markers/ replaces the flat billboard with a floating model that
       // bobs and spins. Falls back to the camera-facing canvas sprite.
-      const modelUrl = firstModel(markerModel, MARKER_MODEL_NAMES[kind]);
+      const modelUrl = firstModel(markerModel, MARKER_MODELS[kind]);
       if (modelUrl) {
         const holder = new Group();
         holder.position.set(cx, baseY, cz);
@@ -1729,26 +1789,6 @@ function firstModel(loader: (name: string) => string | undefined, names: readonl
   return undefined;
 }
 
-/** Terrain type → drop-in tile model candidates (models/terrain/…), precise name
- *  first then short alias. See docs/3D_MODEL_MANIFEST.md §2. */
-const TERRAIN_TILE_MODELS: Record<TerrainType, readonly string[]> = {
-  grass: ['grass_tile', 'grass'],
-  forest: ['forest_ground_tile', 'forest'],
-  water: ['ocean_tile', 'water'],
-  river: ['river_straight', 'river', 'water'],
-  mountain: ['mountain_ground_tile', 'rock_ground_tile', 'mountain'],
-  sand: ['sand_tile', 'shore_tile', 'sand'],
-  fertile: ['fertile_ground_tile', 'fertile'],
-};
-/** Raised mountain feature scattered on mountain tiles (models/terrain/mountains/). */
-const MOUNTAIN_FEATURE_MODELS = ['mountain_peak_medium', 'mountain_peak_large', 'rock_large', 'mountain_peak'] as const;
-/** Prop candidates for the culled vegetation pass (models/props/nature/). */
-const TREE_MODELS = ['pine_tree', 'tree_pine', 'tree', 'tree_deciduous'] as const;
-const BUSH_MODELS = ['bush_small', 'bush', 'bush_medium'] as const;
-/** Traffic-car and delivery-van candidates (models/vehicles/). Author facing +z. */
-const VEHICLE_CAR_MODELS = ['car', 'car_small', 'car_sedan', 'car_van'] as const;
-const VAN_MODELS = ['service_van', 'car_van', 'van', 'delivery_van', 'truck_food'] as const;
-
 const CAR_COLORS = [0xd94f4f, 0x4f7fd9, 0xe0b03a, 0xf2f2f2, 0x5fb35f, 0x333a44];
 
 /** A small shaped car (body + cabin + tinted windows) — clearer than a bare box.
@@ -1798,15 +1838,6 @@ function roadClassFor(defId: string): RoadClass {
   return 'residential';
 }
 
-const BRIDGE_MODELS = [
-  'bridge_medium_road',
-  'bridge_small_stone',
-  'bridge_small_wood',
-  'bridge_large_road',
-  'bridge_road',
-  'bridge',
-] as const;
-
 /** Rotate a 4-bit neighbour mask one step clockwise (N→E→S→W). One step equals a
  *  +90° yaw of the tile piece (see fitObject/three.js Y-rotation). */
 function rotMask(m: number): number {
@@ -1849,16 +1880,6 @@ function roadSegmentNames(base: RoadSegment, cls: RoadClass): string[] {
 
 type MarkerKind = 'activity' | 'construction' | 'problem' | 'upgrade';
 
-/** Drop-in smoke effect model candidates (models/effects/). */
-const SMOKE_EFFECT_MODELS = ['smoke_chimney', 'smoke', 'steam', 'smoke_puff'] as const;
-
-/** Drop-in 3D marker model candidates per kind (models/markers/). */
-const MARKER_MODEL_NAMES: Record<MarkerKind, readonly string[]> = {
-  activity: ['marker_task', 'marker_activity', 'marker_target'],
-  construction: ['marker_construction', 'marker_build'],
-  problem: ['marker_problem', 'marker_alert'],
-  upgrade: ['marker_upgrade', 'marker_bonus', 'marker_arrow'],
-};
 
 const MARKER_STYLE: Record<MarkerKind, { color: string; glyph: 'exclaim' | 'up' | 'wrench' | 'box' }> = {
   activity: { color: '#2fd4d4', glyph: 'box' },

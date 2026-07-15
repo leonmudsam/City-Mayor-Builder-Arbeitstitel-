@@ -24,6 +24,12 @@ aktuell akzeptiert, steht in **§0**.
 Der 3D-Renderer liest diese Kategorien direkt aus der Drop-in-Pipeline. **Erster
 passender Name gewinnt** (Präzis vor Alias). Alles ohne Modell bleibt prozedural.
 
+> **Pro Ordner gibt es zusätzlich eine auto-generierte `README.md`** direkt neben
+> den Modellen (`src/assets/models/<ordner>/README.md`) mit genau den Namen für
+> diesen Ordner. Quelle ist `src/assets/modelManifest.ts` (+ `buildings.config.ts`);
+> ein Test (`tests/modelReadmes.test.ts`) hält sie synchron. Neue Namen dort
+> ergänzen → `WRITE_MODEL_DOCS=1 npx vitest run tests/modelReadmes.test.ts`.
+
 | Kategorie | Ordner | Akzeptierte Dateinamen (Priorität → ) | Ausrichtung / Hinweis |
 |---|---|---|---|
 | Terrain-Kachel Gras | `terrain/…` | `grass_tile` → `grass` | 1×1, ersetzt farbige Kachel |
@@ -49,6 +55,12 @@ passender Name gewinnt** (Präzis vor Alias). Alles ohne Modell bleibt prozedura
 | Marker Problem | `markers/…` | `marker_problem` → `marker_alert` | |
 | Marker Upgrade | `markers/…` | `marker_upgrade` → `marker_bonus` → `marker_arrow` | |
 | Effekt Rauch | `effects/…` | `smoke_chimney` → `smoke` → `steam` → `smoke_puff` | Schornstein aktiver Produktion |
+| Baustelle (Bau **&** Upgrade) | `buildings/…` bzw. `props/construction/…` | `<id>_construction` → `construction_site` → `construction_crane` → `scaffold` → `crane` | pro Gebäude eigen möglich; sonst generisch; sonst Gerüst |
+| Gebäude-Stufe (Upgrade) | `buildings/…` | `<id>_stage2` … `_stage<N>` | Stufe N ≙ Upgrade-Level N−1; sonst `<id>.glb` |
+| Welt-UI Auswahlring | `ui/…` | `ui_selection_ring` → `selection_ring` | unter ausgewähltem Gebäude |
+| Welt-UI Upgrade-Button | `ui/…` | `ui_upgrade_button` → `ui_button_upgrade` → `button_upgrade` | schwebt über ausgew. Gebäude, wenn Upgrade bereit |
+| Welt-UI Aktions-Button | `ui/…` | `ui_build_button` → `ui_button_build` → `button_build` | schwebt über ausgew. Gebäude |
+| Welt-UI Level-Badge | `ui/…` | `ui_level_badge` → `level_badge` → `ui_badge` | reserviert |
 
 `<klasse>` ist die Straßenklasse (`main`, `wide`, `industrial`, `boulevard`) —
 für die Standard-Wohnstraße (`residential`) gibt es keinen Klassen-Präfix, nur der

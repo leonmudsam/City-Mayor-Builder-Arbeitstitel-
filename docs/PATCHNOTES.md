@@ -1,5 +1,37 @@
 # Patch Notes
 
+## v0.34 — „Pro-Ordner-Modellisten, Upgrade-Stufen, Baustellen- & Welt-UI-Modelle"
+
+Baut auf v0.33 auf und macht das Entwickeln eigener Modelle noch geführter.
+
+**Modellliste pro Ordner (auto-synchron).** Jeder Modellordner hat jetzt eine
+`README.md` direkt daneben (`src/assets/models/<ordner>/README.md`) mit exakt den
+Modellnamen, die *dieser* Ordner anbindet — inkl. Aliassen, Ausrichtung und
+Hinweisen. Quelle ist das neue `src/assets/modelManifest.ts` (die **einzige**
+Namensquelle, die auch der Renderer nutzt) plus `buildings.config.ts` für die
+Gebäudeliste. Ein Test (`tests/modelReadmes.test.ts`) hält alle READMEs synchron —
+neues Gebäude/Modellname → Test schlägt fehl, bis regeneriert
+(`WRITE_MODEL_DOCS=1 npx vitest run tests/modelReadmes.test.ts`). Der Renderer
+importiert seine Namensarrays jetzt aus `modelManifest.ts`, sodass Code und Doku
+nicht mehr auseinanderlaufen können.
+
+**Upgrade-Stufen pro Gebäude.** `<id>.glb` deckt weiterhin alle Stufen ab; optional
+liefert `<id>_stage2.glb … _stage<N>.glb` je Ausbaustufe ein eigenes Modell (Stufe
+N ≙ Upgrade-Level N−1) — automatisch nach `upgradeLevel` gewählt.
+
+**Baustellen-Modell pro Gebäude — jetzt auch bei Upgrades.** Während Bau *und*
+Upgrade zeigt der Renderer eine Baustelle: pro Gebäude `<id>_construction.glb`,
+sonst ein generisches Baustellen-Prop (`construction_site` …), sonst ein
+prozedurales Gerüst. Beim Upgrade bleibt die aktuelle Stufe darunter sichtbar.
+
+**Welt-UI mit 3D-Modellen (neuer Ordner `models/ui/`, Loader `uiModel()`).** Der
+Auswahlring unter dem gewählten Gebäude ist per `ui_selection_ring.glb` ersetzbar
+(sonst prozedural). Über dem gewählten Gebäude schwebt ein Aktions-/Upgrade-Button
+(`ui_upgrade_button` wenn Upgrade bereit, sonst `ui_build_button`) — nur, wenn das
+Modell vorhanden ist. `ui_level_badge` ist als Slot reserviert.
+
+Exakte Namen: die jeweilige Ordner-`README.md` bzw. `docs/3D_MODEL_MANIFEST.md` §0.
+
 ## v0.33 — „Drop-in 3D-Modelle für die ganze Welt (Renderer-Anbindung)"
 
 Bisher las der 3D-Renderer nur **Gebäude**-Modelle ein; alles andere war rein
