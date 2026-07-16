@@ -1,5 +1,99 @@
 # Patch Notes
 
+## v0.39 — „Organische Welt: Höhenfeld-Boden, Gebirge, saubere Platzierung & Proportionen"
+
+**Was.** Die Karte ist nicht mehr flach:
+- **Organischer Boden statt Kachel-Boxen.** Der Grund ist jetzt ein durchgehendes,
+  vertex-gefärbtes, beleuchtetes **Höhenfeld**: klare Hügel, geneigte organische
+  Formen, **riesige, smooth verlaufende Gebirge** im Westen/Norden, abgesenkte
+  Seen/Flüsse/Meer. Ein Klick-Boden bleibt für die Kachelauswahl.
+- **Alles sitzt sauber auf dem Boden.** Gebäude, Straßen, Baustellen, Auswahl-Ringe,
+  Geister-Vorschau, Bäume/Sträucher, Autos, Lieferwagen, Marker und Rauch lesen
+  **dieselbe** Höhenfunktion (`terrainHeightAt`) — nichts schwebt oder versinkt.
+  Bebaubares Land ist bewusst **flach/ruhig** gehalten, damit Gebäude sauber stehen;
+  Wasser bekommt eine flache Wasseroberfläche über dem abgesenkten Bett.
+- **Proportionen korrigiert.** Kleine Deko-/Natur-Props behalten ihre **reale Höhe**
+  (1 Kachel ≈ 4 m): eine **Parkbank ist nicht mehr so groß wie ein Baum**. Zentrale
+  Tabelle `DECO_TARGET_HEIGHT`; prozedurale Deko zeichnet jetzt pro id die richtige
+  Form (Bank, Brunnen, Blumenbeet, Baum) in passender Größe.
+- **Prompts & Anweisungen erweitert.** `terrain/PROMPTS.md` und `props/PROMPTS.md`
+  bekommen eine klare **Maßstabs-/Höhen-/Pivot-Regel** (1 Kachel ≈ 4 m, Pivot
+  unten-mittig, nichts schwebt, Höhen-Richtwerte je Objekttyp) plus neue Einträge
+  für Gebirge/Felsen/Klippen/Hügel, Bäume/Sträucher/Hecke/Schilf.
+
+**Warum.** Eine flache Kachelfläche wirkt leblos; klare Hügel und große Gebirge geben
+der Welt Charakter und Tiefe (3D-Welt als visueller Kern). Gleichzeitig müssen
+Bauflächen sauber bleiben und Modelle in stimmigen Größen zueinander stehen — genau
+die genannten Fehler (schwebende/gleich große Objekte) sind damit behoben.
+
+**Architektur.** Neue **eine Höhenquelle** `src/renderer/three/terrainHeight.ts`
+(rein, testbar): leitet die Höhe aus dem Terraintyp (`terrainAt`, Sim) + kohärentem
+Value-Noise ab — biome-abhängig (Land sanft, Gebirge groß, Wasser abgesenkt), bilinear
+geglättet. Der `ThreeMapRenderer` baut den Boden als **ein** `BufferGeometry`-Heightfield
+(Vertexfarben aus den angrenzenden Kacheln, `computeVertexNormals`, ein Draw-Call) und
+setzt jede Platzierung auf `terrainHeightAt`. Rein visuell — Simulation, Saves und
+Kachel-Koordinaten bleiben unberührt (CLAUDE.md §1/§3); Bebaubarkeit/Picking laufen
+weiter über die logischen Kacheln.
+
+**Performance.** Der Boden ist ein einzelner Mesh (statt tausender Instanz-Boxen);
+`terrainHeightAt` ist billig (2-Oktaven-Noise) und wird nur beim Terrain-Rebuild bzw.
+pro Objekt-Platzierung ausgewertet, nicht pro Frame.
+
+**Auswirkung/Zukunft.** Drop-in-Fels-/Gipfel-/Hügel-Modelle sitzen automatisch auf der
+geneigten Oberfläche (Prompts liegen bereit). Später möglich: Footprints unter Gebäuden
+exakt einebnen, Klippen/Terrassen, Uferlinien, Gebirgs-Hero-Modelle, oder die Höhe an
+Gameplay koppeln.
+
+**Verifikation.** `tsc -b --force`, ESLint, **145 Tests** (5 neue Höhenfeld-Tests:
+Gebirge hoch, Wasser unter Wasserlinie, Bauland sanft, stetig), Build — alles grün.
+3D-Screenshot-Smoke: organische Gebirge & Hügel, Stadt sauber auf flacher Fläche,
+Bäume in korrekter Baumgröße, keine Konsolenfehler.
+
+**Dateien.** Neu: `src/renderer/three/terrainHeight.ts`, `tests/terrainHeight.test.ts`.
+Geändert: `src/renderer/three/ThreeMapRenderer.ts` (Heightfield-Boden, Höhen-Platzierung
+überall, `DECO_TARGET_HEIGHT` + `decorationProc`, Wasser auf `WATER_LEVEL`),
+`src/assets/modelManifest.ts` (`SCALE_NOTE` + erweiterte terrain/props-Prompts),
+`src/assets/models/terrain/PROMPTS.md`, `src/assets/models/props/PROMPTS.md` (generiert),
+`docs/PATCHNOTES.md`.
+
+## v0.38 — „Gebäude-Vorschau direkt aus dem 3D-Modell (keine PNGs mehr nötig)"
+
+**Was.** Die Vorschau eines Gebäudes (Baumenü, Gebäude-Sheet, Level-up-Karten,
+Event-Popup) wird jetzt **automatisch aus seiner `.glb` gerendert**. Wer ein Modell
+in `src/assets/models/buildings/` ablegt, braucht **keine `<id>.png`-Vorschau mehr**.
+Reihenfolge der Quellen: **`.glb`-Thumbnail → `<id>.png` (falls vorhanden) → eingebaute
+SVG-Grafik**. Solange das Thumbnail noch rendert, zeigt die Karte die SVG/PNG, blinkt
+also nie leer.
+
+**Warum.** Es gibt inzwischen viele Gebäude-Modelle. Bisher brauchte jede Karte
+zusätzlich ein handgezeichnetes PNG — doppelte Pflege. Jetzt genügt die `.glb`: ein
+Asset für Welt **und** Vorschau, konsistenter Look, weniger Dateien.
+
+**Architektur.** Neuer Offscreen-Renderer `src/renderer/three/modelThumbnail.ts`:
+**ein** geteilter WebGL-Kontext zeichnet jedes Modell **einmal** in ein transparentes
+256²-Canvas (3/4-Ansicht, Welt-Beleuchtung) und liefert eine PNG-Data-URL, **gecacht
+pro Modell-URL**. `BuildingArt` (in `BuildingArtwork.tsx`) nutzt einen kleinen
+`useModelThumbnail`-Hook und wählt die Quelle in obiger Reihenfolge. Rein
+präsentationsseitig — keine Simulation/Save/Koordinaten berührt (CLAUDE.md §1). Ist
+WebGL nicht verfügbar (z. B. Tests), fällt es sauber auf PNG/SVG zurück.
+
+**Performance.** Genau ein zusätzlicher WebGL-Kontext (Singleton, nicht pro Gebäude),
+jedes Modell wird nur einmal gerendert und das Ergebnis gecacht; die Karten zeigen
+danach ein statisches `<img>`.
+
+**Auswirkung/Zukunft.** Neue Gebäude brauchen nur noch die `.glb`. Später ließe sich
+das Thumbnail leicht auf die aktuelle Upgrade-Stufe (`<id>_stage<N>.glb`) oder eine
+kleine Rotations-Vorschau erweitern.
+
+**Verifikation.** `tsc -b --force`, ESLint, **140 Tests**, Build — grün. Sicht-Check
+mit temporären Test-`.glb`: „Kleines Haus" zeigt das aus dem Modell gerenderte
+Thumbnail, Nachbarn ohne Modell weiter ihr SVG; keine Konsolenfehler. (Die Test-`.glb`
+wurden nach der Prüfung wieder entfernt.)
+
+**Dateien.** Neu: `src/renderer/three/modelThumbnail.ts`. Geändert:
+`src/components/art/BuildingArtwork.tsx` (GLB-zuerst + Hook), `src/styles.css`
+(`.bld-art-model`), `docs/ASSETS.md`, `docs/ARCHITECTURE.md`, `docs/PATCHNOTES.md`.
+
 ## v0.37 — „Lebendige Welt: Tag/Nacht-Zyklus + dynamischer Himmel + Wasser"
 
 **Was.** Die 3D-Welt bekommt eine **lebendige Atmosphäre**. Neu:

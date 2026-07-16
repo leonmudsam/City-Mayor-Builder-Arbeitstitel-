@@ -5,11 +5,18 @@ gelisteten Bilder generierst und mit dem angegebenen Dateinamen in den passenden
 Ordner legst, zeigt die UI sie **automatisch** an — kein Code-Eingriff nötig.
 Solange ein Bild fehlt, rendert die eingebaute SVG-Grafik als Platzhalter weiter.
 
+> **Gebäude-Vorschau kommt ab v0.38 aus dem 3D-Modell.** Liegt für ein Gebäude eine
+> `.glb` in `src/assets/models/buildings/` (siehe `docs/3D_MODEL_MANIFEST.md`), wird
+> die Vorschau in Baumenü/Gebäude-Sheet/Level-up **automatisch aus dem Modell
+> gerendert** — eine `<id>.png` ist dann **nicht mehr nötig**. Reihenfolge:
+> **`.glb`-Render → `<id>.png` (falls vorhanden) → eingebaute SVG-Grafik**. Die
+> Ablage unten gilt weiter als optionaler Fallback (z. B. für Gebäude ohne Modell).
+
 ## So funktioniert die Pipeline
 
 - Ablageorte (im Projekt):
   - `src/assets/resources/<id>.png` — Ressourcen
-  - `src/assets/buildings/<id>.png` — Gebäude
+  - `src/assets/buildings/<id>.png` — Gebäude (**optional** ab v0.38, siehe Hinweis oben)
   - `src/assets/portraits/<name>.png` — Bürger/Berater
 - Der Dateiname **muss exakt** der ID unten entsprechen (klein, mit Unterstrich),
   z. B. `house_small.png`, `power_plant.png`, `freshwater.png`.
