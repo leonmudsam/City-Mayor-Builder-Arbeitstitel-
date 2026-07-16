@@ -1,5 +1,146 @@
 # Patch Notes
 
+## v0.42 — „Terrain System V2: Splatmap-Materialdoku & Textur-Drop-in vorbereitet"
+
+**Was.** Neue Dokumentation + Drop-in-Infrastruktur für ein Terrain-
+Materialsystem — noch **keine** Renderer-Änderung:
+- **`docs/TERRAIN_TEXTURES.md`** (neu, generiert): vollständige Spezifikation für
+  35 Boden-/Material-Texturen in 8 Kategorien (Gras, Erde, Stein, Sand, Schnee,
+  Wasser, Felder, Wege) — je Textur Ordner, Auflösung, Stil, Palette, Einsatz,
+  Materialeigenschaften, Mischverhalten, benötigte Normal-/Roughness-/AO-/
+  Height-Maps, Detailstufe, Priorität und ein copy-paste-fertiger
+  ChatGPT-/Bildgenerator-Prompt.
+- **Splatmap-Konzept dokumentiert:** Regeln, wie Höhe, Hangneigung und
+  Wassernähe die Materialgewichte pro Fläche bestimmen (z. B. 70 % Gras/20 %
+  Erde/10 % Stein statt eines harten Terrain-Typs), plus Biome-Materialsets
+  (welche Texturen pro Biom zur Auswahl stehen).
+- **Drop-in vorbereitet:** neuer Ordner `src/assets/textures/terrain/
+  {grass,earth,stone,sand,snow,water,field,path}/` + `terrainTextureUrl()` in
+  `src/assets/registry.ts` (Discovery per `import.meta.glob`, wie bei allen
+  anderen Assets). Eine abgelegte Textur wird gefunden, aber aktuell noch nicht
+  gerendert — der Ground-Shader, der sie tatsächlich mischt, ist bewusst
+  **nicht** Teil dieser Phase.
+
+**Warum.** Der Nutzer will die Bodenoberfläche künftig aus weich gemischten
+Splatmap-Texturen bestehen lassen statt aus vertex-gefärbtem Höhenfeld plus
+einzelnen kleinen Terrain-Modellen (Gras-/Felsbüschel) — "kein Aneinanderreihen
+von Modellen, sondern ein lebendiges Ganzes". Bevor eine einzige Textur
+existiert (der Nutzer erstellt sie extern mit ChatGPT), muss feststehen: welche
+Textur, in welcher Auflösung, mit welchem Motiv, wie sie sich mit ihren
+Nachbarn mischt. Das liefert diese Phase — die eigentliche Shader-
+Implementierung folgt, sobald reale Texturen zum Verifizieren vorliegen (siehe
+v0.40/v0.41: derselbe Doku-zuerst-Ansatz wie bei den 3D-Modellen).
+
+**Architektur.** `src/assets/terrainTextureManifest.ts` ist die einzige Quelle
+(mirror von `modelManifest.ts`): `docs/TERRAIN_TEXTURES.md` wird daraus
+generiert und von `tests/terrainTextures.test.ts` gegen Drift geprüft — exakt
+dasselbe Muster wie die 3D-Modell-Docs (CLAUDE.md §2 „Erweitern statt neu
+bauen"). Technische Angaben (Auflösung, Maps, Detailstufe) sind pro
+Material-Kategorie EINMAL hinterlegt (`CATEGORY_DEFAULTS`) statt 35-mal
+wiederholt — dieselbe Lösung wie `SIZE_CLASS_BUDGETS` bei den 3D-Modellen.
+`ThreeMapRenderer.buildGroundMesh()` ist unverändert (weiterhin vertex-gefärbtes
+Höhenfeld, v0.39) — reine Datendeklaration + Registry-Erweiterung, kein
+Rendering-Risiko in dieser Phase.
+
+**Auswirkung/Zukunft.** Sobald der Nutzer erste Texturen ablegt, sind Name,
+Ordner und Blend-Absicht bereits eindeutig festgelegt. Nächster Schritt (eigene
+Phase): ein Splatmap-Ground-Shader in `ThreeMapRenderer`, der die
+Materialgewichte aus Höhe/Neigung/Feuchtigkeit berechnet und die abgelegten
+Texturen weich mischt — mit Fallback auf das aktuelle vertex-gefärbte Höhenfeld,
+solange keine Texturen vorhanden sind (bricht nie, wie überall im Projekt).
+
+**Verifikation.** `npx tsc -b --force`, `npx eslint src tests`, `npx vitest run`
+(148 Tests, davon 3 neu in `tests/terrainTextures.test.ts`), `npm run build` —
+alle grün. Kein 3D-Screenshot-Smoke nötig (keine Renderer-Code-Änderung).
+
+**Dateien.** Neu: `src/assets/terrainTextureManifest.ts`,
+`tests/terrainTextures.test.ts`, `docs/TERRAIN_TEXTURES.md` (generiert).
+Geändert: `src/assets/registry.ts` (`terrainTextureUrl`/`hasAnyTerrainTexture`),
+`docs/3D_WORLD_ASSETS.md` (Querverweis in §3/§7), `docs/PATCHNOTES.md`.
+
+## v0.41 — „World Graphics V2, Phase 2: Gebirge/Flüsse, Straßen-Gelände, Gebäude-Rotation, Sektor-Nebel, Verkehrs-Pathing"
+
+**Was.** Die zweite World-Graphics-V2-Phase liefert die Rendering-/Gameplay-Seite
+zu der in v0.40 dokumentierten Konzept-Liste:
+- **Gebirge & Flüsse organischer.** `terrainHeight.ts` nutzt für Gebirge jetzt
+  **Ridged-Fractal-Noise** (drei Oktaven) statt glatter Rolling-Hill-Noise —
+  scharfe Gratlinien und Felsplatten statt runder Blobs. Wasser/Fluss-Betten
+  bekommen etwas Unebenheit (statt einer perfekt flachen Wanne), und Land direkt
+  neben Fluss/See senkt sich leicht zum Ufer ab ("gräbt sich ein").
+- **Straßen folgen dem Gelände.** Jedes Straßensegment kippt jetzt nach dem
+  lokalen Höhengradienten (Finite-Differenzen von `terrainHeightAt`, auf ~20°
+  begrenzt) und bekommt eine erdfarbene Schürze an der Unterkante — auf sanft
+  geneigtem Grasland/Wald zeigt sich nie mehr eine schwebende Kante oder Stufe
+  zwischen Nachbarsegmenten.
+- **Gebäude-Rotation.** Vor dem Platzieren lässt sich jedes Gebäude in
+  90°-Schritten drehen (Taste **R** oder der Dreh-Button im Platzierungs-Banner);
+  die Geister-Vorschau zeigt einen kleinen Pfeil an der gewählten Vorderseite.
+  Rein kosmetisch — Grundfläche, Validierung und Kosten bleiben exakt wie vorher,
+  nur die Modell-/Node-Ausrichtung dreht sich. Neues optionales Feld
+  `BuildingInstance.rotation` (0/90/180/270) wird beim Platzieren gespeichert.
+- **Sektor-Nebel.** Gesperrte Sektoren zeigen jetzt zusätzlich zur gedimmten
+  Bodenfarbe einen dichten, sanft wogenden Nebelschleier (eine Ebene je Sektor,
+  animiert über denselben Zeit-Uniform wie die Wasseroberfläche) — hohe
+  Landmarken/Berge können weiter als Silhouette durchscheinen ("keine komplette
+  Sicht", kein Blackout).
+- **Verkehrs-Pathing.** Der Ambient-Verkehr fährt jetzt **Haus → Straße → Ziel**
+  über dieselbe BFS-Straßensuche wie der Missions-Lieferwagen, statt an jeder
+  Kreuzung zufällig abzubiegen. Ohne Wohnhaus/Ziel-Gebäude (frühes Spiel) fällt
+  eine Route auf einen kurzen, richtungstreuen Zufallslauf zurück, damit auf der
+  Karte nie schlagartig aller Verkehr verschwindet.
+
+**Warum.** v0.40 hat die komplette Modell-Dokumentation für World Graphics V2
+vorbereitet, aber bewusst keine Rendering-/Gameplay-Änderung vorgenommen. Dieser
+Durchgang setzt die fünf dort als "Konzept, noch nicht implementiert" markierten
+Abschnitte um — mit vorhandenen prozeduralen Mitteln (keine neuen `.glb` nötig,
+alles bleibt Drop-in-fähig für später).
+
+**Architektur.** Alles erweitert bestehende Systeme statt neue zu bauen
+(CLAUDE.md §2): `terrainHeight.ts` bleibt die eine reine Höhenquelle (nur die
+Rauschfunktion für Gebirge/Wasser geändert); Straßen-Tilt/-Schürze ist ein
+zusätzlicher Schritt in `ThreeMapRenderer.buildRoad`; Rotation ist ein optionales
+Feld auf `BuildingInstance` (kein Migrationszwang, siehe unten) plus ein
+optionales `IMapRenderer.setPlacingRotation` (2D/Iso-Renderer ignorieren es
+ungerührt); Sektor-Nebel ist ein zusätzlicher InstancedMesh-Pass neben
+`buildGroundMesh`/`buildWater`; Verkehr nutzt die bereits vorhandene
+`roadPath()`-BFS (bisher nur vom Missions-Lieferwagen genutzt) auch für den
+Ambient-Verkehr, statt eine zweite Pathing-Logik zu bauen. Simulation bleibt
+unberührt — Terrain-Höhe, Straßen-Optik und Nebel sind rein visuell, Rotation
+ändert nur die Darstellung, Verkehr ist reine Ambient-Deko ohne Gameplay-Wirkung.
+
+**Saves.** `BuildingInstance.rotation` ist ein neues **optionales** Feld
+(`z.union([...]).optional()` in `schemas.ts`) — alte Spielstände parsen unverändert
+(Feld bleibt `undefined` ≙ 0°), keine `SCHEMA_VERSION`-Erhöhung und keine
+Migration nötig (wie zuvor bei `targetUpgradeLevel`/`constructionEndsAt`).
+
+**Auswirkung/Zukunft.** Die Bausteine aus v0.40 §7–§12 sind jetzt aktiv:
+schärfere Gebirge/Flüsse, geländetreue Straßen, drehbare Gebäude, Sektor-Nebel,
+zielgerichteter Verkehr. Offen für spätere Phasen: echte Gebirgs-/Fluss-Terrain-
+Features (Pässe, Wasserfälle, Schluchten als eigene platzierte Formen statt nur
+Höhenfeld-Rauschen), automatischer Straßenanschluss/Gehweg zwischen Gebäude und
+Straße, Bürgerhinweis-Sprechblasen im Nebel, Serpentinen/Tunnel für große
+Höhenunterschiede.
+
+**Verifikation.** `npx tsc -b --force`, `npx eslint src tests`, `npx vitest run`
+(145 Tests inkl. `terrainHeight.test.ts` mit den bestehenden Invarianten —
+Gebirge hoch, Wasser unter Wasserlinie, Bauland gleichmäßig, stetig), `npm run
+build` — alle grün. 3D-Screenshot-Smoke (Playwright, `vite preview`, `/`):
+Karte lädt ohne Konsolenfehler, Gebirge zeigt sichtbar zerklüftete Textur,
+Platzierungs-Banner zeigt den Dreh-Button und wechselt bei Taste R sichtbar
+von 0° auf 90°, Nebel-Ebene über dem gesperrten Sektor sichtbar.
+
+**Dateien.** Geändert: `src/renderer/three/terrainHeight.ts` (Ridged-Noise
+Gebirge, Fluss-/See-Bett-Unebenheit, Uferabsenkung), `src/renderer/three/
+ThreeMapRenderer.ts` (Straßen-Gelände-Fit + Schürze, Gebäude-Rotation anwenden +
+Ghost-Pfeil + `setPlacingRotation`, Sektor-Nebel-Pass, Verkehrs-Pathing via
+`roadPath`), `src/game/types.ts` + `src/game/config/schemas.ts`
+(`BuildingInstance.rotation`), `src/game/commands/controller.ts`
+(`placeBuilding` nimmt optionale Rotation entgegen), `src/state/store.ts`
+(`placingRotation` + `rotatePlacing`), `src/renderer/IMapRenderer.ts` +
+`src/renderer/MapRenderer.ts` (Rotation optional durchgereicht),
+`src/components/MapView.tsx` (Taste R, Dreh-Button im Banner), `src/styles.css`,
+`src/i18n/de.json`, `docs/PATCHNOTES.md`.
+
 ## v0.40 — „World Graphics V2, Phase 1: 3D-Asset-Doku konsolidiert & vollständig"
 
 **Was.** Reine Dokumentations-/Datenüberarbeitung, kein Rendering- oder

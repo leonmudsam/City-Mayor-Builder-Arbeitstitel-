@@ -91,6 +91,21 @@ import type { IMapRenderer, RendererCallbacks } from '../IMapRenderer.ts';
 const MAX_SMOKE = 40;
 const MAX_CARS = 10;
 
+/** Ambient-traffic route endpoints (§ Verkehr Haus→Straße→Ziel): cars drive from
+ *  a residential building to a workplace/destination building, never the other
+ *  way round and never a category that isn't a real building (roads/decoration). */
+const RESIDENTIAL_CATEGORIES: ReadonlySet<string> = new Set(['residential']);
+const TRAFFIC_DESTINATION_CATEGORIES: ReadonlySet<string> = new Set([
+  'production',
+  'services',
+  'economy',
+  'energy',
+  'government',
+  'leisure',
+  'infrastructure',
+  'special',
+]);
+
 /** Default relative height per category when a def has no `visual.heightClass`. */
 const CATEGORY_HEIGHT: Record<string, number> = {
   roads: 0.02,
@@ -148,9 +163,12 @@ interface BuildingNode {
 
 interface Car {
   mesh: Object3D;
-  tile: { x: number; y: number };
-  next: { x: number; y: number };
-  t: number; // 0..1 along tile→next
+  /** Road-tile route the car currently drives (§ Verkehr Haus→Straße→Ziel).
+   *  Built from a real house → destination BFS path when possible, else a
+   *  momentum-based random walk (never both empty while the car is alive). */
+  path: { x: number; y: number }[];
+  idx: number; // current path segment: path[idx] → path[idx+1]
+  t: number; // 0..1 along that segment
   speed: number;
 }
 
@@ -181,6 +199,9 @@ export class ThreeMapRenderer implements IMapRenderer {
   private markerGroup = new Group();
   private ground: Mesh | undefined; // invisible pick plane
   private ghost: Group | undefined;
+  /** Cosmetic facing chosen for the building about to be placed (§ Gebäude-
+   *  Rotation), mirrored from the UI store via setPlacingRotation(). */
+  private placingRotation: 0 | 90 | 180 | 270 = 0;
   private markerTex = new Map<string, CanvasTexture>();
   /** One marker per building. `obj` is a camera-facing sprite billboard OR a
    *  dropped-in 3D marker model; `pulse`/`spin` drive the idle animation. */
@@ -301,6 +322,15 @@ export class ThreeMapRenderer implements IMapRenderer {
     if (!defId) this.clearGhost();
   }
 
+  /** Mirrors the UI store's placingRotation (§ Gebäude-Rotation) so the ghost's
+   *  front-facing indicator and the eventual placed building match what the
+   *  player chose. Forces the ghost to redraw even if the hovered tile is unchanged. */
+  setPlacingRotation(rotation: 0 | 90 | 180 | 270): void {
+    if (this.placingRotation === rotation) return;
+    this.placingRotation = rotation;
+    this.lastHoverKey = ''; // force updateGhostAt to rebuild on the next move
+  }
+
   setMoving(): void {
     // Moving buildings is a 2D-mode interaction (drag/hold); in 3D the player
     // switches to 2D/iso to relocate. No-op here (documented, docs/3D_MODEL_MANIFEST.md).
@@ -370,7 +400,7 @@ export class ThreeMapRenderer implements IMapRenderer {
       },
       place: (cx, cy) => {
         const t = this.pickTileAt(cx, cy);
-        if (t && this.placingDefId) this.callbacks.onPlace(this.placingDefId, t.x, t.y);
+        if (t && this.placingDefId) this.callbacks.onPlace(this.placingDefId, t.x, t.y, this.placingRotation);
       },
       paint: (cx, cy) => {
         const t = this.pickTileAt(cx, cy);
@@ -503,6 +533,19 @@ export class ThreeMapRenderer implements IMapRenderer {
     );
     box.position.y = 0.7;
     grp.add(box);
+    // Front-facing indicator (§ Gebäude-Rotation): a small arrow at the edge the
+    // player chose as the front, so the rotation choice is visible before
+    // committing — roads auto-orient from their neighbour mask, so skip it there.
+    if (def.category !== 'roads') {
+      const rad = (this.placingRotation * Math.PI) / 180;
+      const offset = h / 2 + 0.35;
+      const arrowGeo = new ConeGeometry(0.22, 0.5, 3);
+      arrowGeo.rotateX(Math.PI / 2); // tip points along local +Z at rotation 0
+      const arrow = new Mesh(arrowGeo, new MeshStandardMaterial({ color: col, emissive: col, emissiveIntensity: 0.5 }));
+      arrow.position.set(Math.sin(rad) * offset, 0.5, Math.cos(rad) * offset);
+      arrow.rotation.y = rad;
+      grp.add(arrow);
+    }
     this.overlayGroup.add(grp);
     this.ghost = grp;
   }
@@ -561,6 +604,11 @@ export class ThreeMapRenderer implements IMapRenderer {
 
     // Rippling water surface over every unlocked water/river tile (v0.37).
     this.buildWater(tiles);
+
+    // Dense drifting fog over every locked sector (§ Sektor-Nebel, on top of the
+    // dimmed ground tint from buildGroundMesh): hides detail while letting tall
+    // silhouettes (mountains, future landmarks) hint through, per World Graphics V2.
+    this.buildSectorFog(sectors);
 
     // Drop-in terrain models on top of the coloured base (§ Gebirge/Map): any
     // `.glb` in models/terrain/… replaces the flat tile for its type. Runs async
@@ -716,6 +764,57 @@ export class ThreeMapRenderer implements IMapRenderer {
     inst.instanceMatrix.needsUpdate = true;
     this.terrainGroup.add(inst);
     this.waterMat = mat;
+  }
+
+  /**
+   * Dense, softly drifting fog over every locked sector (§ Sektor-Nebel, World
+   * Graphics V2 §9): one translucent plane per sector, gently undulating via the
+   * same shared time uniform as the water shader. Sits ABOVE the dimmed ground
+   * tint from buildGroundMesh (belt and braces) at a modest height, so a tall
+   * mountain or future landmark inside the sector still pokes a silhouette
+   * through — "keine komplette Sicht", not a total blackout.
+   */
+  private buildSectorFog(sectors: { sx: number; sy: number; status: string }[]): void {
+    const locked = sectors.filter((s) => s.status === 'locked');
+    if (locked.length === 0) return;
+
+    const geo = new PlaneGeometry(SECTOR_SIZE * 0.98, SECTOR_SIZE * 0.98, 8, 8);
+    geo.rotateX(-Math.PI / 2);
+    const mat = new MeshStandardMaterial({
+      color: 0xdbe1e6,
+      roughness: 1,
+      metalness: 0,
+      transparent: true,
+      opacity: 0.5,
+      depthWrite: false, // several overlapping fog planes must blend, never occlude
+    });
+    mat.customProgramCacheKey = () => 'cmb-sectorfog';
+    mat.onBeforeCompile = (shader) => {
+      shader.uniforms['uTime'] = this.waterTime;
+      shader.vertexShader =
+        'uniform float uTime;\n' +
+        shader.vertexShader.replace(
+          '#include <begin_vertex>',
+          `#include <begin_vertex>
+           vec2 wp = vec2(instanceMatrix[3][0], instanceMatrix[3][2]);
+           float ph = wp.x * 0.6 + wp.y * 0.4;
+           transformed.y += sin(uTime * 0.35 + ph) * 0.22 + cos(uTime * 0.22 + wp.x * 0.3) * 0.14;`,
+        );
+    };
+
+    const inst = new InstancedMesh(geo, mat, locked.length);
+    inst.renderOrder = 5; // after opaque ground/vegetation so the blend is correct
+    const dummy = new Object3D();
+    for (let i = 0; i < locked.length; i++) {
+      const s = locked[i]!;
+      const cx = s.sx * SECTOR_SIZE + SECTOR_SIZE / 2;
+      const cz = s.sy * SECTOR_SIZE + SECTOR_SIZE / 2;
+      dummy.position.set(cx, terrainHeightAt(cx, cz) + 1.8, cz);
+      dummy.updateMatrix();
+      inst.setMatrixAt(i, dummy.matrix);
+    }
+    inst.instanceMatrix.needsUpdate = true;
+    this.terrainGroup.add(inst);
   }
 
   /** Terrain type → candidate model names (first match wins). Lets you drop in a
@@ -899,7 +998,7 @@ export class ThreeMapRenderer implements IMapRenderer {
       if (!def) continue;
       seen.add(b.id);
       const roadMask = def.category === 'roads' ? this.roadNeighborMask(b.x, b.y) : -1;
-      const sig = `${b.defId}|${b.upgradeLevel}|${b.status}|${b.id === this.selectedId ? 'sel' : ''}|${roadMask}`;
+      const sig = `${b.defId}|${b.upgradeLevel}|${b.status}|${b.id === this.selectedId ? 'sel' : ''}|${roadMask}|${b.rotation ?? 0}`;
       const existing = this.nodes.get(b.id);
       if (existing && existing.sig === sig) continue;
       if (existing) {
@@ -944,11 +1043,17 @@ export class ThreeMapRenderer implements IMapRenderer {
     const node: BuildingNode = { group, sig };
 
     // Roads/bridges have their own drop-in path (segment model by neighbour mask,
-    // bridge model over water), so they never touch the building-model resolution.
+    // bridge model over water), so they never touch the building-model resolution
+    // or the cosmetic facing below (their orientation comes from the road mask).
     if (def.category === 'roads') {
       this.buildRoad(group, def, b, roadMask);
       return node;
     }
+
+    // Cosmetic facing chosen at placement time (§ Gebäude-Rotation): rotates the
+    // whole node — model, construction site, selection ring, floating UI — around
+    // the footprint centre. Footprint/placement are unaffected (already resolved).
+    if (b.rotation) group.rotation.y = (b.rotation * Math.PI) / 180;
 
     // Selection highlight + floating world-UI for the selected building (§ Welt-UI).
     if (b.id === this.selectedId) {
@@ -1247,6 +1352,33 @@ export class ThreeMapRenderer implements IMapRenderer {
     const seg = roadSegment(mask);
     const url = firstModel(roadModel, roadSegmentNames(seg.base, cls));
     if (url) void this.swapInModel(url, holder, { footprint: 1, rotationY: seg.rotationY, castShadow: false });
+    // Straßen dürfen niemals schweben (§ Gelände-Anpassung): tilt the tile to the
+    // local ground gradient and skirt its edges, so neighbouring segments on
+    // sloped land (forest/grass) never show a floating gap or step.
+    this.fitRoadToTerrain(holder, b.x + 0.5, b.y + 0.5);
+  }
+
+  /**
+   * Tilts a road holder to the terrain's local slope (finite-difference gradient
+   * of `terrainHeightAt`, clamped to a believable ramp angle) and adds a short
+   * skirt around the tile's perimeter that reaches below the lowest plausible
+   * neighbour height. The group itself already sits at the tile-centre height
+   * (buildNode); this only orients/aprons it so it reads as sitting IN the
+   * ground rather than floating a flat plate above it.
+   */
+  private fitRoadToTerrain(holder: Group, cx: number, cz: number): void {
+    const MAX_TILT = 0.35; // ≈20°, keeps steep noise spikes from flipping the deck
+    const dHdx = terrainHeightAt(cx + 0.5, cz) - terrainHeightAt(cx - 0.5, cz);
+    const dHdz = terrainHeightAt(cx, cz + 0.5) - terrainHeightAt(cx, cz - 0.5);
+    holder.rotation.z = MathUtils.clamp(Math.atan(dHdx), -MAX_TILT, MAX_TILT);
+    holder.rotation.x = MathUtils.clamp(-Math.atan(dHdz), -MAX_TILT, MAX_TILT);
+
+    const skirtMat = new MeshStandardMaterial({ color: 0x5b4a3a, roughness: 1 });
+    const skirtDepth = 0.6;
+    const skirt = new Mesh(new BoxGeometry(1.02, skirtDepth, 1.02), skirtMat);
+    skirt.position.y = -skirtDepth / 2;
+    skirt.receiveShadow = true;
+    holder.add(skirt);
   }
 
   /** A simple raised bridge deck (fallback when no bridge model is supplied). */
@@ -1522,7 +1654,8 @@ export class ThreeMapRenderer implements IMapRenderer {
     // traffic reads as "believable", not "massive" (§4).
     for (let i = this.cars.length - 1; i >= 0; i--) {
       const car = this.cars[i]!;
-      if (!this.roadSet.has(`${car.tile.x},${car.tile.y}`)) {
+      const at = car.path[car.idx];
+      if (!at || !this.roadSet.has(`${at.x},${at.y}`)) {
         this.liveGroup.remove(car.mesh);
         this.disposeGroup(car.mesh);
         this.cars.splice(i, 1);
@@ -1531,12 +1664,10 @@ export class ThreeMapRenderer implements IMapRenderer {
     const cap = Math.min(MAX_CARS, Math.floor(this.roadTiles.length / 6));
     let guard = 40;
     while (this.cars.length < cap && this.roadTiles.length > 1 && guard-- > 0) {
-      const start = this.roadTiles[Math.floor(Math.random() * this.roadTiles.length)]!;
-      const nbs = this.roadNeighbors(start);
-      if (nbs.length === 0) continue;
-      const next = nbs[Math.floor(Math.random() * nbs.length)]!;
+      const path = this.buildCarPath();
+      if (!path) continue;
       const mesh = makeCarMesh();
-      const car: Car = { mesh, tile: { ...start }, next, t: 0, speed: 0.85 + Math.random() * 0.5 };
+      const car: Car = { mesh, path, idx: 0, t: 0, speed: 0.85 + Math.random() * 0.5 };
       this.liveGroup.add(mesh);
       this.cars.push(car);
       // Drop-in vehicle model (§ Fahrzeuge): a `car.glb` in models/vehicles/
@@ -1556,7 +1687,9 @@ export class ThreeMapRenderer implements IMapRenderer {
   }
 
   /** Momentum-based next tile: prefer going straight through, turn at junctions,
-   *  never U-turn unless it's a dead end (§4 — no chaotic direction changes). */
+   *  never U-turn unless it's a dead end (§4 — no chaotic direction changes).
+   *  Used only to extend a fallback random-walk route (see buildCarPath) — real
+   *  routes drive a proper BFS path instead. */
   private nextRoadTile(from: { x: number; y: number }, to: { x: number; y: number }): { x: number; y: number } {
     const dx = Math.sign(to.x - from.x);
     const dy = Math.sign(to.y - from.y);
@@ -1567,18 +1700,86 @@ export class ThreeMapRenderer implements IMapRenderer {
     return cands[Math.floor(Math.random() * cands.length)]!;
   }
 
+  /** A road tile next to a random ACTIVE building whose category matches, or
+   *  undefined if none exist yet. Reuses roadTileAdjacent (§ mission van). */
+  private roadTileNearRandomBuilding(categories: ReadonlySet<string>): { x: number; y: number } | undefined {
+    const candidates = Object.values(this.controller.state.buildings).filter((b) => {
+      if (b.status !== 'active') return false;
+      const def = this.controller.config.buildings.get(b.defId);
+      return def !== undefined && categories.has(def.category);
+    });
+    if (candidates.length === 0) return undefined;
+    // Try a handful of random picks (not every candidate) — cheap and avoids
+    // biasing hard toward whichever building happens to be first when several
+    // of the sample have no adjacent road yet.
+    for (let i = 0; i < Math.min(5, candidates.length); i++) {
+      const b = candidates[Math.floor(Math.random() * candidates.length)]!;
+      const def = this.controller.config.buildings.get(b.defId)!;
+      const tile = this.roadTileAdjacent(b.x, b.y, def.size.w, def.size.h);
+      if (tile) return tile;
+    }
+    return undefined;
+  }
+
+  /** A short momentum-based route from a random road tile (§4 fallback) — used
+   *  before the first house/destination exists, or when no path connects them. */
+  private randomWalkPath(steps: number): { x: number; y: number }[] | undefined {
+    const start = this.roadTiles[Math.floor(Math.random() * this.roadTiles.length)];
+    if (!start) return undefined;
+    const nbs = this.roadNeighbors(start);
+    if (nbs.length === 0) return undefined;
+    const path = [start, nbs[Math.floor(Math.random() * nbs.length)]!];
+    for (let i = 0; i < steps; i++) {
+      const from = path[path.length - 2]!;
+      const to = path[path.length - 1]!;
+      path.push(this.nextRoadTile(from, to));
+    }
+    return path;
+  }
+
+  /**
+   * A believable route for ambient traffic (§ Verkehr Haus→Straße→Ziel): a road
+   * tile next to a random house to a road tile next to a random workplace/
+   * destination, via the same BFS the mission van uses (roadPath) — no more
+   * "pick a random neighbour at every junction" wandering. Falls back to a
+   * short random walk while the city has no house/destination pair yet (or
+   * none are reachable from each other), so traffic never disappears entirely.
+   */
+  private buildCarPath(): { x: number; y: number }[] | undefined {
+    const origin = this.roadTileNearRandomBuilding(RESIDENTIAL_CATEGORIES);
+    const dest = origin && this.roadTileNearRandomBuilding(TRAFFIC_DESTINATION_CATEGORIES);
+    if (origin && dest) {
+      const path = this.roadPath(origin, dest);
+      if (path.length >= 2) return path;
+    }
+    return this.randomWalkPath(8);
+  }
+
   private animateCars(dt: number): void {
     for (const car of this.cars) {
+      if (car.path.length < 2) continue;
       car.t += dt * car.speed;
-      const from = car.tile;
-      const to = car.next;
-      while (car.t >= 1) {
+      while (car.t >= 1 && car.idx < car.path.length - 2) {
         car.t -= 1;
-        car.tile = { ...car.next };
-        car.next = this.nextRoadTile(from, car.tile);
+        car.idx++;
       }
-      const cx = MathUtils.lerp(from.x + 0.5, to.x + 0.5, car.t);
-      const cz = MathUtils.lerp(from.y + 0.5, to.y + 0.5, car.t);
+      // Reached the last segment's end: arrived at the destination — pick a new
+      // house → destination route (or wait one tick if none exists yet).
+      if (car.idx >= car.path.length - 2 && car.t >= 1) {
+        const next = this.buildCarPath();
+        if (next) {
+          car.path = next;
+          car.idx = 0;
+          car.t = 0;
+        } else {
+          car.t = 1;
+        }
+      }
+      const from = car.path[car.idx]!;
+      const to = car.path[Math.min(car.idx + 1, car.path.length - 1)]!;
+      const tt = car.idx >= car.path.length - 1 ? 1 : Math.min(car.t, 1);
+      const cx = MathUtils.lerp(from.x + 0.5, to.x + 0.5, tt);
+      const cz = MathUtils.lerp(from.y + 0.5, to.y + 0.5, tt);
       // Drive on the right: offset perpendicular to travel direction.
       const hx = to.x - from.x;
       const hz = to.y - from.y;

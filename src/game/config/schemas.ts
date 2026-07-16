@@ -227,6 +227,7 @@ export const saveGameSchema = z.object({
       status: z.enum(['constructing', 'active', 'paused']),
       targetUpgradeLevel: z.number().int().nonnegative().optional(),
       constructionEndsAt: z.number().optional(),
+      rotation: z.union([z.literal(0), z.literal(90), z.literal(180), z.literal(270)]).optional(),
     }),
   ),
   citizens: z.object({

@@ -120,6 +120,10 @@ interface UiState {
   cameraPreset: CameraPreset;
   setCameraPreset(preset: CameraPreset): void;
   placingDefId: string | undefined;
+  /** Cosmetic facing (degrees) chosen for the building about to be placed
+   *  (§ Gebäude-Rotation). Resets to 0 whenever placement starts/stops. */
+  placingRotation: 0 | 90 | 180 | 270;
+  rotatePlacing(): void;
   /** Building currently being relocated (hold-drag or "Verschieben" button). */
   movingBuildingId: string | undefined;
   selectedBuildingId: string | undefined;
@@ -166,6 +170,8 @@ export const useUiStore = create<UiState>((set) => ({
     set({ cameraPreset: preset });
   },
   placingDefId: undefined,
+  placingRotation: 0,
+  rotatePlacing: () => set((s) => ({ placingRotation: (((s.placingRotation + 90) % 360) as 0 | 90 | 180 | 270) })),
   movingBuildingId: undefined,
   selectedBuildingId: undefined,
   sectorDialog: undefined,
@@ -173,8 +179,15 @@ export const useUiStore = create<UiState>((set) => ({
   events: [],
   setPanel: (panel) => set((s) => ({ openPanel: s.openPanel === panel ? undefined : panel })),
   startPlacing: (defId) =>
-    set({ placingDefId: defId, movingBuildingId: undefined, selectedBuildingId: undefined, sectorDialog: undefined, openPanel: undefined }),
-  stopPlacing: () => set({ placingDefId: undefined }),
+    set({
+      placingDefId: defId,
+      placingRotation: 0,
+      movingBuildingId: undefined,
+      selectedBuildingId: undefined,
+      sectorDialog: undefined,
+      openPanel: undefined,
+    }),
+  stopPlacing: () => set({ placingDefId: undefined, placingRotation: 0 }),
   startMoving: (id) =>
     set({ movingBuildingId: id, placingDefId: undefined, selectedBuildingId: undefined, sectorDialog: undefined, openPanel: undefined }),
   stopMoving: () => set({ movingBuildingId: undefined }),

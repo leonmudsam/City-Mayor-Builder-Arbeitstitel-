@@ -13,6 +13,9 @@ export interface IMapRenderer {
   destroy(): void;
   setRenderMode(mode: RenderMode): void;
   setPlacing(defId: string | undefined): void;
+  /** Cosmetic facing for the ghost/placed building (§ Gebäude-Rotation). Optional —
+   *  only the 3D engine previews/applies it; 2D/iso ignore rotation entirely. */
+  setPlacingRotation?(rotation: 0 | 90 | 180 | 270): void;
   setMoving(id: string | undefined): void;
   setSelected(id: string | undefined): void;
   centerOnCity(): void;

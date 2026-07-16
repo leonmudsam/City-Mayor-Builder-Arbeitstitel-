@@ -309,6 +309,7 @@
   "ui.cooldown": "Bereit in {time}",
   "ui.buffs.active": "Aktive Effekte",
   "ui.placement.hint": "Klicke auf die Karte zum Platzieren.",
+  "ui.placement.rotate_hint": "Drehen (Taste R) — nur die Optik, Grundfläche bleibt gleich.",
   "error.insufficient": "Nicht genug Ressourcen.",
   "error.needs_road": "Braucht Anschluss an eine verbundene Straße.",
   "error.needs_water": "Muss direkt an einen Fluss angrenzen.",

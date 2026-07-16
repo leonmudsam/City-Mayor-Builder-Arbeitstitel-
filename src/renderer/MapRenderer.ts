@@ -53,7 +53,9 @@ export interface HoverInfo {
 export interface RendererCallbacks {
   onSelectBuilding(id: string | undefined): void;
   onClickLockedSector(id: string): void;
-  onPlace(defId: string, x: number, y: number): void;
+  /** `rotation` is the cosmetic facing (degrees) chosen before placing (§ Gebäude-
+   *  Rotation) — omitted/undefined on engines that don't support it (2D/iso). */
+  onPlace(defId: string, x: number, y: number, rotation?: 0 | 90 | 180 | 270): void;
   /** Drag-painting a road across tiles — placement failures stay silent (§7). */
   onDragPlace(defId: string, x: number, y: number): void;
   onCancelPlacement(): void;

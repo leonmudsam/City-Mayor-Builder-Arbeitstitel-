@@ -134,7 +134,7 @@ export class GameController {
 
   // ---- Commands -----------------------------------------------------------
 
-  placeBuilding(defId: string, x: number, y: number): CommandResult {
+  placeBuilding(defId: string, x: number, y: number, rotation?: 0 | 90 | 180 | 270): CommandResult {
     const def = this.config.buildings.get(defId);
     if (!def) return fail('not_found');
     const placementError = validatePlacement(this.state, this.config, this.derived, def, x, y);
@@ -157,6 +157,9 @@ export class GameController {
       upgradeLevel: 0,
       status: instant ? 'active' : 'constructing',
       ...(instant ? {} : { constructionEndsAt: now + def.constructionSec * 1000 }),
+      // Cosmetic facing only (§ Gebäude-Rotation) — omit entirely for 0° so saves
+      // stay minimal; footprint/placement were already validated above unrotated.
+      ...(rotation ? { rotation } : {}),
     };
     for (let dy = 0; dy < def.size.h; dy++) {
       for (let dx = 0; dx < def.size.w; dx++) {

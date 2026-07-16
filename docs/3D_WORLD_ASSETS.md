@@ -129,6 +129,14 @@ für den Key. → Dateinamen projektweit **eindeutig** halten.
 `props/infrastructure/` ist neu (v0.40): Stützmauern/Böschungen, die Straßen bei
 Höhenunterschieden am Schweben hindern (§9).
 
+**Terrain-Materialtexturen (v0.42, Terrain System V2):** separat von den `.glb`-
+Ordnern oben liegen die Splatmap-Bodentexturen unter
+`src/assets/textures/terrain/{grass,earth,stone,sand,snow,water,field,path}/` —
+vollständige Spezifikation + Prompts je Textur: **`docs/TERRAIN_TEXTURES.md`**.
+Ersetzt künftig viele der kleinteiligen Terrain-`.glb`s (einzelne Grasbüschel,
+kleine Felsen) durch eine gemischte Bodenoberfläche; 3D-Modelle bleiben für
+große, prägende Elemente (§7 Tabelle).
+
 **Registry-Funktionen (schon vorhanden):** `buildingModel(id, stage)`,
 `terrainModel(name)`, `roadModel(name)`, `bridgeModel(name)`, `propModel(name)`,
 `vehicleModel(name)`, `markerModel(name)`, `effectModel(name)`, `uiModel(name)`.
@@ -235,6 +243,11 @@ von `tests/modelReadmes.test.ts` gegen Drift geprüft — sie sind die einzige
 Quelle, die nie veraltet sein kann. Neues Modell (auch nur geplant, noch nicht
 gebaut) hinzufügen: Eintrag in `modelManifest.ts` ergänzen, dann
 `WRITE_MODEL_DOCS=1 npx vitest run tests/modelReadmes.test.ts`.
+
+**Boden-/Material-Texturen** (kein `.glb`, sondern flächige Splatmap-Texturen fürs
+Terrain) sind separat dokumentiert: **`docs/TERRAIN_TEXTURES.md`**, generiert aus
+`src/assets/terrainTextureManifest.ts` (`tests/terrainTextures.test.ts` hält sie
+synchron) — siehe §3.
 
 **Was dort für jedes Modell steht:**
 - **Allgemein:** Dateiname, Zielordner, Kategorie, Motiv-Prompt, Live-/Geplant-Status.

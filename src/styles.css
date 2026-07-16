@@ -333,6 +333,13 @@ body {
   box-shadow: var(--shadow); max-width: min(640px, calc(100vw - 32px));
 }
 .placement-banner .banner-sub { font-size: 12px; font-weight: 500; color: var(--text-muted); margin-left: 6px; white-space: nowrap; }
+.placement-banner .banner-rotate {
+  display: flex; align-items: center; gap: 4px;
+  background: var(--bg); border: 1px solid var(--border); border-radius: 8px;
+  padding: 4px 10px; font-size: 13px; font-weight: 600; color: inherit;
+  cursor: pointer; white-space: nowrap;
+}
+.placement-banner .banner-rotate:hover { border-color: var(--accent, var(--good)); }
 .placement-banner.banner-bad { border-color: var(--bad); }
 .placement-banner.banner-bad svg { color: var(--bad); }
 .placement-banner.banner-ok { border-color: var(--good); }

@@ -48,6 +48,13 @@ export interface BuildingInstance {
    */
   targetUpgradeLevel?: number;
   constructionEndsAt?: number;
+  /**
+   * Cosmetic facing, in degrees (0/90/180/270), chosen by the player before
+   * placing (§ World Graphics V2 — Gebäude-Rotation). Purely visual: rotates the
+   * rendered model around its footprint centre. Footprint tiles, placement
+   * validity and gameplay are entirely unaffected. Undefined ≙ 0.
+   */
+  rotation?: 0 | 90 | 180 | 270;
 }
 
 export interface TileState {

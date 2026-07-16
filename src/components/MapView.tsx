@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { AlertTriangle, CheckCircle2, Move, Sparkles } from 'lucide-react';
+import { AlertTriangle, CheckCircle2, Move, RotateCw, Sparkles } from 'lucide-react';
 import { MapRenderer, type HoverInfo, type RendererCallbacks } from '../renderer/MapRenderer.ts';
 import { ThreeMapRenderer } from '../renderer/three/ThreeMapRenderer.ts';
 import type { IMapRenderer } from '../renderer/IMapRenderer.ts';
@@ -89,8 +89,8 @@ export function MapView() {
         });
       },
       onCoverageInfo: (info) => setCoverage(info),
-      onPlace: (defId, x, y) => {
-        const result = controller.placeBuilding(defId, x, y);
+      onPlace: (defId, x, y, rotation) => {
+        const result = controller.placeBuilding(defId, x, y, rotation);
         if (!result.ok) {
           ui.pushToast(placementErrorText(defId, result.error), 'error');
           return;
@@ -136,6 +136,7 @@ export function MapView() {
         renderer.setRenderMode(s.renderMode);
       }
       renderer.setPlacing(s.placingDefId);
+      renderer.setPlacingRotation?.(s.placingRotation);
       renderer.setMoving(s.movingBuildingId);
       renderer.setSelected(s.selectedBuildingId);
     });
@@ -146,6 +147,10 @@ export function MapView() {
         useUiStore.getState().stopMoving();
         useUiStore.getState().selectBuilding(undefined);
         useUiStore.getState().openSectorDialog(undefined);
+      }
+      // Rotate the building about to be placed, 90° per press (§ Gebäude-Rotation).
+      if ((e.key === 'r' || e.key === 'R') && useUiStore.getState().placingDefId !== undefined) {
+        useUiStore.getState().rotatePlacing();
       }
     };
     window.addEventListener('keydown', onKey);
@@ -236,6 +241,12 @@ function CoverageLegend({ info }: { info: CoverageInfo }) {
 function PlacementBanner({ info, moving }: { info: HoverInfo | undefined; moving: boolean }) {
   const controller = getController();
   const defName = info ? t(controller.config.buildings.get(info.defId)?.nameKey ?? '') : '';
+  const placingDefId = useUiStore((s) => s.placingDefId);
+  const placingRotation = useUiStore((s) => s.placingRotation);
+  const rotatePlacing = useUiStore((s) => s.rotatePlacing);
+  // Rotation is cosmetic-only and roads auto-orient from their neighbour mask
+  // (§ Gebäude-Rotation), so the control only makes sense for regular buildings.
+  const rotatable = !moving && placingDefId !== undefined && controller.config.buildings.get(placingDefId)?.category !== 'roads';
 
   let className = 'placement-banner';
   let icon = <Move size={18} />;
@@ -258,6 +269,17 @@ function PlacementBanner({ info, moving }: { info: HoverInfo | undefined; moving
     <div className={className}>
       {icon}
       <span>{text}</span>
+      {rotatable && (
+        <button
+          type="button"
+          className="banner-rotate"
+          onClick={rotatePlacing}
+          title={t('ui.placement.rotate_hint')}
+        >
+          <RotateCw size={16} />
+          {placingRotation}°
+        </button>
+      )}
       <span className="banner-sub">{t('ui.placement.cancel_hint')}</span>
     </div>
   );

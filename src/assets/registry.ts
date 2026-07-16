@@ -237,6 +237,25 @@ export function hasAnyBuildingModel(): boolean {
   return Object.keys(BUILDING_MODELS).length > 0;
 }
 
+// ---- terrain textures (v0.42, Terrain-System-V2 prep) ----------------------
+// Splatmap-ready ground material textures — see docs/TERRAIN_TEXTURES.md and
+// src/assets/terrainTextureManifest.ts for the full per-texture spec + prompts.
+// Discovery only: NOT yet consumed by the 3D renderer (buildGroundMesh still
+// uses the vertex-coloured heightfield, v0.39). Dropping a file in here today
+// is inert but safe — the real blending shader is a follow-up phase.
+//   src/assets/textures/terrain/<category>/<name>.png   e.g. grass/terrain_grass_01.png
+const TERRAIN_TEXTURES = keyed(
+  import.meta.glob('./textures/terrain/**/*.{png,webp,jpg,jpeg}', { eager: true, query: '?url', import: 'default' }) as UrlMap,
+);
+/** Ground-material texture URL, e.g. `terrain_grass_01`, `terrain_mountain`. */
+export function terrainTextureUrl(name: string): string | undefined {
+  return TERRAIN_TEXTURES[name];
+}
+/** Whether ANY terrain texture has been supplied yet (drives a future first-run hint). */
+export function hasAnyTerrainTexture(): boolean {
+  return Object.keys(TERRAIN_TEXTURES).length > 0;
+}
+
 /** How many generic `citizen_N.png` portraits were supplied (for seed spread). */
 const CITIZEN_KEYS = Object.keys(PORTRAIT_IMAGES)
   .filter((k) => /^citizen_\d+$/.test(k))
