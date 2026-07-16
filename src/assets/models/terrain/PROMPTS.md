@@ -7,7 +7,7 @@
 
 Zielordner: `src/assets/models/terrain/`. Jeder Block ist copy-paste-fertig (Stil-Prefix + Motiv). **Technik (Pflicht):** `.glb`, Texturen eingebettet, keine Lichter/Kameras, +Y oben, Front +Z, Pivot mittig an der Unterkante, 1 Tile = 1 Welt-Einheit. Stil-Details & Budgets: `docs/3D_WORLD_ASSETS.md`.
 
-Bodenkacheln (1×1, kachelbar) und Gebirgs-/Hero-Formen. Kacheln flach halten, saubere Übergänge.
+Bodenkacheln (1×1, kachelbar) und Gebirgs-/Hero-Formen. **Der Boden ist ein organisches Höhenfeld** — Hügel/Gebirge sind geneigt, Wasser abgesenkt; Kachel-/Fels-/Gipfel-Modelle werden automatisch auf die Bodenhöhe gesetzt. Deshalb **Pivot unten-mittig, flache Unterseite, nichts schwebt**; Gebirge groß & sauber (klare Felsflächen, keine losen Teile). Maßstab 1 Kachel ≈ 4 m · Pivot unten-mittig, nichts schwebt · Höhen-Richtwerte: Baum ≈ 1.4–1.8, Strauch ≈ 0.5, Bank ≈ 0.4, Laterne ≈ 0.9, Fels ≈ 0.4–1.0, Brunnen ≈ 0.9 (Kacheln).
 
 ## Aktiv genutzt (Kacheln je Terraintyp)
 
@@ -115,6 +115,30 @@ Low-poly stylized 3D city-builder game asset, colorful cartoon look, clean shape
 
 ```text
 Low-poly stylized 3D city-builder game asset, colorful cartoon look, clean shapes, soft bevels, hand-painted feel, optimized for realtime rendering, embedded textures, no lights, no cameras, centered object, pivot at bottom center, +Y up, front facing +Z — a cliff edge tile: flat top dropping to a rocky face, tileable
+```
+
+### `hill_small.glb` — 2×2
+
+```text
+Low-poly stylized 3D city-builder game asset, colorful cartoon look, clean shapes, soft bevels, hand-painted feel, optimized for realtime rendering, embedded textures, no lights, no cameras, centered object, pivot at bottom center, +Y up, front facing +Z — a small rounded grassy hill mound with a gentle slope, blends into flat ground at its base
+```
+
+### `boulder_cluster.glb` — 1×1
+
+```text
+Low-poly stylized 3D city-builder game asset, colorful cartoon look, clean shapes, soft bevels, hand-painted feel, optimized for realtime rendering, embedded textures, no lights, no cameras, centered object, pivot at bottom center, +Y up, front facing +Z — a cluster of stylized grey boulders of varied size sitting on the ground, low-poly
+```
+
+### `rock_outcrop.glb` — 1–2 tiles
+
+```text
+Low-poly stylized 3D city-builder game asset, colorful cartoon look, clean shapes, soft bevels, hand-painted feel, optimized for realtime rendering, embedded textures, no lights, no cameras, centered object, pivot at bottom center, +Y up, front facing +Z — a rocky outcrop rising from the ground, layered stone, flat base
+```
+
+### `mountain_peak_large.glb` — 3×3
+
+```text
+Low-poly stylized 3D city-builder game asset, colorful cartoon look, clean shapes, soft bevels, hand-painted feel, optimized for realtime rendering, embedded textures, no lights, no cameras, centered object, pivot at bottom center, +Y up, front facing +Z — a large stylized rocky mountain peak with steep faces and a broad flat base, no snow
 ```
 
 ### `hero_mountain_range_west.glb` — 8×8–12×12, modular
