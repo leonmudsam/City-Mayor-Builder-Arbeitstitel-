@@ -1,5 +1,63 @@
 # Patch Notes
 
+## v0.37 — „Lebendige Welt: Tag/Nacht-Zyklus + dynamischer Himmel + Wasser"
+
+**Was.** Die 3D-Welt bekommt eine **lebendige Atmosphäre**. Neu:
+- **Tag/Nacht-Zyklus** mit dynamischem Himmel: ein Farbverlaufs-Himmel (Gradient-Dome)
+  von Zenit zu Horizont, eine **wandernde Sonne** (Aufgang im Osten → Zenit → Untergang
+  im Westen), nachts ein **kühler Mond** aus der Gegenrichtung, **Sterne**, die nur
+  nachts aufscheinen, sowie Sonnen-/Mondscheibe am Himmel.
+- **Atmosphärische Beleuchtung + Fog**, die sich stufenlos mit der Tageszeit umfärben
+  (goldene Morgen-/Abenddämmerung, heller Mittag, tiefblaue Nacht — nie ganz schwarz,
+  damit die Stadt lesbar bleibt).
+- **Lebendiges Wasser:** Wasser-/Fluss-Kacheln bekommen eine **animierte, sanft
+  wellende Oberfläche** (GPU-Vertex-Shader), die die Himmelsstimmung aufnimmt und
+  nachts von selbst dunkler wird.
+- **HUD-Regler** (nur 3D): ein Chip zum **An-/Ausschalten des Zyklus** (Sonne/Mond-
+  Icon + Uhrzeit) und ein **Tageszeit-Schieber** zum manuellen Einstellen. Standard:
+  Zyklus **aus** bei angenehmem Vormittag — es ändert sich nichts, bis man ihn
+  aktiviert.
+
+**Warum.** Die 3D-Welt ist der visuelle Kern des Spiels (Strategie). Ein statischer
+Himmel mit fester Sonne wirkt leblos; ein Tag/Nacht-Rhythmus und bewegtes Wasser geben
+der Stadt sofort Tiefe und Stimmung — ohne ein einziges neues 3D-Modell.
+
+**Architektur.** Rein **präsentationsseitig** — kein Eingriff in Simulation, Saves
+oder Koordinaten (CLAUDE.md §1/§3). Die *Mathematik* der Atmosphäre liegt in einem
+reinen, WebGL-freien Modul `src/renderer/three/environment.ts` (Sonnenstand + alle
+Farben/Intensitäten je Tageszeit, in `tests/environment.test.ts` geprüft). Die
+three.js-Umsetzung kapselt `src/renderer/three/SkyEnvironment.ts` (Dome, Sonne/Mond,
+Sterne, die drei Szenen-Lichter + Fog); der `ThreeMapRenderer` ersetzt seinen alten
+statischen Licht-/Himmel-Block dadurch und ruft `env.update(dt)` pro Frame. Die
+Tageszeit-Einstellungen liegen in einem eigenen, persistenten Store
+`src/renderer/three/environmentSettings.ts` (localStorage `cmb.environment`, **nicht**
+im Savegame → keine Schema-Änderung, alte Spielstände laden unverändert) — nach dem
+Muster von `cameraSettings.ts`, sodass HUD und Renderer dieselben Werte live teilen.
+
+**Performance.** Der Himmel ist ein einzelner vertex-gefärbter Dome (Neufärbung pro
+Frame nur über einen vorbereiteten Buffer), Sterne sind ein `Points`-Objekt, das
+Wasser eine **einzelne InstancedMesh** mit GPU-Wellen (ein `uTime`-Uniform, keine
+CPU-Matrix-Updates). Gedimmte gesperrte Sektoren bekommen bewusst **keine**
+Wasser-Oberfläche (Nebel-des-Krieges bleibt erhalten).
+
+**Auswirkung/Zukunft.** Fundament für stimmungsvolle Screenshots und spätere Effekte
+(Fenster-Leuchten bei Nacht, Wetter, Jahreszeiten) — alle können auf dem
+`EnvGrade`-Modell aufbauen. Ein späteres Drop-in-Skybox-Modell ließe sich analog
+ergänzen. Optional könnte der Zyklus künftig an die Spielzeit gekoppelt werden.
+
+**Verifikation.** `tsc -b --force`, ESLint, **140 Tests** (9 neue Env-Tests), Build —
+alles grün. 3D-Screenshot-Smoke (Playwright, Basis `/`) für **Morgen/Nacht/
+Sonnenuntergang** ohne Konsolenfehler; Wasser-Shader mit real gerenderten Instanzen
+gegengeprüft (keine Shader-Fehler).
+
+**Dateien.** Neu: `src/renderer/three/environment.ts`,
+`src/renderer/three/environmentSettings.ts`, `src/renderer/three/SkyEnvironment.ts`,
+`tests/environment.test.ts`. Geändert: `src/renderer/three/ThreeMapRenderer.ts`
+(SkyEnvironment integriert, statischer Licht-/Himmel-Block entfernt, animierte
+Wasseroberfläche, Frame-/Dispose-Anbindung), `src/components/hud/CameraControls.tsx`
+(Tag/Nacht-Regler), `src/i18n/de.json`, `src/styles.css`. **Keine** neuen Assets/
+Ordner nötig (prozedural).
+
 ## v0.36 — „Generierungs-Prompts pro Ordner (PROMPTS.md), auto-synchron"
 
 **Was.** Jeder Modellordner hat jetzt neben der `README.md` (Namensliste) eine

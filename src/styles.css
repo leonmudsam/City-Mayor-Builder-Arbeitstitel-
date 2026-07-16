@@ -1108,6 +1108,19 @@ body {
 .camera-zoom button:hover { background: rgba(255, 255, 255, 0.08); color: var(--primary); }
 .camera-zoom button:first-child { border-bottom: 1px solid var(--panel-border); }
 
+/* Day/night control (§ Atmosphäre, v0.37): cycle toggle + time-of-day scrubber. */
+.env-controls {
+  display: flex; flex-direction: column; align-items: stretch; gap: 5px; padding: 6px 8px; width: 96px;
+  border-radius: 10px; background: var(--panel-bg); border: 1px solid var(--panel-border); box-shadow: var(--shadow);
+}
+.env-toggle {
+  display: flex; align-items: center; justify-content: center; gap: 6px; padding: 5px 6px; border-radius: 8px;
+  color: var(--text-muted); font-size: 12px; font-weight: 700; font-variant-numeric: tabular-nums;
+}
+.env-toggle:hover { background: rgba(255, 255, 255, 0.06); color: var(--text); }
+.env-toggle.active { background: rgba(232, 163, 61, 0.18); color: var(--primary); outline: 1px solid rgba(232, 163, 61, 0.5); }
+.env-time { width: 100%; accent-color: var(--primary); cursor: pointer; }
+
 /* Camera settings (§12): sliders + toggles in the settings panel. */
 .settings-slider { display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 4px 8px; font-size: 12px; color: var(--text-muted); margin: 4px 0; }
 .settings-slider > span:first-child { grid-column: 1; }

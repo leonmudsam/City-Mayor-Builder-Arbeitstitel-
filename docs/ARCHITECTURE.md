@@ -18,7 +18,7 @@ läuft im Browser (Dev/Test) und in der nativen Tauri-App, später auf Mobile.
 | Ordner | Inhalt |
 |---|---|
 | `src/game/` | **Reine Simulation.** `config/`, `simulation/` (Tick), `commands/` (Controller), `economy/`, `buildings/`, `map/`, `progression/`, `storage/` (Saves+Migration), `engine/` (RNG), `types.ts`, `newGame.ts`. Keine Rendering-/React-Imports. |
-| `src/renderer/` | Rendering-Engines: `three/ThreeMapRenderer.ts` (3D), `MapRenderer.ts` (Pixi 2D/Iso), Kontrakt `IMapRenderer.ts`, `projection.ts`, `colors.ts`. |
+| `src/renderer/` | Rendering-Engines: `three/ThreeMapRenderer.ts` (3D), `MapRenderer.ts` (Pixi 2D/Iso), Kontrakt `IMapRenderer.ts`, `projection.ts`, `colors.ts`. Atmosphäre (rein visuell): `three/environment.ts` (Tag/Nacht-Grading, testbar), `three/SkyEnvironment.ts` (Himmel/Sonne/Mond/Sterne/Lichter/Fog), `three/environmentSettings.ts` (persistenter Store, nicht im Save). |
 | `src/components/` | React-UI: `MapView.tsx` + `hud/`, `panels/`, `common/`, `art/`. |
 | `src/state/` | Zustand-Store + Controller-/Map-Bridges (`store.ts`). Der React↔Sim-Seam. |
 | `src/assets/` | Statische Kunst + `models/` (3D-`.glb`-Baum, Drop-in), `registry.ts`, `modelManifest.ts`. |

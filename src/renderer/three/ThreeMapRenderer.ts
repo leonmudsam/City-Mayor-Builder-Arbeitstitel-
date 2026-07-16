@@ -14,7 +14,6 @@
 // models and reaches the full look purely by adding files (docs/3D_MODELS.md).
 
 import {
-  AmbientLight,
   Box3,
   BoxGeometry,
   CanvasTexture,
@@ -22,11 +21,8 @@ import {
   Color,
   ConeGeometry,
   CylinderGeometry,
-  DirectionalLight,
   EdgesGeometry,
-  Fog,
   Group,
-  HemisphereLight,
   InstancedMesh,
   LineBasicMaterial,
   LineSegments,
@@ -48,6 +44,7 @@ import {
   type Object3D as TObject3D,
 } from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
+import { SkyEnvironment } from './SkyEnvironment.ts';
 import { CameraController3D } from './CameraController3D.ts';
 import { CameraInputController, type CameraInputHost } from './CameraInputController.ts';
 import { worldCameraBounds, type CameraPreset } from './CameraConfig.ts';
@@ -166,6 +163,13 @@ export class ThreeMapRenderer implements IMapRenderer {
   private cam = new CameraController3D(worldCameraBounds(), getCameraSettings);
   private input: CameraInputController | undefined;
 
+  // Living atmosphere (v0.37): day/night sky, sun/moon, stars, lights + fog.
+  private env: SkyEnvironment | undefined;
+  // Animated water surface: a shared time uniform fed into the wave shader, plus
+  // the material of the current lake so it can be tinted by the sky each frame.
+  private waterTime = { value: 0 };
+  private waterMat: MeshStandardMaterial | undefined;
+
   private buildingGroup = new Group();
   private terrainGroup = new Group();
   private vegetationGroup = new Group();
@@ -233,24 +237,10 @@ export class ThreeMapRenderer implements IMapRenderer {
     renderer.domElement.style.display = 'block';
     renderer.domElement.style.touchAction = 'none';
 
-    this.scene.background = new Color(0x9fd0ef);
-    this.scene.fog = new Fog(0x9fd0ef, 180, 520);
-
-    const hemi = new HemisphereLight(0xffffff, 0x6b7a5a, 1.05);
-    this.scene.add(hemi);
-    this.scene.add(new AmbientLight(0xffffff, 0.25));
-    const sun = new DirectionalLight(0xfff2d8, 1.35);
-    sun.position.set(-60, 90, -40); // top-left, consistent with the asset spec
-    sun.castShadow = true;
-    sun.shadow.mapSize.set(2048, 2048);
-    const sc = sun.shadow.camera;
-    sc.near = 1;
-    sc.far = 400;
-    sc.left = -140;
-    sc.right = 140;
-    sc.top = 140;
-    sc.bottom = -140;
-    this.scene.add(sun);
+    // Living atmosphere (v0.37): the sky dome, sun/moon, stars, the three scene
+    // lights and the fog are all owned + animated by SkyEnvironment, driven by a
+    // day/night clock. Replaces the old static sky/light block.
+    this.env = new SkyEnvironment(this.scene, this.camera);
 
     // Invisible ground plane for cursor→tile picking and empty-space clicks.
     const groundMat = new MeshLambertMaterial({ visible: false });
@@ -287,6 +277,7 @@ export class ThreeMapRenderer implements IMapRenderer {
       r.domElement.remove();
       r.dispose();
     }
+    this.env?.dispose();
     this.disposeGroup(this.buildingGroup);
     this.disposeGroup(this.terrainGroup);
     this.disposeGroup(this.vegetationGroup);
@@ -582,10 +573,64 @@ export class ThreeMapRenderer implements IMapRenderer {
     if (inst.instanceColor) inst.instanceColor.needsUpdate = true;
     this.terrainGroup.add(inst);
 
+    // Rippling water surface over every unlocked water/river tile (v0.37).
+    this.buildWater(tiles);
+
     // Drop-in terrain models on top of the coloured base (§ Gebirge/Map): any
     // `.glb` in models/terrain/… replaces the flat tile for its type. Runs async
     // so a slow model never blocks the frame; aborts if the world changed.
     void this.decorateTerrain(key, tiles);
+  }
+
+  /**
+   * Animated water surface (v0.37): one InstancedMesh of subdivided planes over
+   * every unlocked water/river tile, rippled in the vertex shader from the shared
+   * `waterTime` uniform. It is a lit MeshStandardMaterial, so it naturally darkens
+   * at night; the frame loop retints it to the current sky colour. Sits just above
+   * the coloured lakebed tile. Rebuilt with the terrain (owns its own material).
+   */
+  private buildWater(tiles: { x: number; y: number; terrain: TerrainType; locked: boolean }[]): void {
+    this.waterMat = undefined;
+    const water = tiles.filter((t) => !t.locked && (t.terrain === 'water' || t.terrain === 'river'));
+    if (water.length === 0) return;
+
+    const geo = new PlaneGeometry(1, 1, 6, 6);
+    geo.rotateX(-Math.PI / 2); // lay the plane flat (Y up)
+    const mat = new MeshStandardMaterial({
+      color: 0x2a6a94,
+      roughness: 0.22,
+      metalness: 0.4,
+      transparent: true,
+      opacity: 0.86,
+    });
+    // A gentle two-wave ripple injected into the standard vertex shader; the phase
+    // varies per tile via the instance translation so the whole lake rolls.
+    mat.customProgramCacheKey = () => 'cmb-water';
+    mat.onBeforeCompile = (shader) => {
+      shader.uniforms['uTime'] = this.waterTime;
+      shader.vertexShader =
+        'uniform float uTime;\n' +
+        shader.vertexShader.replace(
+          '#include <begin_vertex>',
+          `#include <begin_vertex>
+           vec2 wp = vec2(instanceMatrix[3][0], instanceMatrix[3][2]);
+           float ph = wp.x * 1.7 + wp.y * 1.3;
+           transformed.y += sin(uTime * 1.3 + ph) * 0.045 + cos(uTime * 0.85 + wp.x * 2.1) * 0.03;`,
+        );
+    };
+
+    const inst = new InstancedMesh(geo, mat, water.length);
+    inst.receiveShadow = true;
+    const dummy = new Object3D();
+    for (let i = 0; i < water.length; i++) {
+      const t = water[i]!;
+      dummy.position.set(t.x + 0.5, 0.12, t.y + 0.5);
+      dummy.updateMatrix();
+      inst.setMatrixAt(i, dummy.matrix);
+    }
+    inst.instanceMatrix.needsUpdate = true;
+    this.terrainGroup.add(inst);
+    this.waterMat = mat;
   }
 
   /** Terrain type → candidate model names (first match wins). Lets you drop in a
@@ -1704,6 +1749,13 @@ export class ThreeMapRenderer implements IMapRenderer {
     this.input?.update(dt);
     this.cam.update(dt);
     this.writeCamera();
+
+    // Living atmosphere: advance the day/night clock + ripple the water, and let
+    // the lake pick up the current sky tint. Runs after the camera write so the
+    // sky dome/sun follow the freshly-updated camera pose.
+    this.env?.update(dt);
+    this.waterTime.value += dt;
+    if (this.waterMat && this.env) this.waterMat.color.copy(this.env.waterColor);
 
     for (const node of this.nodes.values()) {
       if (node.rotor) node.rotor.rotation.z += dt * 1.6;
