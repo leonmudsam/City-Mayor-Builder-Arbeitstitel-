@@ -16,12 +16,14 @@
 import {
   Box3,
   BoxGeometry,
+  BufferGeometry,
   CanvasTexture,
   Clock,
   Color,
   ConeGeometry,
   CylinderGeometry,
   EdgesGeometry,
+  Float32BufferAttribute,
   Group,
   InstancedMesh,
   LineBasicMaterial,
@@ -45,6 +47,7 @@ import {
 } from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { SkyEnvironment } from './SkyEnvironment.ts';
+import { terrainHeightAt, WATER_LEVEL } from './terrainHeight.ts';
 import { CameraController3D } from './CameraController3D.ts';
 import { CameraInputController, type CameraInputHost } from './CameraInputController.ts';
 import { worldCameraBounds, type CameraPreset } from './CameraConfig.ts';
@@ -478,7 +481,7 @@ export class ThreeMapRenderer implements IMapRenderer {
     const h = def.size.h;
     const col = error ? 0xe5533b : bonusPct > 0 ? 0x58c470 : 0x49b7ff;
     const grp = new Group();
-    grp.position.set(x + w / 2, 0, y + h / 2);
+    grp.position.set(x + w / 2, terrainHeightAt(x + w / 2, y + h / 2), y + h / 2);
     // Footprint pad (clear green/red validity) sitting just above the ground.
     const pad = new Mesh(
       new BoxGeometry(w, 0.04, h),
@@ -534,7 +537,6 @@ export class ThreeMapRenderer implements IMapRenderer {
     this.terrainGroup.clear();
     this.terrainAt.clear();
 
-    const dummy = new Object3D();
     const tiles: { x: number; y: number; terrain: TerrainType; locked: boolean }[] = [];
     for (const s of sectors) {
       const ox = s.sx * SECTOR_SIZE;
@@ -551,27 +553,11 @@ export class ThreeMapRenderer implements IMapRenderer {
       }
     }
 
-    // Slight per-tile colour variation so the grass/ground isn't a flat sheet.
-    const geo = new BoxGeometry(1, 1, 1);
-    const mat = new MeshLambertMaterial();
-    const inst = new InstancedMesh(geo, mat, tiles.length);
-    inst.receiveShadow = true;
-    const c = new Color();
-    for (let i = 0; i < tiles.length; i++) {
-      const tl = tiles[i]!;
-      const relief = terrainRelief(tl.terrain);
-      dummy.position.set(tl.x + 0.5, relief.y, tl.y + 0.5);
-      dummy.scale.set(1, relief.h, 1);
-      dummy.updateMatrix();
-      inst.setMatrixAt(i, dummy.matrix);
-      c.set(TERRAIN_COLORS[tl.terrain]);
-      c.offsetHSL(0, 0, (hash01(`${tl.x},${tl.y}`) - 0.5) * 0.07);
-      if (tl.locked) c.multiplyScalar(0.4);
-      inst.setColorAt(i, c);
-    }
-    inst.instanceMatrix.needsUpdate = true;
-    if (inst.instanceColor) inst.instanceColor.needsUpdate = true;
-    this.terrainGroup.add(inst);
+    // Organic heightfield ground (v0.39): one continuous, vertex-coloured, lit
+    // mesh whose vertices ride the terrain-height field, so hills slope, mountains
+    // tower and water dips — no blocky tiles. Everything else reads the SAME field
+    // (terrainHeightAt) so buildings/roads/props sit exactly on the ground.
+    this.buildGroundMesh(tiles);
 
     // Rippling water surface over every unlocked water/river tile (v0.37).
     this.buildWater(tiles);
@@ -580,6 +566,105 @@ export class ThreeMapRenderer implements IMapRenderer {
     // `.glb` in models/terrain/… replaces the flat tile for its type. Runs async
     // so a slow model never blocks the frame; aborts if the world changed.
     void this.decorateTerrain(key, tiles);
+  }
+
+  /**
+   * The organic ground (v0.39): a single vertex-coloured, lit heightfield mesh
+   * spanning the whole materialized board. Each grid vertex sits at
+   * `terrainHeightAt`, so the surface slopes and mountains rise smoothly; vertex
+   * colours blend the terrain types of the meeting tiles (locked sectors dimmed).
+   * `computeVertexNormals` gives the slopes real shading. One draw call.
+   */
+  private buildGroundMesh(tiles: { x: number; y: number; terrain: TerrainType; locked: boolean }[]): void {
+    if (tiles.length === 0) return;
+    const info = new Map<string, { terrain: TerrainType; locked: boolean }>();
+    let minX = Infinity;
+    let minY = Infinity;
+    let maxX = -Infinity;
+    let maxY = -Infinity;
+    for (const t of tiles) {
+      info.set(`${t.x},${t.y}`, t);
+      if (t.x < minX) minX = t.x;
+      if (t.y < minY) minY = t.y;
+      if (t.x > maxX) maxX = t.x;
+      if (t.y > maxY) maxY = t.y;
+    }
+    const W = maxX - minX + 1;
+    const H = maxY - minY + 1;
+    const nx = W + 1;
+    const ny = H + 1;
+    const positions = new Float32Array(nx * ny * 3);
+    const colors = new Float32Array(nx * ny * 3);
+    const tmp = new Color();
+    const out = new Color();
+
+    for (let iy = 0; iy < ny; iy++) {
+      for (let ix = 0; ix < nx; ix++) {
+        const vx = minX + ix;
+        const vy = minY + iy;
+        const o = (iy * nx + ix) * 3;
+        positions[o] = vx;
+        positions[o + 1] = terrainHeightAt(vx, vy);
+        positions[o + 2] = vy;
+        // Colour = mean of the (up to 4) tiles meeting at this corner; a dimmed
+        // tint when the majority of them are still locked (fog of war).
+        let r = 0;
+        let g = 0;
+        let b = 0;
+        let cnt = 0;
+        let lock = 0;
+        for (const [tx, ty] of [
+          [vx - 1, vy - 1],
+          [vx, vy - 1],
+          [vx - 1, vy],
+          [vx, vy],
+        ] as const) {
+          const ti = info.get(`${tx},${ty}`);
+          if (!ti) continue;
+          tmp.set(TERRAIN_COLORS[ti.terrain]);
+          r += tmp.r;
+          g += tmp.g;
+          b += tmp.b;
+          cnt++;
+          if (ti.locked) lock++;
+        }
+        if (cnt === 0) {
+          tmp.set(TERRAIN_COLORS.grass);
+          r = tmp.r;
+          g = tmp.g;
+          b = tmp.b;
+          cnt = 1;
+        }
+        out.setRGB(r / cnt, g / cnt, b / cnt);
+        // A touch of per-vertex lightness jitter so large fields aren't a flat sheet.
+        out.offsetHSL(0, 0, (hash01(`${vx},${vy}`) - 0.5) * 0.05);
+        if (lock / cnt > 0.5) out.multiplyScalar(0.42);
+        colors[o] = out.r;
+        colors[o + 1] = out.g;
+        colors[o + 2] = out.b;
+      }
+    }
+
+    const indices: number[] = [];
+    for (let iy = 0; iy < H; iy++) {
+      for (let ix = 0; ix < W; ix++) {
+        const a = iy * nx + ix;
+        const b = a + 1;
+        const c = a + nx;
+        const d = c + 1;
+        indices.push(a, c, b, b, c, d); // two up-facing triangles per cell
+      }
+    }
+
+    const geo = new BufferGeometry();
+    geo.setAttribute('position', new Float32BufferAttribute(positions, 3));
+    geo.setAttribute('color', new Float32BufferAttribute(colors, 3));
+    geo.setIndex(indices);
+    geo.computeVertexNormals();
+    const mat = new MeshStandardMaterial({ vertexColors: true, roughness: 1, metalness: 0 });
+    const mesh = new Mesh(geo, mat);
+    mesh.receiveShadow = true;
+    this.terrainGroup.add(mesh);
   }
 
   /**
@@ -624,7 +709,7 @@ export class ThreeMapRenderer implements IMapRenderer {
     const dummy = new Object3D();
     for (let i = 0; i < water.length; i++) {
       const t = water[i]!;
-      dummy.position.set(t.x + 0.5, 0.12, t.y + 0.5);
+      dummy.position.set(t.x + 0.5, WATER_LEVEL, t.y + 0.5);
       dummy.updateMatrix();
       inst.setMatrixAt(i, dummy.matrix);
     }
@@ -648,15 +733,15 @@ export class ThreeMapRenderer implements IMapRenderer {
       (byType.get(t.terrain) ?? byType.set(t.terrain, []).get(t.terrain)!).push({ x: t.x, y: t.y });
     }
     for (const [type, list] of byType) {
-      const relief = terrainRelief(type);
-      const top = relief.y + relief.h / 2; // sit models on the coloured base tile
+      // yBase is now a small offset ABOVE the sampled ground (placeModelInstances
+      // rides the heightfield), so tile/peak models follow the organic terrain.
       const tileUrl = firstModel(terrainModel, TERRAIN_TILE_MODELS[type]);
       if (tileUrl) {
         await this.placeModelInstances(
           tileUrl,
           this.terrainGroup,
           list,
-          { footprint: 1, jitterRot: false, castShadow: false, yBase: top },
+          { footprint: 1, jitterRot: false, castShadow: false, yBase: 0 },
           stale,
         );
         if (stale()) return;
@@ -670,7 +755,7 @@ export class ThreeMapRenderer implements IMapRenderer {
             peakUrl,
             this.terrainGroup,
             peaks,
-            { footprint: 1.6, jitterRot: true, jitterScale: 0.5, yBase: top },
+            { footprint: 1.6, jitterRot: true, jitterScale: 0.5, yBase: 0 },
             stale,
           );
           if (stale()) return;
@@ -718,11 +803,13 @@ export class ThreeMapRenderer implements IMapRenderer {
     const treeUrl = firstModel(propModel, TREE_MODELS);
     const bushUrl = firstModel(propModel, BUSH_MODELS);
     if (treeUrl && trees.length) {
+      // yBase 0: the model's base sits on the sampled ground (placeModelInstances
+      // rides the heightfield). footprint keeps the model's own tall aspect ratio.
       void this.placeModelInstances(
         treeUrl,
         this.vegetationGroup,
         trees,
-        { footprint: 0.9, jitterRot: true, jitterScale: 0.5, cap: 500, yBase: 0.35 },
+        { footprint: 0.9, jitterRot: true, jitterScale: 0.5, cap: 500, yBase: 0 },
         stale,
       );
     }
@@ -731,7 +818,7 @@ export class ThreeMapRenderer implements IMapRenderer {
         bushUrl,
         this.vegetationGroup,
         bushes,
-        { footprint: 0.55, jitterRot: true, jitterScale: 0.4, cap: 300, yBase: 0.2 },
+        { footprint: 0.55, jitterRot: true, jitterScale: 0.4, cap: 300, yBase: 0 },
         stale,
       );
     }
@@ -747,14 +834,15 @@ export class ThreeMapRenderer implements IMapRenderer {
       crowns.castShadow = true;
       for (let i = 0; i < nT; i++) {
         const t = trees[i]!;
+        const gy = terrainHeightAt(t.x + 0.5, t.y + 0.5);
         const jt = hash01(`${t.x}.${t.y}`);
         const sc = 0.8 + jt * 0.5;
         dummy.rotation.set(0, jt * Math.PI * 2, 0);
-        dummy.position.set(t.x + 0.5, 0.25 * sc, t.y + 0.5);
+        dummy.position.set(t.x + 0.5, gy + 0.25 * sc, t.y + 0.5);
         dummy.scale.set(sc, sc, sc);
         dummy.updateMatrix();
         trunks.setMatrixAt(i, dummy.matrix);
-        dummy.position.set(t.x + 0.5, 0.75 * sc, t.y + 0.5);
+        dummy.position.set(t.x + 0.5, gy + 0.75 * sc, t.y + 0.5);
         dummy.updateMatrix();
         crowns.setMatrixAt(i, dummy.matrix);
       }
@@ -771,7 +859,7 @@ export class ThreeMapRenderer implements IMapRenderer {
       for (let i = 0; i < nB; i++) {
         const b = bushes[i]!;
         dummy.rotation.set(0, hash01(`b${b.x},${b.y}`) * Math.PI, 0);
-        dummy.position.set(b.x + 0.5, 0.34, b.y + 0.5);
+        dummy.position.set(b.x + 0.5, terrainHeightAt(b.x + 0.5, b.y + 0.5) + 0.2, b.y + 0.5);
         dummy.scale.set(1, 1, 1);
         dummy.updateMatrix();
         bush.setMatrixAt(i, dummy.matrix);
@@ -848,7 +936,9 @@ export class ThreeMapRenderer implements IMapRenderer {
     group.userData['buildingId'] = b.id;
     const cx = b.x + def.size.w / 2;
     const cz = b.y + def.size.h / 2;
-    group.position.set(cx, 0, cz);
+    // Sit the whole building (and its children: model, roads, construction site,
+    // selection ring, floating UI) on the organic ground at its centre (v0.39).
+    group.position.set(cx, terrainHeightAt(cx, cz), cz);
 
     const constructing = b.status === 'constructing' && b.targetUpgradeLevel === undefined;
     const node: BuildingNode = { group, sig };
@@ -963,7 +1053,13 @@ export class ThreeMapRenderer implements IMapRenderer {
       const size = new Vector3();
       box.getSize(size);
       const span = Math.max(size.x, size.z) || 1;
-      const scale = ((Math.max(def.size.w, def.size.h) * 0.92) / span) * (def.visual?.scale ?? 1);
+      // Buildings fill their tile footprint; small decoration props instead keep a
+      // real-world target height so a bench isn't scaled up to tree size (v0.39).
+      const decoH = DECO_TARGET_HEIGHT[def.id];
+      const scale =
+        def.category === 'decoration' && decoH
+          ? (decoH / (size.y || 1)) * (def.visual?.scale ?? 1)
+          : ((Math.max(def.size.w, def.size.h) * 0.92) / span) * (def.visual?.scale ?? 1);
       model.scale.setScalar(scale);
       const box2 = new Box3().setFromObject(model);
       const c = new Vector3();
@@ -1088,7 +1184,7 @@ export class ThreeMapRenderer implements IMapRenderer {
         const t = list[i]!;
         const j = hash01(`${t.x}.${t.y}`);
         const sc = opts.jitterScale ? 1 - opts.jitterScale / 2 + j * opts.jitterScale : 1;
-        dummy.position.set(t.x + 0.5, yBase, t.y + 0.5);
+        dummy.position.set(t.x + 0.5, terrainHeightAt(t.x + 0.5, t.y + 0.5) + yBase, t.y + 0.5);
         dummy.rotation.set(0, opts.jitterRot ? j * Math.PI * 2 : (opts.rotationY ?? 0), 0);
         dummy.scale.setScalar(sc);
         dummy.updateMatrix();
@@ -1109,7 +1205,7 @@ export class ThreeMapRenderer implements IMapRenderer {
       const j = hash01(`${t.x}.${t.y}`);
       const clone = probe.clone(true);
       const sc = opts.jitterScale ? 1 - opts.jitterScale / 2 + j * opts.jitterScale : 1;
-      clone.position.set(t.x + 0.5, yBase, t.y + 0.5);
+      clone.position.set(t.x + 0.5, terrainHeightAt(t.x + 0.5, t.y + 0.5) + yBase, t.y + 0.5);
       clone.rotation.y = opts.jitterRot ? j * Math.PI * 2 : (opts.rotationY ?? 0);
       clone.scale.multiplyScalar(sc);
       clone.traverse((o) => {
@@ -1266,13 +1362,8 @@ export class ThreeMapRenderer implements IMapRenderer {
     }
 
     if (def.category === 'decoration') {
-      // Small green prop (tree/bush) instead of a block.
-      const trunk = new Mesh(new CylinderGeometry(0.08, 0.1, 0.4), new MeshStandardMaterial({ color: 0x7a5230 }));
-      trunk.position.y = 0.2;
-      const crown = new Mesh(new ConeGeometry(0.4, 0.9, 7), new MeshStandardMaterial({ color: 0x3f8f45 }));
-      crown.position.y = 0.85;
-      crown.castShadow = true;
-      g.add(trunk, crown);
+      // Correctly-proportioned procedural prop per id (a bench is NOT tree-sized).
+      g.add(...decorationProc(def.id));
       return { group: g };
     }
 
@@ -1341,7 +1432,10 @@ export class ThreeMapRenderer implements IMapRenderer {
       const chz = -d * 0.28;
       chim.position.set(chx, height + 0.3, chz);
       g.add(chim);
-      smoke = new Vector3(this.pxFromGroup(def, b, chx), height + 0.7, this.pzFromGroup(def, b, chz));
+      const px = this.pxFromGroup(def, b, chx);
+      const pz = this.pzFromGroup(def, b, chz);
+      // World-space anchor: add the building's ground height (v0.39).
+      smoke = new Vector3(px, terrainHeightAt(px, pz) + height + 0.7, pz);
     }
 
     // (Construction scaffold is added centrally by addConstructionSite so it also
@@ -1490,7 +1584,7 @@ export class ThreeMapRenderer implements IMapRenderer {
       const hz = to.y - from.y;
       const rx = hz * 0.16;
       const rz = -hx * 0.16;
-      car.mesh.position.set(cx + rx, 0.3, cz + rz);
+      car.mesh.position.set(cx + rx, terrainHeightAt(cx, cz) + 0.3, cz + rz);
       if (hx !== 0 || hz !== 0) car.mesh.rotation.y = Math.atan2(hx, hz);
     }
   }
@@ -1642,11 +1736,9 @@ export class ThreeMapRenderer implements IMapRenderer {
     const tt = v.idx >= v.path.length - 1 ? 1 : v.t;
     const hx = b.x - a.x;
     const hz = b.y - a.y;
-    v.mesh.position.set(
-      MathUtils.lerp(a.x + 0.5, b.x + 0.5, tt) + hz * 0.16,
-      0.32,
-      MathUtils.lerp(a.y + 0.5, b.y + 0.5, tt) - hx * 0.16,
-    );
+    const vanX = MathUtils.lerp(a.x + 0.5, b.x + 0.5, tt) + hz * 0.16;
+    const vanZ = MathUtils.lerp(a.y + 0.5, b.y + 0.5, tt) - hx * 0.16;
+    v.mesh.position.set(vanX, terrainHeightAt(vanX, vanZ) + 0.32, vanZ);
     if (hx !== 0 || hz !== 0) v.mesh.rotation.y = Math.atan2(hx, hz);
   }
 
@@ -1695,7 +1787,8 @@ export class ThreeMapRenderer implements IMapRenderer {
       const big = kind === 'activity';
       const cx = b.x + def.size.w / 2;
       const cz = b.y + def.size.h / 2;
-      const baseY = this.approxHeight(def, b.upgradeLevel) + (big ? 1.4 : 1.0);
+      // Anchor above the building, which itself sits on the organic ground (v0.39).
+      const baseY = terrainHeightAt(cx, cz) + this.approxHeight(def, b.upgradeLevel) + (big ? 1.4 : 1.0);
 
       // Drop-in 3D marker (§ Marker): a `marker_problem.glb` etc. in
       // models/markers/ replaces the flat billboard with a floating model that
@@ -1839,6 +1932,73 @@ function firstModel(loader: (name: string) => string | undefined, names: readonl
     if (url) return url;
   }
   return undefined;
+}
+
+/** Real-world target heights (world units; 1 tile ≈ 4 m) for small decoration
+ *  props. A dropped-in `.glb` for these ids is scaled to this height instead of
+ *  being stretched to fill its tile — so a park bench stays bench-sized and a
+ *  tree stays tree-sized. Extend when adding decoration ids. */
+const DECO_TARGET_HEIGHT: Record<string, number> = {
+  deco_tree: 1.7, // ~6–7 m tree
+  deco_bench: 0.42, // ~1.7 m bench
+  deco_flowerbed: 0.3, // low bed
+  deco_fountain: 0.9, // ~3.5 m fountain
+};
+
+/** Correctly-proportioned procedural decoration per id (used when no model is
+ *  dropped in). Sizes are in world units so nothing is tree-sized by accident. */
+function decorationProc(id: string): Object3D[] {
+  if (id === 'deco_bench') {
+    const wood = new MeshStandardMaterial({ color: 0xa9713f, roughness: 0.8 });
+    const legMat = new MeshStandardMaterial({ color: 0x5a4a3a });
+    const seat = new Mesh(new BoxGeometry(0.7, 0.05, 0.26), wood);
+    seat.position.y = 0.22;
+    seat.castShadow = true;
+    const back = new Mesh(new BoxGeometry(0.7, 0.22, 0.05), wood);
+    back.position.set(0, 0.33, -0.1);
+    const parts: Object3D[] = [seat, back];
+    for (const sx of [-0.3, 0.3]) {
+      const leg = new Mesh(new BoxGeometry(0.05, 0.22, 0.24), legMat);
+      leg.position.set(sx, 0.11, 0);
+      parts.push(leg);
+    }
+    return parts;
+  }
+  if (id === 'deco_flowerbed') {
+    const soil = new Mesh(new CylinderGeometry(0.42, 0.42, 0.14, 12), new MeshStandardMaterial({ color: 0x7a4a25 }));
+    soil.position.y = 0.07;
+    const parts: Object3D[] = [soil];
+    const cols = [0xe0503a, 0xffcf57, 0xc86bd6, 0x4a8fd6];
+    for (let i = 0; i < 6; i++) {
+      const a = (i / 6) * Math.PI * 2;
+      const f = new Mesh(new ConeGeometry(0.07, 0.16, 6), new MeshStandardMaterial({ color: cols[i % cols.length]! }));
+      f.position.set(Math.cos(a) * 0.24, 0.22, Math.sin(a) * 0.24);
+      parts.push(f);
+    }
+    return parts;
+  }
+  if (id === 'deco_fountain') {
+    const basin = new Mesh(new CylinderGeometry(0.5, 0.55, 0.2, 16), new MeshStandardMaterial({ color: 0xb7bcc4, roughness: 0.9 }));
+    basin.position.y = 0.1;
+    basin.castShadow = true;
+    const water = new Mesh(new CylinderGeometry(0.4, 0.4, 0.06, 16), new MeshStandardMaterial({ color: 0x3f9be0, roughness: 0.2, metalness: 0.3 }));
+    water.position.y = 0.19;
+    const stem = new Mesh(new CylinderGeometry(0.06, 0.08, 0.5, 8), new MeshStandardMaterial({ color: 0xaab3bf }));
+    stem.position.y = 0.42;
+    const top = new Mesh(new CylinderGeometry(0.18, 0.02, 0.08, 12), new MeshStandardMaterial({ color: 0x9aa3af }));
+    top.position.y = 0.68;
+    return [basin, water, stem, top];
+  }
+  // deco_tree / default: a small tree (trunk + layered crown), tree-proportioned.
+  const trunk = new Mesh(new CylinderGeometry(0.08, 0.11, 0.6, 6), new MeshStandardMaterial({ color: 0x7a5230 }));
+  trunk.position.y = 0.3;
+  const crown = new Mesh(new ConeGeometry(0.5, 1.1, 8), new MeshStandardMaterial({ color: 0x3f8f45 }));
+  crown.position.y = 1.05;
+  crown.castShadow = true;
+  const crown2 = new Mesh(new ConeGeometry(0.38, 0.8, 8), new MeshStandardMaterial({ color: 0x4c9a4e }));
+  crown2.position.y = 1.45;
+  crown2.castShadow = true;
+  return [trunk, crown, crown2];
 }
 
 const CAR_COLORS = [0xd94f4f, 0x4f7fd9, 0xe0b03a, 0xf2f2f2, 0x5fb35f, 0x333a44];
@@ -2002,20 +2162,3 @@ function makeMarkerTexture(kind: MarkerKind): CanvasTexture {
   return new CanvasTexture(cv);
 }
 
-/** Slight per-terrain relief so the ground isn't a flat sheet. Returns the box
- *  centre Y and Y-scale for a 1×1×1 unit box (default thin tile at y≈0). */
-function terrainRelief(terrain: TerrainType): { y: number; h: number } {
-  switch (terrain) {
-    case 'mountain':
-      return { y: 0.9, h: 2.4 };
-    case 'forest':
-      return { y: 0.15, h: 0.5 };
-    case 'water':
-    case 'river':
-      return { y: -0.12, h: 0.3 };
-    case 'fertile':
-      return { y: 0.06, h: 0.26 };
-    default:
-      return { y: 0.05, h: 0.3 };
-  }
-}

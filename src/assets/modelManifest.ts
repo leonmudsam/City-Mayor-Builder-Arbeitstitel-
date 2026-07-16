@@ -304,6 +304,26 @@ export const STYLE_PREFIX =
   'soft bevels, hand-painted feel, optimized for realtime rendering, embedded textures, ' +
   'no lights, no cameras, centered object, pivot at bottom center, +Y up, front facing +Z —';
 
+/**
+ * Maßstab & Proportionen (v0.39). **1 Kachel ≈ 4 m.** Der Boden ist ein
+ * organisches Höhenfeld (Hügel/Gebirge geneigt, Wasser abgesenkt); alle Modelle
+ * werden automatisch auf die Bodenhöhe an ihrer Kachel gesetzt. Deshalb:
+ * **Pivot unten-mittig, flache/definierte Unterseite, nichts schwebt.** Richtwerte
+ * für die Höhe (in Kacheln, damit die Größen zueinander stimmen — eine Parkbank
+ * ist NICHT so groß wie ein Baum):
+ *
+ * - Baum ≈ 1.4–1.8 · Strauch ≈ 0.5 · Hecke ≈ 0.5 · Parkbank ≈ 0.4 · Laterne ≈ 0.9
+ * - Brunnen ≈ 0.9 · Blumenbeet ≈ 0.3 · Fels klein ≈ 0.4 · Fels groß ≈ 1.0
+ * - kleines Haus (2×2) ≈ 1.4 hoch · Gebirgsgipfel groß · Straße/Kachel flach
+ *
+ * Gebäude füllen ihren Footprint; kleine Deko-/Natur-Props behalten ihre reale
+ * Höhe (siehe DECO_TARGET_HEIGHT im Renderer). Straßen/Bodenkacheln bleiben flach
+ * und kachelbar, damit sie sauber auf der geneigten Oberfläche liegen.
+ */
+export const SCALE_NOTE =
+  'Maßstab 1 Kachel ≈ 4 m · Pivot unten-mittig, nichts schwebt · Höhen-Richtwerte: ' +
+  'Baum ≈ 1.4–1.8, Strauch ≈ 0.5, Bank ≈ 0.4, Laterne ≈ 0.9, Fels ≈ 0.4–1.0, Brunnen ≈ 0.9 (Kacheln).';
+
 export interface PromptEntry {
   /** Dateiname ohne `.glb`. */
   name: string;
@@ -384,7 +404,12 @@ export const FOLDER_PROMPTS: FolderPrompts[] = [
   {
     key: 'terrain',
     title: 'Terrain & Gebirge',
-    intro: 'Bodenkacheln (1×1, kachelbar) und Gebirgs-/Hero-Formen. Kacheln flach halten, saubere Übergänge.',
+    intro:
+      'Bodenkacheln (1×1, kachelbar) und Gebirgs-/Hero-Formen. **Der Boden ist ein organisches ' +
+      'Höhenfeld** — Hügel/Gebirge sind geneigt, Wasser abgesenkt; Kachel-/Fels-/Gipfel-Modelle ' +
+      'werden automatisch auf die Bodenhöhe gesetzt. Deshalb **Pivot unten-mittig, flache Unterseite, ' +
+      'nichts schwebt**; Gebirge groß & sauber (klare Felsflächen, keine losen Teile). ' +
+      SCALE_NOTE,
     groups: [
       {
         title: 'Aktiv genutzt (Kacheln je Terraintyp)',
@@ -412,6 +437,10 @@ export const FOLDER_PROMPTS: FolderPrompts[] = [
           { name: 'mountain_wall_straight', footprint: '2×2', motif: 'a straight steep mountain wall segment, layered rock, tileable side to side' },
           { name: 'mountain_valley_pass', footprint: '3×3', motif: 'a mountain valley pass: two rock walls with a passable corridor between them' },
           { name: 'cliff_edge', footprint: '1×1', motif: 'a cliff edge tile: flat top dropping to a rocky face, tileable' },
+          { name: 'hill_small', footprint: '2×2', motif: 'a small rounded grassy hill mound with a gentle slope, blends into flat ground at its base' },
+          { name: 'boulder_cluster', footprint: '1×1', motif: 'a cluster of stylized grey boulders of varied size sitting on the ground, low-poly' },
+          { name: 'rock_outcrop', footprint: '1–2 tiles', motif: 'a rocky outcrop rising from the ground, layered stone, flat base' },
+          { name: 'mountain_peak_large', footprint: '3×3', motif: 'a large stylized rocky mountain peak with steep faces and a broad flat base, no snow' },
           { name: 'hero_mountain_range_west', footprint: '8×8–12×12, modular', motif: 'a large stylized rocky mountain range with steep cliffs, a valley pass and a tunnel entrance, layered peaks, no snow' },
           { name: 'hero_harbor_bay', footprint: '6×6, modular', motif: 'a coastal harbor bay with wooden piers, small docks and calm water, rocky shoreline' },
         ],
@@ -464,7 +493,11 @@ export const FOLDER_PROMPTS: FolderPrompts[] = [
   {
     key: 'props',
     title: 'Props & Vegetation',
-    intro: 'Kleine Welt-Objekte. Vegetation wird instanziert & gegen die Stadt gecullt; Baustellen-Props liegen über Bau/Upgrade.',
+    intro:
+      'Kleine Welt-Objekte. Vegetation wird instanziert & gegen die Stadt gecullt; Baustellen-Props ' +
+      'liegen über Bau/Upgrade. **Proportionen einhalten** — eine Parkbank darf NICHT so groß wie ein ' +
+      'Baum sein. ' +
+      SCALE_NOTE,
     groups: [
       {
         title: 'Aktiv genutzt',
@@ -478,7 +511,12 @@ export const FOLDER_PROMPTS: FolderPrompts[] = [
         title: 'Geplant (Natur, Stadt, Hafen, Farm)',
         note: 'Siehe docs/3D_WORLD_ASSETS.md §11/§14.',
         entries: [
-          { name: 'tree_deciduous', footprint: '1×1', motif: 'a single stylized low-poly broadleaf/deciduous tree with a round crown' },
+          { name: 'tree_deciduous', footprint: '1×1', motif: 'a single stylized low-poly broadleaf/deciduous tree with a round crown, about 1.5 tiles tall' },
+          { name: 'tree_pine_large', footprint: '1×1', motif: 'a tall stylized pine tree, about 1.8 tiles tall, slim conical crown' },
+          { name: 'hedge', footprint: '1×1', motif: 'a low trimmed green hedge segment, about 0.5 tiles tall, tileable side to side' },
+          { name: 'reeds_water', footprint: '1×1', motif: 'a cluster of tall water reeds/cattails for lake and river shores, low-poly' },
+          { name: 'rock_small', footprint: '1×1', motif: 'a small stylized grey rock / few stones on the ground, about 0.4 tiles tall, low-poly' },
+          { name: 'rock_large', footprint: '1×1', motif: 'a large stylized grey boulder, about 1 tile tall, layered stone, low-poly' },
           { name: 'rock_medium', footprint: '1×1', motif: 'a medium stylized grey boulder / rock cluster, low-poly' },
           { name: 'street_lamp', footprint: '1×1', motif: 'a stylized street lamp post with a glowing lamp head' },
           { name: 'bench', footprint: '1×1', motif: 'a simple park bench, low-poly' },

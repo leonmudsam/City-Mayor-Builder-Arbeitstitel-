@@ -1,5 +1,61 @@
 # Patch Notes
 
+## v0.39 — „Organische Welt: Höhenfeld-Boden, Gebirge, saubere Platzierung & Proportionen"
+
+**Was.** Die Karte ist nicht mehr flach:
+- **Organischer Boden statt Kachel-Boxen.** Der Grund ist jetzt ein durchgehendes,
+  vertex-gefärbtes, beleuchtetes **Höhenfeld**: klare Hügel, geneigte organische
+  Formen, **riesige, smooth verlaufende Gebirge** im Westen/Norden, abgesenkte
+  Seen/Flüsse/Meer. Ein Klick-Boden bleibt für die Kachelauswahl.
+- **Alles sitzt sauber auf dem Boden.** Gebäude, Straßen, Baustellen, Auswahl-Ringe,
+  Geister-Vorschau, Bäume/Sträucher, Autos, Lieferwagen, Marker und Rauch lesen
+  **dieselbe** Höhenfunktion (`terrainHeightAt`) — nichts schwebt oder versinkt.
+  Bebaubares Land ist bewusst **flach/ruhig** gehalten, damit Gebäude sauber stehen;
+  Wasser bekommt eine flache Wasseroberfläche über dem abgesenkten Bett.
+- **Proportionen korrigiert.** Kleine Deko-/Natur-Props behalten ihre **reale Höhe**
+  (1 Kachel ≈ 4 m): eine **Parkbank ist nicht mehr so groß wie ein Baum**. Zentrale
+  Tabelle `DECO_TARGET_HEIGHT`; prozedurale Deko zeichnet jetzt pro id die richtige
+  Form (Bank, Brunnen, Blumenbeet, Baum) in passender Größe.
+- **Prompts & Anweisungen erweitert.** `terrain/PROMPTS.md` und `props/PROMPTS.md`
+  bekommen eine klare **Maßstabs-/Höhen-/Pivot-Regel** (1 Kachel ≈ 4 m, Pivot
+  unten-mittig, nichts schwebt, Höhen-Richtwerte je Objekttyp) plus neue Einträge
+  für Gebirge/Felsen/Klippen/Hügel, Bäume/Sträucher/Hecke/Schilf.
+
+**Warum.** Eine flache Kachelfläche wirkt leblos; klare Hügel und große Gebirge geben
+der Welt Charakter und Tiefe (3D-Welt als visueller Kern). Gleichzeitig müssen
+Bauflächen sauber bleiben und Modelle in stimmigen Größen zueinander stehen — genau
+die genannten Fehler (schwebende/gleich große Objekte) sind damit behoben.
+
+**Architektur.** Neue **eine Höhenquelle** `src/renderer/three/terrainHeight.ts`
+(rein, testbar): leitet die Höhe aus dem Terraintyp (`terrainAt`, Sim) + kohärentem
+Value-Noise ab — biome-abhängig (Land sanft, Gebirge groß, Wasser abgesenkt), bilinear
+geglättet. Der `ThreeMapRenderer` baut den Boden als **ein** `BufferGeometry`-Heightfield
+(Vertexfarben aus den angrenzenden Kacheln, `computeVertexNormals`, ein Draw-Call) und
+setzt jede Platzierung auf `terrainHeightAt`. Rein visuell — Simulation, Saves und
+Kachel-Koordinaten bleiben unberührt (CLAUDE.md §1/§3); Bebaubarkeit/Picking laufen
+weiter über die logischen Kacheln.
+
+**Performance.** Der Boden ist ein einzelner Mesh (statt tausender Instanz-Boxen);
+`terrainHeightAt` ist billig (2-Oktaven-Noise) und wird nur beim Terrain-Rebuild bzw.
+pro Objekt-Platzierung ausgewertet, nicht pro Frame.
+
+**Auswirkung/Zukunft.** Drop-in-Fels-/Gipfel-/Hügel-Modelle sitzen automatisch auf der
+geneigten Oberfläche (Prompts liegen bereit). Später möglich: Footprints unter Gebäuden
+exakt einebnen, Klippen/Terrassen, Uferlinien, Gebirgs-Hero-Modelle, oder die Höhe an
+Gameplay koppeln.
+
+**Verifikation.** `tsc -b --force`, ESLint, **145 Tests** (5 neue Höhenfeld-Tests:
+Gebirge hoch, Wasser unter Wasserlinie, Bauland sanft, stetig), Build — alles grün.
+3D-Screenshot-Smoke: organische Gebirge & Hügel, Stadt sauber auf flacher Fläche,
+Bäume in korrekter Baumgröße, keine Konsolenfehler.
+
+**Dateien.** Neu: `src/renderer/three/terrainHeight.ts`, `tests/terrainHeight.test.ts`.
+Geändert: `src/renderer/three/ThreeMapRenderer.ts` (Heightfield-Boden, Höhen-Platzierung
+überall, `DECO_TARGET_HEIGHT` + `decorationProc`, Wasser auf `WATER_LEVEL`),
+`src/assets/modelManifest.ts` (`SCALE_NOTE` + erweiterte terrain/props-Prompts),
+`src/assets/models/terrain/PROMPTS.md`, `src/assets/models/props/PROMPTS.md` (generiert),
+`docs/PATCHNOTES.md`.
+
 ## v0.38 — „Gebäude-Vorschau direkt aus dem 3D-Modell (keine PNGs mehr nötig)"
 
 **Was.** Die Vorschau eines Gebäudes (Baumenü, Gebäude-Sheet, Level-up-Karten,
