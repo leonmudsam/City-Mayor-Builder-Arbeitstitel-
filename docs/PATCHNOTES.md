@@ -1,5 +1,176 @@
 # Patch Notes
 
+## v0.46 — Organisches Terrain-Mesh (MVP3 Phase 1)
+
+**Was.** Der Nutzer hat ein großes Vision-Dokument/Mockup für eine
+Weltneugestaltung ("MVP3", Referenzen: Manor Lords, Foundation, Fabledom,
+Kingdoms Reborn) geteilt und als erste, fundamentale Phase das **organische
+Terrain-Mesh** gewählt. Statt eines Neubaus (die Welt hat seit v0.39 bereits
+ein echtes Höhenfeld) wird das bestehende System ausgebaut — genau der
+nächste Schritt, den `docs/3D_WORLD_ASSETS.md` §8 schon als "nächste
+Code-Phase" angekündigt hatte:
+- **Terrassierte Gebirge:** ein neuer `terrace()`-Helper snapt das
+  Ridged-Fractal-Rauschen in 5 flache Absätze mit steilen Rissern
+  (`tileTarget`s Mountain-Zweig, 65% terrassiert/35% Rest-Rauschen für
+  Fels-Detail) — liest jetzt wie echte Gesteinsschichten/Plateaus statt
+  gleichmäßig glatter Hügel. Bleibt garantiert im bisherigen Höhenbereich
+  `[2.6, 6.0]`, keine Neukalibrierung der Splat-Textur-Bänder nötig.
+- **Tiefere, geformte Flusstäler:** `riverBankDip` scannt jetzt Radius 2 statt
+  nur die 4 direkten Nachbarn und carved ein V-Profil (`-0.22` an der Sohle,
+  smoother Falloff zum Rand) statt eines flachen Einzel-Dips von `-0.06`.
+- **Küsten-Dünen:** Sandkacheln direkt neben Wasser/Fluss bekommen ein feines,
+  niedrigamplitudiges Rauschen (`+0.04`) statt einer toten Ebene — bewusst
+  klein genug, um bebaubar zu bleiben.
+- **Sichtbar glattere Kurven:** `ThreeMapRenderer.buildGroundMesh` unterteilt
+  jede Kachel jetzt `GROUND_SUBDIV`-fach (Default 2×2) statt einem Vertex pro
+  Kachelecke — Positionen kommen weiter direkt aus `terrainHeightAt` (bereits
+  kontinuierlich), Vertexfarben werden bilinear aus dem unveränderten
+  Eckpunkt-Farbraster interpoliert, keine zusätzlichen Terrain-Lookups.
+  Weiterhin **ein** Draw-Call.
+
+**Warum.** Phase 1 von mehreren geplanten MVP3-Phasen — Fundament, auf dem
+Gebirgs-Module, Wald-Patches/Vegetation, Küsten-Deko usw. später aufbauen.
+Ohne dramatischeres Relief hätten erweiterte Texturen/Vegetation weiterhin
+"aufgesetzt" statt gewachsen gewirkt.
+
+**Architektur.** Weiterhin eine **reine, deterministische Renderer-Funktion**
+(`terrainHeightAt` liest nur `terrainAt` aus der Sim + Rauschen, mutiert
+nichts, wird nie persistiert) — keine `SCHEMA_VERSION`-Änderung, keine
+Migration. `tileTarget` bekommt zusätzlich einen modul-internen Memo-Cache,
+weil die Mesh-Subdivision dieselben Kachel-Eckwerte jetzt mehrfach abfragt.
+Bebaubares Land (grass/fertile/sand) bleibt bei den bisherigen, bewusst
+niedrigen Amplituden — Gebäude/Autos positionieren sich weiterhin an einem
+Höhen-Punkt ohne lokale Einebnung, dramatischeres Relief dort hätte das
+sichtbar verschlechtert.
+
+**Auswirkung.** Gebirge, Flusstäler und Küsten wirken deutlich plastischer;
+Straßen (`fitRoadToTerrain`, Tilt-Kappung bei `MAX_TILT≈20°`) und Gebäude
+sitzen weiter korrekt auf. Maximale Kartengröße wächst von ~10.400 auf
+~41.400 Vertices (4×, ein Draw-Call, einmaliger Kostenpunkt nur bei
+Sektor-Aufdeckung, nicht pro Frame).
+
+**Zukunft.** Bewusst nicht Teil dieser Phase (spätere MVP3-Schritte): lokale
+Terrain-Einebnung unter Gebäude-Footprints, Gebirgs-Modul-Assets
+(`mountain_base/peak/ridge/cliff/…`), Wald-Patches/Vegetations-Cluster,
+Küsten-/Hafen-Dekoration, Verkehrs-Graph, Atmosphäre-Erweiterungen.
+
+**Verifikation.** `npx tsc -b --force`, `npx eslint src tests`, `npx vitest
+run`, `npm run build`; 3D-Screenshot-Smoke (Playwright) für Gebirge,
+Flusslauf, Küste und eine Bergstraße.
+
+**Dateien.** Geändert: `src/renderer/three/terrainHeight.ts`,
+`src/renderer/three/ThreeMapRenderer.ts`, `docs/3D_WORLD_ASSETS.md`,
+`docs/PATCHNOTES.md`.
+
+## v0.45 — Straßen-Texturen: Ordner-lokale PROMPTS.md + Doku-Fix
+
+**Was.** `src/assets/textures/roads/PROMPTS.md` (neu, generiert): Schritt-für-
+Schritt-Anweisung je der 6 Straßen-/Brücken-Texturen (Prompt, Format/Auflösung,
+exakter Speicherpfad, was danach passiert) — direkt im Zielordner statt nur in
+`docs/`, damit man beim Ablegen der generierten Bilder nicht zwischen `docs/`
+und dem Textur-Ordner wechseln muss. Außerdem zwei stale Referenzen auf das in
+v0.44 entfernte `roadSegment(mask)` in `roadTextureManifest.ts`/
+`docs/ROAD_TEXTURES.md` korrigiert (Form kommt jetzt korrekt beschrieben direkt
+aus den Nachbar-Mask-Bits in `buildRoadTile`, Kreisverkehr aus `mask === 15`).
+
+**Architektur.** `renderRoadPromptsFile()` (neue Funktion in
+`roadTextureManifest.ts`) nutzt dieselben `ROAD_TEXTURES`-Daten wie
+`renderRoadTexturesDoc()` — keine Zweitquelle. `tests/roadTextures.test.ts`
+prüft jetzt beide generierten Dateien gegen Drift (Liste statt Einzeltest, wie
+bei `modelReadmes.test.ts`).
+
+**Verifikation.** `npx tsc -b --force`, `npx eslint src tests`, `npx vitest run`
+(152 Tests, 1 neu), `npm run build` — alle grün.
+
+**Dateien.** Neu: `src/assets/textures/roads/PROMPTS.md` (generiert). Geändert:
+`src/assets/roadTextureManifest.ts`, `tests/roadTextures.test.ts`,
+`docs/ROAD_TEXTURES.md` (generiert), `docs/PATCHNOTES.md`.
+
+## v0.44 — „Straßen als Textur statt 3D-Modell" + Wald-Kachel-Aufräumung
+
+**Was.**
+- **Waldkacheln aufgeräumt:** `forest.glb`/`forest_ground_tile.glb` entfernt —
+  das waren die hässlichen, sich wiederholenden hellen Klumpen im Screenshot
+  (dieselbe Modell-Instanz auf jeder Waldkachel). Waldflächen fallen jetzt auf
+  das gesplattete Höhenfeld (v0.43) zurück, bis neue Baummodelle entstehen.
+- **Straßen/Brücken laden nie wieder ein `.glb`.** Der komplette Drop-in-Pfad
+  (`roadModel`/`bridgeModel`/`BRIDGE_MODELS`, `roadSegment()`-Rotationslogik)
+  ist entfernt. Stattdessen ist die bestehende Mask-getriebene Geometrie
+  (Kern + Arme + Randstreifen aus `buildRoadTile`) jetzt **texturiert statt
+  einfarbig** und sitzt flach nahe `y≈0` im Gelände statt als erhöhte Platte.
+- **Neu, ohne neue Sim-Konzepte, rein aus vorhandenen Renderer-Daten
+  abgeleitet:**
+  - **Kreisverkehr:** eine 4-Wege-Kreuzung bekommt automatisch eine runde statt
+    eckige Kern-Geometrie.
+  - **Gestrichelte Mittellinie:** texturiert statt Flächenfarbe, für die
+    Straßenklassen mit `centerline: true`.
+  - **Bergstraße/Pass:** liegt die Kachel auf Gebirgsterrain, wird eine
+    rauere Textur statt Asphalt verwendet — ein Pass ist einfach eine
+    Bergstraße am Sattelpunkt, kein eigener Typ.
+  - **Steg vs. Brücke:** die gemessene, zusammenhängende Wasser-Spannweite
+    entscheidet zwischen einem schmalen, pfeilerlosen Holzsteg (1 Kachel) und
+    einer breiteren Brücke mit Geländer/Pfeilern (mehrere Kacheln).
+  - **Randübergang** zu Gras/Erde nutzt die bereits dokumentierte
+    `terrain_road_edge.png` wieder — keine Dopplung.
+- **`src/assets/roadTextureManifest.ts`** (neu, mirror von
+  `terrainTextureManifest.ts`): 6 neue Straßen-/Brücken-Texturen
+  (`road_asphalt`, `road_mountain`, `road_marking_dash`, `road_roundabout`,
+  `road_bridge_deck`, `road_boardwalk`), generiert `docs/ROAD_TEXTURES.md`,
+  drift-geprüft von `tests/roadTextures.test.ts`. Drop-in-Ordner:
+  `src/assets/textures/roads/{surface,markings,crossings}/`.
+- **Aufgeräumt:** `src/assets/models/roads/`/`.../bridges/` sind jetzt nur noch
+  eine historische Doku-Hülle (README/PROMPTS neu generiert mit Hinweis auf
+  `docs/ROAD_TEXTURES.md`), `docs/3D_MODEL_MANIFEST.md`/`docs/3D_WORLD_ASSETS.md`
+  entsprechend gekürzt und verlinkt. Tote Renderer-Funktionen entfernt
+  (`roadSegment`, `roadSegmentNames`, `rotMask`, `rotSteps`).
+
+**Warum.** Der Nutzer wollte nach den Wald-Kachel-Problemen wieder klare
+Struktur in den Asset-Ordnern und ein klares Vorhaben, bevor weitergebaut wird
+— das Nebeneinander aus "3D-Straßenmodelle (nie befüllt)" und dem neuen
+Textursystem sollte aufgeräumt statt nur ergänzt werden. Die Recherche zeigte:
+es gibt heute nur EINE Straßen-Building-Def (`id:'road'`) und keine Sim-Konzepte
+für Brücke/Kreisverkehr/Steg/Bergpass — alles reine Renderer-Optik. Kreuzung,
+Linie, Kreisverkehr, Bergstraße, Pass, Steg und Brücke lassen sich deshalb
+komplett aus vorhandenen Renderer-Daten (Nachbarmaske, Terrain-Typ,
+Wasser-Spannweite) ableiten, ohne `SCHEMA_VERSION`-Bump oder neue
+`buildings.config.ts`-Kategorie — CLAUDE.md §2 "Erweitern statt neu bauen".
+
+**Architektur.** Texturen laden lazy über den in v0.43 gebauten
+`TextureLoader`/`textureCache` (jetzt als `loadTextureByUrl` verallgemeinert,
+mit `loadSplatTexture`/`loadRoadTexture` als dünnen Wrappern). Jedes
+Straßen-Oberflächen-Material ist EINE geteilte `MeshStandardMaterial`-Instanz
+pro Rolle (`getRoadMats()`) statt pro Kachel — ein Drop-in leuchtet für alle
+Straßen gleichzeitig auf (`material.map` + `needsUpdate`), ohne Custom-Shader
+(anders als der Ground-Splat: Straßen sind flach lackiert, keine
+Höhen-/Neigungs-Gewichtsmischung nötig). Ohne jede Textur bleibt exakt die
+bisherige Flächenfarbe — kein Regressionsrisiko.
+
+**Auswirkung/Zukunft.** Echte Stützmauern/Böschungen/Serpentinen/Tunnel bei
+sehr großen Höhensprüngen bleiben bewusst zurückgestellt (bräuchten echte
+zusätzliche Geometrie, keine reine Textur) — die Neigungs-Kappung verhindert
+inzwischen zumindest, dass eine Straße sichtbar kippt oder schwebt. Sobald der
+Nutzer echte Straßen-Texturen ablegt, greifen sie automatisch — kein weiterer
+Code nötig.
+
+**Verifikation.** `npx tsc -b --force`, `npx eslint src tests`, `npx vitest run`
+(151 Tests, davon 3 neu in `tests/roadTextures.test.ts`), `npm run build` —
+alle grün. 3D-Screenshot-Smoke via Playwright (`vite preview`): keine
+Konsolen-/Shader-Fehler, Straßen-Netz (gerade/Kurve/Kreuzung) und eine Brücke
+über Wasser weiterhin korrekt im Gelände, Regressionscheck nach dem Umbau von
+`buildRoadTile`/`buildBridgeDeck`.
+
+**Dateien.** Neu: `src/assets/roadTextureManifest.ts`,
+`tests/roadTextures.test.ts`, `docs/ROAD_TEXTURES.md` (generiert),
+`src/assets/textures/roads/*/.gitkeep`. Geändert:
+`src/renderer/three/ThreeMapRenderer.ts` (Straßen-/Brücken-Umbau,
+Texturloader-Refactor), `src/assets/registry.ts` (`roadTextureUrl`,
+`roadModel`/`bridgeModel`/`hasAnyRoadModel` entfernt),
+`src/assets/modelManifest.ts` (`BRIDGE_MODELS` entfernt, roads/bridges-Einträge
+deprecated), `docs/3D_MODEL_MANIFEST.md`, `docs/3D_WORLD_ASSETS.md`,
+`docs/PATCHNOTES.md`. Gelöscht:
+`src/assets/models/terrain/forest.glb`,
+`src/assets/models/terrain/forest_ground_tile.glb`.
+
 ## v0.43 — „Terrain System V2, Phase 2: Splatmap-Ground-Shader + Drop-in-Ordner"
 
 **Was.** Der in v0.42 dokumentierte, aber bewusst zurückgestellte Splatmap-Shader

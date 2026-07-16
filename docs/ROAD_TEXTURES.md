@@ -41,7 +41,7 @@ Seamless tileable stylized road-surface texture for a premium low-poly city-buil
 Seamless tileable stylized road-surface texture for a premium low-poly city-builder game. Soft painterly look, natural subtle wear, no baked lighting, no shadows, top-down orthographic view, perfect seamless edges along the tiling axis, PBR-ready — circular roundabout junction surface seen from directly above, asphalt with a pale outer ring marking, radial subtle texture, centred composition
 ```
 
-**Spec:** Ordner `textures/roads/markings/` · 512×512 · nahtlos kachelbar · Stil: painterly, radial · Palette: Asphalt-Blaugrau mit hellem Ring · Einsatz: Kreisverkehr-Deckel bei 4-Wege-Kreuzungen (cross_intersection) · Material: matt, radiales Muster · Verwendung: ersetzt den quadratischen Kern durch eine texturierte CylinderGeometry-Scheibe bei roadSegment(mask).base === "cross_intersection" · Maps: Normal – · Roughness – · AO – · Height – · Detailstufe: nah · Priorität: **Empfohlen**
+**Spec:** Ordner `textures/roads/markings/` · 512×512 · nahtlos kachelbar · Stil: painterly, radial · Palette: Asphalt-Blaugrau mit hellem Ring · Einsatz: Kreisverkehr-Deckel bei 4-Wege-Kreuzungen (alle 4 Nachbarbits gesetzt) · Material: matt, radiales Muster · Verwendung: ersetzt den quadratischen Kern durch eine texturierte CylinderGeometry-Scheibe bei mask === 15 · Maps: Normal – · Roughness – · AO – · Height – · Detailstufe: nah · Priorität: **Empfohlen**
 
 ## Wasserüberquerungen
 
@@ -65,8 +65,8 @@ Seamless tileable stylized road-surface texture for a premium low-poly city-buil
 
 Straßen laden nie mehr ein `.glb` (der alte Drop-in-Pfad über `roadModel`/`bridgeModel` wurde aus `ThreeMapRenderer.ts` entfernt). Stattdessen bleibt die vorhandene, Mask-getriebene Geometrie aus `buildRoadTile`/`buildBridgeDeck` (Kern + Arme + Randstreifen, flach nahe `y≈0` ins Höhenfeld integriert) bestehen — sie bekommt nur echte Texturen statt Flächenfarben, sobald eine Datei hier abgelegt wird:
 
-- **Form/Rotation** kommt weiterhin aus `roadSegment(mask)` (gerade/Kurve/T/Kreuz/Ende) — unverändert seit dem alten 3D-Modell-System.
-- **Kreisverkehr** ist keine neue Instanz, sondern dieselbe `cross_intersection`-Form mit einer runden statt eckigen Kern-Geometrie + `road_roundabout`.
+- **Form** ergibt sich direkt aus den gesetzten Nachbar-Mask-Bits (ein Box-Arm pro Bit in `buildRoadTile`) — kein separates Shape-Lookup mehr nötig.
+- **Kreisverkehr** ist keine neue Instanz, sondern dieselbe 4-Wege-Form (`mask === 15`) mit einer runden statt eckigen Kern-Geometrie + `road_roundabout`.
 - **Bergstraße/Pass** ist eine reine Textur-Umschaltung, sobald die Kachel auf `terrainAt==="mountain"` liegt — kein eigener Straßentyp.
 - **Brücke vs. Steg** unterscheidet sich an der gemessenen Wasser-Spannweite (1 Kachel → Steg, mehrere → Brücke) — ebenfalls keine neue Sim-Instanz.
 - **Randübergang** zu Gras/Erde nutzt die bereits dokumentierte `terrain_road_edge.png` (siehe `docs/TERRAIN_TEXTURES.md`, Kategorie „Wege") — hier bewusst nicht dupliziert.

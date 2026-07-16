@@ -63,12 +63,6 @@ passender Name gewinnt** (Präzis vor Alias). Alles ohne Modell bleibt prozedura
 | Terrain-Kachel Sand | `terrain/…` | `sand_tile` → `shore_tile` → `sand` | 1×1 |
 | Terrain-Kachel fruchtbar | `terrain/…` | `fertile_ground_tile` → `fertile` | 1×1 |
 | Gebirgs-Feature | `terrain/…` | `mountain_peak_medium` → `mountain_peak_large` → `rock_large` → `mountain_peak` | auf ~⅓ der Gebirgs-Kacheln gestreut |
-| Straße gerade | `roads/…` | `road_<klasse>_straight` → `road_straight` | **kanonisch N–S**, wird 90°-weise gedreht |
-| Straße Kurve | `roads/…` | `road_<klasse>_curve` → `road_curve` | **kanonisch N+E** |
-| Straße T-Kreuzung | `roads/…` | `road_<klasse>_t_intersection` → `road_t_intersection` | kanonisch offen nach W |
-| Straße Kreuzung | `roads/…` | `road_<klasse>_cross_intersection` → `road_cross_intersection` | symmetrisch |
-| Straße Ende/Stich | `roads/…` | `road_<klasse>_end` → `road_end` | Arm nach N |
-| Brücke (über Wasser) | `bridges/…` | `bridge_medium_road` → `bridge_small_stone` → `bridge_small_wood` → `bridge_large_road` → `bridge_road` → `bridge` | entlang Straßenachse gedreht |
 | Baum | `props/nature/…` | `pine_tree` → `tree_pine` → `tree` → `tree_deciduous` | gecullt, nie auf Stadt/Straße |
 | Busch | `props/nature/…` | `bush_small` → `bush` → `bush_medium` | gecullt |
 | Verkehrsauto | `vehicles/…` | `car` → `car_small` → `car_sedan` → `car_van` | **Front +z** |
@@ -85,10 +79,12 @@ passender Name gewinnt** (Präzis vor Alias). Alles ohne Modell bleibt prozedura
 | Welt-UI Aktions-Button | `ui/…` | `ui_build_button` → `ui_button_build` → `button_build` | schwebt über ausgew. Gebäude |
 | Welt-UI Level-Badge | `ui/…` | `ui_level_badge` → `level_badge` → `ui_badge` | reserviert |
 
-`<klasse>` ist die Straßenklasse (`main`, `wide`, `industrial`, `boulevard`) —
-für die Standard-Wohnstraße (`residential`) gibt es keinen Klassen-Präfix, nur der
-generische Name greift. **Gebäude** siehe §1 (`buildingModel`, Dateiname = ID).
-Modelle werden gecacht & instanziert; ein fehlendes/defektes Modell = Fallback.
+**Straßen & Brücken laden seit v0.44 kein `.glb` mehr** — sie sind texturbasiert
+(§ Straßen als Textur), siehe `docs/ROAD_TEXTURES.md`. `src/assets/models/
+roads/`/`.../bridges/` bleiben nur noch als historische Doku-Hülle.
+
+**Gebäude** siehe §1 (`buildingModel`, Dateiname = ID). Modelle werden gecacht &
+instanziert; ein fehlendes/defektes Modell = Fallback.
 
 **Legende**
 - **Datei** = exakter Dateiname (ohne Ordner ist der Name der Schlüssel).
@@ -187,9 +183,10 @@ fix (§3 in `docs/3D_WORLD_ASSETS.md`).
 | deco_fountain | `deco_fountain.glb` | 1×1 | 7 |
 | deco_bench | `deco_bench.glb` | 1×1 | 7 |
 
-### Straße (Sonderfall) — Modelle in `src/assets/models/roads/`
-Die Gebäude-ID **`road`** (1×1) nutzt **kein** `buildings/road.glb`, sondern das
-Straßen-Segment-System (Auto-Tiling, `roadModel()`). Siehe §2.
+### Straße (Sonderfall) — texturbasiert, kein `.glb`
+Die Gebäude-ID **`road`** (1×1) nutzt **kein** `buildings/road.glb` und auch
+kein `roads/`-Segmentmodell mehr: seit v0.44 ist das Straßen-/Brücken-System
+texturbasiert (§ Straßen als Textur), siehe `docs/ROAD_TEXTURES.md`.
 
 ### Landmarken / Hero-Bauten (geplant) — `buildings/landmarks/`
 Noch keine BuildingDefs, aber vollständig spezifiziert (Footprint, Größenklasse,
@@ -212,8 +209,6 @@ was der Renderer heute lädt) in der jeweiligen `README.md`:
 | Ordner | Namensliste (live) | Volle Spezifikation (live + geplant) |
 |---|---|---|
 | Terrain, Gebirge, Flüsse, Küste, Hero-Weltformen | `src/assets/models/terrain/README.md` | `src/assets/models/terrain/PROMPTS.md` |
-| Straßen | `src/assets/models/roads/README.md` | `src/assets/models/roads/PROMPTS.md` |
-| Brücken | `src/assets/models/bridges/README.md` | `src/assets/models/bridges/PROMPTS.md` |
 | Props (Natur, Stadt, Hafen, Farm, Infrastruktur) | `src/assets/models/props/README.md` | `src/assets/models/props/PROMPTS.md` |
 | Fahrzeuge | `src/assets/models/vehicles/README.md` | `src/assets/models/vehicles/PROMPTS.md` |
 | Marker (inkl. Sektor-Nebel & Bürgerhinweise) | `src/assets/models/markers/README.md` | `src/assets/models/markers/PROMPTS.md` |
@@ -223,3 +218,8 @@ was der Renderer heute lädt) in der jeweiligen `README.md`:
 Beide Dateien je Ordner sind aus `src/assets/modelManifest.ts` generiert und
 werden von `tests/modelReadmes.test.ts` gegen Drift geprüft — hier von Hand
 nichts duplizieren.
+
+**Straßen & Brücken stehen hier bewusst nicht mehr in der Tabelle** — seit v0.44
+(§ Straßen als Textur) laden sie nie ein `.glb`, siehe `docs/ROAD_TEXTURES.md`
+und `src/assets/roadTextureManifest.ts`. `src/assets/models/roads/README.md`/
+`.../bridges/README.md` existieren nur noch als historischer Hinweis.

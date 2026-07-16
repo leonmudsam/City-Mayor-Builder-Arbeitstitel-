@@ -146,12 +146,6 @@ const TERRAIN_MODELS = keyedExt(
 const VEHICLE_MODELS = keyedExt(
   import.meta.glob('./models/vehicles/**/*.glb', { eager: true, query: '?url', import: 'default' }) as UrlMap,
 );
-const ROAD_MODELS = keyedExt(
-  import.meta.glob('./models/roads/**/*.glb', { eager: true, query: '?url', import: 'default' }) as UrlMap,
-);
-const BRIDGE_MODELS = keyedExt(
-  import.meta.glob('./models/bridges/**/*.glb', { eager: true, query: '?url', import: 'default' }) as UrlMap,
-);
 const PROP_MODELS = keyedExt(
   import.meta.glob('./models/props/**/*.glb', { eager: true, query: '?url', import: 'default' }) as UrlMap,
 );
@@ -199,14 +193,6 @@ export function terrainModel(name: string): string | undefined {
 export function vehicleModel(name: string): string | undefined {
   return VEHICLE_MODELS[name];
 }
-/** 3D road segment model, e.g. `road_straight`, `road_cross`, `road_t`, `road_end`. */
-export function roadModel(name: string): string | undefined {
-  return ROAD_MODELS[name];
-}
-/** 3D bridge model, e.g. `bridge_small_stone`, `bridge_medium_road`. */
-export function bridgeModel(name: string): string | undefined {
-  return BRIDGE_MODELS[name];
-}
 /** 3D world prop model, e.g. `tree_pine`, `bush`, `fence`, `crate`, `rock`. */
 export function propModel(name: string): string | undefined {
   return PROP_MODELS[name];
@@ -227,10 +213,6 @@ export function uiModel(name: string): string | undefined {
  *  the building is built or upgraded (else a generic prop / procedural scaffold). */
 export function buildingConstructionModel(id: string | undefined): string | undefined {
   return id ? BUILDING_MODELS[`${id}_construction`] : undefined;
-}
-/** First available road model (drives whether the procedural road is used). */
-export function hasAnyRoadModel(): boolean {
-  return Object.keys(ROAD_MODELS).length > 0;
 }
 /** Whether ANY building model has been supplied (drives a first-run hint). */
 export function hasAnyBuildingModel(): boolean {

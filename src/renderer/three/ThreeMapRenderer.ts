@@ -157,6 +157,13 @@ function loadModel(url: string): Promise<TObject3D> {
 // stone/sand/etc. later just needs the file dropped in, see docs/TERRAIN_TEXTURES.md.
 const textureLoader = new TextureLoader();
 const textureCache = new Map<string, Promise<Texture> | undefined>();
+/** Ground mesh quads per tile edge (§ MVP3 Phase 1 — Organisches Terrain-Mesh).
+ *  1 = one vertex per tile corner (pre-v0.46 behaviour). 2 gives visibly smooth
+ *  curvature at ~4x the vertex count of the max board (still one draw call) —
+ *  kept as the default; 3 (~9x) is deliberately not used, only noted here as a
+ *  possible future "high" graphics setting. */
+const GROUND_SUBDIV = 2;
+
 /** One world unit of ground = this many texture repeats, so a 1254px "nah"-detail
  *  photo reads as close-up ground rather than a stretched smear. */
 const SPLAT_TILE_SCALE = 0.5;
@@ -685,11 +692,18 @@ export class ThreeMapRenderer implements IMapRenderer {
   }
 
   /**
-   * The organic ground (v0.39): a single vertex-coloured, lit heightfield mesh
-   * spanning the whole materialized board. Each grid vertex sits at
-   * `terrainHeightAt`, so the surface slopes and mountains rise smoothly; vertex
-   * colours blend the terrain types of the meeting tiles (locked sectors dimmed).
-   * `computeVertexNormals` gives the slopes real shading. One draw call.
+   * The organic ground (v0.39, subdivided v0.46): a single vertex-coloured,
+   * lit heightfield mesh spanning the whole materialized board. Every grid
+   * vertex sits at `terrainHeightAt`, so slopes/terraces/canyons rise
+   * smoothly; vertex colours blend the terrain types of the meeting tiles
+   * (locked sectors dimmed). `computeVertexNormals` gives the slopes real
+   * shading. One draw call regardless of `GROUND_SUBDIV`.
+   *
+   * Two passes: first the colour at each *tile corner* (unchanged from
+   * pre-v0.46, one `TERRAIN_COLORS` blend per corner), then a denser
+   * `GROUND_SUBDIV`x grid whose positions sample `terrainHeightAt` directly
+   * (already continuous, so this is free) and whose colours are bilinearly
+   * blended from the cached corner grid — no repeated terrain lookups.
    */
   private buildGroundMesh(tiles: { x: number; y: number; terrain: TerrainType; locked: boolean }[]): void {
     if (tiles.length === 0) return;
@@ -707,21 +721,17 @@ export class ThreeMapRenderer implements IMapRenderer {
     }
     const W = maxX - minX + 1;
     const H = maxY - minY + 1;
-    const nx = W + 1;
-    const ny = H + 1;
-    const positions = new Float32Array(nx * ny * 3);
-    const colors = new Float32Array(nx * ny * 3);
+    const nx0 = W + 1;
+    const ny0 = H + 1;
+    const cornerColors = new Float32Array(nx0 * ny0 * 3);
     const tmp = new Color();
     const out = new Color();
 
-    for (let iy = 0; iy < ny; iy++) {
-      for (let ix = 0; ix < nx; ix++) {
+    for (let iy = 0; iy < ny0; iy++) {
+      for (let ix = 0; ix < nx0; ix++) {
         const vx = minX + ix;
         const vy = minY + iy;
-        const o = (iy * nx + ix) * 3;
-        positions[o] = vx;
-        positions[o + 1] = terrainHeightAt(vx, vy);
-        positions[o + 2] = vy;
+        const o = (iy * nx0 + ix) * 3;
         // Colour = mean of the (up to 4) tiles meeting at this corner; a dimmed
         // tint when the majority of them are still locked (fog of war).
         let r = 0;
@@ -755,15 +765,48 @@ export class ThreeMapRenderer implements IMapRenderer {
         // A touch of per-vertex lightness jitter so large fields aren't a flat sheet.
         out.offsetHSL(0, 0, (hash01(`${vx},${vy}`) - 0.5) * 0.05);
         if (lock / cnt > 0.5) out.multiplyScalar(0.42);
-        colors[o] = out.r;
-        colors[o + 1] = out.g;
-        colors[o + 2] = out.b;
+        cornerColors[o] = out.r;
+        cornerColors[o + 1] = out.g;
+        cornerColors[o + 2] = out.b;
+      }
+    }
+
+    const S = GROUND_SUBDIV;
+    const nx = W * S + 1;
+    const ny = H * S + 1;
+    const positions = new Float32Array(nx * ny * 3);
+    const colors = new Float32Array(nx * ny * 3);
+
+    for (let iy = 0; iy < ny; iy++) {
+      const cy0 = Math.min(Math.floor(iy / S), H - 1);
+      const fy = iy / S - cy0;
+      for (let ix = 0; ix < nx; ix++) {
+        const cx0 = Math.min(Math.floor(ix / S), W - 1);
+        const fx = ix / S - cx0;
+        const vx = minX + ix / S;
+        const vy = minY + iy / S;
+        const o = (iy * nx + ix) * 3;
+        positions[o] = vx;
+        positions[o + 1] = terrainHeightAt(vx, vy);
+        positions[o + 2] = vy;
+
+        // Bilinear blend of the 4 surrounding tile-corner colours — mirrors
+        // how terrainHeightAt itself interpolates height between corners.
+        const c00 = (cy0 * nx0 + cx0) * 3;
+        const c10 = (cy0 * nx0 + cx0 + 1) * 3;
+        const c01 = ((cy0 + 1) * nx0 + cx0) * 3;
+        const c11 = ((cy0 + 1) * nx0 + cx0 + 1) * 3;
+        for (let ch = 0; ch < 3; ch++) {
+          const top = cornerColors[c00 + ch]! + (cornerColors[c10 + ch]! - cornerColors[c00 + ch]!) * fx;
+          const bot = cornerColors[c01 + ch]! + (cornerColors[c11 + ch]! - cornerColors[c01 + ch]!) * fx;
+          colors[o + ch] = top + (bot - top) * fy;
+        }
       }
     }
 
     const indices: number[] = [];
-    for (let iy = 0; iy < H; iy++) {
-      for (let ix = 0; ix < W; ix++) {
+    for (let iy = 0; iy < ny - 1; iy++) {
+      for (let ix = 0; ix < nx - 1; ix++) {
         const a = iy * nx + ix;
         const b = a + 1;
         const c = a + nx;
@@ -1472,11 +1515,10 @@ export class ThreeMapRenderer implements IMapRenderer {
   }
 
   /**
-   * A road/bridge tile (§ Straßen/Brücken drop-in). The procedural auto-tiled
-   * asphalt (or a raised deck over water) is drawn immediately into a holder; if a
-   * matching `.glb` exists it replaces it: a road segment picked by the neighbour
-   * mask (straight/curve/T/cross/end + rotation), or a bridge model over
-   * water/river. See docs/3D_MODEL_MANIFEST.md §3.
+   * A road/bridge tile (§ Straßen als Textur, v0.44): flat, texture-based
+   * geometry, never a `.glb`. Over water/river it becomes a boardwalk (single-
+   * tile hop) or bridge (wider crossing); otherwise the auto-tiled road skeleton,
+   * tilted+skirted onto the local ground so it never floats.
    */
   private buildRoad(group: Group, def: BuildingDef, b: BuildingInstance, mask: number): void {
     const holder = new Group();
@@ -1486,23 +1528,32 @@ export class ThreeMapRenderer implements IMapRenderer {
     const overWater = terrain === 'water' || terrain === 'river';
 
     if (overWater) {
-      // Bridge: procedural deck now, swap a bridge model in when present.
       const rot = mask & 2 || mask & 8 ? (mask & 1 || mask & 4 ? 0 : Math.PI / 2) : 0;
-      this.buildBridgeDeck(holder, rot);
-      const url = firstModel(bridgeModel, BRIDGE_MODELS);
-      if (url) void this.swapInModel(url, holder, { footprint: 1, rotationY: rot });
+      this.buildBridgeDeck(holder, rot, this.waterSpanAt(b.x, b.y));
       return;
     }
 
-    // Regular road: procedural auto-tile now, swap a segment model in when present.
-    this.buildRoadTile(holder, mask, cls);
-    const seg = roadSegment(mask);
-    const url = firstModel(roadModel, roadSegmentNames(seg.base, cls));
-    if (url) void this.swapInModel(url, holder, { footprint: 1, rotationY: seg.rotationY, castShadow: false });
+    this.buildRoadTile(holder, mask, cls, terrain);
     // Straßen dürfen niemals schweben (§ Gelände-Anpassung): tilt the tile to the
     // local ground gradient and skirt its edges, so neighbouring segments on
     // sloped land (forest/grass) never show a floating gap or step.
     this.fitRoadToTerrain(holder, b.x + 0.5, b.y + 0.5);
+  }
+
+  /** Contiguous water/river run through (x,y), whichever axis is longer — sizes
+   *  a crossing as a single-tile boardwalk ("Steg") vs. a wider bridge. */
+  private waterSpanAt(x: number, y: number): number {
+    const isWater = (tx: number, ty: number) => {
+      const t = this.terrainAt.get(`${tx},${ty}`);
+      return t === 'water' || t === 'river';
+    };
+    let ew = 1;
+    for (let d = 1; isWater(x + d, y); d++) ew++;
+    for (let d = 1; isWater(x - d, y); d++) ew++;
+    let ns = 1;
+    for (let d = 1; isWater(x, y + d); d++) ns++;
+    for (let d = 1; isWater(x, y - d); d++) ns++;
+    return Math.max(ew, ns);
   }
 
   /**
@@ -1511,7 +1562,9 @@ export class ThreeMapRenderer implements IMapRenderer {
    * skirt around the tile's perimeter that reaches below the lowest plausible
    * neighbour height. The group itself already sits at the tile-centre height
    * (buildNode); this only orients/aprons it so it reads as sitting IN the
-   * ground rather than floating a flat plate above it.
+   * ground rather than floating a flat plate above it. The road surface itself
+   * now sits close to y=0 (see buildRoadTile), so the skirt only needs to hide a
+   * small gap, not a full raised-plate step.
    */
   private fitRoadToTerrain(holder: Group, cx: number, cz: number): void {
     const MAX_TILT = 0.35; // ≈20°, keeps steep noise spikes from flipping the deck
@@ -1521,62 +1574,120 @@ export class ThreeMapRenderer implements IMapRenderer {
     holder.rotation.x = MathUtils.clamp(-Math.atan(dHdz), -MAX_TILT, MAX_TILT);
 
     const skirtMat = new MeshStandardMaterial({ color: 0x5b4a3a, roughness: 1 });
-    const skirtDepth = 0.6;
+    const skirtDepth = 0.22;
     const skirt = new Mesh(new BoxGeometry(1.02, skirtDepth, 1.02), skirtMat);
     skirt.position.y = -skirtDepth / 2;
     skirt.receiveShadow = true;
     holder.add(skirt);
   }
 
-  /** A simple raised bridge deck (fallback when no bridge model is supplied). */
-  private buildBridgeDeck(g: Group, rotationY: number): void {
+  /**
+   * A raised deck over water (§ Straßen als Textur): a narrow, pier-less wooden
+   * boardwalk for a single-tile hop (`span<=1`, "Steg"), or a sturdier deck with
+   * rails/piles for a wider crossing (span>1, "Brücke") — textured via the
+   * shared road materials (`road_boardwalk`/`road_bridge_deck`), flat-colour
+   * fallback until dropped in.
+   */
+  private buildBridgeDeck(g: Group, rotationY: number, span: number): void {
+    const mats = this.getRoadMats();
+    const isBoardwalk = span <= 1;
     const deck = new Group();
     deck.rotation.y = rotationY;
-    const yTop = 0.5;
-    const road = new Mesh(
-      new BoxGeometry(0.7, 0.1, 1.02),
-      new MeshStandardMaterial({ color: 0x4a5058, roughness: 0.95 }),
-    );
+    const yTop = isBoardwalk ? 0.12 : 0.5;
+    const road = new Mesh(new BoxGeometry(isBoardwalk ? 0.42 : 0.7, 0.08, 1.02), isBoardwalk ? mats.boardwalk : mats.bridgeDeck);
     road.position.y = yTop;
     road.castShadow = true;
     road.receiveShadow = true;
     deck.add(road);
-    const railMat = new MeshStandardMaterial({ color: 0x9aa1ab, roughness: 0.9 });
-    for (const sx of [-0.36, 0.36]) {
-      const rail = new Mesh(new BoxGeometry(0.06, 0.16, 1.02), railMat);
-      rail.position.set(sx, yTop + 0.12, 0);
+    const railMat = new MeshStandardMaterial({ color: isBoardwalk ? 0x8a6a45 : 0x9aa1ab, roughness: 0.9 });
+    const railInset = isBoardwalk ? 0.19 : 0.36;
+    for (const sx of [-railInset, railInset]) {
+      const rail = new Mesh(new BoxGeometry(0.05, isBoardwalk ? 0.1 : 0.16, 1.02), railMat);
+      rail.position.set(sx, yTop + (isBoardwalk ? 0.08 : 0.12), 0);
       deck.add(rail);
     }
-    const pileMat = new MeshStandardMaterial({ color: 0x6d747d, roughness: 1 });
-    for (const sz of [-0.32, 0.32]) {
-      const pile = new Mesh(new BoxGeometry(0.6, 0.5, 0.1), pileMat);
-      pile.position.set(0, 0.25, sz);
-      deck.add(pile);
+    if (!isBoardwalk) {
+      const pileMat = new MeshStandardMaterial({ color: 0x6d747d, roughness: 1 });
+      for (const sz of [-0.32, 0.32]) {
+        const pile = new Mesh(new BoxGeometry(0.6, 0.5, 0.1), pileMat);
+        pile.position.set(0, 0.25, sz);
+        deck.add(pile);
+      }
     }
     g.add(deck);
   }
 
-  /**
-   * Auto-tiled procedural road (§3): a dark asphalt cross/strip connecting to
-   * road neighbours (mask), light kerb/sidewalk strips on the open edges, and a
-   * subtle centreline for the bigger road classes — so straight/curve/T/cross/end
-   * all read correctly and it no longer looks like a dark plate with dots. When a
-   * real `road_*.glb` exists it can replace this later (roadModel(), fallback here).
-   */
-  private buildRoadTile(g: Group, mask: number, cls: RoadClass): void {
-    const spec = ROAD_SPECS[cls];
-    const yAsph = 0.24;
-    const yKerb = 0.25;
-    const yMark = 0.262;
-    const asphMat = new MeshStandardMaterial({ color: spec.color, roughness: 0.95 });
-    const kerbMat = new MeshStandardMaterial({ color: spec.kerb, roughness: 1 });
-    const half = spec.half;
+  /** Lazily builds the shared road/bridge materials (once) and kicks off their
+   *  texture loads — every road tile reuses these SAME instances, so a dropped-
+   *  in file lights up everywhere at once instead of per-tile. Flat colour until
+   *  then, exactly the drop-in fallback used everywhere else in the project. */
+  private getRoadMats(): RoadMaterials {
+    if (this.roadMats) return this.roadMats;
+    const mats: RoadMaterials = {
+      asphalt: new MeshStandardMaterial({ color: 0x474d57, roughness: 0.95 }),
+      mountain: new MeshStandardMaterial({ color: 0x6b6258, roughness: 1 }),
+      edge: new MeshStandardMaterial({ color: 0x929aa4, roughness: 1 }),
+      dash: new MeshStandardMaterial({ color: 0xe4d98f, roughness: 1, transparent: true }),
+      roundabout: new MeshStandardMaterial({ color: 0x3c424b, roughness: 0.9 }),
+      bridgeDeck: new MeshStandardMaterial({ color: 0x4a5058, roughness: 0.95 }),
+      boardwalk: new MeshStandardMaterial({ color: 0x7a5a3a, roughness: 0.9 }),
+    };
+    this.roadMats = mats;
+    this.applyRoadTex(loadRoadTexture('road_asphalt'), mats.asphalt);
+    this.applyRoadTex(loadRoadTexture('road_mountain'), mats.mountain);
+    // Reuses the already-documented terrain edge texture (docs/TERRAIN_TEXTURES.md
+    // "Wege") instead of a duplicate road-specific edge asset.
+    this.applyRoadTex(loadSplatTexture('terrain_road_edge'), mats.edge);
+    this.applyRoadTex(loadRoadTexture('road_marking_dash'), mats.dash);
+    this.applyRoadTex(loadRoadTexture('road_roundabout'), mats.roundabout);
+    this.applyRoadTex(loadRoadTexture('road_bridge_deck'), mats.bridgeDeck);
+    this.applyRoadTex(loadRoadTexture('road_boardwalk'), mats.boardwalk);
+    return mats;
+  }
 
-    // Central junction pad.
-    const core = new Mesh(new BoxGeometry(half * 2, 0.06, half * 2), asphMat);
-    core.position.y = yAsph;
-    core.receiveShadow = true;
-    g.add(core);
+  /** Assigns a drop-in texture to a shared road material once it resolves;
+   *  no-op while the file is still missing. */
+  private applyRoadTex(promise: Promise<Texture> | undefined, mat: MeshStandardMaterial): void {
+    if (!promise) return;
+    void promise.then((tex) => {
+      if (this.destroyed) return;
+      mat.map = tex;
+      mat.needsUpdate = true;
+    });
+  }
+
+  /**
+   * Auto-tiled, texture-based road (§ Straßen als Textur, v0.44): a flat
+   * asphalt core/arm skeleton connecting to road neighbours (mask), edge-blend
+   * strips on the open edges, and a dashed centreline for the bigger road
+   * classes — so straight/curve/T/cross/end all read correctly. A 4-way
+   * crossing (`mask===15`) renders as a round roundabout deck instead of a
+   * square junction — same mask data, just a different shape choice, no new
+   * road type. Mountain-terrain tiles get the rougher `road_mountain` surface
+   * instead of asphalt — covers "Bergstraße"/"Pass" as a pure texture swap.
+   */
+  private buildRoadTile(g: Group, mask: number, cls: RoadClass, terrainType: TerrainType | undefined): void {
+    const spec = ROAD_SPECS[cls];
+    const mats = this.getRoadMats();
+    const yAsph = 0.03;
+    const yKerb = 0.035;
+    const yMark = 0.045;
+    const surfaceMat = terrainType === 'mountain' ? mats.mountain : mats.asphalt;
+    const half = spec.half;
+    const isRoundabout = mask === 15;
+
+    // Central junction pad — round for a 4-way roundabout, square otherwise.
+    if (isRoundabout) {
+      const core = new Mesh(new CylinderGeometry(half * 1.15, half * 1.15, 0.06, 24), mats.roundabout);
+      core.position.y = yAsph;
+      core.receiveShadow = true;
+      g.add(core);
+    } else {
+      const core = new Mesh(new BoxGeometry(half * 2, 0.06, half * 2), surfaceMat);
+      core.position.y = yAsph;
+      core.receiveShadow = true;
+      g.add(core);
+    }
 
     const dirs = [
       { bit: 1, dx: 0, dz: -1 },
@@ -1586,29 +1697,24 @@ export class ThreeMapRenderer implements IMapRenderer {
     ];
     for (const { bit, dx, dz } of dirs) {
       if (mask & bit) {
-        // Asphalt arm reaching to the tile edge in that direction.
+        // Asphalt/mountain arm reaching to the tile edge in that direction.
         const arm = new Mesh(
           new BoxGeometry(dx !== 0 ? 0.5 : half * 2, 0.06, dz !== 0 ? 0.5 : half * 2),
-          asphMat,
+          surfaceMat,
         );
         arm.position.set(dx * 0.25, yAsph, dz * 0.25);
         arm.receiveShadow = true;
         g.add(arm);
-        // Centreline dash for bigger classes (not residential/back streets).
-        if (spec.centerline) {
-          const mark = new Mesh(
-            new BoxGeometry(dx !== 0 ? 0.34 : 0.05, 0.02, dz !== 0 ? 0.34 : 0.05),
-            new MeshStandardMaterial({ color: 0xe4d98f, roughness: 1 }),
-          );
+        // Dashed centreline for bigger classes (not residential/back streets;
+        // skipped on the roundabout deck itself).
+        if (spec.centerline && !isRoundabout) {
+          const mark = new Mesh(new BoxGeometry(dx !== 0 ? 0.34 : 0.05, 0.02, dz !== 0 ? 0.34 : 0.05), mats.dash);
           mark.position.set(dx * 0.28, yMark, dz * 0.28);
           g.add(mark);
         }
       } else {
-        // Open edge → raised kerb / sidewalk strip.
-        const kerb = new Mesh(
-          new BoxGeometry(dx !== 0 ? 0.1 : 0.98, 0.1, dz !== 0 ? 0.1 : 0.98),
-          kerbMat,
-        );
+        // Open edge → soft edge-blend strip into the surrounding terrain.
+        const kerb = new Mesh(new BoxGeometry(dx !== 0 ? 0.1 : 0.98, 0.1, dz !== 0 ? 0.1 : 0.98), mats.edge);
         kerb.position.set(dx * 0.45, yKerb, dz * 0.45);
         kerb.receiveShadow = true;
         g.add(kerb);
@@ -1636,7 +1742,7 @@ export class ThreeMapRenderer implements IMapRenderer {
     let smoke: Vector3 | undefined;
 
     if (def.category === 'roads') {
-      this.buildRoadTile(g, roadMask, roadClassFor(def.id));
+      this.buildRoadTile(g, roadMask, roadClassFor(def.id), this.terrainAt.get(`${b.x},${b.y}`));
       return { group: g };
     }
 
@@ -2381,14 +2487,16 @@ function makeVanMesh(): Group {
 
 /** Road-type hierarchy (§3, prepared): the current `road` maps to a residential
  *  street; future ids (road_main, road_wide, …) slot in here without renderer
- *  changes. `half` = asphalt half-width; kerb = sidewalk colour. */
+ *  changes. `half` = asphalt half-width; surface colour/texture is shared
+ *  (getRoadMats) rather than per-class since only `residential` is placeable
+ *  today (see docs/ROAD_TEXTURES.md). */
 export type RoadClass = 'residential' | 'main' | 'wide' | 'industrial' | 'boulevard';
-const ROAD_SPECS: Record<RoadClass, { half: number; color: number; kerb: number; centerline: boolean }> = {
-  residential: { half: 0.3, color: 0x474d57, kerb: 0x929aa4, centerline: false },
-  main: { half: 0.37, color: 0x3c424b, kerb: 0x9aa1ab, centerline: true },
-  wide: { half: 0.43, color: 0x3a4049, kerb: 0x9aa1ab, centerline: true },
-  industrial: { half: 0.4, color: 0x41464f, kerb: 0x7d838d, centerline: false },
-  boulevard: { half: 0.45, color: 0x393f48, kerb: 0xa7aeb8, centerline: true },
+const ROAD_SPECS: Record<RoadClass, { half: number; centerline: boolean }> = {
+  residential: { half: 0.3, centerline: false },
+  main: { half: 0.37, centerline: true },
+  wide: { half: 0.43, centerline: true },
+  industrial: { half: 0.4, centerline: false },
+  boulevard: { half: 0.45, centerline: true },
 };
 function roadClassFor(defId: string): RoadClass {
   if (defId.includes('boulevard') || defId.includes('allee')) return 'boulevard';
@@ -2396,46 +2504,6 @@ function roadClassFor(defId: string): RoadClass {
   if (defId.includes('main') || defId.includes('haupt')) return 'main';
   if (defId.includes('industrial') || defId.includes('zufahrt')) return 'industrial';
   return 'residential';
-}
-
-/** Rotate a 4-bit neighbour mask one step clockwise (N→E→S→W). One step equals a
- *  +90° yaw of the tile piece (see fitObject/three.js Y-rotation). */
-function rotMask(m: number): number {
-  return ((m << 1) | (m >> 3)) & 15;
-}
-/** Steps (0..3) to rotate `canonical` onto `actual`; ×90° gives the yaw. */
-function rotSteps(canonical: number, actual: number): number {
-  let m = canonical;
-  for (let k = 0; k < 4; k++) {
-    if (m === actual) return k;
-    m = rotMask(m);
-  }
-  return 0;
-}
-
-type RoadSegment = 'straight' | 'curve' | 't_intersection' | 'cross_intersection' | 'end';
-
-/** Neighbour mask → segment shape + yaw (canonical: straight=N-S, curve=N+E,
- *  T=absent-W, end=arm-to-N). Matches the road model names in the manifest. */
-function roadSegment(mask: number): { base: RoadSegment; rotationY: number } {
-  const bits = (mask & 1) + ((mask >> 1) & 1) + ((mask >> 2) & 1) + ((mask >> 3) & 1);
-  const q = Math.PI / 2;
-  if (bits >= 4) return { base: 'cross_intersection', rotationY: 0 };
-  if (bits === 3) return { base: 't_intersection', rotationY: rotSteps(7, mask) * q };
-  if (bits === 2) {
-    if (mask === 5 || mask === 10) return { base: 'straight', rotationY: rotSteps(5, mask) * q };
-    return { base: 'curve', rotationY: rotSteps(3, mask) * q };
-  }
-  if (bits === 1) return { base: 'end', rotationY: rotSteps(1, mask) * q };
-  return { base: 'end', rotationY: 0 };
-}
-
-/** Candidate road model names for a segment + class: class-specific first
- *  (`road_main_straight`), then the generic (`road_straight`). */
-function roadSegmentNames(base: RoadSegment, cls: RoadClass): string[] {
-  const generic = `road_${base}`;
-  if (cls === 'residential') return [generic];
-  return [`road_${cls}_${base}`, generic];
 }
 
 type MarkerKind = 'activity' | 'construction' | 'problem' | 'upgrade';

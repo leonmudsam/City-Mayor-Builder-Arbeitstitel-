@@ -4,14 +4,15 @@
 // tests/roadTextures.test.ts), so the doc can never drift from what's planned.
 //
 // Unlike the terrain splat textures (continuous height/slope-blended weights),
-// roads are ORIENTED per tile — the existing neighbour-mask → shape+rotation
-// logic in ThreeMapRenderer's `roadSegment()` already decides straight/curve/
-// T/cross/end; these textures are applied to that same geometry instead of a
-// flat colour. Consumed by `buildRoadTile`/`buildBridgeDeck` in
-// ThreeMapRenderer.ts; missing files fall back to the existing flat colours
-// (never breaks, same drop-in promise as everywhere else). The soft edge
-// blend into grass reuses the already-documented `terrain_road_edge` texture
-// (docs/TERRAIN_TEXTURES.md, category "Wege") — deliberately not duplicated here.
+// roads are ORIENTED per tile — `buildRoadTile` already builds a core + one
+// box arm per set neighbour-mask bit (straight/curve/T/cross/end falls out of
+// WHICH arms exist, no separate shape lookup); these textures are applied to
+// that same geometry instead of a flat colour. Consumed by `buildRoadTile`/
+// `buildBridgeDeck` in ThreeMapRenderer.ts; missing files fall back to the
+// existing flat colours (never breaks, same drop-in promise as everywhere
+// else). The soft edge blend into grass reuses the already-documented
+// `terrain_road_edge` texture (docs/TERRAIN_TEXTURES.md, category "Wege") —
+// deliberately not duplicated here.
 
 // ---- categories & shared per-category technical defaults --------------------
 
@@ -109,9 +110,9 @@ export const ROAD_TEXTURES: RoadTextureEntry[] = [
     category: 'marking',
     style: 'painterly, radial',
     palette: 'Asphalt-Blaugrau mit hellem Ring',
-    useCase: 'Kreisverkehr-Deckel bei 4-Wege-Kreuzungen (cross_intersection)',
+    useCase: 'Kreisverkehr-Deckel bei 4-Wege-Kreuzungen (alle 4 Nachbarbits gesetzt)',
     materialProps: 'matt, radiales Muster',
-    usage: 'ersetzt den quadratischen Kern durch eine texturierte CylinderGeometry-Scheibe bei roadSegment(mask).base === "cross_intersection"',
+    usage: 'ersetzt den quadratischen Kern durch eine texturierte CylinderGeometry-Scheibe bei mask === 15',
     priority: 'Empfohlen',
     alpha: false,
     motif: 'circular roundabout junction surface seen from directly above, asphalt with a pale outer ring marking, radial subtle texture, centred composition',
@@ -191,9 +192,9 @@ export function renderRoadTexturesDoc(): string {
     `getriebene Geometrie aus \`buildRoadTile\`/\`buildBridgeDeck\` (Kern + Arme + Randstreifen, ` +
     `flach nahe \`y≈0\` ins Höhenfeld integriert) bestehen — sie bekommt nur echte Texturen statt ` +
     `Flächenfarben, sobald eine Datei hier abgelegt wird:\n\n` +
-    `- **Form/Rotation** kommt weiterhin aus \`roadSegment(mask)\` (gerade/Kurve/T/Kreuz/Ende) — ` +
-    `unverändert seit dem alten 3D-Modell-System.\n` +
-    `- **Kreisverkehr** ist keine neue Instanz, sondern dieselbe \`cross_intersection\`-Form mit ` +
+    `- **Form** ergibt sich direkt aus den gesetzten Nachbar-Mask-Bits (ein Box-Arm pro Bit in ` +
+    `\`buildRoadTile\`) — kein separates Shape-Lookup mehr nötig.\n` +
+    `- **Kreisverkehr** ist keine neue Instanz, sondern dieselbe 4-Wege-Form (\`mask === 15\`) mit ` +
     `einer runden statt eckigen Kern-Geometrie + \`road_roundabout\`.\n` +
     `- **Bergstraße/Pass** ist eine reine Textur-Umschaltung, sobald die Kachel auf ` +
     `\`terrainAt==="mountain"\` liegt — kein eigener Straßentyp.\n` +
@@ -211,5 +212,51 @@ export function renderRoadTexturesDoc(): string {
     `kein weiterer Code nötig.\n\n` +
     `${categorySections}\n` +
     `${conceptSection}`
+  );
+}
+
+/** Ein Eintrag für die genaue Speicher-Anweisung je Textur in der Ordner-lokalen
+ *  PROMPTS.md (Zielpfad + Dateiname + Format + Kachelverhalten, direkt neben den
+ *  Bildern statt nur in docs/). */
+function fileInstructions(e: RoadTextureEntry): string {
+  const d = CATEGORY_DEFAULTS[e.category];
+  const format = e.alpha ? 'PNG mit Alphakanal (transparente Lücken zwischen den Strichen)' : 'PNG (kein Alphakanal nötig)';
+  return (
+    `### \`${e.name}.png\`\n\n` +
+    `1. **Prompt eingeben** (unverändert kopieren):\n\n` +
+    `   \`\`\`text\n   ${TEXTURE_STYLE_PREFIX} ${e.motif}\n   \`\`\`\n\n` +
+    `2. **Format/Auflösung:** ${format}, ${d.resolution}, quadratisch, seamless/nahtlos kachelbar ` +
+    `an allen vier Rändern (kein sichtbarer Bruch bei Wiederholung).\n` +
+    `3. **Genau hier speichern:** \`src/assets/${d.folder}${e.name}.png\`\n` +
+    `4. **Was passiert dann:** Wird automatisch erkannt (Datei-Watcher/Reload reicht) — ` +
+    `kein Code, kein Neustart nötig. Solange die Datei fehlt, bleibt die aktuelle Flächenfarbe aktiv.\n\n` +
+    `*Kontext:* ${e.useCase}. ${e.usage}. Priorität: **${e.priority}**.\n`
+  );
+}
+
+/** Ordner-lokale PROMPTS.md (`src/assets/textures/roads/PROMPTS.md`), direkt
+ *  neben den Bildern — dieselben Daten wie `renderRoadTexturesDoc()`, aber als
+ *  Schritt-für-Schritt-Anweisung je Textur statt als Referenz-Tabelle, damit man
+ *  beim Ablegen der generierten Bilder nicht zwischen `docs/` und dem
+ *  Textur-Ordner wechseln muss. */
+export function renderRoadPromptsFile(): string {
+  const byCategory = (cat: RoadTextureCategory) => ROAD_TEXTURES.filter((t) => t.category === cat);
+  const sections = CATEGORY_ORDER.map((cat) => {
+    const entries = byCategory(cat);
+    if (entries.length === 0) return '';
+    const d = CATEGORY_DEFAULTS[cat];
+    return (
+      `## ${CATEGORY_TITLES[cat]} — \`src/assets/${d.folder}\`\n\n` +
+      entries.map(fileInstructions).join('\n')
+    );
+  }).join('\n');
+
+  return (
+    `# Straßen-Texturen — Anleitung je Datei (v0.44)\n\n` +
+    `${GEN_BANNER}\n\n` +
+    `Genaue Anweisungen zum Erstellen und Ablegen jeder der ${ROAD_TEXTURES.length} Straßen-/` +
+    `Brücken-Texturen (§ Straßen als Textur). Für das Gesamtkonzept (Splatmap-artige ` +
+    `Verwendung, Kreisverkehr/Bergstraße/Steg-Logik) siehe \`docs/ROAD_TEXTURES.md\`.\n\n` +
+    `${sections}`
   );
 }

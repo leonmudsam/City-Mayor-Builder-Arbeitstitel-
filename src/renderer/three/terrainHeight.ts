@@ -77,28 +77,89 @@ function ridgedFbm(x: number, y: number): number {
   );
 }
 
-/** Land right next to a river/lake dips a little toward the water instead of
- *  ending in a flat table, so the shoreline reads as a carved bank (§ World
- *  Graphics V2 — Gebirgsflüsse: "sie graben sich in das Gelände ein"). */
+/** Deepest a river/lake canyon carves into adjacent land (§ MVP3 Phase 1 —
+ *  Organisches Terrain-Mesh). Kept well short of the -0.32 first tried in
+ *  design so the shoreline can look a little sandy/muddy (realistic) without
+ *  the splat shader's sand band (`smoothstep(-0.05,0.12,h)`) misfiring far
+ *  inland — see `docs/PATCHNOTES.md`. */
+const RIVER_CANYON_DEPTH = 0.22;
+
+/** Land near a river/lake dips toward the water in a V-shaped canyon profile
+ *  (radius 2 falloff) instead of ending in a flat table or a single flat
+ *  step, so the shoreline reads as a real carved valley (§ World Graphics V2
+ *  — Gebirgsflüsse: "sie graben sich in das Gelände ein"). */
 function riverBankDip(tx: number, ty: number, type: TerrainType): number {
   if (type === 'water' || type === 'river' || type === 'mountain') return 0;
+  let best = Infinity;
+  for (let dy = -2; dy <= 2; dy++) {
+    for (let dx = -2; dx <= 2; dx++) {
+      if (dx === 0 && dy === 0) continue;
+      const dist = Math.hypot(dx, dy);
+      if (dist > 2) continue;
+      const nt = terrainAt(tx + dx, ty + dy);
+      if ((nt === 'water' || nt === 'river') && dist < best) best = dist;
+    }
+  }
+  if (best === Infinity) return 0;
+  const t = clamp01((best - 1) / 1);
+  return -RIVER_CANYON_DEPTH * Math.pow(1 - smooth(t), 1.3);
+}
+
+function clamp01(t: number): number {
+  return t < 0 ? 0 : t > 1 ? 1 : t;
+}
+
+/** Snaps a [0,1] height into flat shelves with steep risers between them —
+ *  reads as rock strata/plateaus instead of one smoothly rolling ridge
+ *  (§ MVP3 Phase 1). `steps` = shelf count, `sharpness` = how much of each
+ *  step is flat plateau vs. riser (higher = flatter shelves, narrower risers).
+ *  Always stays in [0,1]. */
+function terrace(h: number, steps: number, sharpness: number): number {
+  const n = h * steps;
+  const fl = Math.floor(n);
+  const fr = n - fl;
+  const rw = 0.5 / sharpness;
+  const t = clamp01((fr - (0.5 - rw)) / (2 * rw));
+  return (fl + smooth(t)) / steps;
+}
+
+/** Only for `sand` tiles touching water/river: a fine, low-amplitude ripple
+ *  so beaches read as dunes/wet sand instead of a dead-flat table. Amplitude
+ *  stays low enough to remain buildable-safe next to sand's own 0.05. */
+function coastalDune(tx: number, ty: number, type: TerrainType): number {
+  if (type !== 'sand') return 0;
   for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]] as const) {
     const nt = terrainAt(tx + dx, ty + dy);
-    if (nt === 'water' || nt === 'river') return -0.06;
+    if (nt === 'water' || nt === 'river') return fbm(tx * 0.6 + 50, ty * 0.6 + 90) * 0.04;
   }
   return 0;
 }
 
-/** Target height for a single tile (its centre), from type + coherent hills. */
+const tileTargetCache = new Map<string, number>();
+
+/** Target height for a single tile (its centre), from type + coherent hills.
+ *  Pure/deterministic — memoised because mesh subdivision now re-queries the
+ *  same tile corners several times per cell (§ MVP3 Phase 1). */
 function tileTarget(tx: number, ty: number): number {
+  const key = `${tx},${ty}`;
+  const cached = tileTargetCache.get(key);
+  if (cached !== undefined) return cached;
+
   const type = terrainAt(tx, ty);
   const [base, amp] = BASE[type];
-  if (amp === 0) return base;
-  if (type === 'mountain') {
-    return base + ridgedFbm(tx * 0.085 + 21, ty * 0.085 + 13) * amp;
+  let result: number;
+  if (amp === 0) {
+    result = base;
+  } else if (type === 'mountain') {
+    const raw = ridgedFbm(tx * 0.085 + 21, ty * 0.085 + 13);
+    const terraced = raw * 0.35 + terrace(raw, 5, 3) * 0.65;
+    result = base + terraced * amp;
+  } else {
+    const hills = fbm(tx * 0.09 + 3.3, ty * 0.09 + 7.1); // large rolling hills
+    result = base + hills * amp + riverBankDip(tx, ty, type) + coastalDune(tx, ty, type);
   }
-  const hills = fbm(tx * 0.09 + 3.3, ty * 0.09 + 7.1); // large rolling hills
-  return base + hills * amp + riverBankDip(tx, ty, type);
+  tileTargetCache.set(key, result);
+  return result;
 }
 
 /**

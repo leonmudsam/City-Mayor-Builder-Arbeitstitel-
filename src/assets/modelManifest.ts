@@ -50,16 +50,6 @@ export const VAN_MODELS = ['service_van', 'car_van', 'van', 'delivery_van', 'tru
 /** Chimney smoke effect (models/effects/). */
 export const SMOKE_EFFECT_MODELS = ['smoke_chimney', 'smoke', 'steam', 'smoke_puff'] as const;
 
-/** Bridge over water/river (models/bridges/). */
-export const BRIDGE_MODELS = [
-  'bridge_medium_road',
-  'bridge_small_stone',
-  'bridge_small_wood',
-  'bridge_large_road',
-  'bridge_road',
-  'bridge',
-] as const;
-
 /** Floating status marker per kind (models/markers/). */
 export const MARKER_MODELS = {
   activity: ['marker_task', 'marker_activity', 'marker_target'],
@@ -159,6 +149,11 @@ export interface ModelFolderDoc {
   loader: string;
   intro: string;
   rows: ModelDocRow[];
+  /** Set when this folder no longer accepts `.glb` drop-ins at all (moved to a
+   *  texture-based system, § Straßen als Textur) — renderFolderReadme prints
+   *  this note instead of the loader/table template, which would otherwise
+   *  wrongly imply a model could still be dropped in here. */
+  deprecated?: string;
 }
 
 /** Non-building folders, documented straight from the arrays above. The buildings
@@ -189,25 +184,25 @@ export const MODEL_FOLDER_DOCS: ModelFolderDoc[] = [
   {
     key: 'roads',
     title: 'Straßen',
-    loader: 'roadModel',
-    intro:
-      'Straßensegmente werden nach 4-Bit-Nachbarmaske gewählt und 90°-weise gedreht. ' +
-      'Kanonik: gerade = N–S, Kurve = N+E, T = offen nach W, Ende = Arm nach N. ' +
-      'Klassenvarianten (`road_main_*`) werden vor dem generischen Namen bevorzugt.',
-    rows: [
-      { purpose: 'Gerade', names: ['road_main_straight', 'road_straight'], note: 'kanonisch N–S' },
-      { purpose: 'Kurve', names: ['road_main_curve', 'road_curve'], note: 'kanonisch N+E' },
-      { purpose: 'T-Kreuzung', names: ['road_main_t_intersection', 'road_t_intersection'] },
-      { purpose: 'Kreuzung', names: ['road_main_cross_intersection', 'road_cross_intersection'] },
-      { purpose: 'Ende/Stich', names: ['road_main_end', 'road_end'] },
-    ],
+    loader: '',
+    intro: '',
+    rows: [],
+    deprecated:
+      '**Straßen laden seit v0.44 nie mehr ein `.glb`** (§ Straßen als Textur). Die Mask-getriebene ' +
+      'Straßengeometrie (gerade/Kurve/T/Kreuzung/Ende, Kreisverkehr, Bergstraße, Steg/Brücke) ist jetzt ' +
+      'texturbasiert — siehe `docs/ROAD_TEXTURES.md` und `src/assets/roadTextureManifest.ts` für die ' +
+      'aktuelle Drop-in-Spezifikation (`src/assets/textures/roads/…`).',
   },
   {
     key: 'bridges',
     title: 'Brücken',
-    loader: 'bridgeModel',
-    intro: 'Wird verwendet, wenn eine Straße auf Wasser/Fluss liegt. Entlang der Straßenachse gedreht.',
-    rows: [{ purpose: 'Brücke über Wasser', names: BRIDGE_MODELS }],
+    loader: '',
+    intro: '',
+    rows: [],
+    deprecated:
+      '**Brücken laden seit v0.44 nie mehr ein `.glb`** (§ Straßen als Textur). Eine Straße über Wasser ' +
+      'wird jetzt als texturierter Steg (schmale Spannweite) oder Brücke (breite Spannweite) gerendert — ' +
+      'siehe `docs/ROAD_TEXTURES.md` und `src/assets/roadTextureManifest.ts`.',
   },
   {
     key: 'props',
@@ -287,6 +282,14 @@ const GEN_BANNER =
 
 /** Markdown for one non-building folder README. */
 export function renderFolderReadme(doc: ModelFolderDoc): string {
+  if (doc.deprecated) {
+    return (
+      `# 3D-Modelle — ${doc.title}\n\n` +
+      `${GEN_BANNER}\n\n` +
+      `Ordner: \`src/assets/models/${doc.key}/\` (historisch — kein aktiver Drop-in-Ziel mehr)\n\n` +
+      `${doc.deprecated}\n`
+    );
+  }
   return (
     `# 3D-Modelle — ${doc.title}\n\n` +
     `${GEN_BANNER}\n\n` +
@@ -585,47 +588,21 @@ export const FOLDER_PROMPTS: FolderPrompts[] = [
   {
     key: 'roads',
     title: 'Straßen',
-    intro: 'Flache, kachelbare Segmente; der Renderer wählt & dreht sie nach Nachbar-Maske. Kanonik: gerade = N–S, Kurve = N+E.',
-    groups: [
-      {
-        title: 'Aktiv genutzt (Wohnstraße)',
-        entries: [
-          { name: 'road_straight', footprint: '1×1', sizeClass: 'terrain_tile', frontFacing: 'n/a (Boden-Segment)', instancing: true, status: 'live', motif: 'a straight two-lane asphalt road segment running north–south, with kerbs; flat and tileable' },
-          { name: 'road_curve', footprint: '1×1', sizeClass: 'terrain_tile', frontFacing: 'n/a', instancing: true, status: 'live', motif: 'a 90° road curve joining the north and east edges, asphalt with kerbs, flat' },
-          { name: 'road_t_intersection', footprint: '1×1', sizeClass: 'terrain_tile', frontFacing: 'n/a', instancing: true, status: 'live', motif: 'a T-junction road segment with three arms (north, east, south), open to the west, asphalt with kerbs' },
-          { name: 'road_cross_intersection', footprint: '1×1', sizeClass: 'terrain_tile', frontFacing: 'n/a', instancing: true, status: 'live', motif: 'a four-way crossroads road segment, asphalt with kerbs and lane markings' },
-          { name: 'road_end', footprint: '1×1', sizeClass: 'terrain_tile', frontFacing: 'n/a', instancing: true, status: 'live', motif: 'a dead-end road cap with a single arm to the north, asphalt with kerbs' },
-        ],
-      },
-      {
-        title: 'Geplant — Hauptstraße, Gehwege, Gelände-Anpassung',
-        note: 'Klassenvarianten `road_main_*` werden vom Renderer vor dem generischen Namen bevorzugt. `road_slope`/`road_bridge_entry` sorgen dafür, dass Straßen dem Gelände folgen statt zu schweben (World-Graphics-V2 §5).',
-        entries: [
-          { name: 'road_main_straight', footprint: '1×1', sizeClass: 'terrain_tile', instancing: true, status: 'planned', motif: 'a wider main-road straight segment with a centre line and sidewalks, running north–south, flat and tileable' },
-          { name: 'road_main_cross_intersection', footprint: '1×1', sizeClass: 'terrain_tile', instancing: true, status: 'planned', motif: 'a wide main-road four-way crossroads with markings and sidewalks' },
-          { name: 'sidewalk_straight', footprint: '1×1', sizeClass: 'terrain_tile', instancing: true, status: 'planned', motif: 'a straight paved sidewalk segment with a kerb, flat and tileable' },
-          { name: 'road_slope', footprint: '1×1', sizeClass: 'terrain_tile', biome: 'Gebirge, Hügelland', placeOn: 'Höhenstufe zwischen zwei Terrassen', instancing: true, status: 'planned', motif: 'a road ramp segment rising one height step, asphalt with kerbs, blends smoothly into flat road tiles at both ends' },
-          { name: 'road_bridge_entry', footprint: '1×1', sizeClass: 'terrain_tile', biome: 'Fluss-/Schluchtrand', placeOn: 'Übergang Straße → Brückendeck', instancing: true, status: 'planned', motif: 'a short road segment transitioning from ground level onto a raised bridge deck, with a low kerb ramp' },
-        ],
-      },
-    ],
+    intro:
+      '**Straßen laden seit v0.44 nie mehr ein `.glb`** (§ Straßen als Textur). Die Mask-getriebene ' +
+      'Straßengeometrie (gerade/Kurve/T/Kreuzung/Ende, Kreisverkehr, Bergstraße, Steg/Brücke) ist jetzt ' +
+      'texturbasiert — siehe `docs/ROAD_TEXTURES.md` und `src/assets/roadTextureManifest.ts` für die ' +
+      'aktuelle Drop-in-Spezifikation (`src/assets/textures/roads/…`).',
+    groups: [],
   },
   {
     key: 'bridges',
     title: 'Brücken',
-    intro: 'Wird verwendet, wenn eine Straße auf Wasser liegt; entlang der Straßenachse ausgerichtet.',
-    groups: [
-      {
-        title: 'Brückenvarianten',
-        entries: [
-          { name: 'bridge_medium_road', footprint: 'modular', sizeClass: 'bridge', status: 'live', motif: 'a stylized stone road bridge with arches, sidewalks and railings, spanning water along its axis' },
-          { name: 'bridge_small_stone', footprint: '1×1', sizeClass: 'bridge', status: 'planned', motif: 'a small single-arch stone footbridge with low railings, spanning a narrow stream' },
-          { name: 'bridge_small_wood', footprint: '1×1', sizeClass: 'bridge', status: 'planned', motif: 'a small wooden plank bridge with posts and rope/wood railings, spanning a stream' },
-          { name: 'bridge_large_road', footprint: 'modular', sizeClass: 'bridge', status: 'planned', motif: 'a large multi-span road bridge with piers, a wide deck, sidewalks and railings' },
-          { name: 'bridge_rail_future', footprint: 'modular', sizeClass: 'bridge', status: 'planned', motif: 'a stylized railway bridge with steel trusses, reserved for a future rail-transport feature' },
-        ],
-      },
-    ],
+    intro:
+      '**Brücken laden seit v0.44 nie mehr ein `.glb`** (§ Straßen als Textur). Eine Straße über Wasser ' +
+      'wird jetzt als texturierter Steg (schmale Spannweite) oder Brücke (breite Spannweite) gerendert — ' +
+      'siehe `docs/ROAD_TEXTURES.md` und `src/assets/roadTextureManifest.ts`.',
+    groups: [],
   },
   {
     key: 'props',

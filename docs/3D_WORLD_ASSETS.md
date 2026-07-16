@@ -129,6 +129,11 @@ für den Key. → Dateinamen projektweit **eindeutig** halten.
 `props/infrastructure/` ist neu (v0.40): Stützmauern/Böschungen, die Straßen bei
 Höhenunterschieden am Schweben hindern (§9).
 
+**Straßen-/Brücken-Texturen (v0.44, Straßen als Textur):** `roads/`/`bridges/`
+oben nehmen seit v0.44 **kein** `.glb` mehr an — die Texturen liegen stattdessen
+unter `src/assets/textures/roads/{surface,markings,crossings}/`, vollständige
+Spezifikation + Prompts: **`docs/ROAD_TEXTURES.md`** (§9).
+
 **Terrain-Materialtexturen (v0.42, Terrain System V2):** separat von den `.glb`-
 Ordnern oben liegen die Splatmap-Bodentexturen unter
 `src/assets/textures/terrain/{grass,earth,stone,sand,snow,water,field,path}/` —
@@ -193,8 +198,8 @@ diese durch `.glb` zu ersetzen (Folge-Slice, kein Migrationsbedarf).
 | Gebäude | prozeduraler Block (Wände + Dach, Kategorie-Farbe, Stufenhöhe) |
 | Terrain | farbige, leicht reliefierte Kachel (Instancing) auf dem Höhenfeld |
 | Wasser | blaue, tiefergelegte Kachel |
-| Straße | prozedurales Auto-Tiling (Fahrbahn + Bordstein + Markierung) |
-| Brücke | Straßensegment über der Wasserkachel |
+| Straße | texturierte Fahrbahn/Randstreifen, nie ein `.glb` (§ Straßen als Textur, `docs/ROAD_TEXTURES.md`) |
+| Brücke/Steg | texturiertes Deck über der Wasserkachel, nie ein `.glb` |
 | Prop (Baum/Busch/Fels) | Low-Poly-Instanz (Kegel/Zylinder) |
 | Fahrzeug | geformtes Auto/Van-Mesh |
 | Marker | farbcodiertes Billboard (Canvas-Textur) |
@@ -230,8 +235,6 @@ Live-/Geplant-Status) in genau einer Datei erfasst:
 |---|---|
 | `buildings/` | `src/assets/models/buildings/PROMPTS.md` (+ `README.md` für die reine Namensliste) |
 | `terrain/` (Kacheln, Gebirge, Flüsse, Küste, Hero-Weltformen) | `src/assets/models/terrain/PROMPTS.md` |
-| `roads/` | `src/assets/models/roads/PROMPTS.md` |
-| `bridges/` | `src/assets/models/bridges/PROMPTS.md` |
 | `props/` (Natur, Stadt, Hafen, Farm, Infrastruktur) | `src/assets/models/props/PROMPTS.md` |
 | `vehicles/` | `src/assets/models/vehicles/PROMPTS.md` |
 | `markers/` (inkl. Sektor-Nebel & Bürgerhinweise) | `src/assets/models/markers/PROMPTS.md` |
@@ -248,6 +251,11 @@ gebaut) hinzufügen: Eintrag in `modelManifest.ts` ergänzen, dann
 Terrain) sind separat dokumentiert: **`docs/TERRAIN_TEXTURES.md`**, generiert aus
 `src/assets/terrainTextureManifest.ts` (`tests/terrainTextures.test.ts` hält sie
 synchron) — siehe §3.
+
+**Straßen-/Brücken-Texturen** (§ Straßen als Textur, v0.44): `roads/`/`bridges/`
+laden seit v0.44 kein `.glb` mehr, siehe stattdessen **`docs/ROAD_TEXTURES.md`**,
+generiert aus `src/assets/roadTextureManifest.ts`
+(`tests/roadTextures.test.ts` hält sie synchron) — siehe §9.
 
 **Was dort für jedes Modell steht:**
 - **Allgemein:** Dateiname, Zielordner, Kategorie, Motiv-Prompt, Live-/Geplant-Status.
@@ -290,33 +298,49 @@ vollständig verstecken:
   Silhouetten, gelegentliche Bürgerhinweise wecken Neugier, ohne Informationen
   preiszugeben (Details/Modelle: §11).
 
-> **Umsetzungsstand (v0.40):** Die organische Höhenfeld-Basis (Hügel, geneigtes
-> Gebirge, abgesenktes Wasser) ist seit v0.39 live (`src/renderer/three/
-> terrainHeight.ts`). Schärfere Gebirgsgeometrie, echte Flussschluchten,
-> Küstenlinien und Biom-Übergänge sind als Modelle in §7 vollständig
-> spezifiziert, aber **noch nicht** als eigene Terrain-Features im Renderer
-> platziert — das ist die nächste Code-Phase, nicht Teil dieser Doku-Revision.
+> **Umsetzungsstand (v0.46 — MVP3 Phase 1, "Organisches Terrain-Mesh"):** Die
+> organische Höhenfeld-Basis (Hügel, geneigtes Gebirge, abgesenktes Wasser) ist
+> seit v0.39 live, seit v0.46 mit deutlich mehr Relief
+> (`src/renderer/three/terrainHeight.ts`): Gebirge sind terrassiert (5 Absätze
+> mit steilen Rissern statt gleichmäßig glatter Rücken), Flüsse/Seen graben ein
+> echtes V-förmiges Tal mit Radius-2-Falloff statt eines flachen Einzel-Dips,
+> Sandküsten neben Wasser bekommen eine feine Dünen-Welligkeit. Das Boden-Mesh
+> (`ThreeMapRenderer.buildGroundMesh`) ist zusätzlich `GROUND_SUBDIV`-fach
+> unterteilt (Default 2×), damit diese Formen sichtbar glatt statt facettiert
+> wirken — weiterhin ein Draw-Call. Als **Modelle statt reiner Geometrie**
+> bleiben aus §7 offen: Gebirgs-Module (`mountain_base/peak/ridge/…`),
+> Wald-Patches/Vegetations-Cluster, Küsten-/Hafen-Dekoration — spätere MVP3-
+> Phasen. Ebenfalls bewusst **nicht** Teil dieser Phase: lokale
+> Terrain-Einebnung unter Gebäuden (Gebäude sitzen weiter an einem
+> Höhen-Punkt, kein Footprint-Carving).
 
 ---
 
-## 9. Straßen folgen dem Gelände (Konzept, noch nicht implementiert)
+## 9. Straßen als Textur (v0.44, implementiert)
 
-Straßen dürfen niemals schweben. Geplantes Verhalten:
+Straßen/Brücken sind seit v0.44 **komplett texturbasiert** statt `.glb`-Modelle —
+siehe `docs/ROAD_TEXTURES.md`/`src/assets/roadTextureManifest.ts` für die
+Textur-Spezifikation und `ThreeMapRenderer.buildRoadTile`/`buildBridgeDeck` für
+den Code. Straßen dürfen niemals schweben; **aktueller Stand:**
 
-- Bei Steigungen entstehen Böschungen (`embankment_slope`) oder Stützmauern
-  (`retaining_wall`, `props/infrastructure/`) statt einer schwebenden Kante.
-- Kleine Höhenunterschiede: `road_slope`-Segmente rampen zwischen zwei
-  Terrassen.
-- Große Höhenunterschiede: Straße in Serpentinen (Kombination aus
-  `road_curve`/`road_slope`), Brücken nur wenn sinnvoll (`road_bridge_entry`
-  führt vom Boden aufs Brückendeck), Gebirgspässe (`mountain_valley_pass`),
-  Tunnel (`mountain_tunnel_entrance`).
-- Alle genannten Modelle sind bereits mit Footprint/Platzierung in
-  `src/assets/models/roads/PROMPTS.md` bzw. `props/PROMPTS.md` spezifiziert.
-- **Aktueller Code-Stand:** Straßen werden heute per Nachbarmaske ausgewählt und
-  flach auf `terrainHeightAt()` gesetzt — Rampen/Stützstrukturen/Serpentinen sind
-  noch nicht implementiert. Das ist eine `ThreeMapRenderer.ts`-Änderung (Road-
-  Placement-Pass), keine reine Asset-Frage, und folgt in einer eigenen Code-Phase.
+- Die Mask-getriebene Kern+Arme-Geometrie (gerade/Kurve/T/Kreuz/Ende) sitzt flach
+  nahe `y≈0` auf `terrainHeightAt()`, gekippt auf den lokalen Höhengradienten +
+  kurzer Randschürze (`fitRoadToTerrain`) — kein Rampen-/Terrassen-Modell nötig,
+  da es keine erhöhte Platte mehr gibt, die zu überbrücken wäre.
+- **Kreisverkehr:** eine 4-Wege-Kreuzung (`mask===15`) bekommt automatisch eine
+  runde statt eckige Kern-Geometrie (`road_roundabout`) — keine neue Straßenart.
+- **Bergstraße/Pass:** liegt die Kachel auf Gebirgsterrain, wird `road_mountain`
+  statt der Asphalt-Textur verwendet — ein Pass ist visuell einfach eine
+  Bergstraße am Sattelpunkt, keine eigene Erkennung nötig.
+- **Steg vs. Brücke:** die zusammenhängende Wasser-Spannweite entscheidet
+  automatisch zwischen einem schmalen, pfeilerlosen Holzsteg (1 Kachel) und
+  einer breiteren Brücke mit Geländer/Pfeilern (mehrere Kacheln).
+- **Nicht implementiert** (bewusst zurückgestellt, da es echte zusätzliche
+  Geometrie bräuchte statt nur Textur): Stützmauern/Böschungen als eigene
+  Formen bei sehr großen Höhensprüngen, echte Serpentinen, Tunnel. Die
+  Neigungs-Kappung (`MAX_TILT ≈ 20°`) verhindert dafür, dass eine Straße auf
+  steilem Gelände sichtbar kippt oder schwebt — sie liest nur flacher, statt
+  eine Kehre zu bilden.
 
 ---
 
