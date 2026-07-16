@@ -1,0 +1,122 @@
+[
+  {
+    "file": "warehouse.glb",
+    "footprint": "2x2",
+    "size_mib": 0.394,
+    "triangles": 2988,
+    "dimensions_xyz": [
+      1.84,
+      1.3181,
+      1.8366
+    ],
+    "min_y": 0.0
+  },
+  {
+    "file": "depot.glb",
+    "footprint": "3x3",
+    "size_mib": 0.34,
+    "triangles": 2970,
+    "dimensions_xyz": [
+      2.689,
+      1.434,
+      2.76
+    ],
+    "min_y": 0.0
+  },
+  {
+    "file": "farm.glb",
+    "footprint": "3x3",
+    "size_mib": 0.345,
+    "triangles": 2949,
+    "dimensions_xyz": [
+      2.7294,
+      1.875,
+      2.76
+    ],
+    "min_y": 0.0
+  },
+  {
+    "file": "town_hall.glb",
+    "footprint": "3x3",
+    "size_mib": 0.408,
+    "triangles": 2969,
+    "dimensions_xyz": [
+      2.515,
+      2.961,
+      2.76
+    ],
+    "min_y": 0.0
+  },
+  {
+    "file": "mayor_house.glb",
+    "footprint": "2x2",
+    "size_mib": 0.386,
+    "triangles": 2983,
+    "dimensions_xyz": [
+      1.84,
+      1.6532,
+      1.8172
+    ],
+    "min_y": 0.0
+  },
+  {
+    "file": "quarry.glb",
+    "footprint": "3x3",
+    "size_mib": 0.343,
+    "triangles": 2978,
+    "dimensions_xyz": [
+      2.76,
+      1.92,
+      2.76
+    ],
+    "min_y": 0.0
+  },
+  {
+    "file": "sawmill.glb",
+    "footprint": "2x2",
+    "size_mib": 0.348,
+    "triangles": 2983,
+    "dimensions_xyz": [
+      1.8365,
+      1.6415,
+      1.84
+    ],
+    "min_y": 0.0
+  },
+  {
+    "file": "house_row.glb",
+    "footprint": "2x2",
+    "size_mib": 0.396,
+    "triangles": 2981,
+    "dimensions_xyz": [
+      1.2501,
+      1.142,
+      1.84
+    ],
+    "min_y": 0.0
+  },
+  {
+    "file": "waterworks.glb",
+    "footprint": "3x2",
+    "size_mib": 0.396,
+    "triangles": 2982,
+    "dimensions_xyz": [
+      2.1839,
+      2.1511,
+      1.84
+    ],
+    "min_y": 0.0
+  },
+  {
+    "file": "residential_tower.glb",
+    "footprint": "3x3",
+    "size_mib": 0.453,
+    "triangles": 2924,
+    "dimensions_xyz": [
+      2.76,
+      4.0755,
+      2.7066
+    ],
+    "min_y": 0.0
+  }
+]
