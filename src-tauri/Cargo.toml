@@ -1,0 +1,25 @@
+# Native desktop wrapper (v0.35 platform pivot). This Rust crate only opens a
+# window and loads the Vite/React/three.js frontend built into ../dist — all game
+# logic stays in TypeScript so the SAME simulation runs on web and desktop. Keep
+# this crate thin; add Rust only for native concerns (files, menus, updater).
+[package]
+name = "city-mayor-builder"
+version = "0.1.0"
+description = "City Mayor Builder — natives Desktop-Build"
+authors = ["leonmudsam"]
+edition = "2021"
+rust-version = "1.77.2"
+
+[lib]
+# The lib is what mobile (Tauri 2 Android/iOS) links against later; the desktop
+# binary in src/main.rs calls into it. `_lib` suffix avoids a Windows name clash.
+name = "city_mayor_builder_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = [] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"

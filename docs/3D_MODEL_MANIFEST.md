@@ -24,11 +24,13 @@ aktuell akzeptiert, steht in **§0**.
 Der 3D-Renderer liest diese Kategorien direkt aus der Drop-in-Pipeline. **Erster
 passender Name gewinnt** (Präzis vor Alias). Alles ohne Modell bleibt prozedural.
 
-> **Pro Ordner gibt es zusätzlich eine auto-generierte `README.md`** direkt neben
-> den Modellen (`src/assets/models/<ordner>/README.md`) mit genau den Namen für
-> diesen Ordner. Quelle ist `src/assets/modelManifest.ts` (+ `buildings.config.ts`);
-> ein Test (`tests/modelReadmes.test.ts`) hält sie synchron. Neue Namen dort
-> ergänzen → `WRITE_MODEL_DOCS=1 npx vitest run tests/modelReadmes.test.ts`.
+> **Pro Ordner gibt es zusätzlich zwei auto-generierte Dateien** direkt neben den
+> Modellen: **`README.md`** (die Namen für diesen Ordner) und **`PROMPTS.md`**
+> (copy-paste-fertige Text-zu-3D-Prompts je Modell — aktuelle *und* geplante, bei
+> Gebäuden ein Prompt pro Config-Gebäude). Quelle ist `src/assets/modelManifest.ts`
+> (+ `buildings.config.ts`); ein Test (`tests/modelReadmes.test.ts`) hält beide
+> synchron. Neue Namen/Motive dort ergänzen →
+> `WRITE_MODEL_DOCS=1 npx vitest run tests/modelReadmes.test.ts`.
 
 | Kategorie | Ordner | Akzeptierte Dateinamen (Priorität → ) | Ausrichtung / Hinweis |
 |---|---|---|---|
