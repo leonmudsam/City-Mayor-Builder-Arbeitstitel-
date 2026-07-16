@@ -237,12 +237,11 @@ export function hasAnyBuildingModel(): boolean {
   return Object.keys(BUILDING_MODELS).length > 0;
 }
 
-// ---- terrain textures (v0.42, Terrain-System-V2 prep) ----------------------
-// Splatmap-ready ground material textures — see docs/TERRAIN_TEXTURES.md and
+// ---- terrain textures (v0.42/v0.43, Terrain-System-V2) ----------------------
+// Splatmap ground material textures — see docs/TERRAIN_TEXTURES.md and
 // src/assets/terrainTextureManifest.ts for the full per-texture spec + prompts.
-// Discovery only: NOT yet consumed by the 3D renderer (buildGroundMesh still
-// uses the vertex-coloured heightfield, v0.39). Dropping a file in here today
-// is inert but safe — the real blending shader is a follow-up phase.
+// Consumed by ThreeMapRenderer.buildGroundMesh's splat shader (v0.43): a dropped
+// file blends in automatically, no further code needed.
 //   src/assets/textures/terrain/<category>/<name>.png   e.g. grass/terrain_grass_01.png
 const TERRAIN_TEXTURES = keyed(
   import.meta.glob('./textures/terrain/**/*.{png,webp,jpg,jpeg}', { eager: true, query: '?url', import: 'default' }) as UrlMap,
@@ -254,6 +253,20 @@ export function terrainTextureUrl(name: string): string | undefined {
 /** Whether ANY terrain texture has been supplied yet (drives a future first-run hint). */
 export function hasAnyTerrainTexture(): boolean {
   return Object.keys(TERRAIN_TEXTURES).length > 0;
+}
+
+// ---- road textures (v0.44, Straßen als Textur) ------------------------------
+// Flat, texture-based road/bridge surfaces — see docs/ROAD_TEXTURES.md and
+// src/assets/roadTextureManifest.ts. Consumed by ThreeMapRenderer's
+// buildRoadTile/buildBridgeDeck; missing files fall back to flat colour (never
+// crashes), matching every other drop-in asset in the project.
+//   src/assets/textures/roads/<category>/<name>.png   e.g. surface/road_asphalt.png
+const ROAD_TEXTURES = keyed(
+  import.meta.glob('./textures/roads/**/*.{png,webp,jpg,jpeg}', { eager: true, query: '?url', import: 'default' }) as UrlMap,
+);
+/** Road-surface texture URL, e.g. `road_asphalt`, `road_marking_dash`. */
+export function roadTextureUrl(name: string): string | undefined {
+  return ROAD_TEXTURES[name];
 }
 
 /** How many generic `citizen_N.png` portraits were supplied (for seed spread). */

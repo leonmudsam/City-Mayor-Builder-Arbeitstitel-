@@ -1,5 +1,65 @@
 # Patch Notes
 
+## v0.43 — „Terrain System V2, Phase 2: Splatmap-Ground-Shader + Drop-in-Ordner"
+
+**Was.** Der in v0.42 dokumentierte, aber bewusst zurückgestellte Splatmap-Shader
+ist jetzt implementiert — der Nutzer hatte bereits reale Texturen (Gras, Erde,
+Stein, Sand) mit ChatGPT erzeugt und in `src/assets/textures/terrain/…` abgelegt,
+aber der Ordner existierte physisch noch gar nicht auf der Platte (nur von
+`registry.ts`/der Doku referenziert) und es gab noch keinen Renderer-Code, der die
+Dateien tatsächlich konsumiert — der Boden blieb daher weiterhin das flache,
+vertex-gefärbte Höhenfeld.
+- **Drop-in-Ordner angelegt:** `src/assets/textures/terrain/
+  {grass,earth,stone,sand,snow,water,field,path}/` mit `.gitkeep`, exakt wie bei
+  den 3D-Modell-Ordnern.
+- **`ThreeMapRenderer.buildGroundMesh()`** blendet jetzt bis zu vier
+  Repräsentativ-Texturen (`terrain_grass_01`, `terrain_earth_light`,
+  `terrain_rock`, `terrain_sand`) direkt auf das bestehende vertex-gefärbte
+  Höhenfeld — nicht als Ersatz, sondern als `onBeforeCompile`-Erweiterung
+  desselben `MeshStandardMaterial`s (gleiches Muster wie der Wasser-/
+  Sektor-Nebel-Shader). Die Mischgewichte pro Vertex kommen aus Höhe und
+  Hangneigung (Splatmap-Konzept aus `docs/TERRAIN_TEXTURES.md`), kalibriert auf
+  die tatsächlichen Zahlen aus `terrainHeight.ts` (Bauland ~0–0.25, Gebirge erst
+  ab 2.6 — die Meterangaben in der Doku waren aspirational und nicht 1:1
+  übertragbar).
+- **Nie kaputt:** Fehlt eine Kategorie-Textur, fällt ihr Gewicht auf 0 und die
+  Deckung (`coverage`) sinkt dort automatisch Richtung reine Vertexfarbe zurück
+  — kein falsches Material, kein Schwarz/Fehlbild. Ohne jede abgelegte Textur
+  bleibt der Boden exakt wie zuvor (v0.39).
+
+**Warum.** Reine Dokumentation half nicht mehr weiter, sobald echte Texturdateien
+vorlagen — das eigentliche "sieht man was?"-Ziel des Nutzers brauchte den
+Verbraucher-Code, nicht nur die Spezifikation.
+
+**Architektur.** Texturen werden lazy über einen modulweiten `TextureLoader` +
+Cache geladen (`loadSplatTexture`, mirror von `loadModel`/`modelCache`). Das
+Laden ist async; solange es läuft, zeigt der Boden die normale Vertexfarbe, dann
+wird das Material per `needsUpdate` + neuem `customProgramCacheKey` live
+nachkompiliert (kein Rebuild der Geometrie nötig). Ein `terrainKey`-Staleness-
+Check verhindert, dass eine inzwischen ersetzte Terrain-Geometrie noch nachträglich
+texturiert wird.
+
+**Auswirkung/Zukunft.** Stein/Sand blenden bereits automatisch mit ein, weil der
+Nutzer sie schon abgelegt hat; Schnee/Wasser/Feld/Weg folgen genauso automatisch,
+sobald Dateien für diese Kategorien existieren — dafür ist keine weitere
+Code-Änderung nötig. Bei der aktuellen Standard-Kamerahöhe liest sich die
+Textur eher als satter, photografischer Farbton (die Einzel-Grashalme sind bei
+dieser Zoomstufe sub-Pixel) statt als scharfe Nahaufnahme — das ist erwartetes
+Mipmapping-Verhalten, keine fehlerhafte Anwendung (per Pixel-Stichprobe
+verifiziert: gerendertes Grün ist spürbar wärmer/gelbstichiger als die alte
+flache Kachelfarbe). Feintuning von Kachelgröße/Kontrast ist ein einfacher,
+eigenständiger Folgeschritt, sobald der Nutzer den Look live beurteilt hat.
+
+**Verifikation.** `npx tsc -b --force`, `npx eslint src tests`, `npx vitest run`
+(148 Tests, unverändert), `npm run build` — alle grün. 3D-Screenshot-Smoke via
+Playwright (`vite preview`): keine Konsolen-/Shader-Fehler, `onBeforeCompile`
+feuert nachweislich, Pixel-Stichprobe bestätigt reale Texturfarben statt der
+alten Flächenfarbe.
+
+**Dateien.** Neu: `src/assets/textures/terrain/*/.gitkeep` (8 Ordner). Geändert:
+`src/renderer/three/ThreeMapRenderer.ts` (Splat-Ladepfad + Ground-Shader),
+`docs/PATCHNOTES.md`.
+
 ## v0.42 — „Terrain System V2: Splatmap-Materialdoku & Textur-Drop-in vorbereitet"
 
 **Was.** Neue Dokumentation + Drop-in-Infrastruktur für ein Terrain-

@@ -36,14 +36,18 @@ import {
   PerspectiveCamera,
   PlaneGeometry,
   Raycaster,
+  RepeatWrapping,
   Scene,
+  SRGBColorSpace,
   Sprite,
   SpriteMaterial,
+  TextureLoader,
   Vector2,
   Vector3,
   WebGLRenderer,
   type Material,
   type Object3D as TObject3D,
+  type Texture,
 } from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { SkyEnvironment } from './SkyEnvironment.ts';
@@ -62,13 +66,13 @@ import {
   buildingModel,
   buildingConstructionModel,
   terrainModel,
-  roadModel,
-  bridgeModel,
   propModel,
   markerModel,
   effectModel,
   vehicleModel,
   uiModel,
+  terrainTextureUrl,
+  roadTextureUrl,
 } from '../../assets/registry.ts';
 import {
   TERRAIN_TILE_MODELS,
@@ -78,7 +82,6 @@ import {
   VEHICLE_CAR_MODELS,
   VAN_MODELS,
   SMOKE_EFFECT_MODELS,
-  BRIDGE_MODELS,
   MARKER_MODELS,
   CONSTRUCTION_MODELS,
   UI_SELECTION_RING_MODELS,
@@ -147,11 +150,73 @@ function loadModel(url: string): Promise<TObject3D> {
   return p;
 }
 
+// Terrain-Texturen splatmap ground shader (§ Terrain System V2): the ground stays
+// the existing vertex-coloured heightfield (never a regression when no texture is
+// dropped in) but blends real material photos on top wherever the drop-in registry
+// has them. Only a small representative texture per category is sampled — adding
+// stone/sand/etc. later just needs the file dropped in, see docs/TERRAIN_TEXTURES.md.
+const textureLoader = new TextureLoader();
+const textureCache = new Map<string, Promise<Texture> | undefined>();
+/** One world unit of ground = this many texture repeats, so a 1254px "nah"-detail
+ *  photo reads as close-up ground rather than a stretched smear. */
+const SPLAT_TILE_SCALE = 0.5;
+const SPLAT_LAYERS = [
+  { key: 'grass', texture: 'terrain_grass_01' },
+  { key: 'earth', texture: 'terrain_earth_light' },
+  { key: 'stone', texture: 'terrain_rock' },
+  { key: 'sand', texture: 'terrain_sand' },
+] as const;
+
+/** Loads (and caches, by URL) any drop-in texture — shared by the terrain splat
+ *  layers and the road/bridge surfaces below, so the same file is never fetched
+ *  twice even if both systems reference it (e.g. `terrain_road_edge`). */
+function loadTextureByUrl(url: string): Promise<Texture> {
+  let p = textureCache.get(url);
+  if (!p) {
+    p = textureLoader.loadAsync(url).then((tex) => {
+      tex.wrapS = RepeatWrapping;
+      tex.wrapT = RepeatWrapping;
+      tex.colorSpace = SRGBColorSpace;
+      return tex;
+    });
+    textureCache.set(url, p);
+  }
+  return p;
+}
+
+/** Loads the drop-in PNG for one splat layer; `undefined` if the user hasn't
+ *  added that texture yet — never a hard dependency. */
+function loadSplatTexture(name: string): Promise<Texture> | undefined {
+  const url = terrainTextureUrl(name);
+  return url ? loadTextureByUrl(url) : undefined;
+}
+
+/** Loads the drop-in PNG for one road/bridge surface (§ Straßen als Textur);
+ *  `undefined` if not supplied yet. */
+function loadRoadTexture(name: string): Promise<Texture> | undefined {
+  const url = roadTextureUrl(name);
+  return url ? loadTextureByUrl(url) : undefined;
+}
+
 /** Small deterministic hash → 0..1, so per-building colour jitter is stable. */
 function hash01(s: string): number {
   let h = 2166136261;
   for (let i = 0; i < s.length; i++) h = Math.imul(h ^ s.charCodeAt(i), 16777619);
   return ((h >>> 0) % 1000) / 1000;
+}
+
+/** One shared, lazily-textured MeshStandardMaterial per road/bridge surface role
+ *  (§ Straßen als Textur, v0.44) — every road tile reuses the SAME instance per
+ *  role, so a dropped-in texture only has to load once and every tile picks it
+ *  up together via `material.map` + `needsUpdate` (no per-tile shader work). */
+interface RoadMaterials {
+  asphalt: MeshStandardMaterial;
+  mountain: MeshStandardMaterial;
+  edge: MeshStandardMaterial;
+  dash: MeshStandardMaterial;
+  roundabout: MeshStandardMaterial;
+  bridgeDeck: MeshStandardMaterial;
+  boardwalk: MeshStandardMaterial;
 }
 
 interface BuildingNode {
@@ -190,6 +255,9 @@ export class ThreeMapRenderer implements IMapRenderer {
   // the material of the current lake so it can be tinted by the sky each frame.
   private waterTime = { value: 0 };
   private waterMat: MeshStandardMaterial | undefined;
+  // Shared road/bridge surface materials (§ Straßen als Textur), built once on
+  // first use and textured in-place as drop-in files resolve (see getRoadMats).
+  private roadMats: RoadMaterials | undefined;
 
   private buildingGroup = new Group();
   private terrainGroup = new Group();
@@ -713,6 +781,85 @@ export class ThreeMapRenderer implements IMapRenderer {
     const mesh = new Mesh(geo, mat);
     mesh.receiveShadow = true;
     this.terrainGroup.add(mesh);
+    void this.applyGroundSplat(mat, this.terrainKey);
+  }
+
+  /**
+   * Blends real drop-in ground textures (§ Terrain-Texturen, Terrain System V2)
+   * on top of the vertex-coloured heightfield once they've loaded. Only the
+   * categories the user has actually dropped a PNG for are sampled — with zero
+   * textures present this is a no-op and the existing coloured look stands
+   * exactly as before ("nie kaputt" per Drop-in-Assets rule). Height/slope pick
+   * the blend weights per docs/TERRAIN_TEXTURES.md's Splatmap-Konzept; wherever
+   * the dominant band's texture is still missing (e.g. only grass+earth exist so
+   * far), coverage fades back toward the plain vertex colour instead of showing
+   * a wrong material.
+   */
+  private async applyGroundSplat(mat: MeshStandardMaterial, key: string): Promise<void> {
+    const resolved = await Promise.all(
+      SPLAT_LAYERS.map(async (l) => {
+        const p = loadSplatTexture(l.texture);
+        if (!p) return undefined;
+        try {
+          return { key: l.key, tex: await p };
+        } catch {
+          return undefined;
+        }
+      }),
+    );
+    const active = resolved.filter((x): x is { key: (typeof SPLAT_LAYERS)[number]['key']; tex: Texture } => !!x);
+    // Stale (terrain rebuilt again meanwhile) or nothing dropped in yet.
+    if (this.terrainKey !== key || active.length === 0 || this.destroyed) return;
+
+    const cap = (s: string) => `w${s[0]!.toUpperCase()}${s.slice(1)}`;
+    mat.customProgramCacheKey = () => `cmb-splat-${active.map((a) => a.key).sort().join('-')}`;
+    mat.onBeforeCompile = (shader) => {
+      for (const a of active) shader.uniforms[`uTex_${a.key}`] = { value: a.tex };
+      shader.vertexShader =
+        'varying float vSplatH;\nvarying float vSplatSlope;\nvarying vec2 vSplatUv;\n' +
+        shader.vertexShader.replace(
+          '#include <begin_vertex>',
+          `#include <begin_vertex>
+           vSplatH = position.y;
+           vSplatSlope = 1.0 - abs(normal.y);
+           vSplatUv = position.xz * ${SPLAT_TILE_SCALE.toFixed(4)};`,
+        );
+
+      const samplerDecls = active.map((a) => `uniform sampler2D uTex_${a.key};`).join('\n');
+      const zeroInactive = SPLAT_LAYERS.filter((l) => !active.some((a) => a.key === l.key))
+        .map((l) => `${cap(l.key)} = 0.0;`)
+        .join('\n');
+      const sumTerms = SPLAT_LAYERS.map((l) => cap(l.key)).join(' + ');
+      const sampleTerms = active.map((a) => `texture2D(uTex_${a.key}, vSplatUv).rgb * ${cap(a.key)}`).join(' + ');
+      shader.fragmentShader =
+        `varying float vSplatH;\nvarying float vSplatSlope;\nvarying vec2 vSplatUv;\n${samplerDecls}\n` +
+        shader.fragmentShader.replace(
+          '#include <map_fragment>',
+          `#include <map_fragment>
+           {
+             // Bands calibrated against the REAL terrainHeightAt() ranges (see
+             // terrainHeight.ts BASE table), not the aspirational metre figures in
+             // docs/TERRAIN_TEXTURES.md: grass/fertile/sand all sit within roughly
+             // 0.0–0.25, forest up to ~0.6, mountains start at 2.6 — so the sand→
+             // grass→stone transitions have to happen in that much smaller range.
+             float h = vSplatH;
+             float slope = clamp(vSplatSlope, 0.0, 1.0);
+             float wSlope = smoothstep(0.28, 0.55, slope);
+             float wSand = max(1.0 - smoothstep(-0.05, 0.12, h) - wSlope * 0.5, 0.0);
+             float wGrass = max((smoothstep(-0.02, 0.15, h) - smoothstep(1.4, 2.4, h)) * (1.0 - wSlope), 0.0);
+             float wStone = max(smoothstep(1.4, 2.4, h), wSlope);
+             float wEarth = max((smoothstep(-0.05, 0.3, h) - smoothstep(1.2, 2.0, h)) * 0.4 + wSand * 0.25, 0.0);
+             ${zeroInactive}
+             float wTotal = ${sumTerms};
+             float coverage = clamp(wTotal, 0.0, 1.0);
+             if (wTotal > 0.0005) {
+               vec3 splatColor = (${sampleTerms}) / wTotal;
+               diffuseColor.rgb = mix(diffuseColor.rgb, splatColor, coverage);
+             }
+           }`,
+        );
+    };
+    mat.needsUpdate = true;
   }
 
   /**
