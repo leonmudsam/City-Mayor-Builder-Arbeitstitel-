@@ -126,7 +126,7 @@ export function terrainIsoImage(id: string): string | undefined {
 // build time via import.meta.glob (as a URL the GLTFLoader fetches) — no wiring
 // per file. When a model is missing the 3D renderer draws a procedural block, so
 // the game keeps working with zero models and reaches the full look purely by
-// adding files. Naming, scale and pivot rules live in docs/3D_MODELS.md.
+// adding files. Naming, scale and pivot rules live in docs/3D_MODEL_MANIFEST.md.
 //
 //   src/assets/models/buildings/<id>.glb          base model (all stages)
 //   src/assets/models/buildings/<id>_stage2.glb   optional per-upgrade variant

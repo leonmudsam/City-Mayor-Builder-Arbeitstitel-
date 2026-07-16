@@ -11,7 +11,7 @@
 // Assets are drop-in: a building draws its `.glb` from src/assets/models/… when
 // present (see registry `buildingModel`), otherwise a procedural block sized by
 // footprint + height class + upgrade level. The scene therefore works with zero
-// models and reaches the full look purely by adding files (docs/3D_MODELS.md).
+// models and reaches the full look purely by adding files (docs/3D_MODEL_MANIFEST.md).
 
 import {
   Box3,
@@ -303,7 +303,7 @@ export class ThreeMapRenderer implements IMapRenderer {
 
   setMoving(): void {
     // Moving buildings is a 2D-mode interaction (drag/hold); in 3D the player
-    // switches to 2D/iso to relocate. No-op here (documented, docs/3D_MODELS.md).
+    // switches to 2D/iso to relocate. No-op here (documented, docs/3D_MODEL_MANIFEST.md).
   }
 
   setSelected(id: string | undefined): void {
@@ -1082,7 +1082,7 @@ export class ThreeMapRenderer implements IMapRenderer {
       group.add(model);
       group.updateWorldMatrix(true, true);
 
-      // Honour the named-node conventions (docs/3D_MODELS.md): a node called
+      // Honour the named-node conventions (docs/3D_MODEL_MANIFEST.md): a node called
       // `rotor` spins (wind turbines), a node called `chimney` emits smoke while
       // the building is active. Fall back to whatever the placeholder set.
       const rotor = model.getObjectByName('rotor') ?? model.getObjectByName('Rotor');

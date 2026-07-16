@@ -16,4 +16,4 @@ Schwebende 3D-UI: Auswahlring, Upgrade-/Bau-Buttons und Level-Badge über dem au
 | Bau-/Aktions-Button (schwebend) | `ui_build_button.glb` → `ui_button_build.glb` → `button_build.glb` |  |
 | Level-Badge | `ui_level_badge.glb` → `level_badge.glb` → `ui_badge.glb` |  |
 
-Fehlt ein Modell, greift der prozedurale Fallback — das Spiel bricht nie.
+Fehlt ein Modell, greift der prozedurale Fallback — das Spiel bricht nie. Die volle Spezifikation (Footprint, Höhe, Pivot, Platzierung, Biom, Budget) für diese UND alle geplanten Modelle dieses Ordners steht in `PROMPTS.md` daneben.

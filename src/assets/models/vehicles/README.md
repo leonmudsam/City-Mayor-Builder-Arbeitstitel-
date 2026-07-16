@@ -14,4 +14,4 @@ Front zeigt +z (Fahrtrichtung). Verkehr und Stadtarbeit-Van.
 | Verkehrsauto | `car.glb` → `car_small.glb` → `car_sedan.glb` → `car_van.glb` |  |
 | Liefer-Van (Stadtarbeit) | `service_van.glb` → `car_van.glb` → `van.glb` → `delivery_van.glb` → `truck_food.glb` |  |
 
-Fehlt ein Modell, greift der prozedurale Fallback — das Spiel bricht nie.
+Fehlt ein Modell, greift der prozedurale Fallback — das Spiel bricht nie. Die volle Spezifikation (Footprint, Höhe, Pivot, Platzierung, Biom, Budget) für diese UND alle geplanten Modelle dieses Ordners steht in `PROMPTS.md` daneben.

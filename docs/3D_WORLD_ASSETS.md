@@ -1,23 +1,33 @@
-# 3D-Welt-Assets — Zielbild, Struktur, Modelllisten, Prompts (v0.32)
+# 3D-Welt-Assets — Zielbild, Stilstandard, Konzepte (v0.40 — World Graphics V2)
 
 Diese Datei ist die **verbindliche Bauanleitung** für die 3D-Welt in Richtung des
 Referenzbildes: eine hochwertige, stilisierte Küsten-/Insel-City-Builder-Welt mit
 Gebirge, Wald, Fluss, See, Küste, Meer, Stadtzentrum, Wohnvierteln, Feldern,
-Straßen, Brücken, Ressourcenorten und Landmarken.
+Straßen, Brücken, Ressourcenorten und Landmarken — organisch statt „Kachelbrett".
 
 **Kernprinzip (Drop-in):** Du legst ein korrekt benanntes `.glb` in den passenden
 Ordner unter `src/assets/models/…` → das Spiel nutzt es **automatisch** (rekursive
-Erkennung, v0.32). Fehlt ein Modell, greift ein **prozeduraler Platzhalter** — das
+Erkennung, v0.32+). Fehlt ein Modell, greift ein **prozeduraler Platzhalter** — das
 Spiel bricht nie. **Kein Code-Change pro Modell.**
 
-Ergänzt `docs/3D_MODELS.md` (Grundlagen Gebäude/Stufen/Live-Effekte) und
-`docs/ISO_ASSETS.md`. Gameplay-Grid und Savegames bleiben unberührt.
+> **v0.40-Umbau:** Die früher hier von Hand gepflegten Modell-Einzellisten (§7–§18
+> der alten Fassung) sind entfallen. Jedes Modell — aktuell verdrahtet **und**
+> geplant — steht jetzt vollständig spezifiziert (Footprint, Höhe, Pivot, Budget,
+> Platzierung, Biom, Animationen …) in `src/assets/models/<ordner>/PROMPTS.md`,
+> generiert aus `src/assets/modelManifest.ts`. Das verhindert, dass diese Datei und
+> der Code auseinanderlaufen. Hier bleibt nur, was sich **nicht** automatisch
+> generieren lässt: Zielbild, Stilphilosophie, Ordnerstruktur, Fallback-Regeln und
+> die Konzepte für die noch ausstehenden Rendering-/Gameplay-Phasen.
+
+Ergänzt `docs/3D_MODEL_MANIFEST.md` (kurzer Namens-Index, testgeprüft) und
+`docs/ISO_ASSETS.md`. Gameplay-Grid und Savegames bleiben unberührt — die Optik
+darf organischer wirken als die darunterliegende Logik (siehe §8).
 
 ---
 
 ## 1. Referenzbild — Analyse & Zonen
 
-Das Bild zeigt eine zusammenhängende Landzunge/Insel mit klaren Zonen:
+Das Referenzbild zeigt eine zusammenhängende Landzunge/Insel mit klaren Zonen:
 
 - **West / Links:** massives Gebirge mit steilen Felswänden, Tälern/Durchgängen,
   **Minen-/Tunneleingängen**, **Wasserfällen**, Flussquelle, dichtem Wald,
@@ -36,19 +46,10 @@ Das Bild zeigt eine zusammenhängende Landzunge/Insel mit klaren Zonen:
 - **Gameplay-Symbole:** grüne Bau-/Werkzeugmarker auf freien Sektoren, blauer
   Wasser-Marker am See, oranger Handels-/Marktmarker, Verwaltungs-Marker.
 
-**Ableitung — was ist was:**
-
-| Kategorie | Aus dem Bild |
-|---|---|
-| **Terrain** | Gras/Wiese, fruchtbarer Boden, Wald-Boden, Fels, Gebirge, Sand/Ufer, Fluss, See, Meer, Klippen, Höhenstufen |
-| **Hero-Terrain** | Gebirgsmassiv West, Wasserfall-Cluster, Flusstal, Seebecken, Küstenklippe, Hafenbucht |
-| **Gebäude** | Rathaus, Wohnhäuser (mehrere Stufen), Markt, Museum/Verwaltung, Farm/Felder, Sägewerk, Steinbruch/Mine, Lager |
-| **Landmarken** | Leuchtturm, Hafen, Schiff, Brücke, Monument, Mineneingang |
-| **Props** | Bäume (Nadel/Laub), Büsche, Felsen, Zäune, Marktstände, Straßenlampen, Docks, Boote, Heuballen |
-| **Roads/Bridges** | Haupt-/Wohnstraßen, Kreuzungen, Kurven, Brücken über Fluss/Straße |
-| **Vehicles** | (impliziert) Autos/Lieferverkehr auf den Straßen, Schiff an der Küste |
-| **Markers** | Build-/Werkzeug-, Wasser-, Handels-, Verwaltungs-Marker |
-| **Effects** | Wasserfall-Gischt, Schornsteinrauch, bewegtes Wasser/Wellen |
+**Zonenkonzept:** West/Mitte/Nord/Ost/Süd sollen **handdesignt oder halb-
+handdesignt** definierbar sein, nicht rein zufällig — die Stadt gründet sich immer
+auf der größten zusammenhängenden Ebene, das Gebirge/die Küste/der Wald bilden
+außen herum die natürliche Landschaft (§8).
 
 **Sofort nötig (Prio 1):** Terrain-Grundkacheln (Gras/Fels/Sand/Wasser),
 Straßensegmente, Häuser (klein/Reihe), Rathaus, Farm, Sägewerk, Steinbruch,
@@ -72,31 +73,37 @@ und dem Referenzbild. Keine realistische, dunkle Simulation, keine High-Poly-Det
 - Format **`.glb`**, Texturen **eingebettet**, keine externen Dateien.
 - **Keine** Kameras, **keine** Lichter im Modell.
 - **+Y = oben**, Vorderseite **+Z**.
-- **Pivot mittig an der Unterkante** (X/Z zentriert, Unterkante Y = 0).
-- **1 Tile = 1 Welt-Einheit**; Modell auf seinen Footprint skalierbar.
+- **Pivot mittig an der Unterkante** (X/Z zentriert, Unterkante Y = 0) — der Boden
+  ist seit v0.39 ein organisches Höhenfeld, jedes Modell wird automatisch auf die
+  Bodenhöhe an seiner Kachel gesetzt. Nichts darf schweben.
+- **1 Tile ≈ 4 m**; Modell auf seinen Footprint skalierbar.
 - Saubere Bounding-Box, keine großen Offsets, Ursprung korrekt.
-- Dateiname **exakt** wie in dieser Doku (Kleinbuchstaben, `_`), **eindeutig**
-  (der Dateiname ist der Key, auch über Unterordner hinweg).
+- Dateiname **exakt** wie in der generierten `PROMPTS.md` (Kleinbuchstaben, `_`),
+  **eindeutig** (der Dateiname ist der Key, auch über Unterordner hinweg).
 
-**Größenrichtwerte (Footprint in Tiles):**
-- 1×1 kleines Modell / Prop · 2×2 Wohnhaus · 3×3 Rathaus/Markt · 4×4 Marktplatz
-- Mine 3×3 (am Gebirge) · Brücke variabel/modular · Hafen 6×6 oder modular
-- Bergmodule 4×4 / 8×8 · **Hero-Gebirge 8×8–12×12** / gestufter Cluster ·
-  Wasserfall-Cluster 4×4–8×8 · Farmfeld 3×3 oder modular 1×1.
+**Größenklassen (Budget):** siehe `SIZE_CLASS_BUDGETS` in
+`src/assets/modelManifest.ts` bzw. die generierte Spec-Zeile jedes Modells in
+`PROMPTS.md`. Kurzfassung:
 
-**Poly-/Textur-Budget (Richtwerte, §22):**
-| Typ | Tris | Textur |
+| Größenklasse | Tris | Textur |
 |---|---|---|
-| kleine Props | < 500 | ≤ 256² |
-| kleine Gebäude | 500–2 000 | ≤ 512² |
-| große Gebäude | 2 000–6 000 | ≤ 1024² |
-| Landmarken | 6 000–12 000 | ≤ 1024² |
-| Hero-Modelle | so niedrig wie möglich, ggf. **modular** | ≤ 1024², geteilt |
-| Terrain-Chunks | größenabhängig, LOD bevorzugt | ≤ 1024² |
+| Prop (klein) | < 500 | ≤ 256² |
+| Prop (groß/Setpiece) | 500–1 500 | ≤ 512² |
+| Fahrzeug | 500–1 200 | ≤ 512² |
+| Marker/Welt-UI | < 200 | ≤ 128² (oder Canvas) |
+| Effekt-Mesh | < 300 | ≤ 128² |
+| Terrain-/Straßen-Kachel | 200–800 | ≤ 512² |
+| Terrain-Feature | 800–3 000 | ≤ 512² |
+| Brücke | 1 500–4 000 | ≤ 512² |
+| kleines Gebäude | 500–2 000 | ≤ 512² |
+| großes Gebäude | 2 000–6 000 | ≤ 1024² |
+| Landmarke | 6 000–12 000 | ≤ 1024² |
+| Hero-/Weltform | so niedrig wie möglich, modular | ≤ 1024², geteilt |
 
-**LOD/Instancing:** Für Bäume/Felsen/kleine Props nutzt der Renderer **Instancing**
-(bereits umgesetzt). Große Modelle bitte mit optionaler `model3dLod`-Variante
-(Low-Poly) liefern; Culling außerhalb der Kamera ist vorbereitet. Varianten sparsam.
+**LOD/Instancing:** Für Bäume/Felsen/kleine Props/Terrain-Kacheln nutzt der
+Renderer **Instancing** (bereits umgesetzt, siehe `instancing`-Feld je Modell in
+`PROMPTS.md`). Große Hero-/Landmarken-Modelle bitte **modular** liefern statt als
+ein Monolith; Culling außerhalb der Kamera ist vorbereitet.
 
 ---
 
@@ -108,19 +115,23 @@ src/assets/models/
   terrain/{tiles,cliffs,mountains,water,coast,biome,hero}/
   roads/
   bridges/
-  props/{nature,city,construction,harbor,farm}/
+  props/{nature,city,construction,harbor,farm,infrastructure}/
   vehicles/
   markers/
   effects/
+  ui/
 ```
 
 Die Erkennung ist **rekursiv**: eine `.glb` in *irgendeinem* Unterordner der
 Kategorie wird gefunden (Key = Dateiname). Unterordner sind zur Ordnung da, nicht
 für den Key. → Dateinamen projektweit **eindeutig** halten.
 
+`props/infrastructure/` ist neu (v0.40): Stützmauern/Böschungen, die Straßen bei
+Höhenunterschieden am Schweben hindern (§9).
+
 **Registry-Funktionen (schon vorhanden):** `buildingModel(id, stage)`,
 `terrainModel(name)`, `roadModel(name)`, `bridgeModel(name)`, `propModel(name)`,
-`vehicleModel(name)`, `markerModel(name)`, `effectModel(name)`.
+`vehicleModel(name)`, `markerModel(name)`, `effectModel(name)`, `uiModel(name)`.
 
 ---
 
@@ -172,14 +183,15 @@ diese durch `.glb` zu ersetzen (Folge-Slice, kein Migrationsbedarf).
 | Typ | Fallback, wenn Modell fehlt |
 |---|---|
 | Gebäude | prozeduraler Block (Wände + Dach, Kategorie-Farbe, Stufenhöhe) |
-| Terrain | farbige, leicht reliefierte Kachel (Instancing) |
+| Terrain | farbige, leicht reliefierte Kachel (Instancing) auf dem Höhenfeld |
 | Wasser | blaue, tiefergelegte Kachel |
 | Straße | prozedurales Auto-Tiling (Fahrbahn + Bordstein + Markierung) |
 | Brücke | Straßensegment über der Wasserkachel |
 | Prop (Baum/Busch/Fels) | Low-Poly-Instanz (Kegel/Zylinder) |
 | Fahrzeug | geformtes Auto/Van-Mesh |
 | Marker | farbcodiertes Billboard (Canvas-Textur) |
-| Hero-Asset | Cluster kleinerer prozeduraler Teile / mehrere Standardkacheln |
+| Effekt (Partikel/Shader) | läuft bereits ohne `.glb` — kein Fallback nötig |
+| Hero-/Landmarken-Asset | Cluster kleinerer prozeduraler Teile / mehrere Standardkacheln |
 
 Fallbacks bleiben **spielbar**, wirken aber klar als Platzhalter.
 
@@ -192,232 +204,223 @@ Fallbacks bleiben **spielbar**, wirken aber klar als Platzhalter.
 > embedded textures, no lights, no cameras, centered object, pivot at bottom
 > center, +Y up, front facing +Z —`
 
-Für Text-zu-3D-Tools (Meshy, Rodin, Tripo, Luma, Alpha3D): Prefix + Motiv, als
-`.glb` exportieren, Dateiname exakt wie unten, in den Zielordner legen.
+Für Text-zu-3D-Tools (Meshy, Rodin, Tripo, Luma, Alpha3D): Prefix + Motiv (siehe
+generierte `PROMPTS.md` je Ordner), als `.glb` exportieren, Dateiname exakt wie
+dort angegeben, in den Zielordner legen.
 
 ---
 
-## 7. Terrain-Kacheln → `terrain/tiles/`
+## 7. Vollständige Modell-Spezifikation je Ordner (generiert)
 
-| Datei | Footprint | Motiv |
-|---|---|---|
-| `grass_tile.glb` | 1×1 | flache grüne Wiesenkachel, leichte Mikrostruktur, kachelbar |
-| `grass_tile_variant_01.glb` | 1×1 | Gras mit Grasbüscheln/kleinen Steinen |
-| `grass_tile_variant_02.glb` | 1×1 | Gras mit Blumen/Unebenheit |
-| `fertile_ground_tile.glb` | 1×1 | gepflügter fruchtbarer Ackerboden |
-| `forest_ground_tile.glb` | 1×1 | Waldboden mit Moos/Wurzeln |
-| `rock_ground_tile.glb` | 1×1 | steiniger grauer Boden |
-| `mountain_ground_tile.glb` | 1×1 | steiler Felsboden |
-| `sand_tile.glb` | 1×1 | Sand/Strand |
-| `shore_tile.glb` | 1×1 | Ufer: Gras trifft Wasser |
-| `locked_sector_tile.glb` | 1×1 | vernebelte/eingezäunte gesperrte Fläche |
-| `buildable_sector_tile.glb` | 1×1 | grün markierte Baufläche |
-| `city_center_ground_tile.glb` | 1×1 | gepflasterter Platz-/Stadtboden |
+Statt Handlisten hier: **jedes** Modell — Terrain, Gebirge, Wasser, Küste,
+Straßen, Brücken, Props, Fahrzeuge, Marker, Effekte, Welt-UI, Gebäude, Landmarken
+— ist mit vollem Feldset (Footprint, Höhe, Pivot, Front, Größenklasse/Budget,
+Platzierungsregeln, Biom, Zufallsverhalten, Instancing, Animations-/Effekt-Nodes,
+Live-/Geplant-Status) in genau einer Datei erfasst:
 
-Ziel: Variation pro Terrain, klare Biome, saubere Übergänge Natur↔Stadt.
+| Ordner | Vollständige Spezifikation |
+|---|---|
+| `buildings/` | `src/assets/models/buildings/PROMPTS.md` (+ `README.md` für die reine Namensliste) |
+| `terrain/` (Kacheln, Gebirge, Flüsse, Küste, Hero-Weltformen) | `src/assets/models/terrain/PROMPTS.md` |
+| `roads/` | `src/assets/models/roads/PROMPTS.md` |
+| `bridges/` | `src/assets/models/bridges/PROMPTS.md` |
+| `props/` (Natur, Stadt, Hafen, Farm, Infrastruktur) | `src/assets/models/props/PROMPTS.md` |
+| `vehicles/` | `src/assets/models/vehicles/PROMPTS.md` |
+| `markers/` (inkl. Sektor-Nebel & Bürgerhinweise) | `src/assets/models/markers/PROMPTS.md` |
+| `effects/` (inkl. Ambient-Leben) | `src/assets/models/effects/PROMPTS.md` |
+| `ui/` | `src/assets/models/ui/PROMPTS.md` |
 
-## 8. Wasser → `terrain/water/`
+Diese Dateien sind **auto-generiert aus `src/assets/modelManifest.ts`** und werden
+von `tests/modelReadmes.test.ts` gegen Drift geprüft — sie sind die einzige
+Quelle, die nie veraltet sein kann. Neues Modell (auch nur geplant, noch nicht
+gebaut) hinzufügen: Eintrag in `modelManifest.ts` ergänzen, dann
+`WRITE_MODEL_DOCS=1 npx vitest run tests/modelReadmes.test.ts`.
 
-`river_straight`, `river_curve`, `river_fork`, `river_source`, `river_mouth`,
-`lake_center`, `lake_edge`, `ocean_tile`, `coast_rocky`, `coast_sandy`,
-`waterfall_small`, `waterfall_large` (je `.glb`, 1×1 bzw. Cluster). Motive: fließend
-blaues Flusswasser (kachelbar), ruhige Seefläche, Meer mit leichter Welle, felsige/
-sandige Küste mit Übergang, Wasserfall mit Gischt-Anschluss (Effekt separat).
+**Was dort für jedes Modell steht:**
+- **Allgemein:** Dateiname, Zielordner, Kategorie, Motiv-Prompt, Live-/Geplant-Status.
+- **Modellierung:** Footprint, empfohlene Höhe, Größenklasse (→ Tri-/Textur-/
+  Material-Budget), Pivot, Front, Stilvorgabe (Stil-Prefix).
+- **Platzierung:** worauf platzierbar/nie platzierbar, Mindestabstand,
+  Zufallsrotation/-skalierung, Instancing-Eignung, Cluster-/Spawn-Regel.
+- **Weltlogik:** Biom(e), Animations-Node (`rotor`, …), Effekt-Node/-Anschluss
+  (`chimney`, …), ob es sich um ein Partikel/Shader statt `.glb` handelt.
 
-## 9. Gebirge & Felsen → `terrain/mountains/` + `terrain/cliffs/`
+Damit kann jedes Modell unabhängig von anderen von verschiedenen Artists gebaut
+werden und passt trotzdem zusammen — die Regeln sind zentral, nicht pro Datei neu
+erfunden.
 
-`mountain_peak_large/medium`, `mountain_cluster_large/medium`,
-`mountain_wall_straight/corner`, `mountain_valley_pass`, `mountain_tunnel_entrance`,
-`cliff_edge`, `cliff_corner`, `rock_spire`, `rock_small/medium/large`. Ziel: echtes
-Gebirge mit Tälern/Durchgängen und Ressourcenorten — **nicht** flache graue Blöcke.
+---
 
-## 10. Hero-Terrain → `terrain/hero/`
+## 8. Organische Welt statt Kachelbrett
 
-`hero_mountain_range_west` (8×8–12×12), `hero_waterfall_cluster` (4×4–8×8),
-`hero_river_valley`, `hero_lake_basin`, `hero_coastal_cliff`, `hero_harbor_bay`,
-`hero_forest_ridge`, `hero_fertile_valley`, `hero_dam_site`. Große, prägende
-Weltformen, die die Map gliedern und Orientierung geben (modular bevorzugt).
+Die gesamte Karte soll wie eine echte Region wirken, nicht wie ein Spielfeld. Das
+Gameplay bleibt **vollständig rasterbasiert** — die Grafik darf das nahezu
+vollständig verstecken:
 
-## 11. Natur-Props → `props/nature/`
+- Terrain soll organisch, natürlich, abwechslungsreich, logisch und physikalisch
+  nachvollziehbar wirken. Nirgends soll sichtbar sein, dass darunter nur
+  quadratische Tiles liegen.
+- **Physikalisch plausibel:** Flüsse entstehen im Gebirge und fließen bergab, Seen
+  liegen in Senken, Küsten liegen auf Meereshöhe, Gebirge besitzen Täler, Straßen
+  folgen der Landschaft, Brücken entstehen nur über Wasser/Schluchten, Tunnel
+  verlaufen durch Berge, Bäume wachsen nicht im Fels, Felder liegen auf
+  fruchtbarem Land, Steinbrüche an Felsformationen.
+- **Terrain-Daten (dokumentierte Erweiterung, kein Migrationszwang):**
+  ```ts
+  terrain: { type: TerrainType; biome: BiomeType; height: number;
+    slope?: SlopeType; waterDepth?: number; variant?: string; }
+  ```
+  Das Gameplay-Grid bleibt bestehen; Höhenstufen/Klippen/Flusstiefe/Küsten-
+  übergänge/Felsen sind rein optisch, solange Platzierung weiter auf validen
+  Tiles passiert.
+- **Gesperrte Sektoren** zeigen keine vollständige Sicht: dichter Nebel,
+  Silhouetten, gelegentliche Bürgerhinweise wecken Neugier, ohne Informationen
+  preiszugeben (Details/Modelle: §11).
 
-`pine_tree`, `pine_tree_large`, `tree_deciduous`, `tree_deciduous_large`,
-`forest_cluster_small/medium`, `bush_small/medium`, `grass_patch`, `flower_patch`,
-`fallen_log`. Random Rotation/Scale, Instancing, **nie unter Gebäude/Straße**
-(Culling aktiv). Waldränder organisch (`clusterType: patch/strip`).
+> **Umsetzungsstand (v0.40):** Die organische Höhenfeld-Basis (Hügel, geneigtes
+> Gebirge, abgesenktes Wasser) ist seit v0.39 live (`src/renderer/three/
+> terrainHeight.ts`). Schärfere Gebirgsgeometrie, echte Flussschluchten,
+> Küstenlinien und Biom-Übergänge sind als Modelle in §7 vollständig
+> spezifiziert, aber **noch nicht** als eigene Terrain-Features im Renderer
+> platziert — das ist die nächste Code-Phase, nicht Teil dieser Doku-Revision.
 
-## 12. Straßen → `roads/` · Brücken → `bridges/`
+---
 
-Roads: `road_straight`, `road_curve`, `road_t_intersection`,
-`road_cross_intersection`, `road_end`, `road_slope`, `road_bridge_entry`,
-`road_main_straight`, `road_main_curve`, `road_main_cross`, `sidewalk_straight`,
-`sidewalk_corner`, `driveway_small`. Bridges: `bridge_small_stone`,
-`bridge_small_wood`, `bridge_medium_road`, `bridge_large_road`, `bridge_rail_future`.
-Der Renderer wählt das Segment automatisch aus der Nachbar-Maske (Fallback:
-prozedurales Auto-Tiling); Haupt-/Wohnstraße über die vorbereitete `RoadClass`.
+## 9. Straßen folgen dem Gelände (Konzept, noch nicht implementiert)
 
-## 13. Gebäude (aus BuildingDefs)
+Straßen dürfen niemals schweben. Geplantes Verhalten:
 
-**Wohnen** `buildings/housing/`: `house_small`, `house_small_level_2`,
-`duplex_house`, `row_house`, `row_house_level_2`, `apartment_house`,
-`apartment_house_level_2`, `residential_block`, `residential_tower`,
-`skyscraper_residential`.
-**Verwaltung** `buildings/administration/`: `town_hall`, `town_hall_level_2`,
-`citizen_house`, `mayor_house`, `market_square`, `city_center_plaza`.
-**Wirtschaft** `buildings/economy/`: `market`, `supermarket`, `trade_office`,
-`office_small`, `office_medium`, `office_tower`, `commercial_block`.
-**Ressourcen** `buildings/resources/`: `farm`, `farm_level_2`, `farm_field_wheat`,
-`farm_field_vegetables`, `sawmill`, `sawmill_level_2`, `quarry`, `quarry_level_2`,
-`warehouse`, `warehouse_large`, `mine_entrance`.
-**Versorgung** `buildings/services/`: `well`, `water_pump`, `water_treatment`,
-`fire_station`, `police_station`, `clinic`, `hospital`, `school`.
-**Energie** `buildings/energy/`: `wind_park`, `wind_turbine`, `coal_power_plant`,
-`solar_field`, `substation`, `hydro_plant`, `dam`.
-**Freizeit** `buildings/leisure/`: `playground`, `park_small`, `park_medium`,
-`central_park_piece`, `fountain`, `sports_field`, `campground`, `beach_activity`,
-`river_kayak_station`.
-**Landmarken** `buildings/landmarks/`: `lighthouse`, `harbor_small`, `harbor_pier`,
-`ship_sailing`, `monument_city`, `museum`, `stadium`, `observation_tower`,
-`mountain_tunnel_landmark`.
-**Hero-Bauten** `buildings/landmarks/`: `hero_city_hall_plaza`,
-`hero_market_district`, `hero_harbor_complex`, `hero_lighthouse_cliff`,
-`hero_grand_bridge`, `hero_mine_complex`, `hero_dam_complex`, `hero_central_park`,
-`hero_waterfront_district`.
+- Bei Steigungen entstehen Böschungen (`embankment_slope`) oder Stützmauern
+  (`retaining_wall`, `props/infrastructure/`) statt einer schwebenden Kante.
+- Kleine Höhenunterschiede: `road_slope`-Segmente rampen zwischen zwei
+  Terrassen.
+- Große Höhenunterschiede: Straße in Serpentinen (Kombination aus
+  `road_curve`/`road_slope`), Brücken nur wenn sinnvoll (`road_bridge_entry`
+  führt vom Boden aufs Brückendeck), Gebirgspässe (`mountain_valley_pass`),
+  Tunnel (`mountain_tunnel_entrance`).
+- Alle genannten Modelle sind bereits mit Footprint/Platzierung in
+  `src/assets/models/roads/PROMPTS.md` bzw. `props/PROMPTS.md` spezifiziert.
+- **Aktueller Code-Stand:** Straßen werden heute per Nachbarmaske ausgewählt und
+  flach auf `terrainHeightAt()` gesetzt — Rampen/Stützstrukturen/Serpentinen sind
+  noch nicht implementiert. Das ist eine `ThreeMapRenderer.ts`-Änderung (Road-
+  Placement-Pass), keine reine Asset-Frage, und folgt in einer eigenen Code-Phase.
 
-> Der **Dateiname muss zur Gebäude-ID passen** (`buildings.config.ts`), damit die
-> Karte das Modell automatisch zieht. Weicht die Wunschdatei ab, per
-> `visual.model3d` verknüpfen. Ausbaustufen: `<id>_stage<N>.glb` **oder** Auto-Skalierung.
+---
 
-## 14. City-/Hafen-/Farm-Props
+## 10. Gebäude-Front, Rotation & Platzierungsvorschau (Konzept, noch nicht implementiert)
 
-`props/city/`: `street_lamp`, `bench`, `trash_bin`, `mailbox`, `fence_wood`,
-`fence_stone`, `road_sign`, `traffic_light`, `construction_crane`,
-`construction_barrier`, `market_stall`, `flower_bed`, `small_fountain`.
-`props/harbor/`: `pier_wood`, `boat_small`, `boat_sail`, `dock_crate`, `dock_barrel`.
-`props/farm/`: `hay_bale`, `tractor_small`, `farm_fence`, `crop_row`, `water_trough`.
-`props/construction/`: Kran/Gerüst/Absperrung für Baustellen. Zweck: Zonen
-definieren, leere Flächen brechen — visuelle Weltstruktur, nicht nur Deko.
+Jedes Gebäude besitzt konzeptionell eine Vorderseite (**+Z**, siehe §2), eine
+Rückseite und Seiten; der Haupteingang zeigt standardmäßig zur Straße. Geplant:
 
-## 15. Fahrzeuge → `vehicles/`
+- **Automatischer Straßenanschluss:** zwischen Gebäude und Straße entsteht
+  automatisch ein Gehweg/Pflasterweg/Vorplatz — je Gebäudetyp unterschiedlich
+  (Wohnhaus → Gehweg, Supermarkt → Parkplatz+Gehweg, Feuerwehr → große Ausfahrt,
+  Krankenhaus → Vorfahrt, Industrie → LKW-Zufahrt, Hafen → Hafenstraße).
+- **Rotation vor dem Platzieren:** der Spieler soll das Gebäude in 90°-Schritten
+  drehen und die Vorderseite/den Eingang bewusst ausrichten können. Betrifft nur
+  die Optik — Footprint und Gameplay bleiben identisch.
+- **Platzierungsvorschau:** vollständiges 3D-Modell, Schatten, Kollisionsfläche,
+  Footprint, Straßenanschluss, Eingang, Geländeanpassung, Steigung,
+  Höhenversatz, mögliche Konflikte — ungültige Platzierungen eindeutig markiert.
+- **Automatische Geländeanpassung:** Gebäude schweben nie; der Renderer passt
+  Fundament/Böschung/Stützmauer/Erdaufschüttung automatisch an.
 
-`car_small`, `car_van`, `truck_food`, `truck_material`, `service_van`, `firetruck`,
-`police_car`, `ambulance`, `bus_small`. Klein, lesbar, performant; Pivot mittig
-unten, Front +Z. Fahren später echte Routen (Verkehr/Missionen bereits vorhanden).
+**Aktueller Code-Stand:** `BuildingInstance` hat heute **kein** Rotationsfeld,
+`validatePlacement()` kennt keine Ausrichtung, es gibt keine Straßenanschluss-
+Logik. Das ist eine Erweiterung des Platzierungs- und Renderer-Codes (neues
+optionales `rotation`-Feld auf der Instanz, kein Schema-Bruch, siehe
+`docs/PROJECT_STRATEGY.md` „Saves brechen nie") — eigene, spätere Code-Phase.
 
-## 16. Marker → `markers/` (3D) — Alternativen erklärt
+---
 
-`marker_buildable`, `marker_locked`, `marker_water`, `marker_trade`,
-`marker_government`, `marker_problem`, `marker_task`, `marker_bonus`,
-`marker_resource`. **Drei Marker-Arten unterscheiden:**
-- **3D-Marker** (`.glb` in `markers/`) — schweben in der Welt, kippen mit ihr.
-- **Billboard-Marker** (Standard heute, Canvas-Textur) — immer zur Kamera gerichtet,
-  farbcodiert, rotationssicher. Empfohlen für Gebäude-Zustände.
-- **UI-Marker** (HUD/Panels, React/SVG) — bildschirmfixiert.
-Fallback ist immer das Billboard.
+## 11. Sektor-Nebel, Silhouetten & Bürgerhinweise (Konzept, noch nicht implementiert)
 
-## 17. Effekte & Weltleben → `effects/` (+ Partikel-Hinweise)
+Gesperrte Sektoren sollen den Spieler neugierig machen, ohne Informationen
+preiszugeben:
 
-`smoke_chimney`, `waterfall_mist`, `construction_spark`, `upgrade_glow`,
-`building_complete_effect`, `fire_response_effect`, `police_patrol_effect`,
-`trade_delivery_effect`, `tree_wind_sway_effect`, `water_surface_motion_effect`,
-`bird_flock_effect`, `harbor_wave_effect`. Vieles ist als **Partikel/Shader**
-sinnvoller als `.glb`:
-- **Heute im Renderer:** Schornsteinrauch (Partikel), drehende Windräder, fahrender
-  Verkehr, Missions-Lieferwagen, pulsierende Marker.
-- **Geplant (Partikel/Shader, kein `.glb`):** leicht bewegte Wasseroberfläche,
-  Wasserfall-Gischt, Küstenwellen, Wind-Sway in Bäumen, Vogelschwärme, nachts
-  leuchtende Fenster. `.glb` nur für feste Effekt-Meshes.
+- Dichter Nebel (`locked_sector_fog_veil`) statt einer nur dunkel getönten
+  Kachel.
+- Schwache Silhouetten großer Landmarken, die im Sektor liegen
+  (`landmark_silhouette_hint`) — kein Oberflächendetail, nur Umriss.
+- Bürgerhinweise als Sprechblase (`marker_citizen_hint`), z. B. „Dort hinten
+  soll es ein großes Gebirge geben.", „Man erzählt sich von fruchtbaren Böden.",
+  „Ein Fischer sprach von einer riesigen Bucht.", „Dort könnte Eisen
+  vorkommen." — Textinhalt ist Gameplay/i18n, hier nur das Mesh spezifiziert.
+- Bei Freischaltung: Highlight/Animation + Kamerafokus.
 
-## 18. Sektor-/Build-Zonen-Assets → `markers/` bzw. `terrain/`
+Alle drei Modelle sind in `src/assets/models/markers/PROMPTS.md` vollständig
+spezifiziert. **Aktueller Code-Stand:** `SectorState.status` kennt nur
+`locked`/`unlocked`, es gibt keine Hinweistexte, keine Silhouetten-Logik und
+keinen Nebel-Mesh — reine Blend-Färbung der Höhenfeld-Vertices. Umsetzung ist
+Renderer- + kleine Gameplay-Arbeit (Hinweistext-Pool je Sektor/Biom), eigene
+Code-Phase.
 
-`sector_border_unlocked.glb`, `sector_border_locked.glb`, `sector_marker_build.glb`,
-`sector_marker_resource.glb`. Sektorstatus: `locked` (markiert, nicht nur dunkel),
-`unlockable`, `unlocked`, `buildable`, `special biome`. Bei Freischaltung:
-Highlight/Animation + Kamerafokus (Fokus-Hook vorhanden). Build-Zonen visuell
-attraktiv mit gestricheltem Rahmen (wie im Referenzbild).
+---
 
-## 19. Welt nicht-statisch / Features in der Map (§3, §16, §18)
+## 12. Verkehr: Haus → Straße → Ziel (Konzept, noch nicht implementiert)
 
-Damit die Map nicht wie ein Kachelbrett wirkt, gehören **Features zwischen die
-Bauplätze**: kleine Waldlichtungen, Felder mit Wegen, Bachläufe/Nebengewässer,
-Felsgruppen, Aussichtspunkte, Küstenpfade, Brückenansätze, Platz-/Parksegmente,
-Marktstände, Deko-Inseln, Stadteingänge, Wegkreuze, Geländebrüche, kleine Docks,
-gebirgsnahe Engstellen, Minenzufahrten, kleine Landmarken außerhalb der Stadt.
+Heute fährt der Ambient-Verkehr eine zufällige Route über das Straßennetz
+(zufälliger Startpunkt, an jeder Kreuzung zufällige Abzweigung). Geplant:
 
-**Terrain-Daten (dokumentierte Erweiterung, kein Migrationszwang):**
-```ts
-terrain: { type: TerrainType; biome: BiomeType; height: number;
-  slope?: SlopeType; waterDepth?: number; variant?: string; }
-```
-Das **Gameplay-Grid bleibt** — die Optik darf organischer sein als die Logik
-(Höhenstufen, Klippen, tieferer Fluss, Küstenübergänge, Felsen), solange
-Platzierung weiter auf validen Tiles passiert. Die Zonen (West/Mitte/Nord/Ost/Süd)
-sollen **handdesignt oder halb-handdesignt** definierbar sein, nicht rein random.
+- Fahrzeuge fahren immer Haus → Straße → Ziel, kein Wenden mitten auf
+  Kreuzungen, keine Geisterfahrten, keine unnötigen Schleifen.
+- Ampeln vorbereiten, später ein Stau-System.
 
-## 20. Visuelle Konsistenz (§23)
+**Wiederverwendbarer Baustein:** Der Missions-Lieferwagen hat bereits echtes
+Start→Ziel-Pathing per BFS über den Straßen-Graphen (`roadPath()` in
+`ThreeMapRenderer.ts`) — dasselbe Muster lässt sich auf den Ambient-Verkehr
+übertragen, statt ein neues System zu bauen (siehe `CLAUDE.md` „Erweitern statt
+neu bauen"). Modelle: siehe `vehicles/PROMPTS.md` — unverändert, betrifft nur
+Pathing-Logik.
+
+---
+
+## 13. Lebendige Welt & Landmarken
+
+**Lebendige Welt (§10 der ursprünglichen Anfrage):** Vögel, Schmetterlinge, Wind
+in Bäumen, Wolkenschatten, Wasserbewegung, Brandung, Rauch, drehende Windräder,
+Schiffe, Verkehr — bewusst größtenteils als **Partikel/Shader statt `.glb`**
+umgesetzt (siehe `effects/PROMPTS.md`, Gruppe „lebendige Welt"). Bereits live:
+Schornsteinrauch, Windrad-Rotor, Verkehr, Missions-Lieferwagen, Tag-/Nacht-Zyklus,
+animiertes Wasser.
+
+**Hero-Landmarken:** jede Karte erhält mehrere bewusst platzierte (nicht
+zufällige) Landmarken zur Orientierung — Gebirge, Leuchtturm, Wasserfall, Hafen,
+Burg, Damm, Schlucht, Monument, große Brücke, Ruinen, Höhlen, Inseln. Vollständig
+mit Footprint/Biom/Platzierung in `terrain/PROMPTS.md` (Weltformen) und
+`buildings/PROMPTS.md` (Landmarken/Hero-Bauten) spezifiziert.
+
+---
+
+## 14. Visuelle Konsistenz
 
 `cardArt` (Baumenü) · `sheetArt` (Detail) · `model3d` (Karte) · `stages`/
 `<id>_stage<N>` (Upgrade-Optik) gehören je Gebäude zusammen: gleiche Form, Farben,
-Silhouette — der Spieler erkennt sein Gebäude in UI und Welt wieder, Upgrades zeigen
-sichtbare Entwicklung.
+Silhouette — der Spieler erkennt sein Gebäude in UI und Welt wieder, Upgrades
+zeigen sichtbare Entwicklung. Dasselbe Prinzip gilt jetzt für **alle** Weltobjekte
+(Terrain, Gebirge, Wasser, Küste, Landmarken, Props, Fahrzeuge, Marker, Effekte):
+ein einheitlicher stilisierter Cartoon-Low-Poly-Look, dieselbe Farbpalette
+(Stil-Prefix, §6), dieselben Proportionsregeln (`SCALE_NOTE` in
+`modelManifest.ts`).
 
-## 21. Beispiel-Prompts (Auszug)
+---
 
-```
-Datei: src/assets/models/buildings/housing/house_small.glb  (Footprint 2×2)
-<Stil-Prefix> small cozy family house with a red pitched roof, chimney, tiny
-front garden, warm windows, readable from an isometric camera.
+## 15. Workflow — nur Modelle ablegen
 
-Datei: src/assets/models/buildings/administration/town_hall.glb  (3×3)
-<Stil-Prefix> a grand town hall with a clock tower, columns, a flag and a red
-roof, small plaza in front.
-
-Datei: src/assets/models/terrain/hero/hero_mountain_range_west.glb  (8×8+, modular)
-<Stil-Prefix> a large stylized rocky mountain range with steep cliffs, a valley
-pass and a tunnel/mine entrance, layered peaks, snow-free, low-poly.
-
-Datei: src/assets/models/terrain/water/waterfall_large.glb  (4×4–8×8)
-<Stil-Prefix> a tall cascading waterfall over rocky cliffs into a pool, stylized
-foam at the base, low-poly.
-
-Datei: src/assets/models/terrain/hero/hero_harbor_bay.glb  (6×6, modular)
-<Stil-Prefix> a coastal harbor bay with wooden piers, small docks and calm water,
-rocky shoreline, low-poly.
-
-Datei: src/assets/models/buildings/landmarks/lighthouse.glb  (2×2)
-<Stil-Prefix> a red-and-white striped lighthouse on a rocky base with a lantern room.
-
-Datei: src/assets/models/bridges/bridge_medium_road.glb  (modular)
-<Stil-Prefix> a stylized stone road bridge with arches, sidewalks and railings.
-
-Datei: src/assets/models/buildings/administration/market_square.glb  (3×3–4×4)
-<Stil-Prefix> a lively market square with striped stalls, crates, a fountain and
-paved ground.
-
-Datei: src/assets/models/buildings/energy/dam.glb  (4×4+)
-<Stil-Prefix> a concrete hydro dam across a river valley with spillways and a small
-control building.
-
-Datei: src/assets/models/props/nature/pine_tree.glb  (1×1)
-<Stil-Prefix> a single stylized low-poly pine tree, slightly irregular.
-```
-
-Analog für alle Modelle aus §7–§18: Motiv + gewünschte Größe/Footprint an den
-Prefix hängen. Varianten (`_variant_01`, `_large`, `_level_2`) mit klarer Abwandlung.
-
-## 22. Workflow — nur Modelle ablegen
-
-1. Modell als `.glb` erzeugen (Standard aus §2 einhalten).
-2. In den dokumentierten Ordner legen, **Dateiname exakt** wie hier.
+1. Modell als `.glb` erzeugen (Standard aus §2 einhalten, Motiv+Spec aus der
+   passenden `PROMPTS.md`).
+2. In den dokumentierten Ordner legen, **Dateiname exakt** wie dort angegeben.
 3. `npm run build` (oder `npm run dev`).
 4. Das Spiel nutzt das Modell automatisch (rekursive Erkennung).
 5. Fehlt es, greift der Platzhalter. **Kein Code-Change nötig.**
 
-## 23. Empfohlene Startreihenfolge
+## 16. Empfohlene Startreihenfolge
 
-1. `house_small`, `house_row` (row_house), `town_hall`, `farm`, `sawmill`,
-   `quarry` — die häufigsten Gebäude.
-2. `grass_tile` (+1–2 Varianten), `road_straight`/`road_cross`, `pine_tree`,
-   `rock_medium` — Grundwelt.
+1. `house_small`, `house_row`, `town_hall`, `farm`, `sawmill`, `quarry` — die
+   häufigsten Gebäude.
+2. `grass_tile` (+1–2 Varianten), `road_straight`/`road_cross_intersection`,
+   `pine_tree`, `rock_medium` — Grundwelt.
 3. Hero: `hero_mountain_range_west`, `waterfall_large`, `lighthouse`,
    `harbor_small`, `bridge_medium_road` — Landmarken/Weltcharakter.
-4. Danach schrittweise Rest je Zone (West→Mitte→Nord→Ost→Süd).
+4. Danach schrittweise Rest je Zone (West→Mitte→Nord→Ost→Süd), Reihenfolge je
+   Ordner in der jeweiligen `PROMPTS.md` (Gruppe „Aktiv genutzt" vor „Geplant").

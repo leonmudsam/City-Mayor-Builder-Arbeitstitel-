@@ -7,7 +7,7 @@
 
 Ordner: `src/assets/models/props/`  ·  Loader: `propModel()`  ·  Schlüssel = Dateiname (rekursiv).
 
-Vegetation wird gegen die Stadt gecullt (nie auf Gebäude/Straße). Baustellen-Modelle (construction/) werden während Bau & Upgrade genutzt. Unterordner (nature/city/harbor/farm/construction) sind reine Organisation.
+Vegetation wird gegen die Stadt gecullt (nie auf Gebäude/Straße). Baustellen-Modelle (construction/) werden während Bau & Upgrade genutzt. Unterordner (nature/city/harbor/farm/construction/infrastructure) sind reine Organisation.
 
 | Zweck | Akzeptierte Dateinamen (Priorität →) | Hinweis |
 |---|---|---|
@@ -15,4 +15,4 @@ Vegetation wird gegen die Stadt gecullt (nie auf Gebäude/Straße). Baustellen-M
 | Busch | `bush_small.glb` → `bush.glb` → `bush_medium.glb` | gecullt, instanziert |
 | Baustelle (Bau & Upgrade) | `construction_site.glb` → `construction_crane.glb` → `scaffold.glb` → `crane.glb` | generisch; pro Gebäude: <id>_construction.glb |
 
-Fehlt ein Modell, greift der prozedurale Fallback — das Spiel bricht nie.
+Fehlt ein Modell, greift der prozedurale Fallback — das Spiel bricht nie. Die volle Spezifikation (Footprint, Höhe, Pivot, Platzierung, Biom, Budget) für diese UND alle geplanten Modelle dieses Ordners steht in `PROMPTS.md` daneben.

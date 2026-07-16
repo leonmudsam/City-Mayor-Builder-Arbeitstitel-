@@ -1,4 +1,5 @@
-// Single source of truth for every 3D model the true3d renderer wires in (v0.34).
+// Single source of truth for every 3D model the true3d renderer wires in (v0.40,
+// "World Graphics V2" doc consolidation).
 //
 // The ThreeMapRenderer imports the arrays below to decide which `.glb` to load per
 // category, and the per-folder `src/assets/models/<folder>/README.md` files are
@@ -8,6 +9,12 @@
 //
 // "First match wins" everywhere — precise name first, short alias after. A missing
 // model always falls back to the procedural stand-in, so the game never breaks.
+//
+// v0.40 also makes this file the ONE place that specifies every PLANNED (not yet
+// wired) model too — footprint, height, pivot, placement/biome rules, budget class,
+// animation/effect nodes — so `PROMPTS.md` per folder is a complete, artist-ready
+// spec instead of a bare name+motif list. See docs/3D_WORLD_ASSETS.md for the
+// narrative style guide and docs/3D_MODEL_MANIFEST.md for the short naming index.
 
 import type { TerrainType } from '../game/types.ts';
 
@@ -96,6 +103,48 @@ export const BUILDING_CATEGORY_FOLDER: Record<string, string> = {
   roads: 'roads',
 };
 
+// ---- size classes → shared poly/texture/material budget ---------------------
+// v0.40: every model (current + planned) resolves its budget from ONE of these
+// classes instead of restating tris/texture numbers per row (unmaintainable at
+// ~150–250 entries). Matches docs/3D_WORLD_ASSETS.md §22. Add per-entry
+// `heightRange`/`footprint` for the parts that actually vary model to model.
+
+export type SizeClass =
+  | 'prop'
+  | 'prop_large'
+  | 'vehicle'
+  | 'marker'
+  | 'effect'
+  | 'terrain_tile'
+  | 'terrain_feature'
+  | 'bridge'
+  | 'building_small'
+  | 'building_large'
+  | 'landmark'
+  | 'hero';
+
+export interface SizeClassBudget {
+  label: string;
+  triBudget: string;
+  textureSize: string;
+  materials: string;
+}
+
+export const SIZE_CLASS_BUDGETS: Record<SizeClass, SizeClassBudget> = {
+  prop: { label: 'kleines Prop', triBudget: '< 500 Tris', textureSize: '≤ 256²', materials: '1 Material' },
+  prop_large: { label: 'großes Prop / Setpiece', triBudget: '500–1 500 Tris', textureSize: '≤ 512²', materials: '1–2 Materialien' },
+  vehicle: { label: 'Fahrzeug', triBudget: '500–1 200 Tris', textureSize: '≤ 512²', materials: '1–2 Materialien' },
+  marker: { label: 'Marker / Welt-UI', triBudget: '< 200 Tris', textureSize: '≤ 128² (oder Canvas)', materials: '1 Material, emissiv' },
+  effect: { label: 'Effekt-Mesh', triBudget: '< 300 Tris', textureSize: '≤ 128²', materials: '1 Material, halbtransparent' },
+  terrain_tile: { label: 'Terrain-/Straßen-Kachel', triBudget: '200–800 Tris', textureSize: '≤ 512² (bevorzugt geteilt)', materials: '1 Material' },
+  terrain_feature: { label: 'Terrain-Feature', triBudget: '800–3 000 Tris', textureSize: '≤ 512²', materials: '1–2 Materialien' },
+  bridge: { label: 'Brücke', triBudget: '1 500–4 000 Tris', textureSize: '≤ 512²', materials: '1–2 Materialien' },
+  building_small: { label: 'kleines Gebäude', triBudget: '500–2 000 Tris', textureSize: '≤ 512²', materials: '1–2 Materialien' },
+  building_large: { label: 'großes Gebäude', triBudget: '2 000–6 000 Tris', textureSize: '≤ 1024²', materials: '2–3 Materialien' },
+  landmark: { label: 'Landmarke', triBudget: '6 000–12 000 Tris', textureSize: '≤ 1024²', materials: '2–4 Materialien' },
+  hero: { label: 'Hero-/Weltform (modular bevorzugt)', triBudget: 'so niedrig wie möglich, modular', textureSize: '≤ 1024², geteilt', materials: '2–6 Materialien je Modul' },
+};
+
 // ---- folder documentation model ---------------------------------------------
 
 export interface ModelDocRow {
@@ -113,7 +162,10 @@ export interface ModelFolderDoc {
 }
 
 /** Non-building folders, documented straight from the arrays above. The buildings
- *  folder is generated separately from buildings.config (see buildBuildingsReadme). */
+ *  folder is generated separately from buildings.config (see buildBuildingsReadme).
+ *  This lists only what the renderer ACTUALLY loads today — planned-but-unwired
+ *  models live in FOLDER_PROMPTS below, not here (adding a name here without
+ *  renderer code would be a lie about what the game does). */
 export const MODEL_FOLDER_DOCS: ModelFolderDoc[] = [
   {
     key: 'terrain',
@@ -164,7 +216,7 @@ export const MODEL_FOLDER_DOCS: ModelFolderDoc[] = [
     intro:
       'Vegetation wird gegen die Stadt gecullt (nie auf Gebäude/Straße). Baustellen-' +
       'Modelle (construction/) werden während Bau & Upgrade genutzt. Unterordner ' +
-      '(nature/city/harbor/farm/construction) sind reine Organisation.',
+      '(nature/city/harbor/farm/construction/infrastructure) sind reine Organisation.',
     rows: [
       { purpose: 'Baum', names: TREE_MODELS, note: 'gecullt, instanziert' },
       { purpose: 'Busch', names: BUSH_MODELS, note: 'gecullt, instanziert' },
@@ -242,7 +294,9 @@ export function renderFolderReadme(doc: ModelFolderDoc): string {
     `Schlüssel = Dateiname (rekursiv).\n\n` +
     `${doc.intro}\n\n` +
     `${table(doc.rows)}\n\n` +
-    `Fehlt ein Modell, greift der prozedurale Fallback — das Spiel bricht nie.\n`
+    `Fehlt ein Modell, greift der prozedurale Fallback — das Spiel bricht nie. Die volle ` +
+    `Spezifikation (Footprint, Höhe, Pivot, Platzierung, Biom, Budget) für diese UND alle ` +
+    `geplanten Modelle dieses Ordners steht in \`PROMPTS.md\` daneben.\n`
   );
 }
 
@@ -288,15 +342,17 @@ export function buildBuildingsReadme(buildings: readonly BuildingLike[]): string
     `|---|---|---|---|---|---|---|---|\n` +
     `${rows}\n\n` +
     `Die Straßen-ID \`road\` nutzt kein \`buildings/road.glb\`, sondern das Straßen-Segment-System ` +
-    `(\`src/assets/models/roads/\`).\n`
+    `(\`src/assets/models/roads/\`). Volle Spezifikation je Gebäude (Größenklasse, Budget, Front/Eingang, ` +
+    `Baustil): \`PROMPTS.md\` daneben.\n`
   );
 }
 
 // ---- Generierungs-Prompts (PROMPTS.md je Ordner) ----------------------------
 // Fertige Text-zu-3D-Prompts (Meshy/Rodin/Tripo/Luma …): jeder Block ist copy-paste-
-// fertig (Stil-Prefix + Motiv). Aus derselben Quelle generiert wie die READMEs; der
-// Test tests/modelReadmes.test.ts hält sie synchron. Motive bewusst auf Englisch,
-// da die Text-zu-3D-Tools damit am besten arbeiten.
+// fertig (Stil-Prefix + Motiv) UND trägt die volle Modell-Spezifikation (Größenklasse/
+// Budget, Höhe, Pivot, Platzierung, Biom, Animationen …). Aus derselben Quelle
+// generiert wie die READMEs; der Test tests/modelReadmes.test.ts hält sie synchron.
+// Motive bewusst auf Englisch, da die Text-zu-3D-Tools damit am besten arbeiten.
 
 /** Shared style/technical prefix — identisch zu docs/3D_WORLD_ASSETS.md §6. */
 export const STYLE_PREFIX =
@@ -324,6 +380,11 @@ export const SCALE_NOTE =
   'Maßstab 1 Kachel ≈ 4 m · Pivot unten-mittig, nichts schwebt · Höhen-Richtwerte: ' +
   'Baum ≈ 1.4–1.8, Strauch ≈ 0.5, Bank ≈ 0.4, Laterne ≈ 0.9, Fels ≈ 0.4–1.0, Brunnen ≈ 0.9 (Kacheln).';
 
+/** Default pivot/front, only overridden on an entry when it genuinely differs
+ *  (e.g. markers/effects hover instead of sitting on the ground). */
+const DEFAULT_PIVOT = 'unten-mittig (X/Z zentriert, Unterkante Y = 0)';
+const DEFAULT_FRONT = '+Z';
+
 export interface PromptEntry {
   /** Dateiname ohne `.glb`. */
   name: string;
@@ -331,6 +392,37 @@ export interface PromptEntry {
   footprint?: string;
   /** Englisches Motiv, wird an STYLE_PREFIX gehängt. */
   motif: string;
+  // ---- v0.40: volle Modell-Spezifikation (alle optional, Defaults gelten sonst) ----
+  /** Budget-Klasse → löst Tris/Textur/Material-Richtwert auf (SIZE_CLASS_BUDGETS). */
+  sizeClass?: SizeClass;
+  /** Empfohlene Höhe in Kacheln, z. B. "≈1.4–1.8 Kacheln". */
+  heightRange?: string;
+  /** Nur setzen, wenn abweichend von DEFAULT_PIVOT. */
+  pivot?: string;
+  /** Nur setzen, wenn abweichend von DEFAULT_FRONT oder nicht zutreffend (z. B. Terrain). */
+  frontFacing?: string;
+  /** Biom(e), in denen das Modell vorkommt. */
+  biome?: string;
+  /** Worauf platzierbar (Terrain-/Biom-Typen oder Gebäude-Nachbarschaft). */
+  placeOn?: string;
+  /** Worauf NIE platzierbar. */
+  neverOn?: string;
+  /** Mindestabstand zu gleichartigen Instanzen. */
+  minSpacing?: string;
+  /** Zufalls-Rotation/-Skalierung, Cluster-Verhalten. */
+  randomize?: string;
+  /** Ob der Renderer/die Platzierung Instancing nutzt (mehrfach, gleiche Geometrie). */
+  instancing?: boolean;
+  /** Benannter Node, den der Renderer animiert (z. B. `rotor`). */
+  animationNodes?: string;
+  /** Benannter Node/Anschlusspunkt für Partikel-Effekte (z. B. `chimney`). */
+  effectNodes?: string;
+  /** Spawn-Wahrscheinlichkeit / Verteilungsregel. */
+  spawnRule?: string;
+  /** 'particle-shader' = bewusst KEIN `.glb`, sondern Partikel/Shader im Renderer. */
+  implementation?: 'glb' | 'particle-shader';
+  /** Ist das Modell schon in der Renderer-Pipeline verdrahtet (§0 in 3D_MODEL_MANIFEST.md)? */
+  status?: 'live' | 'planned';
 }
 export interface PromptGroup {
   title: string;
@@ -383,20 +475,26 @@ export const BUILDING_PROMPTS: Record<string, string> = {
 
 /** Geplante Landmarken/Hero-Bauten (noch keine Config-IDs; siehe 3D_WORLD_ASSETS §13). */
 export const BUILDING_LANDMARK_PROMPTS: PromptEntry[] = [
-  { name: 'lighthouse', footprint: '2×2', motif: 'a red-and-white striped lighthouse on a rocky base with a lantern room' },
-  { name: 'harbor_small', footprint: '4×4 / modular', motif: 'a small harbor with wooden piers, bollards, crates and a calm water edge' },
-  { name: 'harbor_pier', footprint: 'modular', motif: 'a wooden harbor pier segment with planks and posts, extends over water' },
-  { name: 'ship_sailing', footprint: '2×4', motif: 'a small stylized sailing ship / cargo boat, front facing +Z, readable silhouette' },
-  { name: 'monument_city', footprint: '2×2', motif: 'a city monument: a stone obelisk or statue on a stepped base with a small plaza' },
-  { name: 'museum', footprint: '3×3', motif: 'a classical museum with columns, a wide staircase, a pediment and a flag' },
-  { name: 'stadium', footprint: '4×4', motif: 'a small sports stadium with tiered stands, a pitch and floodlights' },
-  { name: 'observation_tower', footprint: '2×2', motif: 'a tall slim observation tower with a viewing platform at the top' },
-  { name: 'mountain_tunnel_landmark', footprint: '3×3', motif: 'a mountain tunnel / mine entrance carved into rock, with a portal, rails and props' },
-  { name: 'hero_city_hall_plaza', footprint: '6×6, modular', motif: 'a hero city-hall plaza: the town hall with a grand paved square, fountains and greenery' },
-  { name: 'hero_harbor_complex', footprint: '6×6, modular', motif: 'a hero harbor complex: piers, cranes, warehouses, moored boats and a promenade' },
-  { name: 'hero_lighthouse_cliff', footprint: '6×6, modular', motif: 'a hero coastal cliff with a lighthouse on top, rocky shore and crashing waves' },
-  { name: 'hero_grand_bridge', footprint: 'modular', motif: 'a hero grand stone-and-steel bridge spanning a wide river valley with towers' },
-  { name: 'hero_central_park', footprint: '6×6, modular', motif: 'a hero central park: lawns, tree clusters, ponds, paths, a bandstand and benches' },
+  { name: 'lighthouse', footprint: '2×2', sizeClass: 'landmark', heightRange: '≈4–6 Kacheln', biome: 'Küste', placeOn: 'Küstenklippe/Landzunge, Wasserzugang', motif: 'a red-and-white striped lighthouse on a rocky base with a lantern room' },
+  { name: 'harbor_small', footprint: '4×4 / modular', sizeClass: 'hero', biome: 'Küste, Bucht', placeOn: 'Küste, Wasserzugang auf mind. 2 Seiten', motif: 'a small harbor with wooden piers, bollards, crates and a calm water edge' },
+  { name: 'harbor_pier', footprint: 'modular', sizeClass: 'terrain_feature', biome: 'Küste, See', placeOn: 'ragt über Wasser', motif: 'a wooden harbor pier segment with planks and posts, extends over water' },
+  { name: 'ship_sailing', footprint: '2×4', sizeClass: 'prop_large', pivot: DEFAULT_PIVOT, frontFacing: '+Z, fährt entlang Wasserfläche', biome: 'Meer, See', motif: 'a small stylized sailing ship / cargo boat, front facing +Z, readable silhouette' },
+  { name: 'monument_city', footprint: '2×2', sizeClass: 'landmark', biome: 'Stadtzentrum, Platz', motif: 'a city monument: a stone obelisk or statue on a stepped base with a small plaza' },
+  { name: 'museum', footprint: '3×3', sizeClass: 'landmark', biome: 'Stadtzentrum', motif: 'a classical museum with columns, a wide staircase, a pediment and a flag' },
+  { name: 'stadium', footprint: '4×4', sizeClass: 'landmark', biome: 'Stadtrand', motif: 'a small sports stadium with tiered stands, a pitch and floodlights' },
+  { name: 'observation_tower', footprint: '2×2', sizeClass: 'landmark', heightRange: '≈6–9 Kacheln', biome: 'Hochplateau, Stadtrand', motif: 'a tall slim observation tower with a viewing platform at the top' },
+  { name: 'mountain_tunnel_landmark', footprint: '3×3', sizeClass: 'landmark', biome: 'Gebirge', placeOn: 'Gebirgswand, an Straße/Gebirgspass', motif: 'a mountain tunnel / mine entrance carved into rock, with a portal, rails and props' },
+  { name: 'hero_city_hall_plaza', footprint: '6×6, modular', sizeClass: 'hero', biome: 'Stadtzentrum', spawnRule: 'ein Exemplar, handplatziert im Stadtkern', motif: 'a hero city-hall plaza: the town hall with a grand paved square, fountains and greenery' },
+  { name: 'hero_market_district', footprint: '6×6, modular', sizeClass: 'hero', biome: 'Stadtzentrum', spawnRule: 'ein Exemplar, handplatziert nahe Marktachse', motif: 'a hero market district: a bustling square with market stalls, awnings, crates and paved streets' },
+  { name: 'hero_harbor_complex', footprint: '6×6, modular', sizeClass: 'hero', biome: 'Küste, Bucht', spawnRule: 'ein Exemplar, handplatziert an der Küstenzone', motif: 'a hero harbor complex: piers, cranes, warehouses, moored boats and a promenade' },
+  { name: 'hero_lighthouse_cliff', footprint: '6×6, modular', sizeClass: 'hero', biome: 'Küste, Klippe', spawnRule: 'ein Exemplar, handplatziert an prägnanter Klippe', motif: 'a hero coastal cliff with a lighthouse on top, rocky shore and crashing waves' },
+  { name: 'hero_grand_bridge', footprint: 'modular', sizeClass: 'hero', biome: 'Fluss/Schlucht', placeOn: 'spannt Fluss oder Schlucht', motif: 'a hero grand stone-and-steel bridge spanning a wide river valley with towers' },
+  { name: 'hero_mine_complex', footprint: '6×6, modular', sizeClass: 'hero', biome: 'Gebirge', spawnRule: 'ein Exemplar, handplatziert am Gebirgsfuß', motif: 'a hero mining complex: a mountain mine entrance with rail tracks, ore carts, a headframe and stockpiles' },
+  { name: 'hero_dam_complex', footprint: '8×4, modular', sizeClass: 'hero', biome: 'Fluss/Tal', placeOn: 'spannt Flusstal', motif: 'a hero hydro dam complex: a concrete dam wall across a valley with spillways and a small control building' },
+  { name: 'hero_central_park', footprint: '6×6, modular', sizeClass: 'hero', biome: 'Stadtzentrum, Grünfläche', motif: 'a hero central park: lawns, tree clusters, ponds, paths, a bandstand and benches' },
+  { name: 'hero_waterfront_district', footprint: '6×6, modular', sizeClass: 'hero', biome: 'Küste, Seeufer', motif: 'a hero waterfront district: a scenic promenade with cafés, small piers and moored boats along the water' },
+  { name: 'castle_hilltop', footprint: '4×4', sizeClass: 'landmark', heightRange: '≈8–12 Kacheln', biome: 'Hochplateau, Gebirgsrand', status: 'planned', motif: 'a small stylized hilltop castle with a keep, walls and a flag, evoking a distant-future endgame prestige building' },
+  { name: 'hero_grand_observatory', footprint: '4×4', sizeClass: 'hero', heightRange: '≈10–14 Kacheln', biome: 'Hochplateau, Gebirgsgipfel', status: 'planned', motif: 'a hero endgame grand observatory: a domed tower on a rocky summit with a telescope, reachable by a winding path' },
 ];
 
 /** Prompt-Katalog je Nicht-Gebäude-Ordner: aktiv genutzte + geplante Modelle. */
@@ -407,42 +505,79 @@ export const FOLDER_PROMPTS: FolderPrompts[] = [
     intro:
       'Bodenkacheln (1×1, kachelbar) und Gebirgs-/Hero-Formen. **Der Boden ist ein organisches ' +
       'Höhenfeld** — Hügel/Gebirge sind geneigt, Wasser abgesenkt; Kachel-/Fels-/Gipfel-Modelle ' +
-      'werden automatisch auf die Bodenhöhe gesetzt. Deshalb **Pivot unten-mittig, flache Unterseite, ' +
-      'nichts schwebt**; Gebirge groß & sauber (klare Felsflächen, keine losen Teile). ' +
+      'werden automatisch auf die Bodenhöhe gesetzt (reiten das Höhenfeld). Deshalb **Pivot unten-mittig, ' +
+      'flache Unterseite, nichts schwebt**; Gebirge groß & sauber (klare Felsflächen, keine losen Teile). ' +
       SCALE_NOTE,
     groups: [
       {
         title: 'Aktiv genutzt (Kacheln je Terraintyp)',
         entries: [
-          { name: 'grass_tile', footprint: '1×1', motif: 'a flat green grass meadow tile, subtle micro-detail, tileable edges' },
-          { name: 'forest_ground_tile', footprint: '1×1', motif: 'a forest floor tile with moss, roots and a few leaves, tileable' },
-          { name: 'ocean_tile', footprint: '1×1', motif: 'a calm sea water tile with a gentle stylized wave, deep blue, tileable' },
-          { name: 'river_straight', footprint: '1×1', motif: 'a straight flowing blue river water tile, gentle current, tileable along its axis' },
-          { name: 'mountain_ground_tile', footprint: '1×1', motif: 'a steep grey rocky mountain ground tile, tileable' },
-          { name: 'sand_tile', footprint: '1×1', motif: 'a light sandy beach tile, tileable' },
-          { name: 'fertile_ground_tile', footprint: '1×1', motif: 'a ploughed fertile farmland soil tile with brown furrows, tileable' },
-          { name: 'mountain_peak_medium', footprint: '1–2 tiles', motif: 'a stylized rocky mountain peak / large boulder cluster, layered rock, no snow' },
+          { name: 'grass_tile', footprint: '1×1', sizeClass: 'terrain_tile', biome: 'Grasland', placeOn: 'grass', instancing: true, status: 'live', motif: 'a flat green grass meadow tile, subtle micro-detail, tileable edges' },
+          { name: 'forest_ground_tile', footprint: '1×1', sizeClass: 'terrain_tile', biome: 'Mischwald', placeOn: 'forest', instancing: true, status: 'live', motif: 'a forest floor tile with moss, roots and a few leaves, tileable' },
+          { name: 'ocean_tile', footprint: '1×1', sizeClass: 'terrain_tile', biome: 'Meer', placeOn: 'water', instancing: true, status: 'live', motif: 'a calm sea water tile with a gentle stylized wave, deep blue, tileable' },
+          { name: 'river_straight', footprint: '1×1', sizeClass: 'terrain_tile', biome: 'Fluss', placeOn: 'river', instancing: true, status: 'live', motif: 'a straight flowing blue river water tile, gentle current, tileable along its axis' },
+          { name: 'mountain_ground_tile', footprint: '1×1', sizeClass: 'terrain_tile', biome: 'Gebirge', placeOn: 'mountain', instancing: true, status: 'live', motif: 'a steep grey rocky mountain ground tile, tileable' },
+          { name: 'sand_tile', footprint: '1×1', sizeClass: 'terrain_tile', biome: 'Strand/Küste', placeOn: 'sand', instancing: true, status: 'live', motif: 'a light sandy beach tile, tileable' },
+          { name: 'fertile_ground_tile', footprint: '1×1', sizeClass: 'terrain_tile', biome: 'Fruchtbares Land', placeOn: 'fertile', instancing: true, status: 'live', motif: 'a ploughed fertile farmland soil tile with brown furrows, tileable' },
+          { name: 'mountain_peak_medium', footprint: '1–2 Kacheln', sizeClass: 'terrain_feature', heightRange: '≈2–3 Kacheln', biome: 'Gebirge', placeOn: 'mountain', spawnRule: '~⅓ der Gebirgs-Kacheln, zufällig gestreut', instancing: true, randomize: 'Zufallsrotation + leichte Zufallsskalierung', status: 'live', motif: 'a stylized rocky mountain peak / large boulder cluster, layered rock, no snow' },
         ],
       },
       {
-        title: 'Geplant (Wasser, Gebirge, Klippen, Hero)',
-        note: 'Noch nicht verdrahtet, aber vom Weltbild vorgesehen (siehe docs/3D_WORLD_ASSETS.md §7–§10).',
+        title: 'Geplant — Gebirge (schroffe Felsen statt runder Blöcke)',
+        note: 'Bilden zusammen ein zerklüftetes Gebirge mit Tälern/Pässen statt flacher grauer Blöcke (siehe World-Graphics-V2 §2).',
         entries: [
-          { name: 'grass_tile_variant_01', footprint: '1×1', motif: 'a grass tile variant with tufts and small stones, tileable' },
-          { name: 'shore_tile', footprint: '1×1', motif: 'a shoreline tile where grass meets water, tileable' },
-          { name: 'river_curve', footprint: '1×1', motif: 'a curved river water tile connecting two adjacent edges, tileable' },
-          { name: 'lake_center', footprint: '1×1', motif: 'a calm lake water tile, still deep-blue surface, tileable' },
-          { name: 'coast_rocky', footprint: '1×1', motif: 'a rocky coastline tile where land meets sea, tileable' },
-          { name: 'waterfall_large', footprint: '4×4–8×8', motif: 'a tall cascading waterfall over rocky cliffs into a pool, stylized foam at the base' },
-          { name: 'mountain_wall_straight', footprint: '2×2', motif: 'a straight steep mountain wall segment, layered rock, tileable side to side' },
-          { name: 'mountain_valley_pass', footprint: '3×3', motif: 'a mountain valley pass: two rock walls with a passable corridor between them' },
-          { name: 'cliff_edge', footprint: '1×1', motif: 'a cliff edge tile: flat top dropping to a rocky face, tileable' },
-          { name: 'hill_small', footprint: '2×2', motif: 'a small rounded grassy hill mound with a gentle slope, blends into flat ground at its base' },
-          { name: 'boulder_cluster', footprint: '1×1', motif: 'a cluster of stylized grey boulders of varied size sitting on the ground, low-poly' },
-          { name: 'rock_outcrop', footprint: '1–2 tiles', motif: 'a rocky outcrop rising from the ground, layered stone, flat base' },
-          { name: 'mountain_peak_large', footprint: '3×3', motif: 'a large stylized rocky mountain peak with steep faces and a broad flat base, no snow' },
-          { name: 'hero_mountain_range_west', footprint: '8×8–12×12, modular', motif: 'a large stylized rocky mountain range with steep cliffs, a valley pass and a tunnel entrance, layered peaks, no snow' },
-          { name: 'hero_harbor_bay', footprint: '6×6, modular', motif: 'a coastal harbor bay with wooden piers, small docks and calm water, rocky shoreline' },
+          { name: 'mountain_wall_straight', footprint: '2×2', sizeClass: 'terrain_feature', heightRange: '≈3–5 Kacheln', biome: 'Gebirge', placeOn: 'mountain, Gebirgsrand', neverOn: 'Straße, Bauplatz', instancing: false, status: 'planned', motif: 'a straight steep mountain wall segment, layered rock, tileable side to side' },
+          { name: 'mountain_wall_corner', footprint: '2×2', sizeClass: 'terrain_feature', heightRange: '≈3–5 Kacheln', biome: 'Gebirge', placeOn: 'Gebirgsrand-Ecke', instancing: false, status: 'planned', motif: 'a 90° corner mountain wall segment, layered rock, connects two straight wall pieces' },
+          { name: 'mountain_valley_pass', footprint: '3×3', sizeClass: 'terrain_feature', biome: 'Gebirge', placeOn: 'zwischen zwei Gebirgswänden, an Straße/Serpentine', instancing: false, status: 'planned', motif: 'a mountain valley pass: two rock walls with a passable corridor between them' },
+          { name: 'mountain_tunnel_entrance', footprint: '2×1', sizeClass: 'terrain_feature', biome: 'Gebirge', placeOn: 'Gebirgswand, an Straße', animationNodes: 'reserved: light_window (Tunnellicht)', instancing: false, status: 'planned', motif: 'a mountain tunnel entrance carved into rock, with a portal frame and rail-free road opening' },
+          { name: 'rock_spire', footprint: '1×1', sizeClass: 'terrain_feature', heightRange: '≈2.5–4 Kacheln', biome: 'Gebirge', placeOn: 'mountain', neverOn: 'Straße, Bauplatz', instancing: true, randomize: 'Zufallsrotation', status: 'planned', motif: 'a tall narrow stylized rock spire / pinnacle rising from rugged mountain terrain' },
+          { name: 'mountain_peak_large', footprint: '3×3', sizeClass: 'terrain_feature', heightRange: '≈4–6 Kacheln', biome: 'Gebirge', placeOn: 'mountain, zentral im Gebirgscluster', instancing: false, status: 'planned', motif: 'a large stylized rocky mountain peak with steep faces and a broad flat base, no snow' },
+        ],
+      },
+      {
+        title: 'Geplant — Gebirgsflüsse (Quelle → Schlucht → Mündung)',
+        note: 'Flüsse entspringen im Gebirge, graben sich ein und münden ins Meer/den See (World-Graphics-V2 §3).',
+        entries: [
+          { name: 'river_source', footprint: '1×1', sizeClass: 'terrain_feature', biome: 'Gebirge/Fluss-Ursprung', placeOn: 'am Fuß einer Gebirgswand, Anfang eines Flusslaufs', effectNodes: 'water_surface_motion_effect (Partikel)', instancing: false, status: 'planned', motif: 'a small mountain spring where a river originates from rock, trickling water, mossy stones' },
+          { name: 'river_curve', footprint: '1×1', sizeClass: 'terrain_tile', biome: 'Fluss', placeOn: 'river (Kurven-Nachbarmaske)', instancing: true, status: 'planned', motif: 'a curved river water tile connecting two adjacent edges, tileable' },
+          { name: 'river_fork', footprint: '1×1', sizeClass: 'terrain_tile', biome: 'Fluss', placeOn: 'river (Verzweigung/Zusammenfluss)', instancing: true, status: 'planned', motif: 'a river fork/confluence water tile where two branches join, tileable' },
+          { name: 'river_mouth', footprint: '1×1', sizeClass: 'terrain_feature', biome: 'Flussmündung/Küste', placeOn: 'Übergang Fluss → Meer/See', instancing: false, status: 'planned', motif: 'a river mouth tile where fresh water widens and meets the sea, sandbanks, tileable edges' },
+          { name: 'waterfall_small', footprint: '2×2', sizeClass: 'terrain_feature', heightRange: '≈2–3 Kacheln', biome: 'Gebirgsfluss', placeOn: 'Geländestufe zwischen zwei Flusshöhen', effectNodes: 'waterfall_mist (Gischt-Partikel)', instancing: false, status: 'planned', motif: 'a small waterfall cascading over a short rocky drop into a stream, light foam at the base' },
+          { name: 'waterfall_large', footprint: '4×4–8×8', sizeClass: 'hero', biome: 'Gebirge', placeOn: 'große Geländestufe im Hero-Gebirge', effectNodes: 'waterfall_mist (Gischt-Partikel)', spawnRule: 'ein bis zwei Exemplare, handplatziert', instancing: false, status: 'planned', motif: 'a tall cascading waterfall over rocky cliffs into a pool, stylized foam at the base' },
+          { name: 'lake_center', footprint: '1×1', sizeClass: 'terrain_tile', biome: 'See', placeOn: 'in einer Geländesenke', instancing: true, status: 'planned', motif: 'a calm lake water tile, still deep-blue surface, tileable' },
+          { name: 'lake_edge', footprint: '1×1', sizeClass: 'terrain_tile', biome: 'See-Ufer', placeOn: 'Übergang See → Ufer', instancing: true, status: 'planned', motif: 'a lake shoreline tile blending calm water into a sandy or grassy edge, tileable' },
+        ],
+      },
+      {
+        title: 'Geplant — Küste & Klippen',
+        note: 'Meer wird Küstenlinie statt Fläche: Strand, Klippen, Brandung (World-Graphics-V2 §4).',
+        entries: [
+          { name: 'grass_tile_variant_01', footprint: '1×1', sizeClass: 'terrain_tile', biome: 'Grasland', placeOn: 'grass', instancing: true, status: 'planned', motif: 'a grass tile variant with tufts and small stones, tileable' },
+          { name: 'shore_tile', footprint: '1×1', sizeClass: 'terrain_tile', biome: 'Ufer', placeOn: 'Übergang Gras → Wasser', instancing: true, status: 'planned', motif: 'a shoreline tile where grass meets water, tileable' },
+          { name: 'coast_rocky', footprint: '1×1', sizeClass: 'terrain_tile', biome: 'Felsküste', placeOn: 'Übergang Land → Meer an Klippen', instancing: true, status: 'planned', motif: 'a rocky coastline tile where land meets sea, tileable' },
+          { name: 'coast_sandy', footprint: '1×1', sizeClass: 'terrain_tile', biome: 'Sandküste', placeOn: 'Übergang Land → Meer am Strand', instancing: true, status: 'planned', motif: 'a sandy coastline tile with light surf foam where the beach meets the sea, tileable' },
+          { name: 'cliff_edge', footprint: '1×1', sizeClass: 'terrain_feature', biome: 'Küstenklippe, Hochplateau', placeOn: 'Geländestufe/Kante', instancing: false, status: 'planned', motif: 'a cliff edge tile: flat top dropping to a rocky face, tileable' },
+          { name: 'cliff_corner', footprint: '1×1', sizeClass: 'terrain_feature', biome: 'Küstenklippe, Hochplateau', placeOn: 'Ecke einer Klippenkante', instancing: false, status: 'planned', motif: 'a cliff corner tile turning the cliff edge 90°, tileable with cliff_edge' },
+          { name: 'hero_coastal_cliff', footprint: '6×6, modular', sizeClass: 'hero', biome: 'Küste', spawnRule: 'ein Exemplar, handplatziert an der Küstenzone', status: 'planned', motif: 'a hero coastal cliff formation with crashing waves, seabirds and a narrow cliffside path' },
+          { name: 'hero_harbor_bay', footprint: '6×6, modular', sizeClass: 'hero', biome: 'Küste, Bucht', spawnRule: 'ein Exemplar, handplatziert', status: 'planned', motif: 'a coastal harbor bay with wooden piers, small docks and calm water, rocky shoreline' },
+        ],
+      },
+      {
+        title: 'Geplant — Hügel, Ebenen & weitere Hero-Weltformen',
+        note: 'Große, prägende Weltformen für Orientierung; handplatziert pro Zone, nicht zufallsgestreut.',
+        entries: [
+          { name: 'hill_small', footprint: '2×2', sizeClass: 'terrain_feature', biome: 'Grasland-Hügelland', placeOn: 'Übergangszone Ebene → Gebirge', instancing: false, status: 'planned', motif: 'a small rounded grassy hill mound with a gentle slope, blends into flat ground at its base' },
+          { name: 'boulder_cluster', footprint: '1×1', sizeClass: 'prop_large', biome: 'Gebirge, Fels, Küste', placeOn: 'mountain, sand, Felsrand', neverOn: 'Straße, Gebäude', instancing: true, randomize: 'Zufallsrotation + Zufallsskalierung', status: 'planned', motif: 'a cluster of stylized grey boulders of varied size sitting on the ground, low-poly' },
+          { name: 'rock_outcrop', footprint: '1–2 Kacheln', sizeClass: 'terrain_feature', biome: 'Gebirge, Grasland-Übergang', placeOn: 'mountain-nahe Kacheln', instancing: true, status: 'planned', motif: 'a rocky outcrop rising from the ground, layered stone, flat base' },
+          { name: 'hero_mountain_range_west', footprint: '8×8–12×12, modular', sizeClass: 'hero', biome: 'Gebirge', spawnRule: 'ein Exemplar, bildet den Gebirgszug einer Kartenseite', status: 'planned', motif: 'a large stylized rocky mountain range with steep cliffs, a valley pass and a tunnel entrance, layered peaks, no snow' },
+          { name: 'hero_river_valley', footprint: '6×6, modular', sizeClass: 'hero', biome: 'Fluss/Tal', spawnRule: 'ein Exemplar, entlang des Hauptflusslaufs', status: 'planned', motif: 'a hero river valley: a carved river gorge with a stream, footbridge and terraced banks' },
+          { name: 'hero_lake_basin', footprint: '6×6, modular', sizeClass: 'hero', biome: 'See', spawnRule: 'ein Exemplar, in einer Geländesenke', status: 'planned', motif: 'a hero lake basin: a calm lake surrounded by reeds, rocks and a small shoreline path' },
+          { name: 'hero_forest_ridge', footprint: '6×6, modular', sizeClass: 'hero', biome: 'Mischwald', spawnRule: 'ein Exemplar, auf einem Höhenzug', status: 'planned', motif: 'a hero forest ridge: a densely wooded hilltop ridge with a scenic overlook clearing' },
+          { name: 'hero_fertile_valley', footprint: '6×6, modular', sizeClass: 'hero', biome: 'Fruchtbares Land', spawnRule: 'ein Exemplar, in der Farmregion', status: 'planned', motif: 'a hero fertile valley: patchwork farm fields with hedgerows, a windmill and a dirt path' },
+          { name: 'hero_dam_site', footprint: '8×4, modular', sizeClass: 'hero', biome: 'Fluss/Tal', placeOn: 'spannt Flusstal', status: 'planned', motif: 'a hero dam site: a concrete dam across a narrow valley with a reservoir and a spillway' },
+          { name: 'hero_ruins_ancient', footprint: '4×4, modular', sizeClass: 'hero', biome: 'Grasland, Wald', spawnRule: 'ein Exemplar, versteckt abseits der Stadt', status: 'planned', motif: 'a hero ancient ruin: crumbling stone walls, broken columns and overgrown vines on a grassy mound' },
+          { name: 'hero_cave_system', footprint: '4×4, modular', sizeClass: 'hero', biome: 'Gebirge', placeOn: 'Gebirgswand', status: 'planned', motif: 'a hero cave system entrance: a large dark cave mouth in a rock face with stalactite details and a path leading in' },
+          { name: 'hero_island_offshore', footprint: '4×4, modular', sizeClass: 'hero', biome: 'Meer', placeOn: 'im Meer, sichtbar vom Festland', status: 'planned', motif: 'a hero small offshore island with a few trees, rocks and a sandy beach, surrounded by sea' },
         ],
       },
     ],
@@ -455,21 +590,22 @@ export const FOLDER_PROMPTS: FolderPrompts[] = [
       {
         title: 'Aktiv genutzt (Wohnstraße)',
         entries: [
-          { name: 'road_straight', footprint: '1×1', motif: 'a straight two-lane asphalt road segment running north–south, with kerbs; flat and tileable' },
-          { name: 'road_curve', footprint: '1×1', motif: 'a 90° road curve joining the north and east edges, asphalt with kerbs, flat' },
-          { name: 'road_t_intersection', footprint: '1×1', motif: 'a T-junction road segment with three arms (north, east, south), open to the west, asphalt with kerbs' },
-          { name: 'road_cross_intersection', footprint: '1×1', motif: 'a four-way crossroads road segment, asphalt with kerbs and lane markings' },
-          { name: 'road_end', footprint: '1×1', motif: 'a dead-end road cap with a single arm to the north, asphalt with kerbs' },
+          { name: 'road_straight', footprint: '1×1', sizeClass: 'terrain_tile', frontFacing: 'n/a (Boden-Segment)', instancing: true, status: 'live', motif: 'a straight two-lane asphalt road segment running north–south, with kerbs; flat and tileable' },
+          { name: 'road_curve', footprint: '1×1', sizeClass: 'terrain_tile', frontFacing: 'n/a', instancing: true, status: 'live', motif: 'a 90° road curve joining the north and east edges, asphalt with kerbs, flat' },
+          { name: 'road_t_intersection', footprint: '1×1', sizeClass: 'terrain_tile', frontFacing: 'n/a', instancing: true, status: 'live', motif: 'a T-junction road segment with three arms (north, east, south), open to the west, asphalt with kerbs' },
+          { name: 'road_cross_intersection', footprint: '1×1', sizeClass: 'terrain_tile', frontFacing: 'n/a', instancing: true, status: 'live', motif: 'a four-way crossroads road segment, asphalt with kerbs and lane markings' },
+          { name: 'road_end', footprint: '1×1', sizeClass: 'terrain_tile', frontFacing: 'n/a', instancing: true, status: 'live', motif: 'a dead-end road cap with a single arm to the north, asphalt with kerbs' },
         ],
       },
       {
-        title: 'Geplant (Hauptstraße, Gehwege, Rampen)',
-        note: 'Klassenvarianten `road_main_*` werden vom Renderer vor dem generischen Namen bevorzugt.',
+        title: 'Geplant — Hauptstraße, Gehwege, Gelände-Anpassung',
+        note: 'Klassenvarianten `road_main_*` werden vom Renderer vor dem generischen Namen bevorzugt. `road_slope`/`road_bridge_entry` sorgen dafür, dass Straßen dem Gelände folgen statt zu schweben (World-Graphics-V2 §5).',
         entries: [
-          { name: 'road_main_straight', footprint: '1×1', motif: 'a wider main-road straight segment with a centre line and sidewalks, running north–south, flat and tileable' },
-          { name: 'road_main_cross_intersection', footprint: '1×1', motif: 'a wide main-road four-way crossroads with markings and sidewalks' },
-          { name: 'sidewalk_straight', footprint: '1×1', motif: 'a straight paved sidewalk segment with a kerb, flat and tileable' },
-          { name: 'road_slope', footprint: '1×1', motif: 'a road ramp segment rising one height step, asphalt with kerbs' },
+          { name: 'road_main_straight', footprint: '1×1', sizeClass: 'terrain_tile', instancing: true, status: 'planned', motif: 'a wider main-road straight segment with a centre line and sidewalks, running north–south, flat and tileable' },
+          { name: 'road_main_cross_intersection', footprint: '1×1', sizeClass: 'terrain_tile', instancing: true, status: 'planned', motif: 'a wide main-road four-way crossroads with markings and sidewalks' },
+          { name: 'sidewalk_straight', footprint: '1×1', sizeClass: 'terrain_tile', instancing: true, status: 'planned', motif: 'a straight paved sidewalk segment with a kerb, flat and tileable' },
+          { name: 'road_slope', footprint: '1×1', sizeClass: 'terrain_tile', biome: 'Gebirge, Hügelland', placeOn: 'Höhenstufe zwischen zwei Terrassen', instancing: true, status: 'planned', motif: 'a road ramp segment rising one height step, asphalt with kerbs, blends smoothly into flat road tiles at both ends' },
+          { name: 'road_bridge_entry', footprint: '1×1', sizeClass: 'terrain_tile', biome: 'Fluss-/Schluchtrand', placeOn: 'Übergang Straße → Brückendeck', instancing: true, status: 'planned', motif: 'a short road segment transitioning from ground level onto a raised bridge deck, with a low kerb ramp' },
         ],
       },
     ],
@@ -482,10 +618,11 @@ export const FOLDER_PROMPTS: FolderPrompts[] = [
       {
         title: 'Brückenvarianten',
         entries: [
-          { name: 'bridge_medium_road', footprint: 'modular', motif: 'a stylized stone road bridge with arches, sidewalks and railings, spanning water along its axis' },
-          { name: 'bridge_small_stone', footprint: '1×1', motif: 'a small single-arch stone footbridge with low railings, spanning a narrow stream' },
-          { name: 'bridge_small_wood', footprint: '1×1', motif: 'a small wooden plank bridge with posts and rope/wood railings, spanning a stream' },
-          { name: 'bridge_large_road', footprint: 'modular', motif: 'a large multi-span road bridge with piers, a wide deck, sidewalks and railings' },
+          { name: 'bridge_medium_road', footprint: 'modular', sizeClass: 'bridge', status: 'live', motif: 'a stylized stone road bridge with arches, sidewalks and railings, spanning water along its axis' },
+          { name: 'bridge_small_stone', footprint: '1×1', sizeClass: 'bridge', status: 'planned', motif: 'a small single-arch stone footbridge with low railings, spanning a narrow stream' },
+          { name: 'bridge_small_wood', footprint: '1×1', sizeClass: 'bridge', status: 'planned', motif: 'a small wooden plank bridge with posts and rope/wood railings, spanning a stream' },
+          { name: 'bridge_large_road', footprint: 'modular', sizeClass: 'bridge', status: 'planned', motif: 'a large multi-span road bridge with piers, a wide deck, sidewalks and railings' },
+          { name: 'bridge_rail_future', footprint: 'modular', sizeClass: 'bridge', status: 'planned', motif: 'a stylized railway bridge with steel trusses, reserved for a future rail-transport feature' },
         ],
       },
     ],
@@ -502,28 +639,63 @@ export const FOLDER_PROMPTS: FolderPrompts[] = [
       {
         title: 'Aktiv genutzt',
         entries: [
-          { name: 'pine_tree', footprint: '1×1', motif: 'a single stylized low-poly pine tree, slightly irregular' },
-          { name: 'bush_small', footprint: '1×1', motif: 'a small round low-poly bush' },
-          { name: 'construction_site', footprint: '1–3 tiles', motif: 'a construction site prop: scaffolding, a small crane and barriers with warning stripes, to sit over a building under construction' },
+          { name: 'pine_tree', footprint: '1×1', sizeClass: 'prop', heightRange: '≈1.4–1.8 Kacheln', biome: 'Wald, Grasland, fruchtbares Land', placeOn: 'grass, forest, fertile', neverOn: 'Straße, Gebäude-Footprint, Bauplatz, Wasser, Gebirge', minSpacing: '0.3–0.5 Kacheln', randomize: 'Zufallsrotation + Zufallsskalierung (±15%)', instancing: true, status: 'live', motif: 'a single stylized low-poly pine tree, slightly irregular' },
+          { name: 'bush_small', footprint: '1×1', sizeClass: 'prop', heightRange: '≈0.5 Kacheln', biome: 'Wald, Grasland', placeOn: 'grass, forest, fertile', neverOn: 'Straße, Gebäude-Footprint, Wasser', instancing: true, status: 'live', motif: 'a small round low-poly bush' },
+          { name: 'construction_site', footprint: '1–3 Kacheln', sizeClass: 'prop_large', biome: 'überall (temporär)', placeOn: 'Gebäude im Bau/Upgrade', instancing: false, status: 'live', motif: 'a construction site prop: scaffolding, a small crane and barriers with warning stripes, to sit over a building under construction' },
         ],
       },
       {
-        title: 'Geplant (Natur, Stadt, Hafen, Farm)',
+        title: 'Geplant — Natur, Stadt, Hafen, Farm',
         note: 'Siehe docs/3D_WORLD_ASSETS.md §11/§14.',
         entries: [
-          { name: 'tree_deciduous', footprint: '1×1', motif: 'a single stylized low-poly broadleaf/deciduous tree with a round crown, about 1.5 tiles tall' },
-          { name: 'tree_pine_large', footprint: '1×1', motif: 'a tall stylized pine tree, about 1.8 tiles tall, slim conical crown' },
-          { name: 'hedge', footprint: '1×1', motif: 'a low trimmed green hedge segment, about 0.5 tiles tall, tileable side to side' },
-          { name: 'reeds_water', footprint: '1×1', motif: 'a cluster of tall water reeds/cattails for lake and river shores, low-poly' },
-          { name: 'rock_small', footprint: '1×1', motif: 'a small stylized grey rock / few stones on the ground, about 0.4 tiles tall, low-poly' },
-          { name: 'rock_large', footprint: '1×1', motif: 'a large stylized grey boulder, about 1 tile tall, layered stone, low-poly' },
-          { name: 'rock_medium', footprint: '1×1', motif: 'a medium stylized grey boulder / rock cluster, low-poly' },
-          { name: 'street_lamp', footprint: '1×1', motif: 'a stylized street lamp post with a glowing lamp head' },
-          { name: 'bench', footprint: '1×1', motif: 'a simple park bench, low-poly' },
-          { name: 'market_stall', footprint: '1×1', motif: 'a market stall with a striped awning and crates of goods' },
-          { name: 'boat_small', footprint: '1×2', motif: 'a small rowing/fishing boat, front facing +Z, low-poly' },
-          { name: 'hay_bale', footprint: '1×1', motif: 'a round hay bale, low-poly' },
-          { name: 'tractor_small', footprint: '1×1', motif: 'a small farm tractor, front facing +Z, low-poly' },
+          { name: 'tree_deciduous', footprint: '1×1', sizeClass: 'prop', heightRange: '≈1.5 Kacheln', biome: 'Mischwald, Grasland', placeOn: 'grass, forest, fertile', neverOn: 'Straße, Gebäude, Wasser, Gebirge', minSpacing: '0.3–0.5 Kacheln', randomize: 'Zufallsrotation + Zufallsskalierung', instancing: true, status: 'planned', motif: 'a single stylized low-poly broadleaf/deciduous tree with a round crown, about 1.5 tiles tall' },
+          { name: 'tree_pine_large', footprint: '1×1', sizeClass: 'prop', heightRange: '≈1.8 Kacheln', biome: 'Wald, Gebirgsrand', placeOn: 'forest, mountain-nahe grass', instancing: true, status: 'planned', motif: 'a tall stylized pine tree, about 1.8 tiles tall, slim conical crown' },
+          { name: 'forest_cluster_small', footprint: '2×2', sizeClass: 'prop_large', biome: 'Waldrand', placeOn: 'forest-Kante', spawnRule: 'am Waldrand für organische Übergänge statt harter Kante', instancing: false, status: 'planned', motif: 'a small cluster of 3–4 mixed trees and undergrowth, forming a natural forest-edge patch' },
+          { name: 'forest_cluster_medium', footprint: '3×3', sizeClass: 'prop_large', biome: 'Waldrand', placeOn: 'forest-Kante', spawnRule: 'am Waldrand für organische Übergänge statt harter Kante', instancing: false, status: 'planned', motif: 'a medium cluster of 6–8 mixed trees, bushes and fallen logs, forming a natural forest-edge patch' },
+          { name: 'fallen_log', footprint: '1×1', sizeClass: 'prop', biome: 'Wald', placeOn: 'forest', instancing: true, status: 'planned', motif: 'a fallen mossy tree log lying on the forest floor, low-poly' },
+          { name: 'grass_patch', footprint: '1×1', sizeClass: 'prop', heightRange: '≈0.2 Kacheln', biome: 'Grasland', placeOn: 'grass', instancing: true, randomize: 'Zufallsrotation', status: 'planned', motif: 'a small patch of taller grass tufts, low-poly, sits flush on grass tiles' },
+          { name: 'flower_patch', footprint: '1×1', sizeClass: 'prop', heightRange: '≈0.2 Kacheln', biome: 'Grasland, fruchtbares Land', placeOn: 'grass, fertile', instancing: true, randomize: 'Zufallsrotation + Zufallsfarbe (falls Vertex-Color)', status: 'planned', motif: 'a small patch of colorful wildflowers among short grass, low-poly' },
+          { name: 'hedge', footprint: '1×1', sizeClass: 'prop', heightRange: '≈0.5 Kacheln', biome: 'Stadtrand, Park', instancing: true, status: 'planned', motif: 'a low trimmed green hedge segment, about 0.5 tiles tall, tileable side to side' },
+          { name: 'reeds_water', footprint: '1×1', sizeClass: 'prop', biome: 'See-/Flussufer', placeOn: 'shore_tile, lake_edge', instancing: true, status: 'planned', motif: 'a cluster of tall water reeds/cattails for lake and river shores, low-poly' },
+          { name: 'rock_small', footprint: '1×1', sizeClass: 'prop', heightRange: '≈0.4 Kacheln', biome: 'Gebirge, Grasland', instancing: true, status: 'planned', motif: 'a small stylized grey rock / few stones on the ground, about 0.4 tiles tall, low-poly' },
+          { name: 'rock_medium', footprint: '1×1', sizeClass: 'prop', biome: 'Gebirge, Küste', instancing: true, status: 'planned', motif: 'a medium stylized grey boulder / rock cluster, low-poly' },
+          { name: 'rock_large', footprint: '1×1', sizeClass: 'prop_large', heightRange: '≈1.0 Kacheln', biome: 'Gebirge', instancing: true, status: 'planned', motif: 'a large stylized grey boulder, about 1 tile tall, layered stone, low-poly' },
+          { name: 'street_lamp', footprint: '1×1', sizeClass: 'prop', heightRange: '≈0.9 Kacheln', biome: 'Stadt', placeOn: 'entlang Gehweg/Straße', animationNodes: 'reserved: light_window/glow bei Nacht', instancing: true, status: 'planned', motif: 'a stylized street lamp post with a glowing lamp head' },
+          { name: 'bench', footprint: '1×1', sizeClass: 'prop', heightRange: '≈0.4 Kacheln', biome: 'Stadt, Park', instancing: true, status: 'planned', motif: 'a simple park bench, low-poly' },
+          { name: 'market_stall', footprint: '1×1', sizeClass: 'prop', biome: 'Stadtzentrum, Markt', instancing: false, status: 'planned', motif: 'a market stall with a striped awning and crates of goods' },
+          { name: 'boat_small', footprint: '1×2', sizeClass: 'prop_large', frontFacing: '+Z', biome: 'Küste, See', placeOn: 'an Pier/Ufer, im Wasser', instancing: false, status: 'planned', motif: 'a small rowing/fishing boat, front facing +Z, low-poly' },
+          { name: 'hay_bale', footprint: '1×1', sizeClass: 'prop', biome: 'Fruchtbares Land', instancing: true, status: 'planned', motif: 'a round hay bale, low-poly' },
+          { name: 'tractor_small', footprint: '1×1', sizeClass: 'prop', frontFacing: '+Z', biome: 'Fruchtbares Land', instancing: false, status: 'planned', motif: 'a small farm tractor, front facing +Z, low-poly' },
+        ],
+      },
+      {
+        title: 'Geplant — Gelände-Anpassung für Straßen (props/infrastructure/)',
+        note: 'Straßen dürfen niemals schweben: bei Steigungen entstehen Böschungen/Stützmauern statt schwebender Kanten (World-Graphics-V2 §5).',
+        entries: [
+          { name: 'retaining_wall', footprint: '1×1, modular entlang Kante', sizeClass: 'terrain_feature', biome: 'Gebirge, Hügelland', placeOn: 'entlang einer Straßen-/Bauplatzkante mit Höhenversatz', instancing: true, status: 'planned', motif: 'a stone retaining wall segment holding back a slope, tileable side to side' },
+          { name: 'embankment_slope', footprint: '1×1, modular', sizeClass: 'terrain_feature', biome: 'Gebirge, Hügelland', placeOn: 'natürliche Böschung statt Stützmauer, weicher Höhenübergang', instancing: true, status: 'planned', motif: 'a grassy earth embankment slope segment smoothing a height step next to a road, tileable' },
+        ],
+      },
+      {
+        title: 'Geplant — Wegkreuze, Wanderwege, Naturdenkmäler, ländliche Umgebung',
+        note: 'Kleine Weltobjekte AUSSERHALB der Stadt, die die Karte lebendig statt leer wirken lassen (World-Graphics-V2 Erweiterung).',
+        entries: [
+          { name: 'wayside_cross', footprint: '1×1', sizeClass: 'prop', heightRange: '≈1.0 Kacheln', biome: 'Grasland, Feldweg', instancing: false, status: 'planned', motif: 'a small stone or wooden wayside cross/shrine beside a country path, weathered and rustic' },
+          { name: 'hiking_trail_marker', footprint: '1×1', sizeClass: 'prop', heightRange: '≈0.6 Kacheln', biome: 'Gebirge, Wald, Hügelland', placeOn: 'entlang eines Wanderwegs', instancing: true, status: 'planned', motif: 'a small wooden hiking trail signpost with a directional arrow, rustic style' },
+          { name: 'natural_monument_stone', footprint: '1×1', sizeClass: 'prop_large', heightRange: '≈1.2 Kacheln', biome: 'Gebirge, Grasland', instancing: false, status: 'planned', motif: 'a striking single natural monument boulder, distinct shape, marked as a scenic point of interest' },
+          { name: 'viewpoint_bench', footprint: '1×1', sizeClass: 'prop', biome: 'Hochplateau, Klippe', placeOn: 'an Aussichtspunkten', instancing: false, status: 'planned', motif: 'a scenic viewpoint bench with a small wooden railing, facing outward over a vista' },
+          { name: 'cave_entrance_small', footprint: '1×1', sizeClass: 'prop_large', biome: 'Gebirge', placeOn: 'mountain-Wandfuß', instancing: false, status: 'planned', motif: 'a small dark cave entrance opening in a rocky mountainside, low-poly' },
+          { name: 'mine_entrance_small', footprint: '1×1', sizeClass: 'prop_large', biome: 'Gebirge', placeOn: 'mountain-Wandfuß, außerhalb der Stadt', instancing: false, status: 'planned', motif: 'a small abandoned mine entrance with wooden support beams set into a rocky slope' },
+          { name: 'farmstead_ruin', footprint: '2×2', sizeClass: 'prop_large', biome: 'Fruchtbares Land, Grasland', instancing: false, status: 'planned', motif: 'a small rustic farmstead outside the city: a weathered barn, a fence and a dirt yard' },
+          { name: 'village_cluster_small', footprint: '3×3', sizeClass: 'hero', biome: 'Grasland, Hügelland', spawnRule: 'ein bis zwei Exemplare, abseits der Stadt', instancing: false, status: 'planned', motif: 'a tiny rural village cluster of 3–4 small cottages with a shared dirt path, outside the main city' },
+        ],
+      },
+      {
+        title: 'Geplant — saisonale Deko',
+        note: 'Optionale Überlagerung auf bestehenden Props/Terrain, keine neue Kategorie in der Spiellogik.',
+        entries: [
+          { name: 'seasonal_wreath_winter', footprint: '1×1', sizeClass: 'prop', biome: 'Stadt (saisonal)', instancing: false, status: 'planned', motif: 'a small festive winter wreath decoration with a red ribbon, to hang on a building facade' },
+          { name: 'seasonal_pumpkin_pile', footprint: '1×1', sizeClass: 'prop', biome: 'Stadt, Farm (saisonal)', instancing: true, status: 'planned', motif: 'a small autumn pile of decorative pumpkins beside a path' },
         ],
       },
     ],
@@ -536,18 +708,19 @@ export const FOLDER_PROMPTS: FolderPrompts[] = [
       {
         title: 'Aktiv genutzt',
         entries: [
-          { name: 'car', footprint: '≈0.3×0.5', motif: 'a small stylized car, readable from an isometric camera, front facing +Z, low-poly' },
-          { name: 'service_van', footprint: '≈0.4×0.7', motif: 'a small white delivery / service van, front facing +Z, low-poly' },
+          { name: 'car', footprint: '≈0.3×0.5', sizeClass: 'vehicle', status: 'live', motif: 'a small stylized car, readable from an isometric camera, front facing +Z, low-poly' },
+          { name: 'service_van', footprint: '≈0.4×0.7', sizeClass: 'vehicle', status: 'live', motif: 'a small white delivery / service van, front facing +Z, low-poly' },
         ],
       },
       {
-        title: 'Geplant (Flotte)',
+        title: 'Geplant — Flotte',
+        note: 'Verkehr fährt künftig Haus → Straße → Ziel statt Zufallslauf (World-Graphics-V2 §11) — betrifft nur die Pathing-Logik, nicht die Modelle hier.',
         entries: [
-          { name: 'truck_food', footprint: '≈0.5×0.9', motif: 'a small food delivery truck with a box body, front facing +Z, low-poly' },
-          { name: 'firetruck', footprint: '≈0.5×0.9', motif: 'a red fire truck with a ladder, front facing +Z, low-poly' },
-          { name: 'police_car', footprint: '≈0.3×0.5', motif: 'a police car with blue livery and a light bar, front facing +Z, low-poly' },
-          { name: 'ambulance', footprint: '≈0.4×0.7', motif: 'a white ambulance with a red cross and a light bar, front facing +Z, low-poly' },
-          { name: 'bus_small', footprint: '≈0.4×1.0', motif: 'a small city bus, front facing +Z, low-poly' },
+          { name: 'truck_food', footprint: '≈0.5×0.9', sizeClass: 'vehicle', status: 'planned', motif: 'a small food delivery truck with a box body, front facing +Z, low-poly' },
+          { name: 'firetruck', footprint: '≈0.5×0.9', sizeClass: 'vehicle', status: 'planned', motif: 'a red fire truck with a ladder, front facing +Z, low-poly' },
+          { name: 'police_car', footprint: '≈0.3×0.5', sizeClass: 'vehicle', status: 'planned', motif: 'a police car with blue livery and a light bar, front facing +Z, low-poly' },
+          { name: 'ambulance', footprint: '≈0.4×0.7', sizeClass: 'vehicle', status: 'planned', motif: 'a white ambulance with a red cross and a light bar, front facing +Z, low-poly' },
+          { name: 'bus_small', footprint: '≈0.4×1.0', sizeClass: 'vehicle', status: 'planned', motif: 'a small city bus, front facing +Z, low-poly' },
         ],
       },
     ],
@@ -560,19 +733,31 @@ export const FOLDER_PROMPTS: FolderPrompts[] = [
       {
         title: 'Aktiv genutzt',
         entries: [
-          { name: 'marker_task', footprint: '~1 tile hoch', motif: 'a floating quest/task marker: a rounded teal pin with a clean icon, readable from any angle' },
-          { name: 'marker_construction', footprint: '~1 tile hoch', motif: 'a floating construction marker: a yellow pin with a wrench or hard-hat icon' },
-          { name: 'marker_problem', footprint: '~1 tile hoch', motif: 'a floating problem marker: a red pin with a white exclamation mark' },
-          { name: 'marker_upgrade', footprint: '~1 tile hoch', motif: 'a floating upgrade marker: a green pin with a white up-arrow' },
+          { name: 'marker_task', footprint: '~1 Kachel hoch', sizeClass: 'marker', pivot: 'zentriert, schwebt über dem Gebäude', frontFacing: 'n/a, immer zur Kamera (Billboard-Fallback)', status: 'live', motif: 'a floating quest/task marker: a rounded teal pin with a clean icon, readable from any angle' },
+          { name: 'marker_construction', footprint: '~1 Kachel hoch', sizeClass: 'marker', pivot: 'zentriert, schwebt', status: 'live', motif: 'a floating construction marker: a yellow pin with a wrench or hard-hat icon' },
+          { name: 'marker_problem', footprint: '~1 Kachel hoch', sizeClass: 'marker', pivot: 'zentriert, schwebt', status: 'live', motif: 'a floating problem marker: a red pin with a white exclamation mark' },
+          { name: 'marker_upgrade', footprint: '~1 Kachel hoch', sizeClass: 'marker', pivot: 'zentriert, schwebt', status: 'live', motif: 'a floating upgrade marker: a green pin with a white up-arrow' },
         ],
       },
       {
-        title: 'Geplant (weitere Zustände & Sektoren)',
+        title: 'Geplant — weitere Zustände & Sektoren',
         entries: [
-          { name: 'marker_water', footprint: '~1 tile hoch', motif: 'a floating blue water marker: a droplet icon pin' },
-          { name: 'marker_trade', footprint: '~1 tile hoch', motif: 'a floating orange trade marker: a coins/handshake icon pin' },
-          { name: 'marker_resource', footprint: '~1 tile hoch', motif: 'a floating resource marker: a crate/ore icon pin' },
-          { name: 'sector_marker_build', footprint: '1×1', motif: 'a buildable-zone marker: a green dashed frame with a small tool icon on the ground' },
+          { name: 'marker_water', footprint: '~1 Kachel hoch', sizeClass: 'marker', pivot: 'zentriert, schwebt', status: 'planned', motif: 'a floating blue water marker: a droplet icon pin' },
+          { name: 'marker_trade', footprint: '~1 Kachel hoch', sizeClass: 'marker', pivot: 'zentriert, schwebt', status: 'planned', motif: 'a floating orange trade marker: a coins/handshake icon pin' },
+          { name: 'marker_resource', footprint: '~1 Kachel hoch', sizeClass: 'marker', pivot: 'zentriert, schwebt', status: 'planned', motif: 'a floating resource marker: a crate/ore icon pin' },
+          { name: 'sector_border_locked', footprint: 'entlang Sektorgrenze', sizeClass: 'marker', pivot: 'liegt auf dem Boden', status: 'planned', motif: 'a low glowing fence/border line marking a locked sector boundary, semi-transparent' },
+          { name: 'sector_border_unlocked', footprint: 'entlang Sektorgrenze', sizeClass: 'marker', pivot: 'liegt auf dem Boden', status: 'planned', motif: 'a subtle low border line marking a freshly unlocked sector boundary' },
+          { name: 'sector_marker_build', footprint: '1×1', sizeClass: 'marker', pivot: 'liegt auf dem Boden', status: 'planned', motif: 'a buildable-zone marker: a green dashed frame with a small tool icon on the ground' },
+          { name: 'sector_marker_resource', footprint: '1×1', sizeClass: 'marker', pivot: 'liegt auf dem Boden', status: 'planned', motif: 'a resource-hint zone marker: a faint dashed frame with a subtle ore/wood icon on the ground' },
+        ],
+      },
+      {
+        title: 'Geplant — Sektor-Nebel & Bürgerhinweise',
+        note: 'Gesperrte Sektoren zeigen keine vollständige Sicht: dichter Nebel, Silhouetten, gelegentliche Bürgerhinweise als Sprechblase (World-Graphics-V2 §9). Reiner Hinweis-/Mystery-Zweck, keine Gameplay-Information.',
+        entries: [
+          { name: 'locked_sector_fog_veil', footprint: 'deckt einen ganzen Sektor ab', sizeClass: 'terrain_feature', pivot: 'flache Ebene über dem Sektor, halbtransparent', frontFacing: 'n/a', biome: 'gesperrter Sektor', effectNodes: 'leichte Partikel-Nebelbewegung', instancing: false, status: 'planned', motif: 'a dense, softly animated fog veil mesh covering an unrevealed map sector, semi-transparent, obscuring detail beneath' },
+          { name: 'landmark_silhouette_hint', footprint: 'grob wie das verborgene Hero-Objekt', sizeClass: 'terrain_feature', pivot: DEFAULT_PIVOT, biome: 'gesperrter Sektor', spawnRule: 'nur wenn ein Hero-/Landmarken-Objekt im Sektor liegt', instancing: false, status: 'planned', motif: 'a low-detail dark silhouette shape hinting at a large landmark hidden behind fog, barely readable, no surface detail' },
+          { name: 'marker_citizen_hint', footprint: '~1 Kachel hoch', sizeClass: 'marker', pivot: 'schwebt über einem Bürger/Gebäude', biome: 'überall, temporär', status: 'planned', motif: 'a floating speech-bubble marker mesh with a small dashed outline, used for a citizen hint about an unrevealed sector (text content is UI/i18n, not part of the mesh)' },
         ],
       },
     ],
@@ -585,15 +770,30 @@ export const FOLDER_PROMPTS: FolderPrompts[] = [
       {
         title: 'Aktiv genutzt',
         entries: [
-          { name: 'smoke_chimney', footprint: 'klein', motif: 'a small soft stylized smoke/steam puff mesh for a chimney, light grey, semi-transparent look' },
+          { name: 'smoke_chimney', footprint: 'klein', sizeClass: 'effect', effectNodes: 'chimney (Ursprungspunkt am Gebäude)', status: 'live', motif: 'a small soft stylized smoke/steam puff mesh for a chimney, light grey, semi-transparent look' },
         ],
       },
       {
-        title: 'Geplant',
-        note: 'Bewegtes Wasser, Gischt, Wind-Sway etc. sind als Partikel/Shader sinnvoller als `.glb` (siehe 3D_WORLD_ASSETS §17).',
+        title: 'Geplant — feste Effekt-Meshes',
         entries: [
-          { name: 'upgrade_glow', footprint: 'klein', motif: 'a soft golden glow/sparkle burst mesh to play when a building is upgraded' },
-          { name: 'building_complete_effect', footprint: 'klein', motif: 'a small celebratory confetti/spark ring mesh for when construction completes' },
+          { name: 'upgrade_glow', footprint: 'klein', sizeClass: 'effect', status: 'planned', motif: 'a soft golden glow/sparkle burst mesh to play when a building is upgraded' },
+          { name: 'building_complete_effect', footprint: 'klein', sizeClass: 'effect', status: 'planned', motif: 'a small celebratory confetti/spark ring mesh for when construction completes' },
+          { name: 'waterfall_mist', footprint: 'klein, am Wasserfallfuß', sizeClass: 'effect', status: 'planned', motif: 'a soft white mist/foam puff mesh to sit at the base of a waterfall' },
+          { name: 'fire_response_effect', footprint: 'klein', sizeClass: 'effect', status: 'planned', motif: 'a small flashing emergency-light effect mesh for an active fire response' },
+          { name: 'police_patrol_effect', footprint: 'klein', sizeClass: 'effect', status: 'planned', motif: 'a small flashing blue-light effect mesh for an active police patrol' },
+          { name: 'trade_delivery_effect', footprint: 'klein', sizeClass: 'effect', status: 'planned', motif: 'a small sparkle/coin effect mesh marking a completed trade delivery' },
+        ],
+      },
+      {
+        title: 'Geplant — lebendige Welt (bewusst KEIN `.glb`, Partikel/Shader)',
+        note: 'World-Graphics-V2 §10: die Welt soll sich schon aus großer Entfernung bewegen. Diese Effekte sind als Renderer-Partikel/Shader sinnvoller als als Mesh — hier trotzdem vollständig dokumentiert, damit nichts fehlt.',
+        entries: [
+          { name: 'bird_flock_effect', footprint: 'groß, am Himmel', sizeClass: 'effect', implementation: 'particle-shader', status: 'planned', motif: 'a small flock of simple low-poly birds looping across the sky at distance' },
+          { name: 'butterfly_swarm_effect', footprint: 'klein, über Wiesen/Blumenbeeten', sizeClass: 'effect', implementation: 'particle-shader', status: 'planned', motif: 'a few simple low-poly butterflies drifting above meadows and flower patches' },
+          { name: 'tree_wind_sway_effect', footprint: 'n/a (Vertex-Shader auf Baum-/Buschmodellen)', sizeClass: 'effect', implementation: 'particle-shader', status: 'planned', motif: 'a gentle vertex-shader sway applied to tree and bush canopies to suggest wind' },
+          { name: 'water_surface_motion_effect', footprint: 'n/a (Shader auf Wasserflächen)', sizeClass: 'effect', implementation: 'particle-shader', status: 'planned', motif: 'a subtle animated ripple/wave shader for river, lake and ocean surfaces' },
+          { name: 'harbor_wave_effect', footprint: 'klein, an Küste/Pier', sizeClass: 'effect', implementation: 'particle-shader', status: 'planned', motif: 'small breaking-wave foam particles along a rocky or sandy coastline' },
+          { name: 'cloud_shadow_effect', footprint: 'groß, über der Karte', sizeClass: 'effect', implementation: 'particle-shader', status: 'planned', motif: 'a soft moving cloud-shadow patch drifting slowly across the terrain' },
         ],
       },
     ],
@@ -606,10 +806,10 @@ export const FOLDER_PROMPTS: FolderPrompts[] = [
       {
         title: 'Welt-UI-Modelle',
         entries: [
-          { name: 'ui_selection_ring', footprint: 'Footprint des Gebäudes', motif: 'a thin glowing flat selection ring that lies on the ground around a building, emissive, no top surface' },
-          { name: 'ui_upgrade_button', footprint: 'klein', motif: 'a floating 3D upgrade button: an up-arrow inside a rounded chip, bright and readable, hovers above a building' },
-          { name: 'ui_build_button', footprint: 'klein', motif: 'a floating 3D action button: a hammer or plus inside a rounded chip' },
-          { name: 'ui_level_badge', footprint: 'klein', motif: 'a small floating level badge chip that displays a building level number' },
+          { name: 'ui_selection_ring', footprint: 'Footprint des Gebäudes', sizeClass: 'marker', pivot: 'liegt flach auf dem Boden unter dem Gebäude', status: 'live', motif: 'a thin glowing flat selection ring that lies on the ground around a building, emissive, no top surface' },
+          { name: 'ui_upgrade_button', footprint: 'klein', sizeClass: 'marker', pivot: 'schwebt über dem Gebäude', status: 'planned', motif: 'a floating 3D upgrade button: an up-arrow inside a rounded chip, bright and readable, hovers above a building' },
+          { name: 'ui_build_button', footprint: 'klein', sizeClass: 'marker', pivot: 'schwebt über dem Gebäude', status: 'planned', motif: 'a floating 3D action button: a hammer or plus inside a rounded chip' },
+          { name: 'ui_level_badge', footprint: 'klein', sizeClass: 'marker', pivot: 'schwebt über dem Gebäude', status: 'planned', motif: 'a small floating level badge chip that displays a building level number' },
         ],
       },
     ],
@@ -621,10 +821,40 @@ const PROMPT_INTRO_TECH =
   'Front +Z, Pivot mittig an der Unterkante, 1 Tile = 1 Welt-Einheit. Stil-Details & Budgets: ' +
   '`docs/3D_WORLD_ASSETS.md`.';
 
-/** Ein copy-paste-fertiger Prompt-Block (Überschrift + Codeblock mit Prefix+Motiv). */
+/** Formats the structured per-model spec (size class, height, pivot, placement,
+ *  biome, animation/effect nodes …) as one compact line under the prompt block.
+ *  Only fields that are actually set (or resolvable defaults) are printed — this
+ *  is what makes ~200 entries maintainable instead of restating every field by
+ *  hand on every row. */
+function specLine(e: PromptEntry): string {
+  const parts: string[] = [];
+  if (e.sizeClass) {
+    const b = SIZE_CLASS_BUDGETS[e.sizeClass];
+    parts.push(`Größenklasse \`${e.sizeClass}\` — ${b.label} (${b.triBudget}, ${b.textureSize}, ${b.materials})`);
+  }
+  if (e.heightRange) parts.push(`Höhe ${e.heightRange}`);
+  if (e.implementation !== 'particle-shader') {
+    parts.push(`Pivot ${e.pivot ?? DEFAULT_PIVOT}`);
+    parts.push(`Front ${e.frontFacing ?? DEFAULT_FRONT}`);
+  }
+  if (e.biome) parts.push(`Biom: ${e.biome}`);
+  if (e.placeOn) parts.push(`platzierbar auf: ${e.placeOn}`);
+  if (e.neverOn) parts.push(`nie auf: ${e.neverOn}`);
+  if (e.minSpacing) parts.push(`Mindestabstand ${e.minSpacing}`);
+  if (e.randomize) parts.push(e.randomize);
+  if (e.instancing !== undefined) parts.push(`Instancing: ${e.instancing ? 'ja' : 'nein'}`);
+  if (e.animationNodes) parts.push(`Animations-Node: \`${e.animationNodes}\``);
+  if (e.effectNodes) parts.push(`Effekt-Node/-Anschluss: \`${e.effectNodes}\``);
+  if (e.spawnRule) parts.push(`Spawn: ${e.spawnRule}`);
+  if (e.implementation === 'particle-shader') parts.push('**Kein `.glb`** — als Partikel/Shader im Renderer umgesetzt, nicht als Modell');
+  parts.push(e.status === 'live' ? '**live** (bereits verdrahtet)' : '*geplant* (noch nicht verdrahtet)');
+  return parts.length ? `\n**Spec:** ${parts.join(' · ')}\n` : '';
+}
+
+/** Ein copy-paste-fertiger Prompt-Block (Überschrift + Codeblock mit Prefix+Motiv + Spec-Zeile). */
 function promptBlock(e: PromptEntry): string {
   const head = e.footprint ? `### \`${e.name}.glb\` — ${e.footprint}` : `### \`${e.name}.glb\``;
-  return `${head}\n\n\`\`\`text\n${STYLE_PREFIX} ${e.motif}\n\`\`\`\n`;
+  return `${head}\n\n\`\`\`text\n${STYLE_PREFIX} ${e.motif}\n\`\`\`\n${specLine(e)}`;
 }
 
 /** Markdown für ein `PROMPTS.md` eines Nicht-Gebäude-Ordners. */
@@ -640,10 +870,17 @@ export function renderFolderPrompts(fp: FolderPrompts): string {
     `# 3D-Prompts — ${fp.title}\n\n` +
     `${GEN_BANNER}\n\n` +
     `Zielordner: \`src/assets/models/${fp.key}/\`. Jeder Block ist copy-paste-fertig ` +
-    `(Stil-Prefix + Motiv). ${PROMPT_INTRO_TECH}\n\n` +
+    `(Stil-Prefix + Motiv) und trägt darunter die volle Spezifikation (Größenklasse/Budget, ` +
+    `Höhe, Pivot, Front, Platzierung, Biom, Animationen). ${PROMPT_INTRO_TECH}\n\n` +
     `${fp.intro}\n\n` +
     `${body}`
   );
+}
+
+/** Leitet eine SizeClass aus der Gebäude-Grundfläche ab (klein ≤ 4 Kacheln, sonst
+ *  groß) — mechanisch statt pro Gebäude von Hand gepflegt. */
+function buildingSizeClass(b: BuildingLike): SizeClass {
+  return b.size.w * b.size.h <= 4 ? 'building_small' : 'building_large';
 }
 
 /** Markdown für `buildings/PROMPTS.md` — ein Prompt je Config-Gebäude + Landmarken. */
@@ -653,11 +890,12 @@ export function buildBuildingsPrompts(buildings: readonly BuildingLike[]): strin
     .map((b) => {
       const motif = BUILDING_PROMPTS[b.id] ?? `a ${b.category} building`;
       const stages = (b.upgrades?.length ?? 0) + 1;
-      const block = promptBlock({ name: b.id, footprint: `${b.size.w}×${b.size.h}`, motif });
+      const sizeClass = buildingSizeClass(b);
+      const block = promptBlock({ name: b.id, footprint: `${b.size.w}×${b.size.h}`, motif, sizeClass, status: 'live' });
       const extra =
         stages > 1
-          ? `> Stufen: \`${b.id}${BUILD_STAGE_PREFIX}2\`…\`${b.id}${BUILD_STAGE_PREFIX}${stages}\` (sichtbar weiterentwickelt) · Baustelle: \`${b.id}${BUILD_CONSTRUCTION_SUFFIX}.glb\`\n`
-          : `> Baustelle optional: \`${b.id}${BUILD_CONSTRUCTION_SUFFIX}.glb\`\n`;
+          ? `> Stufen: \`${b.id}${BUILD_STAGE_PREFIX}2\`…\`${b.id}${BUILD_STAGE_PREFIX}${stages}\` (sichtbar weiterentwickelt) · Baustelle: \`${b.id}${BUILD_CONSTRUCTION_SUFFIX}.glb\` · Eingang zeigt zur Straße, Gehweg wird automatisch ergänzt.\n`
+          : `> Baustelle optional: \`${b.id}${BUILD_CONSTRUCTION_SUFFIX}.glb\` · Eingang zeigt zur Straße, Gehweg wird automatisch ergänzt.\n`;
       return `${block}${extra}`;
     })
     .join('\n');
@@ -667,7 +905,10 @@ export function buildBuildingsPrompts(buildings: readonly BuildingLike[]): strin
     `${GEN_BANNER}\n` +
     `> Gebäudeliste kommt aus \`src/game/config/buildings.config.ts\` — neue Gebäude erscheinen automatisch.\n\n` +
     `Zielordner: \`src/assets/models/buildings/<kategorie>/\`, **Dateiname = Gebäude-ID**. Jeder Block ist ` +
-    `copy-paste-fertig (Stil-Prefix + Motiv). ${PROMPT_INTRO_TECH}\n\n` +
+    `copy-paste-fertig (Stil-Prefix + Motiv) und trägt die volle Spezifikation. ${PROMPT_INTRO_TECH}\n\n` +
+    `**Front/Eingang (Konzept, siehe docs/3D_WORLD_ASSETS.md „Gebäude-Front & Straßenanschluss"):** Vorderseite ` +
+    `zeigt standardmäßig +Z zur Straße; der Renderer ergänzt künftig automatisch einen Gehweg/Vorplatz zwischen ` +
+    `Gebäude und Straße. Noch nicht implementiert — betrifft nur die Platzierung, nicht das Modell selbst.\n\n` +
     `## Gebäude (aus buildings.config.ts)\n\n` +
     `${rows}\n` +
     `## Landmarken & Hero-Bauten (geplant)\n\n` +

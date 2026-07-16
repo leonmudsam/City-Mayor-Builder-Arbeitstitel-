@@ -1,5 +1,81 @@
 # Patch Notes
 
+## v0.40 — „World Graphics V2, Phase 1: 3D-Asset-Doku konsolidiert & vollständig"
+
+**Was.** Reine Dokumentations-/Datenüberarbeitung, kein Rendering- oder
+Gameplay-Code geändert:
+- **Eine Quelle statt drei widersprüchlicher Docs.** `docs/3D_MODELS.md` (v0.29,
+  veraltet — nutzte noch alte Namen wie `grass.glb`/`water.glb`) ist entfallen;
+  seine noch gültigen Inhalte (Node-Namen `rotor`/`chimney`, Kartenmodi,
+  Integrationsschritte) sind in `docs/3D_MODEL_MANIFEST.md` aufgegangen.
+  `docs/3D_MODEL_MANIFEST.md` ist jetzt der kurze, testgeprüfte Namens-Index;
+  `docs/3D_WORLD_ASSETS.md` das entschlackte Zielbild/Stilhandbuch. Beide
+  duplizieren keine Modell-Einzellisten mehr, sondern verweisen auf die
+  generierten `src/assets/models/<ordner>/PROMPTS.md`.
+- **Jedes Modell — aktuell verdrahtet *und* geplant — vollständig spezifiziert.**
+  `src/assets/modelManifest.ts` bekam ein erweitertes Datenmodell (`SizeClass` +
+  `SIZE_CLASS_BUDGETS`, sowie Footprint/Höhe/Pivot/Front/Platzierung/Biom/
+  Instancing/Animations- & Effekt-Nodes/Spawn-Regel/Live-Status je Eintrag). Jede
+  generierte `PROMPTS.md` trägt jetzt pro Modell einen vollständigen Spec-Block
+  statt nur Name+Motiv.
+- **Alle in der „World Graphics V2"-Anfrage genannten künftigen Modelle ergänzt:**
+  schroffes Gebirge (Wand/Ecke/Tal-Pass/Tunnel/Spitze), Gebirgsflüsse (Quelle →
+  Kurve/Gabelung → Mündung, kleine/große Wasserfälle), Küste & Klippen (Sand/Fels,
+  Kliffkante/-ecke, Hero-Küstenklippe), Straßen-Geländeanpassung (`road_slope`,
+  `road_bridge_entry`, neue `props/infrastructure/`-Kategorie für Stützmauer/
+  Böschung), Sektor-Nebel & Bürgerhinweise (`locked_sector_fog_veil`,
+  `landmark_silhouette_hint`, `marker_citizen_hint`), fehlende Hero-Landmarken
+  (Mine, Damm, Marktviertel, Waterfront) sowie neue Kategorien für Wegkreuze,
+  Wanderwege, Naturdenkmäler, ländliche Streusiedlungen, saisonale Deko und zwei
+  Endgame-Landmarken-Platzhalter. Lebendige-Welt-Effekte (Vögel, Schmetterlinge,
+  Wind-Sway, Wasserbewegung, Brandung, Wolkenschatten) sind bewusst als
+  „Partikel/Shader, kein `.glb`" dokumentiert statt als Modell-Kategorie.
+- **Konzept-Kapitel für die noch ausstehenden Code-Phasen** in
+  `docs/3D_WORLD_ASSETS.md` ergänzt (explizit als *noch nicht implementiert*
+  markiert): Straßen-Geländeanpassung, Gebäude-Rotation/Platzierungsvorschau/
+  automatischer Straßenanschluss, Sektor-Nebel/Silhouetten/Bürgerhinweise,
+  Verkehrs-Pathing Haus→Straße→Ziel.
+
+**Warum.** Der Nutzer forderte eine grafische Weltüberarbeitung („World Graphics
+V2") mit ~14 Rendering-/Gameplay-Systemen — realistisch mehrere Code-Phasen. Ein
+Teil der Anfrage war explizit als **verpflichtend** markiert: die vollständige
+Überarbeitung der 3D-Asset-Dokumentation, damit jedes künftige Modell (auch
+Landmarken, Terrain-Stücke, Küsten-/Fluss-/Gebirgsobjekte, Dekorationen) schon
+jetzt einen eindeutigen, vollständig spezifizierten Platz hat, bevor überhaupt
+eine `.glb`-Datei existiert. Diese Phase liefert genau das — die Blaupause, auf
+der jede folgende Rendering-Code-Phase (organisches Gebirge, Flusstäler, Straßen-
+Gelände-Logik, Gebäude-Rotation, Sektor-Nebel, Verkehrs-Pathing) aufbaut.
+
+**Architektur.** `src/assets/modelManifest.ts` bleibt die **einzige** Quelle für
+Modellnamen UND jetzt auch für deren volle Spezifikation; die drei `docs/*.md`
+tragen nur noch das, was sich nicht automatisch generieren lässt (Zielbild,
+Stilphilosophie, Konzepte). Kein neues System — konsequente Erweiterung des
+bestehenden Drop-in-/Fallback-Mechanismus (CLAUDE.md §1/§2/§5). Keine Änderung an
+`ThreeMapRenderer.ts`s Lade-/Fallback-Logik, an `registry.ts`, an
+`GameController`/State oder an Savegames — reine Datendeklaration plus generierte
+Dokumentation.
+
+**Auswirkung/Zukunft.** Jedes künftig abgelegte `.glb` (auch für noch nicht
+gebaute Features) hat bereits Dateiname, Footprint, Budget, Platzierungs- und
+Biom-Regeln — kein Rätselraten mehr für Artists. Die als „Konzept, noch nicht
+implementiert" markierten Abschnitte in `docs/3D_WORLD_ASSETS.md` sind die
+Roadmap für die nächsten Code-Phasen (Terrain-/Gebirgs-Rendering, Straßen-
+Gelände-Logik, Gebäude-Rotation & Platzierungsvorschau, Sektor-Nebel/Hinweise,
+Verkehrs-Pathing) — bewusst nicht Teil dieser Phase.
+
+**Verifikation.** `npx tsc -b --force`, `npx eslint src tests`, `npx vitest run`
+(inkl. `tests/modelReadmes.test.ts` und `tests/manifest.test.ts`), `npm run
+build` — alle grün. Kein 3D-Screenshot-Smoke nötig (keine Renderer-Code-Änderung).
+
+**Dateien.** Geändert: `src/assets/modelManifest.ts` (SizeClass-Budgets, erweitertes
+`PromptEntry`-Schema, alle neuen World-Graphics-V2-Modelleinträge), `docs/
+3D_WORLD_ASSETS.md`, `docs/3D_MODEL_MANIFEST.md` (beide v0.40, entschlackt),
+`src/renderer/three/ThreeMapRenderer.ts`/`src/assets/registry.ts`/`src/i18n/
+de.json` (Doku-Verweise auf das entfallene `docs/3D_MODELS.md` umgebogen).
+Gelöscht: `docs/3D_MODELS.md` (Inhalt in `3D_MODEL_MANIFEST.md` aufgegangen).
+**Assets:** alle `src/assets/models/<ordner>/README.md` + `PROMPTS.md` neu
+generiert (`WRITE_MODEL_DOCS=1 npx vitest run tests/modelReadmes.test.ts`).
+
 ## v0.39 — „Organische Welt: Höhenfeld-Boden, Gebirge, saubere Platzierung & Proportionen"
 
 **Was.** Die Karte ist nicht mehr flach:

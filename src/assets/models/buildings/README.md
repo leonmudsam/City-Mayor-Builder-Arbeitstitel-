@@ -45,4 +45,4 @@ Ordner: `src/assets/models/buildings/`  ·  Loader: `buildingModel(id, stage)`  
 | deco_fountain | `deco_fountain.glb` | leisure/ | 1×1 | 7 | 1 | — | `deco_fountain_construction.glb` |
 | deco_bench | `deco_bench.glb` | leisure/ | 1×1 | 7 | 1 | — | `deco_bench_construction.glb` |
 
-Die Straßen-ID `road` nutzt kein `buildings/road.glb`, sondern das Straßen-Segment-System (`src/assets/models/roads/`).
+Die Straßen-ID `road` nutzt kein `buildings/road.glb`, sondern das Straßen-Segment-System (`src/assets/models/roads/`). Volle Spezifikation je Gebäude (Größenklasse, Budget, Front/Eingang, Baustil): `PROMPTS.md` daneben.

@@ -1,35 +1,56 @@
-# 3D-Modell-Manifest — vollständige Namensliste (v0.32)
+# 3D-Modell-Manifest — Namens-Index (v0.40 — World Graphics V2)
 
-**Die eine, verbindliche Liste aller 3D-Modelle mit exakten Dateinamen.** Ein Modell
-hier eintragen → das korrekt benannte `.glb` in den Ordner legen → das Spiel nutzt es
-automatisch (rekursive Erkennung, Key = Dateiname). Fehlt es, greift ein
-**prozeduraler Platzhalter** — das Spiel bricht nie.
+**Die kurze, testgeprüfte Namens-Autorität.** Ein Gebäude hier eintragen → das
+korrekt benannte `.glb` in den Ordner legen → das Spiel nutzt es automatisch
+(rekursive Erkennung, Key = Dateiname). Fehlt es, greift ein **prozeduraler
+Platzhalter** — das Spiel bricht nie.
 
-- **Gebäude-Sektion** ist aus `src/game/config/buildings.config.ts` abgeleitet und
-  muss synchron bleiben. Ein Test (`tests/manifest.test.ts`) schlägt fehl, wenn ein
-  Gebäude in der Config fehlt/hinzukommt, ohne dass es hier steht — so bleibt die
-  Liste aktuell.
-- Stil-/Technik-Standard, Größen, Prompts, Hero-/Welt-Modelle: siehe
-  **`docs/3D_WORLD_ASSETS.md`**. Gebäude-Grundlagen/Stufen: `docs/3D_MODELS.md`.
+- **Gebäude-Sektion (§1)** ist aus `src/game/config/buildings.config.ts`
+  abgeleitet und muss synchron bleiben. `tests/manifest.test.ts` schlägt fehl,
+  wenn ein Gebäude in der Config fehlt/hinzukommt, ohne dass es hier steht.
+- **Die vollständige Spezifikation** (Footprint, Höhe, Pivot, Front,
+  Größenklasse/Budget, Platzierung, Biom, Animationen, Live-/Geplant-Status) für
+  **jedes** Modell — aktuell verdrahtet *und* geplant, inkl. Gebirge, Flüsse,
+  Küste, Hero-Landmarken, Straßen-Geländeanpassung, Sektor-Nebel/Bürgerhinweise —
+  steht **generiert** in `src/assets/models/<ordner>/PROMPTS.md`. Diese Datei
+  hier ist **nur der Namens-Index**, keine Zweitquelle. Stilstandard,
+  Zielbild und Konzepte für noch ausstehende Phasen: `docs/3D_WORLD_ASSETS.md`.
+
+**Drei Kartenmodi** (Einstellungen → Kartenansicht): **2D-Raster**, **Isometrisch**
+und **3D**. Der 3D-Modus rendert Terrain, Gebäude, Bäume, Schatten,
+Straßenverkehr und Schornsteinrauch in einer perspektivischen Szene und
+funktioniert **schon ohne ein einziges 3D-Modell** — fehlende Gebäude erscheinen
+als prozeduraler Block (Wände + Dach, Höhe nach Ausbaustufe). Steuerung:
+**Ziehen/Rechtsklick-Ziehen = schwenken**, **Mausrad = zoomen**, **Umschalt +
+Ziehen = drehen/neigen**, **Klick auf Gebäude = auswählen** (ausführlich:
+`docs/3D_CAMERA_CONTROLS.md`).
+
+**Benannte Nodes für Live-Effekte** (optional, aber empfohlen): benenne die
+entsprechende Mesh/Group im 3D-Tool exakt so, damit der Renderer sie belebt —
+`rotor` dreht sich dauerhaft (Windrad, Mühle, Ventilator), `chimney` ist der
+Ursprung für aufsteigenden Rauch, solange das Gebäude aktiv produziert. Fehlt der
+Node, passiert nichts Schlimmes — der Effekt entfällt einfach. Reserviert für
+später: `door`, `crane`, `sign`, `light_window`.
 
 **Stand:** Noch keine `.glb` abgelegt → überall Platzhalter aktiv. Die
-Renderer-Anbindung ist **live** (v0.33): sobald eine korrekt benannte Datei im
-Ordner liegt, nutzt der 3D-Renderer sie automatisch. Welche Namen der Renderer
-aktuell akzeptiert, steht in **§0**.
+Renderer-Anbindung ist **live**: sobald eine korrekt benannte Datei im Ordner
+liegt, nutzt der 3D-Renderer sie automatisch. Welche Namen der Renderer aktuell
+akzeptiert, steht in **§0**.
 
 ---
 
-## 0. Renderer-Anbindung — was JETZT automatisch geladen wird (v0.33)
+## 0. Renderer-Anbindung — was JETZT automatisch geladen wird
 
 Der 3D-Renderer liest diese Kategorien direkt aus der Drop-in-Pipeline. **Erster
 passender Name gewinnt** (Präzis vor Alias). Alles ohne Modell bleibt prozedural.
 
 > **Pro Ordner gibt es zusätzlich zwei auto-generierte Dateien** direkt neben den
-> Modellen: **`README.md`** (die Namen für diesen Ordner) und **`PROMPTS.md`**
-> (copy-paste-fertige Text-zu-3D-Prompts je Modell — aktuelle *und* geplante, bei
-> Gebäuden ein Prompt pro Config-Gebäude). Quelle ist `src/assets/modelManifest.ts`
-> (+ `buildings.config.ts`); ein Test (`tests/modelReadmes.test.ts`) hält beide
-> synchron. Neue Namen/Motive dort ergänzen →
+> Modellen: **`README.md`** (die aktuell akzeptierten Namen für diesen Ordner)
+> und **`PROMPTS.md`** (die **vollständige Spezifikation** + copy-paste-fertige
+> Text-zu-3D-Prompts — aktuelle *und* geplante Modelle, bei Gebäuden ein Eintrag
+> pro Config-Gebäude). Quelle ist `src/assets/modelManifest.ts`
+> (+ `buildings.config.ts`); `tests/modelReadmes.test.ts` hält beide synchron.
+> Neue Namen/Motive/Spezifikation dort ergänzen →
 > `WRITE_MODEL_DOCS=1 npx vitest run tests/modelReadmes.test.ts`.
 
 | Kategorie | Ordner | Akzeptierte Dateinamen (Priorität → ) | Ausrichtung / Hinweis |
@@ -71,7 +92,7 @@ Modelle werden gecacht & instanziert; ein fehlendes/defektes Modell = Fallback.
 
 **Legende**
 - **Datei** = exakter Dateiname (ohne Ordner ist der Name der Schlüssel).
-- **Footprint** = Grundfläche in Tiles (1 Tile = 1 Welt-Einheit).
+- **Footprint** = Grundfläche in Tiles (1 Tile ≈ 4 m).
 - **Stufen** = Ausbaustufen. `<id>.glb` deckt alle ab (Auto-Skalierung); optionale
   eigene Stufen-Modelle heißen `<id>_stage2.glb … _stage<N+1>.glb`.
 - **Fallback** (immer): prozeduraler Block/Prop, klar als Platzhalter erkennbar.
@@ -84,10 +105,15 @@ Wenn du in `buildings.config.ts` ein **neues Gebäude** hinzufügst:
 1. Zeile in der passenden Gebäude-Tabelle unten ergänzen (ID, Datei, Footprint,
    Level, Stufen, Ordner).
 2. Optional das Modell `src/assets/models/buildings/<ordner>/<id>.glb` ablegen.
-3. `npm test` — `manifest.test.ts` prüft, dass jede Config-ID hier steht.
+3. Prompt in `BUILDING_PROMPTS` (`src/assets/modelManifest.ts`) ergänzen —
+   `npm test` (`modelReadmes.test.ts`) erzwingt das für jede Gebäude-ID.
+4. `npm test` — `manifest.test.ts` prüft, dass jede Config-ID hier steht.
 
-Bei neuem **Terrain/Straße/Prop/Fahrzeug/Marker/Effekt**: in der jeweiligen Tabelle
-unten ergänzen; die Ordner sind fix.
+Bei neuem **Terrain/Straße/Prop/Fahrzeug/Marker/Effekt/Welt-UI** (aktuell
+verdrahtet oder erst geplant): Eintrag in der passenden Array/Gruppe in
+`src/assets/modelManifest.ts` ergänzen, dann
+`WRITE_MODEL_DOCS=1 npx vitest run tests/modelReadmes.test.ts` — die Ordner sind
+fix (§3 in `docs/3D_WORLD_ASSETS.md`).
 
 ---
 
@@ -163,101 +189,37 @@ unten ergänzen; die Ordner sind fix.
 
 ### Straße (Sonderfall) — Modelle in `src/assets/models/roads/`
 Die Gebäude-ID **`road`** (1×1) nutzt **kein** `buildings/road.glb`, sondern das
-Straßen-Segment-System (Auto-Tiling, `roadModel()`). Siehe §3.
+Straßen-Segment-System (Auto-Tiling, `roadModel()`). Siehe §2.
 
 ### Landmarken / Hero-Bauten (geplant) — `buildings/landmarks/`
-Noch keine BuildingDefs, aber vorgesehen (siehe `docs/3D_WORLD_ASSETS.md` §13):
-`lighthouse`, `harbor_small`, `harbor_pier`, `ship_sailing`, `monument_city`,
-`museum`, `stadium`, `observation_tower`, `mountain_tunnel_landmark`,
-`hero_city_hall_plaza`, `hero_market_district`, `hero_harbor_complex`,
-`hero_lighthouse_cliff`, `hero_grand_bridge`, `hero_mine_complex`,
-`hero_dam_complex`, `hero_central_park`, `hero_waterfront_district`.
+Noch keine BuildingDefs, aber vollständig spezifiziert (Footprint, Größenklasse,
+Biom, Motiv-Prompt) in `src/assets/models/buildings/PROMPTS.md` §„Landmarken &
+Hero-Bauten": `lighthouse`, `harbor_small`, `harbor_pier`, `ship_sailing`,
+`monument_city`, `museum`, `stadium`, `observation_tower`,
+`mountain_tunnel_landmark`, `hero_city_hall_plaza`, `hero_market_district`,
+`hero_harbor_complex`, `hero_lighthouse_cliff`, `hero_grand_bridge`,
+`hero_mine_complex`, `hero_dam_complex`, `hero_central_park`,
+`hero_waterfront_district`, `castle_hilltop`, `hero_grand_observatory`.
 
 ---
 
-## 2. Terrain → `src/assets/models/terrain/…`
+## 2. Terrain, Straßen, Brücken, Props, Fahrzeuge, Marker, Effekte, Welt-UI
 
-**Kacheln** `terrain/tiles/` (1×1): `grass_tile`, `grass_tile_variant_01`,
-`grass_tile_variant_02`, `fertile_ground_tile`, `forest_ground_tile`,
-`rock_ground_tile`, `mountain_ground_tile`, `sand_tile`, `shore_tile`,
-`locked_sector_tile`, `buildable_sector_tile`, `city_center_ground_tile`.
+Alle Namen (aktuell verdrahtet **und** geplant) mit vollständiger Spezifikation
+stehen generiert in der jeweiligen `PROMPTS.md`, die reine Namensliste (nur das,
+was der Renderer heute lädt) in der jeweiligen `README.md`:
 
-**Wasser** `terrain/water/`: `river_straight`, `river_curve`, `river_fork`,
-`river_source`, `river_mouth`, `lake_center`, `lake_edge`, `ocean_tile`,
-`coast_rocky`, `coast_sandy`, `waterfall_small`, `waterfall_large`.
+| Ordner | Namensliste (live) | Volle Spezifikation (live + geplant) |
+|---|---|---|
+| Terrain, Gebirge, Flüsse, Küste, Hero-Weltformen | `src/assets/models/terrain/README.md` | `src/assets/models/terrain/PROMPTS.md` |
+| Straßen | `src/assets/models/roads/README.md` | `src/assets/models/roads/PROMPTS.md` |
+| Brücken | `src/assets/models/bridges/README.md` | `src/assets/models/bridges/PROMPTS.md` |
+| Props (Natur, Stadt, Hafen, Farm, Infrastruktur) | `src/assets/models/props/README.md` | `src/assets/models/props/PROMPTS.md` |
+| Fahrzeuge | `src/assets/models/vehicles/README.md` | `src/assets/models/vehicles/PROMPTS.md` |
+| Marker (inkl. Sektor-Nebel & Bürgerhinweise) | `src/assets/models/markers/README.md` | `src/assets/models/markers/PROMPTS.md` |
+| Effekte (inkl. lebendige Welt) | `src/assets/models/effects/README.md` | `src/assets/models/effects/PROMPTS.md` |
+| Welt-UI | `src/assets/models/ui/README.md` | `src/assets/models/ui/PROMPTS.md` |
 
-**Gebirge** `terrain/mountains/`: `mountain_peak_large`, `mountain_peak_medium`,
-`mountain_cluster_large`, `mountain_cluster_medium`, `mountain_wall_straight`,
-`mountain_wall_corner`, `mountain_valley_pass`, `mountain_tunnel_entrance`,
-`rock_spire`, `rock_small`, `rock_medium`, `rock_large`.
-
-**Klippen** `terrain/cliffs/`: `cliff_edge`, `cliff_corner`.
-
-**Hero-Terrain** `terrain/hero/`: `hero_mountain_range_west`,
-`hero_waterfall_cluster`, `hero_river_valley`, `hero_lake_basin`,
-`hero_coastal_cliff`, `hero_harbor_bay`, `hero_forest_ridge`,
-`hero_fertile_valley`, `hero_dam_site`.
-
-(Alle `.glb`; Footprints/Prompts in `docs/3D_WORLD_ASSETS.md` §7–§10.)
-
----
-
-## 3. Straßen → `roads/` · Brücken → `bridges/`
-
-**Roads** (`roadModel()`, Auto-Tiling-Fallback): `road_straight`, `road_curve`,
-`road_t_intersection`, `road_cross_intersection`, `road_end`, `road_slope`,
-`road_bridge_entry`, `road_main_straight`, `road_main_curve`, `road_main_cross`,
-`sidewalk_straight`, `sidewalk_corner`, `driveway_small`.
-
-**Bridges** (`bridgeModel()`): `bridge_small_stone`, `bridge_small_wood`,
-`bridge_medium_road`, `bridge_large_road`, `bridge_rail_future`.
-
----
-
-## 4. Props → `src/assets/models/props/…` (`propModel()`)
-
-**Natur** `props/nature/`: `pine_tree`, `pine_tree_large`, `tree_deciduous`,
-`tree_deciduous_large`, `forest_cluster_small`, `forest_cluster_medium`,
-`bush_small`, `bush_medium`, `grass_patch`, `flower_patch`, `fallen_log`.
-
-**Stadt** `props/city/`: `street_lamp`, `bench`, `trash_bin`, `mailbox`,
-`fence_wood`, `fence_stone`, `road_sign`, `traffic_light`, `construction_crane`,
-`construction_barrier`, `market_stall`, `flower_bed`, `small_fountain`.
-
-**Hafen** `props/harbor/`: `pier_wood`, `boat_small`, `boat_sail`, `dock_crate`,
-`dock_barrel`.
-
-**Farm** `props/farm/`: `hay_bale`, `tractor_small`, `farm_fence`, `crop_row`,
-`water_trough`.
-
-**Baustelle** `props/construction/`: (Kran/Gerüst/Absperrung nach Bedarf).
-
----
-
-## 5. Fahrzeuge → `src/assets/models/vehicles/` (`vehicleModel()`)
-
-`car_small`, `car_van`, `truck_food`, `truck_material`, `service_van`,
-`firetruck`, `police_car`, `ambulance`, `bus_small`.
-(Der aktuelle Verkehr sucht `car` bzw. formt Autos prozedural; Lieferwagen der
-Stadtarbeit prozedural — echte Modelle ersetzen sie per Dateiname.)
-
----
-
-## 6. Marker → `src/assets/models/markers/` (`markerModel()`)
-
-`marker_buildable`, `marker_locked`, `marker_water`, `marker_trade`,
-`marker_government`, `marker_problem`, `marker_task`, `marker_bonus`,
-`marker_resource`, `sector_border_unlocked`, `sector_border_locked`,
-`sector_marker_build`, `sector_marker_resource`.
-(Fallback: farbcodierte Billboard-Marker — immer zur Kamera gerichtet.)
-
----
-
-## 7. Effekte → `src/assets/models/effects/` (`effectModel()`)
-
-`smoke_chimney`, `waterfall_mist`, `construction_spark`, `upgrade_glow`,
-`building_complete_effect`, `fire_response_effect`, `police_patrol_effect`,
-`trade_delivery_effect`, `tree_wind_sway_effect`, `water_surface_motion_effect`,
-`bird_flock_effect`, `harbor_wave_effect`.
-(Vieles ist als Partikel/Shader sinnvoller als `.glb` — siehe
-`docs/3D_WORLD_ASSETS.md` §17. Rauch, Windrad-Rotor, Verkehr laufen bereits.)
+Beide Dateien je Ordner sind aus `src/assets/modelManifest.ts` generiert und
+werden von `tests/modelReadmes.test.ts` gegen Drift geprüft — hier von Hand
+nichts duplizieren.

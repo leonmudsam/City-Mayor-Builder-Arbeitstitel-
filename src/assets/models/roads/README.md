@@ -17,4 +17,4 @@ Straßensegmente werden nach 4-Bit-Nachbarmaske gewählt und 90°-weise gedreht.
 | Kreuzung | `road_main_cross_intersection.glb` → `road_cross_intersection.glb` |  |
 | Ende/Stich | `road_main_end.glb` → `road_end.glb` |  |
 
-Fehlt ein Modell, greift der prozedurale Fallback — das Spiel bricht nie.
+Fehlt ein Modell, greift der prozedurale Fallback — das Spiel bricht nie. Die volle Spezifikation (Footprint, Höhe, Pivot, Platzierung, Biom, Budget) für diese UND alle geplanten Modelle dieses Ordners steht in `PROMPTS.md` daneben.

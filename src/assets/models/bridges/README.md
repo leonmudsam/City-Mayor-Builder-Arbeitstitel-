@@ -13,4 +13,4 @@ Wird verwendet, wenn eine Straße auf Wasser/Fluss liegt. Entlang der Straßenac
 |---|---|---|
 | Brücke über Wasser | `bridge_medium_road.glb` → `bridge_small_stone.glb` → `bridge_small_wood.glb` → `bridge_large_road.glb` → `bridge_road.glb` → `bridge.glb` |  |
 
-Fehlt ein Modell, greift der prozedurale Fallback — das Spiel bricht nie.
+Fehlt ein Modell, greift der prozedurale Fallback — das Spiel bricht nie. Die volle Spezifikation (Footprint, Höhe, Pivot, Platzierung, Biom, Budget) für diese UND alle geplanten Modelle dieses Ordners steht in `PROMPTS.md` daneben.

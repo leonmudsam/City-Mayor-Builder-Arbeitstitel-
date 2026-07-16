@@ -20,4 +20,4 @@ Bodenkacheln je Terraintyp (ersetzen die farbige Basis-Kachel) und gestreute Geb
 | Kachel fruchtbar | `fertile_ground_tile.glb` → `fertile.glb` |  |
 | Gebirgs-Feature (gestreut) | `mountain_peak_medium.glb` → `mountain_peak_large.glb` → `rock_large.glb` → `mountain_peak.glb` | auf ~⅓ der Gebirgs-Kacheln |
 
-Fehlt ein Modell, greift der prozedurale Fallback — das Spiel bricht nie.
+Fehlt ein Modell, greift der prozedurale Fallback — das Spiel bricht nie. Die volle Spezifikation (Footprint, Höhe, Pivot, Platzierung, Biom, Budget) für diese UND alle geplanten Modelle dieses Ordners steht in `PROMPTS.md` daneben.

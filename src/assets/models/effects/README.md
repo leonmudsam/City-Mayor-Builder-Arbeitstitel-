@@ -13,4 +13,4 @@ Partikel-/Look-Effekte. Rauch am Schornstein aktiver Produktion.
 |---|---|---|
 | Schornstein-Rauch | `smoke_chimney.glb` → `smoke.glb` → `steam.glb` → `smoke_puff.glb` |  |
 
-Fehlt ein Modell, greift der prozedurale Fallback — das Spiel bricht nie.
+Fehlt ein Modell, greift der prozedurale Fallback — das Spiel bricht nie. Die volle Spezifikation (Footprint, Höhe, Pivot, Platzierung, Biom, Budget) für diese UND alle geplanten Modelle dieses Ordners steht in `PROMPTS.md` daneben.
