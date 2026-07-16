@@ -1024,6 +1024,9 @@ body {
 .res-art-img { object-fit: contain; }
 .bld-art-img { object-fit: cover; border-radius: 10px; }
 .portrait-img { object-fit: cover; border-radius: 11px; }
+/* 3D-model thumbnails (v0.38): transparent PNG rendered from the .glb, shown whole
+   on the same green tile as the SVG previews so the visual language stays consistent. */
+.bld-art-model { object-fit: contain; background: #cfe3b8; }
 
 /* ===== v0.26 UI overhaul: bigger, more graphical chrome ===== */
 /* UI-art frame (category/activity/reward/marker/event tiles). */

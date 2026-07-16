@@ -1,5 +1,43 @@
 # Patch Notes
 
+## v0.38 — „Gebäude-Vorschau direkt aus dem 3D-Modell (keine PNGs mehr nötig)"
+
+**Was.** Die Vorschau eines Gebäudes (Baumenü, Gebäude-Sheet, Level-up-Karten,
+Event-Popup) wird jetzt **automatisch aus seiner `.glb` gerendert**. Wer ein Modell
+in `src/assets/models/buildings/` ablegt, braucht **keine `<id>.png`-Vorschau mehr**.
+Reihenfolge der Quellen: **`.glb`-Thumbnail → `<id>.png` (falls vorhanden) → eingebaute
+SVG-Grafik**. Solange das Thumbnail noch rendert, zeigt die Karte die SVG/PNG, blinkt
+also nie leer.
+
+**Warum.** Es gibt inzwischen viele Gebäude-Modelle. Bisher brauchte jede Karte
+zusätzlich ein handgezeichnetes PNG — doppelte Pflege. Jetzt genügt die `.glb`: ein
+Asset für Welt **und** Vorschau, konsistenter Look, weniger Dateien.
+
+**Architektur.** Neuer Offscreen-Renderer `src/renderer/three/modelThumbnail.ts`:
+**ein** geteilter WebGL-Kontext zeichnet jedes Modell **einmal** in ein transparentes
+256²-Canvas (3/4-Ansicht, Welt-Beleuchtung) und liefert eine PNG-Data-URL, **gecacht
+pro Modell-URL**. `BuildingArt` (in `BuildingArtwork.tsx`) nutzt einen kleinen
+`useModelThumbnail`-Hook und wählt die Quelle in obiger Reihenfolge. Rein
+präsentationsseitig — keine Simulation/Save/Koordinaten berührt (CLAUDE.md §1). Ist
+WebGL nicht verfügbar (z. B. Tests), fällt es sauber auf PNG/SVG zurück.
+
+**Performance.** Genau ein zusätzlicher WebGL-Kontext (Singleton, nicht pro Gebäude),
+jedes Modell wird nur einmal gerendert und das Ergebnis gecacht; die Karten zeigen
+danach ein statisches `<img>`.
+
+**Auswirkung/Zukunft.** Neue Gebäude brauchen nur noch die `.glb`. Später ließe sich
+das Thumbnail leicht auf die aktuelle Upgrade-Stufe (`<id>_stage<N>.glb`) oder eine
+kleine Rotations-Vorschau erweitern.
+
+**Verifikation.** `tsc -b --force`, ESLint, **140 Tests**, Build — grün. Sicht-Check
+mit temporären Test-`.glb`: „Kleines Haus" zeigt das aus dem Modell gerenderte
+Thumbnail, Nachbarn ohne Modell weiter ihr SVG; keine Konsolenfehler. (Die Test-`.glb`
+wurden nach der Prüfung wieder entfernt.)
+
+**Dateien.** Neu: `src/renderer/three/modelThumbnail.ts`. Geändert:
+`src/components/art/BuildingArtwork.tsx` (GLB-zuerst + Hook), `src/styles.css`
+(`.bld-art-model`), `docs/ASSETS.md`, `docs/ARCHITECTURE.md`, `docs/PATCHNOTES.md`.
+
 ## v0.37 — „Lebendige Welt: Tag/Nacht-Zyklus + dynamischer Himmel + Wasser"
 
 **Was.** Die 3D-Welt bekommt eine **lebendige Atmosphäre**. Neu:
