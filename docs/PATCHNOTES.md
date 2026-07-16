@@ -1,5 +1,40 @@
 # Patch Notes
 
+## v0.36 — „Generierungs-Prompts pro Ordner (PROMPTS.md), auto-synchron"
+
+**Was.** Jeder Modellordner hat jetzt neben der `README.md` (Namensliste) eine
+**`PROMPTS.md`** mit **copy-paste-fertigen Text-zu-3D-Prompts** für jedes Modell —
+aktuelle *und* geplante. Für Gebäude wird **ein Prompt pro Config-Gebäude** erzeugt
+(alle aus `buildings.config.ts`, inkl. Footprint, Stufen-Dateinamen und
+Baustellen-Modell), plus ein Block für geplante Landmarken/Hero-Bauten. Die übrigen
+Ordner (terrain/roads/bridges/props/vehicles/markers/effects/ui) listen je Modell
+einen Prompt, gruppiert in „Aktiv genutzt" und „Geplant".
+
+**Warum.** Damit man für **alle** Modelle — die es gibt und die noch kommen — direkt
+einen fertigen Prompt zur Hand hat, genau im richtigen Ordner, ohne Stil-/Technik-
+Regeln jedes Mal neu zusammenzusuchen.
+
+**Architektur.** Gleiche Single-Source wie die READMEs: alles kommt aus
+`src/assets/modelManifest.ts` (neu: `STYLE_PREFIX`, `BUILDING_PROMPTS`,
+`BUILDING_LANDMARK_PROMPTS`, `FOLDER_PROMPTS`, `renderFolderPrompts`,
+`buildBuildingsPrompts`). Jeder Block enthält den gemeinsamen Stil-/Technik-Prefix
+(identisch zu `docs/3D_WORLD_ASSETS.md` §6) + ein englisches Motiv (Text-zu-3D-Tools
+arbeiten damit am besten). Der Renderer nutzt weiterhin dieselben Namensarrays →
+Code, README und Prompts können nicht auseinanderlaufen.
+
+**Auto-synchron.** `tests/modelReadmes.test.ts` generiert/prüft jetzt **README *und*
+PROMPTS** je Ordner und erzwingt zusätzlich, dass **jede** Gebäude-ID einen Prompt in
+`BUILDING_PROMPTS` hat. Neues Gebäude ohne Prompt/Motiv → Test schlägt fehl.
+Regenerieren: `WRITE_MODEL_DOCS=1 npx vitest run tests/modelReadmes.test.ts`.
+
+**Auswirkung/Zukunft.** Ein neues Gebäude in der Config zieht automatisch einen
+Prompt-Slot nach sich; neue Modellnamen ergänzt man an einer Stelle. Damit lässt sich
+die 3D-Welt Modell für Modell füllen, ohne Doku-Drift.
+
+**Dateien.** Geändert: `src/assets/modelManifest.ts`, `tests/modelReadmes.test.ts`,
+`docs/3D_MODEL_MANIFEST.md`, `docs/PATCHNOTES.md`. Neu (generiert):
+`src/assets/models/<ordner>/PROMPTS.md` (9 Dateien inkl. `buildings/`).
+
 ## v0.35 — „Plattform-Pivot: natives PC-Spiel (Tauri), eine Codebasis"
 
 **Was wurde geändert.** City Mayor Builder wird ab sofort als **natives PC-Spiel**
