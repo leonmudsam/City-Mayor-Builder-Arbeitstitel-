@@ -1,7 +1,12 @@
-import { useEffect, useRef } from 'react';
-import { Eye, Grid3x3, Maximize2, Crosshair, Plus, Minus, Compass } from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
+import { Eye, Grid3x3, Maximize2, Crosshair, Plus, Minus, Compass, Sun, Moon } from 'lucide-react';
 import { getMapApi, useUiStore } from '../../state/store.ts';
 import type { CameraPreset } from '../../renderer/three/CameraConfig.ts';
+import {
+  getEnvironmentSettings,
+  setEnvironmentSettings,
+  subscribeEnvironmentSettings,
+} from '../../renderer/three/environmentSettings.ts';
 import { t } from '../../i18n/index.ts';
 
 // 3D view controls (§9/§14, v0.30): camera presets replace the old 2D/iso/3D
@@ -81,7 +86,49 @@ export function CameraControls() {
             <Minus size={16} />
           </button>
         </div>
+        <DayNightControl />
       </div>
+    </div>
+  );
+}
+
+/** Format a normalised time-of-day (0..1) as HH:MM. */
+function clock(tod: number): string {
+  const total = Math.round(tod * 24 * 60);
+  const h = Math.floor(total / 60) % 24;
+  const m = total % 60;
+  return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+}
+
+/** Day/night HUD: toggle the auto-cycle and scrub the time of day (§ Atmosphäre,
+ *  v0.37). Reads/writes the shared environmentSettings store the SkyEnvironment
+ *  also listens to, so changes apply live. Purely visual — no game effect. */
+function DayNightControl() {
+  const [env, setEnv] = useState(getEnvironmentSettings());
+  useEffect(() => subscribeEnvironmentSettings(() => setEnv(getEnvironmentSettings())), []);
+
+  return (
+    <div className="env-controls">
+      <button
+        className={`env-toggle${env.cycle ? ' active' : ''}`}
+        onClick={() => setEnvironmentSettings({ cycle: !env.cycle })}
+        title={t('ui.env.cycle')}
+      >
+        {env.cycle ? <Sun size={16} /> : <Moon size={16} />}
+        <span>{clock(env.timeOfDay)}</span>
+      </button>
+      <input
+        type="range"
+        className="env-time"
+        min={0}
+        max={0.999}
+        step={0.001}
+        value={env.timeOfDay}
+        // Scrubbing pauses the cycle so the chosen moment holds.
+        onChange={(e) => setEnvironmentSettings({ timeOfDay: Number(e.target.value), cycle: false })}
+        title={t('ui.env.time')}
+        aria-label={t('ui.env.time')}
+      />
     </div>
   );
 }

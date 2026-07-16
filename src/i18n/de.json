@@ -228,6 +228,8 @@
   "ui.camera.compass": "Ausrichtung zurücksetzen (Kompass)",
   "ui.camera.zoomIn": "Näher heranzoomen",
   "ui.camera.zoomOut": "Weiter herauszoomen",
+  "ui.env.cycle": "Tag/Nacht-Zyklus an/aus",
+  "ui.env.time": "Tageszeit einstellen",
   "ui.shop": "Shop",
   "ui.population": "Einwohner",
   "ui.happiness": "Zufriedenheit",
