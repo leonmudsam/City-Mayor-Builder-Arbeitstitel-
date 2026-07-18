@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { nearTownHall, newController, setLevel, flattenTerrain, T0 } from './helpers.ts';
 import { moveInPerMin } from '../src/game/simulation/tick.ts';
+import { buildingsConfig } from '../src/game/config/buildings.config.ts';
+import { regionsConfig } from '../src/game/config/regions.config.ts';
 
 // Insel-Layout (v11): Startstrassen-Zeile bei Rathaus-y+5, Gebaeude ab y+6.
 const at = (dx: number, dy: number) => nearTownHall(dx, dy);
@@ -152,5 +154,57 @@ describe('active-play & growth (v0.18)', () => {
     const { controller } = newController();
     // No housing yet → the status says so.
     expect(controller.getGrowthStatus().reason).toBe('no_housing');
+  });
+});
+
+// § A10 Balancing-Pass: strukturelle Monotonie über die 20 Level × Regionen.
+// Kein fixes Zahlenliteral (Werte dürfen sich verschieben), sondern die Regeln,
+// die „jede Stufe ein Meilenstein" und „Expansion ist eine Entscheidung" tragen.
+describe('config balancing invariants (A10)', () => {
+  it('every upgrade stage costs strictly more money than the previous', () => {
+    const bad: string[] = [];
+    for (const b of buildingsConfig) {
+      let prev = b.cost?.money ?? 0;
+      (b.upgrades ?? []).forEach((u, i) => {
+        const m = u.cost?.money ?? 0;
+        if (m <= prev) bad.push(`${b.id} Stufe ${i + 2}: ${m} ≤ ${prev}`);
+        prev = m;
+      });
+    }
+    expect(bad, `Upgrade-Kosten nicht streng steigend: ${bad.join(', ')}`).toEqual([]);
+  });
+
+  it('every gated upgrade stage requires a strictly higher level than the previous', () => {
+    const bad: string[] = [];
+    for (const b of buildingsConfig) {
+      let prev = b.unlockLevel;
+      (b.upgrades ?? []).forEach((u, i) => {
+        if (u.unlockLevel != null) {
+          if (u.unlockLevel <= prev) bad.push(`${b.id} Stufe ${i + 2}: L${u.unlockLevel} ≤ L${prev}`);
+          prev = u.unlockLevel;
+        }
+      });
+    }
+    expect(bad, `Stufen-Level nicht streng steigend: ${bad.join(', ')}`).toEqual([]);
+  });
+
+  it('never unlocks a region before its prerequisite regions', () => {
+    const byId = new Map(regionsConfig.map((r) => [r.id, r]));
+    const bad: string[] = [];
+    for (const r of regionsConfig) {
+      for (const p of r.prerequisiteRegionIds ?? []) {
+        const pr = byId.get(p);
+        if (pr && pr.unlockLevel > r.unlockLevel) bad.push(`Region ${r.id} (L${r.unlockLevel}) < Voraussetzung ${p} (L${pr.unlockLevel})`);
+      }
+    }
+    expect(bad, `Regions-Voraussetzungen inkonsistent: ${bad.join(', ')}`).toEqual([]);
+  });
+
+  it('keeps every unlockable region gate within L1–L18 (Teaser ausgenommen)', () => {
+    const bad = regionsConfig
+      .filter((r) => r.unlockable)
+      .filter((r) => r.unlockLevel < 1 || r.unlockLevel > 18)
+      .map((r) => `Region ${r.id}: L${r.unlockLevel}`);
+    expect(bad, `Regions-Gate außerhalb L1–L18: ${bad.join(', ')}`).toEqual([]);
   });
 });

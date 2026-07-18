@@ -69,7 +69,12 @@ Async-Ladepfade, CLAUDE.md §1 (Sim importiert kein three/react) bleibt gewahrt.
 > (Bake-Segmentierung → `islandRegions.gen.ts`, `regions.config.ts` statt
 > `sectors.config.ts`, Schema v11), alle Gebäude-Footprints/Stufenketten neu
 > aufgesetzt (sizeClass XS–XXL, 20 Level) und den 2D-Pixi-Renderer entfernt.
-> Sektor-Bezüge in den Abschnitten oben sind historisch (P1–P3).
+> Sektor-Bezüge in den Abschnitten oben sind historisch (P1–P3). **A9 ✅**
+> (v0.58) hat die Asset-/Gameplay-Doku generiert & testgeprüft synchronisiert:
+> `docs/BUILDINGS.md` (verbindliche Gebäudetabelle je Stufe) und `docs/REGIONS.md`
+> (32 Regionen) aus der Config, ein 3D-Prompt **je Ausbaustufe**
+> (`buildings/PROMPTS.md`) und neue Prompt-Ordner für Weidetiere/Farm/
+> Stadtarbeit-Fahrzeuge.
 
 ## Bewusst später (nicht Teil dieses Umbaus)
 

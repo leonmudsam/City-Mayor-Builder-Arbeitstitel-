@@ -40,7 +40,7 @@ export type ResetVariant = 'normal' | 'bonus';
 export function App() {
   const [ready, setReady] = useState(false);
   const [bootError, setBootError] = useState<string>();
-  // Bumped on reset/import to remount the game view (fresh Pixi renderer, no
+  // Bumped on reset/import to remount the game view (fresh 3D renderer, no
   // stale region/building caches) — the controller instance itself is reused.
   const [gameKey, setGameKey] = useState(0);
   const controllerRef = useRef<GameController | undefined>(undefined);

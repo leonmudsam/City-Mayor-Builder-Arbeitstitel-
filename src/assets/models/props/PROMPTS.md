@@ -183,6 +183,46 @@ Low-poly stylized 3D city-builder game asset, colorful cartoon look, clean shape
 
 **Spec:** Größenklasse `prop` — kleines Prop (< 500 Tris, ≤ 256², 1 Material) · Pivot unten-mittig (X/Z zentriert, Unterkante Y = 0) · Front +Z · Biom: Fruchtbares Land · Instancing: nein · *geplant* (noch nicht verdrahtet)
 
+### `field_crop_rows.glb` — 1×1
+
+```text
+Low-poly stylized 3D city-builder game asset, colorful cartoon look, clean shapes, soft bevels, hand-painted feel, optimized for realtime rendering, embedded textures, no lights, no cameras, centered object, pivot at bottom center, +Y up, front facing +Z — a patch of neat crop rows (wheat or vegetables) on ploughed soil, tileable, low-poly
+```
+
+**Spec:** Größenklasse `prop` — kleines Prop (< 500 Tris, ≤ 256², 1 Material) · Höhe ≈0.3 Kacheln · Pivot unten-mittig (X/Z zentriert, Unterkante Y = 0) · Front +Z · Biom: Fruchtbares Land, Farm · platzierbar auf: freie Kacheln im Farm-Footprint · Zufallsrotation (0/90°), Frucht-Farbvariante · Instancing: ja · *geplant* (noch nicht verdrahtet)
+
+### `fence_wooden.glb` — 1×1, modular
+
+```text
+Low-poly stylized 3D city-builder game asset, colorful cartoon look, clean shapes, soft bevels, hand-painted feel, optimized for realtime rendering, embedded textures, no lights, no cameras, centered object, pivot at bottom center, +Y up, front facing +Z — a wooden farm fence segment with posts and rails, tileable side to side, low-poly
+```
+
+**Spec:** Größenklasse `prop` — kleines Prop (< 500 Tris, ≤ 256², 1 Material) · Höhe ≈0.5 Kacheln · Pivot unten-mittig (X/Z zentriert, Unterkante Y = 0) · Front +Z · Biom: Farm, Weide · platzierbar auf: Rand des Farm-/Weide-Grundstücks · Instancing: ja · *geplant* (noch nicht verdrahtet)
+
+### `farm_gate.glb` — 1×1
+
+```text
+Low-poly stylized 3D city-builder game asset, colorful cartoon look, clean shapes, soft bevels, hand-painted feel, optimized for realtime rendering, embedded textures, no lights, no cameras, centered object, pivot at bottom center, +Y up, front facing +Z — a simple wooden farm gate in a fence line, low-poly
+```
+
+**Spec:** Größenklasse `prop` — kleines Prop (< 500 Tris, ≤ 256², 1 Material) · Höhe ≈0.6 Kacheln · Pivot unten-mittig (X/Z zentriert, Unterkante Y = 0) · Front +Z · Biom: Farm, Weide · platzierbar auf: Zaun-Öffnung zur Straße · Instancing: nein · *geplant* (noch nicht verdrahtet)
+
+### `scarecrow.glb` — 1×1
+
+```text
+Low-poly stylized 3D city-builder game asset, colorful cartoon look, clean shapes, soft bevels, hand-painted feel, optimized for realtime rendering, embedded textures, no lights, no cameras, centered object, pivot at bottom center, +Y up, front facing +Z — a straw scarecrow on a wooden cross frame standing in a field, low-poly
+```
+
+**Spec:** Größenklasse `prop` — kleines Prop (< 500 Tris, ≤ 256², 1 Material) · Höhe ≈0.8 Kacheln · Pivot unten-mittig (X/Z zentriert, Unterkante Y = 0) · Front +Z · Biom: Fruchtbares Land, Farm · platzierbar auf: im Feld · Instancing: ja · *geplant* (noch nicht verdrahtet)
+
+### `windmill_small.glb` — 2×2
+
+```text
+Low-poly stylized 3D city-builder game asset, colorful cartoon look, clean shapes, soft bevels, hand-painted feel, optimized for realtime rendering, embedded textures, no lights, no cameras, centered object, pivot at bottom center, +Y up, front facing +Z — a small rustic windmill with four turning sails on a node named 'rotor', stone or wooden base, low-poly
+```
+
+**Spec:** Größenklasse `prop_large` — großes Prop / Setpiece (500–1 500 Tris, ≤ 512², 1–2 Materialien) · Höhe ≈2.5 Kacheln · Pivot unten-mittig (X/Z zentriert, Unterkante Y = 0) · Front +Z · Biom: Fruchtbares Land · Instancing: nein · Animations-Node: `reserved: rotor (drehende Flügel)` · *geplant* (noch nicht verdrahtet)
+
 ## Geplant — Gelände-Anpassung für Straßen (props/infrastructure/)
 
 Straßen dürfen niemals schweben: bei Steigungen entstehen Böschungen/Stützmauern statt schwebender Kanten (World-Graphics-V2 §5).

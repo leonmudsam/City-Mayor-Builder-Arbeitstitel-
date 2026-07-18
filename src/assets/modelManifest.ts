@@ -17,6 +17,7 @@
 // narrative style guide and docs/3D_MODEL_MANIFEST.md for the short naming index.
 
 import type { TerrainType } from '../game/types.ts';
+import type { BuildingSizeClass } from '../game/config/types.ts';
 
 // ---- accepted model names (consumed by ThreeMapRenderer) --------------------
 
@@ -133,6 +134,20 @@ export const SIZE_CLASS_BUDGETS: Record<SizeClass, SizeClassBudget> = {
   building_large: { label: 'großes Gebäude', triBudget: '2 000–6 000 Tris', textureSize: '≤ 1024²', materials: '2–3 Materialien' },
   landmark: { label: 'Landmarke', triBudget: '6 000–12 000 Tris', textureSize: '≤ 1024²', materials: '2–4 Materialien' },
   hero: { label: 'Hero-/Weltform (modular bevorzugt)', triBudget: 'so niedrig wie möglich, modular', textureSize: '≤ 1024², geteilt', materials: '2–6 Materialien je Modul' },
+};
+
+// § Gebäudesystem 2.0: Budget je GEBÄUDE-Größenklasse (XS–XXL, Pflichtfeld
+// `sizeClass` auf jedem BuildingDef). Getrennt von SIZE_CLASS_BUDGETS oben (das
+// deckt Props/Terrain/Fahrzeuge ab) — hier steigt das Poly-/Textur-Budget mit
+// der Grundfläche, ein 8×8-Kraftwerk (XXL) darf deutlich mehr als ein 2×2-Laden
+// (S). buildings/PROMPTS.md und docs/BUILDINGS.md lösen ihr Budget hierüber auf.
+export const BUILDING_SIZE_BUDGETS: Record<BuildingSizeClass, SizeClassBudget & { footprint: string }> = {
+  XS: { label: 'Deko/Kachel', footprint: '1×1', triBudget: '< 600 Tris', textureSize: '≤ 256²', materials: '1 Material' },
+  S: { label: 'kleines Gebäude', footprint: '2×2', triBudget: '800–2 000 Tris', textureSize: '≤ 512²', materials: '1–2 Materialien' },
+  M: { label: 'mittleres Gebäude', footprint: '3×3', triBudget: '1 500–3 500 Tris', textureSize: '≤ 512²', materials: '2 Materialien' },
+  L: { label: 'großes Gebäude', footprint: '4×4–5×5', triBudget: '3 000–6 000 Tris', textureSize: '≤ 1024²', materials: '2–3 Materialien' },
+  XL: { label: 'Groß-Areal', footprint: '6×6–7×7', triBudget: '5 000–9 000 Tris', textureSize: '≤ 1024²', materials: '3–4 Materialien' },
+  XXL: { label: 'Mega-Areal', footprint: '8×8', triBudget: '8 000–12 000 Tris', textureSize: '≤ 1024² (bevorzugt 2 Sets)', materials: '3–5 Materialien' },
 };
 
 // ---- folder documentation model ---------------------------------------------
@@ -309,9 +324,20 @@ export interface BuildingLike {
   id: string;
   category: string;
   size: { w: number; h: number };
+  sizeClass?: BuildingSizeClass;
   unlockLevel: number;
   upgrades?: unknown[];
 }
+
+/** Benannte Nodes/Anschlusspunkte, die der Renderer an einem Gebäudemodell
+ *  erwartet (animiert oder als Effekt-Ursprung) — dokumentiert in
+ *  buildings/PROMPTS.md und docs/BUILDINGS.md, damit die Modelle sie mitliefern.
+ *  Nur Gebäude mit Sonderknoten stehen hier; alle anderen brauchen keine. */
+export const BUILDING_NODES: Record<string, string> = {
+  sawmill: '`chimney` (Rauch-Ursprung am Schornstein)',
+  power_plant: '`chimney` (Dampf/Rauch am Kühlturm/Schlot)',
+  wind_farm: '`rotor` (drehende Rotorblätter je Turbine)',
+};
 
 /** Markdown for the buildings folder README, derived from the building config so
  *  it always lists every building, its stage count, and its construction model. */
@@ -446,8 +472,6 @@ export const BUILDING_PROMPTS: Record<string, string> = {
   mayor_house: "an elegant mayor's residence, larger than a normal house, with a small portico, bay windows and a tidy front garden",
   district_center: 'a modern district administration building, wide facade with a glass entrance, flags and a small forecourt',
   house_small: 'a small cozy family house with a red pitched roof, a chimney, a tiny front garden and warm windows',
-  house_row: 'a short terraced row house of two to three joined units with pitched roofs and small doorsteps',
-  apartment: 'a mid-rise apartment building, three to four floors, balconies, a low roof and a tidy entrance',
   residential_tower: 'a tall residential tower with many balconies, a flat roof and a modern colorful facade',
   sawmill: "a wooden sawmill with a pitched roof, log piles, a saw shed and a chimney (name the chimney node 'chimney')",
   quarry: 'a stone quarry site with terraced rock, a small crane, gravel piles and a work shed',
@@ -474,6 +498,125 @@ export const BUILDING_PROMPTS: Record<string, string> = {
   deco_flowerbed: 'a small decorative flowerbed with colorful flowers and a low border',
   deco_fountain: 'a small ornamental fountain with a round basin and a gentle water spout',
   deco_bench: 'a small park bench with a nearby lamp or planter on a paved patch',
+};
+
+/**
+ * § Gebäudesystem 2.0 (A9): ein **eigenes Motiv pro Ausbaustufe** — Index 0 =
+ * Basis (`<id>.glb`), Index N = `<id>_stage{N+1}.glb`. Die Stufen ändern die
+ * Grundfläche NIE (Nutzer-Entscheidung), aber das Modell verdichtet dasselbe
+ * Grundstück sichtbar: aus dem Kleinen Haus wird über sechs Stufen ein
+ * Wohnblock, aus dem Sägewerk ein Holzkombinat. `buildBuildingsPrompts`
+ * emittiert daraus einen vollwertigen Prompt je Stufen-Datei; der Test in
+ * tests/modelReadmes.test.ts erzwingt **Prompt-Anzahl ≡ Stufenzahl**, damit jede
+ * Stufe eines Mehrstufen-Gebäudes eine artist-fertige Beschreibung hat.
+ * Einstufige Gebäude brauchen keinen Eintrag (Fallback = BUILDING_PROMPTS).
+ * Footprint bleibt fix, deshalb überall „same fixed footprint".
+ */
+export const BUILDING_STAGE_PROMPTS: Record<string, readonly string[]> = {
+  town_hall: [
+    'a modest town hall with a small clock tower, a columned entrance, a flag and a red roof, a paved forecourt (fills a 5×5 civic plot)',
+    'an expanded city administration: the town hall grown with side wings, more windows, a larger clock tower and a busier forecourt with lampposts (same 5×5 plot)',
+    'a grand city palace: an ornate administrative palace with a dome, a colonnade, statues and a formal garden square (same 5×5 plot, clearly more prestigious)',
+    'a monumental city hall: a towering civic landmark with a tall clock spire, grand staircase, fountains and flags dominating the plaza (same 5×5 plot, the city’s crown)',
+  ],
+  house_small: [
+    'a small cozy family house with a red pitched roof, a chimney, a tiny front garden and warm windows (fills a 3×3 plot with garden)',
+    'a detached single-family home: a slightly bigger house with a porch, a garage and a neat garden on the same 3×3 plot',
+    'a semi-detached duplex: two joined homes with pitched roofs sharing the same 3×3 plot, two doorsteps and small gardens',
+    'a multi-family house: a compact three-storey apartment house with balconies and a shared entrance filling the 3×3 plot',
+    'an apartment block: a five-storey residential building with rows of balconies, a flat roof and a small forecourt on the 3×3 plot',
+    'a dense residential block: a tall filled-out apartment block covering the whole 3×3 plot, many balconies, roof units and a paved base — as many households as a whole street of starter houses',
+  ],
+  residential_tower: [
+    'a tall residential tower with many balconies, a flat roof and a modern colorful facade on a landscaped 5×5 plaza',
+    'a high-rise residential building: taller than the tower with a stepped silhouette, glass balconies and rooftop gardens (same 5×5 plaza)',
+    'a skyscraper: a gleaming residential skyscraper piercing the skyline, glass-and-steel facade, sky terraces and a grand plaza base (same 5×5 plaza, metropolis endgame)',
+  ],
+  sawmill: [
+    "a wooden sawmill with a pitched roof, log piles, a saw shed and a chimney (name the chimney node 'chimney'); fills a 4×4 works yard with a loading area",
+    "a large sawmill: a bigger mill hall, more stacked logs, a conveyor and a second chimney on the 4×4 yard (name a chimney node 'chimney')",
+    "a timber combine: a full industrial wood-processing complex with multiple halls, cranes, huge log stockpiles and smoking chimneys filling the 4×4 yard (name a chimney node 'chimney')",
+  ],
+  quarry: [
+    'a stone quarry site with terraced rock, a small crane, gravel piles and a work shed on a 5×5 excavation plot',
+    'a deep quarry: a wider terraced pit with conveyor belts, dump trucks and larger spoil heaps on the 5×5 plot',
+    'a mining complex: a full-scale rock-mining operation with heavy machinery, crushers, silos and rail carts filling the 5×5 plot',
+  ],
+  farm: [
+    'a farm with a barn, a farmhouse, silos and fenced fields, warm rural look, filling a 6×6 farmstead plot',
+    'a large farm: a bigger barn, more silos, extra outbuildings and expanded ploughed fields on the 6×6 plot',
+    'an agricultural complex: an industrial-scale farm with greenhouses, tall grain silos, machinery sheds and dense fields filling the 6×6 plot',
+  ],
+  well: [
+    'a small stone village well with a little wooden roof and a bucket (1×1)',
+    'a deep well: a sturdier stone well with an iron pump mechanism and a raised base (1×1)',
+  ],
+  water_pump: [
+    'a compact water pumping station: a small building with pipes, valves and a tank on a 3×3 plot',
+    'a pumping works: a larger pump house with multiple tanks, a control room and a pipe manifold filling the 3×3 plot',
+  ],
+  warehouse: [
+    'a rectangular storage warehouse with large roller doors, a flat roof and loading bays on a 4×4 yard',
+    'a high-bay warehouse: a taller automated storage building with tall racking visible through openings, more loading docks and parked trailers on the 4×4 yard',
+  ],
+  depot: [
+    'a logistics depot: a large shed with loading docks, crates, a small yard and parked trailers on a 5×5 plot',
+    'a logistics hub: a bigger multi-dock distribution centre with a truck yard, container stacks and a control office filling the 5×5 plot',
+  ],
+  waterworks: [
+    'a waterworks facility with round filtration tanks, pipes and a control building at the water’s edge on a 5×5 plot',
+    'a sewage/treatment works: additional large clarifier basins, aeration tanks and a bigger control building on the 5×5 plot',
+  ],
+  market: [
+    'a small market with striped awnings, crates of produce and a paved front on a 3×3 square',
+    'a covered market hall: a larger roofed market building with arched openings, many stalls and a busy paved forecourt on the 3×3 square',
+  ],
+  supermarket: [
+    'a modern supermarket: a wide flat building with a big storefront, a sign board and a small parking strip on a 4×4 plot',
+    'a shopping centre: a larger retail complex with a glass frontage, multiple storefronts and a bigger car park filling the 4×4 plot',
+  ],
+  bakery: [
+    'a charming corner bakery with a shop window, an awning and a chimney, warm inviting look (2×2)',
+    'a large bakery: a bigger bakery with a production annex, a delivery door and a taller chimney on the 2×2 plot',
+  ],
+  fire_station: [
+    'a small fire station with a red facade, a garage door, a short training tower and a flag on a 5×5 plot with a forecourt',
+    'a city fire station: a larger station with several garage bays, a taller drill tower, a vehicle yard and a green strip filling the 5×5 plot',
+    'a fire response centre: a major headquarters with a long row of garage bays, a command tower, helipad markings and a busy apparatus yard filling the 5×5 plot',
+  ],
+  police_station: [
+    'a police station: a sturdy civic building with blue accents, an entrance porch and a flag on a 4×4 plot with a yard',
+    'a police precinct: a larger station with a parking yard for patrol cars, an extension wing and blue signage filling the 4×4 plot',
+    'a police headquarters: an imposing presidium building with a secure courtyard, a communications mast and flags filling the 4×4 plot',
+  ],
+  hospital: [
+    'a clinic: a clean white medical building with a red cross sign, an ambulance bay and many windows on a 6×6 campus',
+    'a hospital: a larger multi-wing hospital with a taller main block, a bigger ambulance bay and a helipad on the 6×6 campus',
+    'a university hospital: a sprawling medical campus with several connected wings, a research tower, a helipad and landscaped grounds filling the 6×6 campus',
+  ],
+  trading_post: [
+    'a trading post / merchant house with crates, barrels, an awning and a hanging sign on a 3×3 plot',
+    'a commodities exchange: a busier trading house with a weighing yard, more stacked goods and a signboard on the 3×3 plot',
+    'an export centre: a large trading complex with a loading yard, container stacks and an office wing filling the 3×3 plot',
+  ],
+  shop_small: [
+    'a small retail shop with a colorful storefront, an awning and a sign (2×2)',
+    'a retail parade: a row of two to three small joined shops with awnings and signs filling the 2×2 plot',
+  ],
+  office: [
+    'a small office: a low-rise office building with a glass facade, clean modern lines and an entrance plaza on a 4×4 plot',
+    'an office building: a taller mid-rise office block with a full glass curtain wall and a lobby entrance on the 4×4 plot',
+    'a business center: a large corporate office complex with two connected towers, a plaza and flags filling the 4×4 plot',
+    'an office tower: a tall gleaming office skyscraper with a sleek glass-and-steel facade dominating the 4×4 plot',
+  ],
+  power_plant: [
+    "a coal power plant: a large hall with tall smokestacks emitting steam, cooling towers and a coal yard filling an 8×8 industrial plot (name a smokestack node 'chimney')",
+    "a large power station: an expanded plant with more cooling towers, a bigger boiler house, a rail siding and towering smokestacks filling the 8×8 plot (name a smokestack node 'chimney')",
+  ],
+  park: [
+    'a small green park with trees, paths, benches and a lawn, low and flat, on a 5×5 plot',
+    'a city park: a larger landscaped park with a pond, winding paths, tree clusters, flowerbeds and a bandstand filling the 5×5 plot',
+  ],
 };
 
 /** Geplante Landmarken/Hero-Bauten (noch keine Config-IDs; siehe 3D_WORLD_ASSETS §13). */
@@ -643,6 +786,11 @@ export const FOLDER_PROMPTS: FolderPrompts[] = [
           { name: 'boat_small', footprint: '1×2', sizeClass: 'prop_large', frontFacing: '+Z', biome: 'Küste, See', placeOn: 'an Pier/Ufer, im Wasser', instancing: false, status: 'planned', motif: 'a small rowing/fishing boat, front facing +Z, low-poly' },
           { name: 'hay_bale', footprint: '1×1', sizeClass: 'prop', biome: 'Fruchtbares Land', instancing: true, status: 'planned', motif: 'a round hay bale, low-poly' },
           { name: 'tractor_small', footprint: '1×1', sizeClass: 'prop', frontFacing: '+Z', biome: 'Fruchtbares Land', instancing: false, status: 'planned', motif: 'a small farm tractor, front facing +Z, low-poly' },
+          { name: 'field_crop_rows', footprint: '1×1', sizeClass: 'prop', heightRange: '≈0.3 Kacheln', biome: 'Fruchtbares Land, Farm', placeOn: 'freie Kacheln im Farm-Footprint', instancing: true, randomize: 'Zufallsrotation (0/90°), Frucht-Farbvariante', status: 'planned', motif: 'a patch of neat crop rows (wheat or vegetables) on ploughed soil, tileable, low-poly' },
+          { name: 'fence_wooden', footprint: '1×1, modular', sizeClass: 'prop', heightRange: '≈0.5 Kacheln', biome: 'Farm, Weide', placeOn: 'Rand des Farm-/Weide-Grundstücks', instancing: true, status: 'planned', motif: 'a wooden farm fence segment with posts and rails, tileable side to side, low-poly' },
+          { name: 'farm_gate', footprint: '1×1', sizeClass: 'prop', heightRange: '≈0.6 Kacheln', biome: 'Farm, Weide', placeOn: 'Zaun-Öffnung zur Straße', instancing: false, status: 'planned', motif: 'a simple wooden farm gate in a fence line, low-poly' },
+          { name: 'scarecrow', footprint: '1×1', sizeClass: 'prop', heightRange: '≈0.8 Kacheln', biome: 'Fruchtbares Land, Farm', placeOn: 'im Feld', instancing: true, status: 'planned', motif: 'a straw scarecrow on a wooden cross frame standing in a field, low-poly' },
+          { name: 'windmill_small', footprint: '2×2', sizeClass: 'prop_large', heightRange: '≈2.5 Kacheln', biome: 'Fruchtbares Land', animationNodes: 'reserved: rotor (drehende Flügel)', instancing: false, status: 'planned', motif: "a small rustic windmill with four turning sails on a node named 'rotor', stone or wooden base, low-poly" },
         ],
       },
       {
@@ -698,6 +846,14 @@ export const FOLDER_PROMPTS: FolderPrompts[] = [
           { name: 'police_car', footprint: '≈0.3×0.5', sizeClass: 'vehicle', status: 'planned', motif: 'a police car with blue livery and a light bar, front facing +Z, low-poly' },
           { name: 'ambulance', footprint: '≈0.4×0.7', sizeClass: 'vehicle', status: 'planned', motif: 'a white ambulance with a red cross and a light bar, front facing +Z, low-poly' },
           { name: 'bus_small', footprint: '≈0.4×1.0', sizeClass: 'vehicle', status: 'planned', motif: 'a small city bus, front facing +Z, low-poly' },
+        ],
+      },
+      {
+        title: 'Geplant — Stadtarbeit-Fahrzeuge (A6, „Selbst fahren")',
+        note: 'Die fünf steuerbaren Missionsfahrzeuge (A6). Der Fahrmodus nutzt bis zum Drop-in prozedurale Platzhalter je Typ — diese Modelle ersetzen sie. Front +Z, klare Silhouette auch aus der Verfolgerkamera.',
+        entries: [
+          { name: 'logging_truck', footprint: '≈0.5×1.1', sizeClass: 'vehicle', status: 'planned', motif: 'a logging truck carrying stacked tree logs on a long flatbed trailer, front facing +Z, low-poly' },
+          { name: 'flatbed', footprint: '≈0.5×1.0', sizeClass: 'vehicle', status: 'planned', motif: 'a flatbed construction-material truck loaded with pallets of bricks and planks, front facing +Z, low-poly' },
         ],
       },
     ],
@@ -791,6 +947,30 @@ export const FOLDER_PROMPTS: FolderPrompts[] = [
       },
     ],
   },
+  {
+    key: 'animals',
+    title: 'Weidetiere (Landwirtschaft)',
+    intro:
+      'Tiere für die lebendigen Höfe (A7). Der Renderer streut sie instanziert auf freie Weidekacheln rund um ' +
+      'aktive Bauernhöfe und lässt sie gemächlich grasen/wandern; bis zum Drop-in sind es prozedurale ' +
+      'Platzhalter. **Klein halten** (ein Rind ≈ 0.5 Kacheln hoch), Pivot unten-mittig, Front +Z, wenige Tris ' +
+      '(werden vielfach instanziert). ' +
+      SCALE_NOTE,
+    groups: [
+      {
+        title: 'Geplant — Nutztiere (instanziert, Weide-Wander-Animation im Renderer)',
+        note: 'Ein ruhiges Idle/Graze genügt; die Bewegung über die Weide macht der Renderer (kein Skelett-Animationszwang). Mehr Tiere je Farmstufe, global gedeckelt.',
+        entries: [
+          { name: 'cow', footprint: '1×1', sizeClass: 'prop', heightRange: '≈0.5 Kacheln', biome: 'Farm, Weide, Fruchtbares Land', placeOn: 'freie Weidekacheln um die Farm', instancing: true, randomize: 'Zufallsrotation, leichte Skalierung, Fell-Farbvariante', status: 'planned', motif: 'a small stylized cow standing on grass, black-and-white patches, front facing +Z, low-poly' },
+          { name: 'sheep', footprint: '1×1', sizeClass: 'prop', heightRange: '≈0.4 Kacheln', biome: 'Farm, Weide', placeOn: 'freie Weidekacheln', instancing: true, randomize: 'Zufallsrotation, leichte Skalierung', status: 'planned', motif: 'a small fluffy white sheep grazing on grass, front facing +Z, low-poly' },
+          { name: 'chicken', footprint: '1×1', sizeClass: 'prop', heightRange: '≈0.25 Kacheln', biome: 'Farm', placeOn: 'freie Kacheln nahe der Scheune', instancing: true, randomize: 'Zufallsrotation', status: 'planned', motif: 'a tiny stylized chicken pecking the ground, front facing +Z, low-poly' },
+          { name: 'horse', footprint: '1×1', sizeClass: 'prop', heightRange: '≈0.6 Kacheln', biome: 'Farm, Weide', placeOn: 'freie Weidekacheln', instancing: true, randomize: 'Zufallsrotation, Fell-Farbvariante', status: 'planned', motif: 'a small stylized horse standing on grass, brown coat, front facing +Z, low-poly' },
+          { name: 'pig', footprint: '1×1', sizeClass: 'prop', heightRange: '≈0.35 Kacheln', biome: 'Farm', placeOn: 'freie Kacheln nahe der Scheune', instancing: true, randomize: 'Zufallsrotation', status: 'planned', motif: 'a small pink pig standing on soil, front facing +Z, low-poly' },
+          { name: 'goat', footprint: '1×1', sizeClass: 'prop', heightRange: '≈0.4 Kacheln', biome: 'Farm, Weide, Hügelland', placeOn: 'freie Weidekacheln', instancing: true, randomize: 'Zufallsrotation', status: 'planned', motif: 'a small stylized goat grazing on grass, front facing +Z, low-poly' },
+        ],
+      },
+    ],
+  },
 ];
 
 const PROMPT_INTRO_TECH =
@@ -854,38 +1034,82 @@ export function renderFolderPrompts(fp: FolderPrompts): string {
   );
 }
 
-/** Leitet eine SizeClass aus der Gebäude-Grundfläche ab (klein ≤ 4 Kacheln, sonst
- *  groß) — mechanisch statt pro Gebäude von Hand gepflegt. */
-function buildingSizeClass(b: BuildingLike): SizeClass {
-  return b.size.w * b.size.h <= 4 ? 'building_small' : 'building_large';
+/** Größenklasse eines Gebäudes (XS–XXL). Nimmt das Pflichtfeld `sizeClass`, mit
+ *  Footprint-Fallback für gelockerte BuildingLike-Testdaten. */
+function buildingSizeClassOf(b: BuildingLike): BuildingSizeClass {
+  if (b.sizeClass) return b.sizeClass;
+  const n = Math.max(b.size.w, b.size.h);
+  if (n <= 1) return 'XS';
+  if (n === 2) return 'S';
+  if (n === 3) return 'M';
+  if (n <= 5) return 'L';
+  if (n <= 7) return 'XL';
+  return 'XXL';
 }
 
-/** Markdown für `buildings/PROMPTS.md` — ein Prompt je Config-Gebäude + Landmarken. */
+/** Stufen-Motive eines Gebäudes (Index 0 = Basis). Explizite Einträge aus
+ *  BUILDING_STAGE_PROMPTS; sonst das Basis-Motiv auf die Stufenzahl aufgefüllt.
+ *  Der Sync-Test erzwingt für Mehrstufen-Gebäude echte Einträge. */
+export function buildingStagePrompts(b: BuildingLike): readonly string[] {
+  const stages = (b.upgrades?.length ?? 0) + 1;
+  const explicit = BUILDING_STAGE_PROMPTS[b.id];
+  if (explicit) return explicit;
+  const base = BUILDING_PROMPTS[b.id] ?? `a ${b.category} building`;
+  return Array.from({ length: stages }, () => base);
+}
+
+/** Spec-Zeile eines Gebäude-Stufen-Blocks (Budget aus der Gebäude-Größenklasse). */
+function buildingSpecLine(b: BuildingLike, stageIndex: number, stages: number): string {
+  const cls = buildingSizeClassOf(b);
+  const bud = BUILDING_SIZE_BUDGETS[cls];
+  const parts: string[] = [
+    `Größenklasse \`${cls}\` — ${bud.label} (${bud.triBudget}, ${bud.textureSize}, ${bud.materials})`,
+    `Footprint ${b.size.w}×${b.size.h} (fix über alle Stufen)`,
+    `Pivot ${DEFAULT_PIVOT}`,
+    `Front ${DEFAULT_FRONT} (Eingang zur Straße)`,
+  ];
+  const nodes = BUILDING_NODES[b.id];
+  if (nodes) parts.push(`Nodes: ${nodes}`);
+  parts.push(
+    stageIndex === 0
+      ? `Stufe 1/${stages} — Basis \`${b.id}.glb\``
+      : `Stufe ${stageIndex + 1}/${stages} — \`${b.id}${BUILD_STAGE_PREFIX}${stageIndex + 1}.glb\``,
+  );
+  return `\n**Spec:** ${parts.join(' · ')}\n`;
+}
+
+/** Ein copy-paste-fertiger Prompt-Block für EINE Gebäude-Stufe. */
+function buildingStageBlock(b: BuildingLike, stageIndex: number, motif: string, stages: number): string {
+  const file = stageIndex === 0 ? `${b.id}.glb` : `${b.id}${BUILD_STAGE_PREFIX}${stageIndex + 1}.glb`;
+  const head = `#### \`${file}\` — Stufe ${stageIndex + 1}/${stages}`;
+  return `${head}\n\n\`\`\`text\n${STYLE_PREFIX} ${motif}\n\`\`\`\n${buildingSpecLine(b, stageIndex, stages)}`;
+}
+
+/** Markdown für `buildings/PROMPTS.md` — ein Prompt je STUFE + Landmarken. */
 export function buildBuildingsPrompts(buildings: readonly BuildingLike[]): string {
   const rows = buildings
     .filter((b) => b.category !== 'roads')
     .map((b) => {
-      const motif = BUILDING_PROMPTS[b.id] ?? `a ${b.category} building`;
       const stages = (b.upgrades?.length ?? 0) + 1;
-      const sizeClass = buildingSizeClass(b);
-      const block = promptBlock({ name: b.id, footprint: `${b.size.w}×${b.size.h}`, motif, sizeClass, status: 'live' });
-      const extra =
-        stages > 1
-          ? `> Stufen: \`${b.id}${BUILD_STAGE_PREFIX}2\`…\`${b.id}${BUILD_STAGE_PREFIX}${stages}\` (sichtbar weiterentwickelt) · Baustelle: \`${b.id}${BUILD_CONSTRUCTION_SUFFIX}.glb\` · Eingang zeigt zur Straße, Gehweg wird automatisch ergänzt.\n`
-          : `> Baustelle optional: \`${b.id}${BUILD_CONSTRUCTION_SUFFIX}.glb\` · Eingang zeigt zur Straße, Gehweg wird automatisch ergänzt.\n`;
-      return `${block}${extra}`;
+      const motifs = buildingStagePrompts(b);
+      const blocks = motifs.map((m, i) => buildingStageBlock(b, i, m, stages)).join('\n');
+      const construction =
+        `> Baustelle (Bau *und* Upgrade): \`${b.id}${BUILD_CONSTRUCTION_SUFFIX}.glb\`, sonst generisches ` +
+        `Baustellen-Prop, sonst prozedurales Gerüst. Der Renderer skaliert jedes Modell automatisch auf den Footprint.\n`;
+      return `### ${b.id} — ${stages} ${stages === 1 ? 'Stufe' : 'Stufen'}\n\n${blocks}${construction}`;
     })
     .join('\n');
   const landmarks = BUILDING_LANDMARK_PROMPTS.map(promptBlock).join('\n');
   return (
     `# 3D-Prompts — Gebäude\n\n` +
     `${GEN_BANNER}\n` +
-    `> Gebäudeliste kommt aus \`src/game/config/buildings.config.ts\` — neue Gebäude erscheinen automatisch.\n\n` +
-    `Zielordner: \`src/assets/models/buildings/<kategorie>/\`, **Dateiname = Gebäude-ID**. Jeder Block ist ` +
-    `copy-paste-fertig (Stil-Prefix + Motiv) und trägt die volle Spezifikation. ${PROMPT_INTRO_TECH}\n\n` +
-    `**Front/Eingang (Konzept, siehe docs/3D_WORLD_ASSETS.md „Gebäude-Front & Straßenanschluss"):** Vorderseite ` +
-    `zeigt standardmäßig +Z zur Straße; der Renderer ergänzt künftig automatisch einen Gehweg/Vorplatz zwischen ` +
-    `Gebäude und Straße. Noch nicht implementiert — betrifft nur die Platzierung, nicht das Modell selbst.\n\n` +
+    `> Gebäudeliste kommt aus \`src/game/config/buildings.config.ts\` — neue Gebäude/Stufen erscheinen automatisch.\n\n` +
+    `Zielordner: \`src/assets/models/buildings/<kategorie>/\`, **Dateiname = Gebäude-ID** (Basis) bzw. ` +
+    `\`<id>_stage<N>.glb\` (Stufe N ≙ Upgrade-Level N−1). **Ein Block je Stufe** — jede Stufe verdichtet den ` +
+    `FIXEN Footprint sichtbar weiter. Jeder Block ist copy-paste-fertig (Stil-Prefix + Motiv) und trägt die ` +
+    `volle Spezifikation. ${PROMPT_INTRO_TECH}\n\n` +
+    `**Front/Eingang:** Vorderseite zeigt +Z zur Straße; der Renderer ergänzt automatisch Gehweg/Vorplatz. ` +
+    `Volle Gameplay-Tabelle (Kosten, Effekte, Gates je Stufe): \`docs/BUILDINGS.md\`.\n\n` +
     `## Gebäude (aus buildings.config.ts)\n\n` +
     `${rows}\n` +
     `## Landmarken & Hero-Bauten (geplant)\n\n` +

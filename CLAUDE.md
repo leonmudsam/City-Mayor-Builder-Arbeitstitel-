@@ -46,3 +46,16 @@ der Cloud-Umgebung** (kein Rust/Windows) — dort nur den Browser-Pfad verifizie
 ## Nicht anfassen ohne Grund
 `src-tauri/target`, `src-tauri/gen`, `dist/`, `node_modules/`, `scratchpad/`
 (gitignored). GitHub Pages ist abgeschaltet — kein Deploy-Workflow wieder einführen.
+`archive/legacy-2d/` = archivierte 2D-/Iso-Reste (nicht reaktivieren).
+
+## Status: Ausbaustufe 2.0 abgeschlossen (v0.50–v0.59)
+Gebäudesystem 2.0 + Welt 2.0 sind vollständig (A1–A10). **Nur noch der
+3D-Renderer** existiert (`src/renderer/three/`); der 2D-/Iso-Pixi-Renderer,
+`house_row`/`apartment` und `pixi.js` sind endgültig entfernt (kein Modus-Wähler
+wieder einführen). Gebäude-/Regions-/Prompt-Doku ist **generiert & testgeprüft**
+(`docs/BUILDINGS.md`, `docs/REGIONS.md`, `models/**/PROMPTS.md` — Regel §5 gilt
+weiter). Save-Schema steht bei **v11** (Regionen). Balancing/Progression sind über
+20 Level × 32 Regionen ausbalanciert und durch `config.test.ts`/`balancing.test.ts`
+gegen Regressionen gesichert. Bewusst offen (drop-in-fähig, Prompts existieren):
+der erweiterte Biom-Prop-Katalog (Wasserfälle/Windmühlen/Boote/Landmarken) —
+prozedurale Fallbacks decken den Kern, echte `.glb` einfach einlegen.

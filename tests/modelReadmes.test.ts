@@ -5,6 +5,7 @@ import {
   MODEL_FOLDER_DOCS,
   FOLDER_PROMPTS,
   BUILDING_PROMPTS,
+  BUILDING_STAGE_PROMPTS,
   renderFolderReadme,
   renderFolderPrompts,
   buildBuildingsReadme,
@@ -52,5 +53,22 @@ describe('per-folder model docs (README + PROMPTS)', () => {
   it('has a generation prompt for every building id', () => {
     const missing = bc.filter((b) => b.category !== 'roads').filter((b) => !BUILDING_PROMPTS[b.id]).map((b) => b.id);
     expect(missing, `BUILDING_PROMPTS fehlt Gebäude: ${missing.join(', ')}`).toEqual([]);
+  });
+
+  // § A9: jede Ausbaustufe eines Mehrstufen-Gebäudes braucht ein eigenes Motiv
+  // (Prompt-Anzahl ≡ Stufenzahl), damit Artists jede Stufen-Datei generieren können.
+  it('has one stage prompt per stage for every multi-stage building', () => {
+    const wrong = bc
+      .filter((b) => b.category !== 'roads')
+      .map((b) => ({ id: b.id, stages: (b.upgrades?.length ?? 0) + 1, prompts: BUILDING_STAGE_PROMPTS[b.id] }))
+      .filter((x) => x.stages > 1 && (x.prompts?.length ?? 0) !== x.stages)
+      .map((x) => `${x.id} (${x.prompts?.length ?? 0}/${x.stages})`);
+    expect(wrong, `BUILDING_STAGE_PROMPTS-Stufenzahl stimmt nicht: ${wrong.join(', ')}`).toEqual([]);
+  });
+
+  it('does not keep stage prompts for removed buildings', () => {
+    const ids = new Set(bc.map((b) => b.id));
+    const orphan = Object.keys(BUILDING_STAGE_PROMPTS).filter((id) => !ids.has(id));
+    expect(orphan, `BUILDING_STAGE_PROMPTS hat verwaiste Gebäude: ${orphan.join(', ')}`).toEqual([]);
   });
 });

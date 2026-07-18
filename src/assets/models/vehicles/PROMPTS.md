@@ -70,3 +70,23 @@ Low-poly stylized 3D city-builder game asset, colorful cartoon look, clean shape
 ```
 
 **Spec:** Größenklasse `vehicle` — Fahrzeug (500–1 200 Tris, ≤ 512², 1–2 Materialien) · Pivot unten-mittig (X/Z zentriert, Unterkante Y = 0) · Front +Z · *geplant* (noch nicht verdrahtet)
+
+## Geplant — Stadtarbeit-Fahrzeuge (A6, „Selbst fahren")
+
+Die fünf steuerbaren Missionsfahrzeuge (A6). Der Fahrmodus nutzt bis zum Drop-in prozedurale Platzhalter je Typ — diese Modelle ersetzen sie. Front +Z, klare Silhouette auch aus der Verfolgerkamera.
+
+### `logging_truck.glb` — ≈0.5×1.1
+
+```text
+Low-poly stylized 3D city-builder game asset, colorful cartoon look, clean shapes, soft bevels, hand-painted feel, optimized for realtime rendering, embedded textures, no lights, no cameras, centered object, pivot at bottom center, +Y up, front facing +Z — a logging truck carrying stacked tree logs on a long flatbed trailer, front facing +Z, low-poly
+```
+
+**Spec:** Größenklasse `vehicle` — Fahrzeug (500–1 200 Tris, ≤ 512², 1–2 Materialien) · Pivot unten-mittig (X/Z zentriert, Unterkante Y = 0) · Front +Z · *geplant* (noch nicht verdrahtet)
+
+### `flatbed.glb` — ≈0.5×1.0
+
+```text
+Low-poly stylized 3D city-builder game asset, colorful cartoon look, clean shapes, soft bevels, hand-painted feel, optimized for realtime rendering, embedded textures, no lights, no cameras, centered object, pivot at bottom center, +Y up, front facing +Z — a flatbed construction-material truck loaded with pallets of bricks and planks, front facing +Z, low-poly
+```
+
+**Spec:** Größenklasse `vehicle` — Fahrzeug (500–1 200 Tris, ≤ 512², 1–2 Materialien) · Pivot unten-mittig (X/Z zentriert, Unterkante Y = 0) · Front +Z · *geplant* (noch nicht verdrahtet)

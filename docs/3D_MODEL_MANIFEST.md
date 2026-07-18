@@ -119,69 +119,76 @@ fix (§3 in `docs/3D_WORLD_ASSETS.md`).
 > Der Unterordner ist nur Organisation — erkannt wird rekursiv per Dateiname.
 > Weicht die Wunschdatei ab, per `BuildingDef.visual.model3d` verknüpfen.
 
+> **Verbindliche Gameplay-Tabelle je Gebäude** (Größenklasse, Footprint, Stufen
+> mit Namen/Gates/Kosten/Kern-Wirkung, benötigte GLBs, Nodes) steht **generiert**
+> in `docs/BUILDINGS.md`, die 3D-Prompts je Stufe in
+> `src/assets/models/buildings/PROMPTS.md`, die Ordner-Übersicht in
+> `src/assets/models/buildings/README.md` — alle drei aus der Config abgeleitet
+> und testgeprüft synchron. Die kompakten Tabellen unten sind der schnelle
+> Namens-Index (Gebäudesystem 2.0: XS 1×1 · S 2×2 · M 3×3 · L 4×4–5×5 ·
+> XL 6×6–7×7 · XXL 8×8; Footprints fix über alle Stufen).
+
 ### Verwaltung / Zentrum — `buildings/administration/`
-| ID | Datei | Footprint | Ab Level | Stufen |
-|---|---|---|---|---|
-| town_hall | `town_hall.glb` | 3×3 | 1 | 4 (`_stage2.._stage4`) |
-| mayor_house | `mayor_house.glb` | 2×2 | 3 | 1 |
-| district_center | `district_center.glb` | 3×3 | 12 | 1 |
+| ID | Datei | Klasse | Footprint | Ab Level | Stufen |
+|---|---|---|---|---|---|
+| town_hall | `town_hall.glb` | L | 5×5 | 1 | 4 (`_stage2.._stage4`) |
+| mayor_house | `mayor_house.glb` | M | 3×3 | 3 | 1 |
+| district_center | `district_center.glb` | L | 4×4 | 12 | 1 |
 
 ### Wohnen — `buildings/housing/`
-| ID | Datei | Footprint | Ab Level | Stufen |
-|---|---|---|---|---|
-| house_small | `house_small.glb` | 2×2 | 1 | 6 (`_stage2.._stage6`) |
-| house_row | `house_row.glb` | 2×2 | 6 | 3 (`_stage2,_stage3`) |
-| apartment | `apartment.glb` | 2×3 | 10 | 3 |
-| residential_tower | `residential_tower.glb` | 3×3 | 12 | 3 |
+| ID | Datei | Klasse | Footprint | Ab Level | Stufen |
+|---|---|---|---|---|---|
+| house_small | `house_small.glb` | M | 3×3 | 1 | 6 (`_stage2.._stage6`) |
+| residential_tower | `residential_tower.glb` | L | 5×5 | 15 | 3 (`_stage2,_stage3`) |
 
 ### Ressourcen / Produktion / Logistik — `buildings/resources/`
-| ID | Datei | Footprint | Ab Level | Stufen | Hinweis |
-|---|---|---|---|---|---|
-| sawmill | `sawmill.glb` | 2×2 | 2 | 4 | Schornstein (`chimney`) für Rauch |
-| quarry | `quarry.glb` | 3×3 | 4 | 4 | |
-| farm | `farm.glb` | 3×3 | 4 | 4 | |
-| warehouse | `warehouse.glb` | 2×2 | 6 | 2 | |
-| depot | `depot.glb` | 3×3 | 7 | 1 | |
-| waterworks | `waterworks.glb` | 3×2 | 11 | 1 | |
+| ID | Datei | Klasse | Footprint | Ab Level | Stufen | Hinweis |
+|---|---|---|---|---|---|---|
+| sawmill | `sawmill.glb` | L | 4×4 | 2 | 3 | Schornstein (`chimney`) für Rauch |
+| quarry | `quarry.glb` | L | 5×5 | 4 | 3 | |
+| farm | `farm.glb` | XL | 6×6 | 4 | 3 | Weidetiere/Felder rundum (A7) |
+| warehouse | `warehouse.glb` | L | 4×4 | 6 | 2 | |
+| depot | `depot.glb` | L | 5×5 | 7 | 2 | |
+| waterworks | `waterworks.glb` | L | 5×5 | 11 | 2 | grenzt an Fluss |
 
 ### Versorgung / Dienste — `buildings/services/`
-| ID | Datei | Footprint | Ab Level | Stufen |
-|---|---|---|---|---|
-| well | `well.glb` | 1×1 | 3 | 2 |
-| water_pump | `water_pump.glb` | 2×2 | 7 | 3 |
-| market | `market.glb` | 2×2 | 5 | 2 |
-| supermarket | `supermarket.glb` | 3×2 | 12 | 1 |
-| bakery | `bakery.glb` | 2×2 | 9 | 1 |
-| fire_station | `fire_station.glb` | 2×2 | 8 | 2 |
-| police_station | `police_station.glb` | 2×2 | 13 | 2 |
-| hospital | `hospital.glb` | 3×2 | 14 | 2 |
+| ID | Datei | Klasse | Footprint | Ab Level | Stufen |
+|---|---|---|---|---|---|
+| well | `well.glb` | XS | 1×1 | 3 | 2 |
+| water_pump | `water_pump.glb` | M | 3×3 | 7 | 2 |
+| market | `market.glb` | M | 3×3 | 5 | 2 |
+| supermarket | `supermarket.glb` | L | 4×4 | 12 | 2 |
+| bakery | `bakery.glb` | S | 2×2 | 9 | 2 |
+| fire_station | `fire_station.glb` | L | 5×5 | 8 | 3 |
+| police_station | `police_station.glb` | L | 4×4 | 13 | 3 |
+| hospital | `hospital.glb` | XL | 6×6 | 14 | 3 |
 
 ### Wirtschaft / Handel — `buildings/economy/`
-| ID | Datei | Footprint | Ab Level | Stufen |
-|---|---|---|---|---|
-| trading_post | `trading_post.glb` | 2×2 | 5 | 3 |
-| shop_small | `shop_small.glb` | 2×2 | 6 | 1 |
-| office | `office.glb` | 4×2 | 8 | 3 |
+| ID | Datei | Klasse | Footprint | Ab Level | Stufen |
+|---|---|---|---|---|---|
+| trading_post | `trading_post.glb` | M | 3×3 | 5 | 3 |
+| shop_small | `shop_small.glb` | S | 2×2 | 6 | 2 |
+| office | `office.glb` | L | 4×4 | 8 | 4 |
 
 ### Energie — `buildings/energy/`
-| ID | Datei | Footprint | Ab Level | Stufen | Hinweis |
-|---|---|---|---|---|---|
-| power_plant | `power_plant.glb` | 3×3 | 11 | 1 | Schornstein (`chimney`) |
-| wind_farm | `wind_farm.glb` | 3×3 | 11 | 1 | Rotor-Node (`rotor`) dreht sich |
+| ID | Datei | Klasse | Footprint | Ab Level | Stufen | Hinweis |
+|---|---|---|---|---|---|---|
+| power_plant | `power_plant.glb` | XXL | 8×8 | 11 | 2 | Schornstein (`chimney`) |
+| wind_farm | `wind_farm.glb` | XL | 7×7 | 11 | 1 | Rotor-Node (`rotor`) dreht sich |
 
 ### Freizeit / Umwelt — `buildings/leisure/`
-| ID | Datei | Footprint | Ab Level | Stufen |
-|---|---|---|---|---|
-| park | `park.glb` | 2×2 | 7 | 2 |
-| playground | `playground.glb` | 2×2 | 7 | 1 |
+| ID | Datei | Klasse | Footprint | Ab Level | Stufen |
+|---|---|---|---|---|---|
+| park | `park.glb` | L | 5×5 | 7 | 2 |
+| playground | `playground.glb` | M | 3×3 | 7 | 1 |
 
 ### Dekoration (1×1-Props, als Gebäude platzierbar) — `buildings/leisure/`
-| ID | Datei | Footprint | Ab Level |
-|---|---|---|---|
-| deco_tree | `deco_tree.glb` | 1×1 | 7 |
-| deco_flowerbed | `deco_flowerbed.glb` | 1×1 | 7 |
-| deco_fountain | `deco_fountain.glb` | 1×1 | 7 |
-| deco_bench | `deco_bench.glb` | 1×1 | 7 |
+| ID | Datei | Klasse | Footprint | Ab Level |
+|---|---|---|---|---|
+| deco_tree | `deco_tree.glb` | XS | 1×1 | 7 |
+| deco_flowerbed | `deco_flowerbed.glb` | XS | 1×1 | 7 |
+| deco_fountain | `deco_fountain.glb` | XS | 1×1 | 7 |
+| deco_bench | `deco_bench.glb` | XS | 1×1 | 7 |
 
 ### Straße (Sonderfall) — texturbasiert, kein `.glb`
 Die Gebäude-ID **`road`** (1×1) nutzt **kein** `buildings/road.glb` und auch
@@ -210,7 +217,8 @@ was der Renderer heute lädt) in der jeweiligen `README.md`:
 |---|---|---|
 | Terrain, Gebirge, Flüsse, Küste, Hero-Weltformen | `src/assets/models/terrain/README.md` | `src/assets/models/terrain/PROMPTS.md` |
 | Props (Natur, Stadt, Hafen, Farm, Infrastruktur) | `src/assets/models/props/README.md` | `src/assets/models/props/PROMPTS.md` |
-| Fahrzeuge | `src/assets/models/vehicles/README.md` | `src/assets/models/vehicles/PROMPTS.md` |
+| Weidetiere (Landwirtschaft, A7 — nur geplant) | — (prozedural) | `src/assets/models/animals/PROMPTS.md` |
+| Fahrzeuge (inkl. Stadtarbeit-Fahrzeuge A6) | `src/assets/models/vehicles/README.md` | `src/assets/models/vehicles/PROMPTS.md` |
 | Marker (inkl. Sektor-Nebel & Bürgerhinweise) | `src/assets/models/markers/README.md` | `src/assets/models/markers/PROMPTS.md` |
 | Effekte (inkl. lebendige Welt) | `src/assets/models/effects/README.md` | `src/assets/models/effects/PROMPTS.md` |
 | Welt-UI | `src/assets/models/ui/README.md` | `src/assets/models/ui/PROMPTS.md` |

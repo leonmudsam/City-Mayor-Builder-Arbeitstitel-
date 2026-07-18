@@ -1,5 +1,157 @@
 # Patch Notes
 
+## v0.59 — Ausbaustufe 2.0, Phase A10: Balancing, Bereinigung & Abschluss
+
+**Was.** Der Abschluss des Programms **Ausbaustufe 2.0** (Gebäudesystem 2.0 +
+Welt 2.0, A1–A10): Balancing verifiziert, Alt-Lasten bereinigt, Abschlussliste.
+
+- **Balancing-Pass (verifiziert, nicht gewürfelt).** Die in A1 neu gesetzte
+  Ökonomie über 20 Level × 32 Regionen ist strukturell abgesichert: neue
+  Invarianten-Tests in `balancing.test.ts` erzwingen, dass jede Ausbaustufe
+  **streng teurer** und **streng höher gegatet** ist als die vorige, dass keine
+  Region **vor ihren Voraussetzungen** freischaltbar ist und alle Regions-Gates
+  in **L1–L18** liegen (Meilenstein-Gefühl §5, „Expansion ist eine
+  Entscheidung"). Zahlen bleiben config-getrieben — die Tests prüfen die Regel,
+  nicht das Literal.
+- **Bereinigung.** `pixi.js` als Abhängigkeit entfernt (der 2D-/Iso-Renderer war
+  schon in A1 raus, jetzt auch das tote Paket); die entfallenen Gebäude-Assets
+  `house_row.png`/`apartment.png` und die Iso-Doku
+  (`ISO_ASSETS.md`/`ISO_RENDERING.md`) nach `archive/legacy-2d/` verschoben;
+  drei liegengebliebene `adjustment_report*.json` gelöscht; ein veralteter
+  „Pixi renderer"-Kommentar in `App.tsx` korrigiert. CLAUDE.md-Statusnotiz
+  ergänzt.
+
+**§28 — Abschlussliste (Entfernt / Ersetzt / Migriert / Archiviert / Behalten).**
+
+- **Entfernt:** 2D-/Iso-Pixi-Renderer (A1) · `pixi.js`-Abhängigkeit (A10) ·
+  Gebäude `house_row`, `apartment` (A1, Migration erstattet) · 36 Quadrat-Sektoren
+  (`sectors.config.ts`, A1) · `adjustment_report*.json`-Reste (A10).
+- **Ersetzt:** Sektoren → **32 organische Regionen** (`regions.config.ts` +
+  Bake-Segmentierung) · Kategorie-Höhen → **Größenklassen XS–XXL** ·
+  Klick-Stadtarbeit → **Fahrmodus** (A6) · hand­gepflegte Gebäude-Doku →
+  **generiert** (`docs/BUILDINGS.md`, A9).
+- **Migriert:** Save **v10 → v11** (eine Migration, 100 % Erstattung, Rathaus 5×5,
+  Sektor→Region, Level-Rederivierung, A2).
+- **Archiviert:** `archive/legacy-2d/` (2D-Gebäude-Artwork der entfallenen
+  Gebäude + Iso-Doku) — historisch, nicht reaktivieren.
+- **Behalten:** three-Renderer (`src/renderer/three/`) als einziger Renderer ·
+  Drop-in-Asset-Registry (§5) · alle bestehenden `.glb`/`.png`-Assets aktiver
+  Gebäude · Quest-/Bürger-/Aktivitäts-System (für Fahrmissionen erweitert).
+
+**Bewusst offen (drop-in-fähig).** Der erweiterte Biom-Prop-**Katalog**
+(Wasserfälle, Windmühlen, Heuballen, Boote, dedizierte Landmarken) bleibt
+Polish: die prozeduralen Fallbacks (A3/A7) decken den Kern, und die vollständigen
+Text-zu-3D-Prompts existieren bereits generiert (A9) — echte `.glb` einfach in
+den passenden Ordner legen, der Renderer nutzt sie automatisch (§5). Ein
+GPU-Profiling der Groß-Stadt braucht echte Hardware; die Budgets (Instancing,
+Distanz-Culling, Deko-/Tier-/Verkehrs-Caps) stehen aus A3/A7 und wurden im
+Boot-Smoke ohne Konsolenfehler bestätigt.
+
+**Verifikation.** `tsc`/`eslint`/`vitest` (185, davon 4 neue Balancing-Invarianten)/
+`build` grün. Boot-Smoke (1280×720, Beispielstadt) ohne Konsolenfehler nach
+Paket-/Asset-Bereinigung — Welt, Gebäude und Panels rendern korrekt. Reine
+Bereinigungs-/Test-/Doku-Phase ohne Renderer-Änderung.
+
+**Dateien.** Entfernt: `pixi.js` (package.json/-lock),
+`src/assets/models/**/adjustment_report*.json`. Archiviert nach
+`archive/legacy-2d/`: `house_row.png`, `apartment.png`, `ISO_ASSETS.md`,
+`ISO_RENDERING.md` (+ `archive/legacy-2d/README.md`). Geändert:
+`tests/balancing.test.ts` (Invarianten), `src/App.tsx` (Kommentar), `CLAUDE.md`
+(Statusnotiz).
+
+## v0.58 — Ausbaustufe 2.0, Phase A9: Doku & Prompts — generierte Gebäude-/Regionstabellen, ein Prompt je Stufe
+
+**Was.** Die verbindliche Asset- und Gameplay-Doku wird vollständig aus der
+Config generiert und testgeprüft synchron gehalten (§ Auftrag A §10–§11, §13
+„Gameplay ↔ Doku ↔ Assets konsistent"):
+
+- **`docs/BUILDINGS.md` (neu, generiert).** Die verbindliche Gebäudetabelle:
+  Größenklassen-Legende (XS–XXL mit Tri-/Textur-/Material-Budgets), eine
+  Übersicht aller Gebäude und pro Gebäude ein Detailblock mit Footprint,
+  Asset-Budget, benötigten GLBs (`<id>.glb` / `<id>_stageN.glb` /
+  `<id>_construction.glb`), Modell-Nodes (`chimney`/`rotor`), Besonderheiten
+  (Standortbonus, Baugrenze, Adjazenz …) und einer **Stufentabelle** (Name,
+  Level-Gate, Kosten, Kern-Wirkung je Stufe). Dazu die 20-Level-XP-Kurve.
+- **`docs/REGIONS.md` (neu, generiert).** Alle 32 organischen Regionen mit
+  Biom, Freischaltung (Level/Kosten), Voraussetzungen, bebaubaren Kacheln,
+  Produktions-Modifikatoren und Nachteilen; Startregion und Teaser-Insel
+  hervorgehoben.
+- **Ein 3D-Prompt JE AUSBAUSTUFE.** `src/assets/models/buildings/PROMPTS.md`
+  emittiert jetzt nicht mehr einen Block je Gebäude, sondern **einen
+  copy-paste-fertigen Tripo-Prompt je Stufen-Datei** (Basis + `_stage2`…
+  `_stageN`) mit eigenem Motiv — vom Kleinen Haus über sechs Stufen bis zum
+  Wohnblock, jeder mit voller Spec-Zeile (Größenklasse-Budget, fixer Footprint,
+  Pivot, Front, Nodes).
+- **Neue Prompt-Kataloge.** Ordner `animals/` für die A7-Weidetiere
+  (Kuh/Schaf/Huhn/Pferd/Schwein/Ziege), Farm-Props (Feldreihen, Holzzaun, Tor,
+  Vogelscheuche, Windmühle) und die A6-Stadtarbeit-Fahrzeuge (`logging_truck`,
+  `flatbed`) im Fahrzeug-Katalog.
+
+**Warum & Architektur.** §2 gewahrt — kein neues Doku-System, sondern der
+bestehende Generator-Pfad erweitert: neuer reiner Builder
+`src/assets/buildingSpecDocs.ts` (`buildBuildingsSpec`/`buildRegionsDoc`, leitet
+aus `buildings.config`/`levels.config`/`regions.config` + i18n ab, importiert
+nie Renderer/State — §1 gewahrt) und in `modelManifest.ts` neu
+`BUILDING_STAGE_PROMPTS` (Motiv je Stufe), `BUILDING_SIZE_BUDGETS` (XS–XXL) und
+`BUILDING_NODES`. Zwei Sync-Tests halten alles an der Config: neuer
+`tests/buildingDocs.test.ts` (`WRITE_BUILDING_DOCS=1`) für BUILDINGS/REGIONS.md,
+erweiterter `tests/modelReadmes.test.ts` erzwingt **Prompt-Anzahl ≡ Stufenzahl**
+je Mehrstufen-Gebäude und verbietet verwaiste Stufen-Prompts. Nebenbei
+bereinigt: die entfallenen `house_row`/`apartment` aus den Prompt-Daten
+entfernt, die (hand­gepflegte, veraltete) Gebäude-Tabelle in
+`3D_MODEL_MANIFEST.md` auf die aktuellen Größen/Stufen korrigiert und auf die
+generierten Dokumente verwiesen.
+
+**Auswirkung.** Artists bekommen pro Stufe genau einen fertigen Prompt und eine
+verbindliche Tabelle, was das Modell leisten muss; die Doku kann nicht mehr von
+der Config abweichen, ohne dass ein Test bricht.
+
+**Verifikation.** `tsc`/`eslint`/`vitest` (181, davon 6 neu)/`build` grün. Alle
+`WRITE_*`-Regens laufen sauber durch (Doku-Sync bewiesen). Reine Doku/Daten-
+Phase ohne Renderer-Änderung — kein Screenshot-Smoke nötig.
+
+**Dateien.** Neu: `src/assets/buildingSpecDocs.ts`, `tests/buildingDocs.test.ts`,
+`docs/BUILDINGS.md`, `docs/REGIONS.md`, `src/assets/models/animals/PROMPTS.md`.
+Geändert: `src/assets/modelManifest.ts` (`BUILDING_STAGE_PROMPTS`,
+`BUILDING_SIZE_BUDGETS`, `BUILDING_NODES`, `buildBuildingsPrompts` je Stufe,
+Weidetiere/Farm/Fahrzeug-Prompts), `tests/modelReadmes.test.ts`,
+`docs/3D_MODEL_MANIFEST.md`, `docs/WORLD_REBUILD.md`, die generierten
+`src/assets/models/**/PROMPTS.md`.
+
+## v0.57 — Ausbaustufe 2.0, Phase A8: UI-Audit — Panels über der unteren Leiste
+
+**Was.** Ein systematisches Layout-Audit aller Panels bei zwei Auflösungen
+(1280×720 und 1920×1080) mit gefüllter Beispielstadt (§14 Auftrag B):
+
+- **Bürgeranliegen ↔ untere Leiste behoben.** Auf niedrigen Auflösungen reichte
+  das rechte „Stadt-Status"-/Bürgeranliegen-Widget bis zum Fensterboden und wurde
+  von der unteren rechten Schnellleiste („Bauen"-Knopf + Quick-Bar) verdeckt bzw.
+  angeschnitten. Rechts angedockte Info-Blätter (`.side-panel`: Stadtarbeit,
+  Bürgermeister, Statistiken/Wirtschaft) hatten dasselbe Problem.
+- **Reservierter Freiraum.** Neue CSS-Variable `--bottom-bar-clear` (120px)
+  reserviert den vertikalen Platz der unteren Leiste. Rechte Panels enden jetzt
+  garantiert darüber; ihr Inhalt scrollt intern (die Anliegen-Liste behält ihren
+  „Alle Aufträge ansehen"-Fußknopf sichtbar).
+
+**Warum & Architektur.** Reines Layout/CSS — keine Komponenten- oder
+Simulationsänderung. Der Freiraum ist zentral als Variable gesetzt, statt an
+mehreren Panels einzeln, damit künftige Panels denselben Wert erben. `.side-panel`
+endet bei `calc(var(--hud-gap) + var(--bottom-bar-clear))`; die Anliegen-Liste
+kappt ihre `max-height` um denselben Betrag.
+
+**Auswirkung.** Auf 720p-Fenstern (und schmalen Desktop-Fenstern) bleiben alle
+rechten Panels vollständig bedien- und lesbar, ohne die untere Leiste zu
+überlappen. Auf 1080p+ unverändert (dort war ohnehin genug Höhe).
+
+**Verifikation.** `tsc`/`eslint`/`vitest` (175)/`build` grün. Playwright-Smokes
+je Auflösung mit Beispielstadt: Standardansicht, Bauen, Stadtarbeit,
+Bürgermeister, Statistiken geöffnet — bei 1280×720 enden alle rechten Panels
+sauber über der Leiste (vorher/nachher verglichen), bei 1920×1080 unverändert
+korrekt, keine Konsolenfehler.
+
+**Dateien.** `src/styles.css` (`--bottom-bar-clear`, `.side-panel` bottom,
+`.citizen-requests` max-height).
+
 ## v0.56 — Ausbaustufe 2.0, Phase A7: Lebendige Welt — Farmen, Weidetiere, Biom-Deko
 
 **Was.** Die Welt bekommt Leben zwischen den Gebäuden (§ Auftrag B, absorbiert
