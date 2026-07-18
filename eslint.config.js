@@ -2,7 +2,9 @@ import js from '@eslint/js';
 import tseslint from 'typescript-eslint';
 
 export default tseslint.config(
-  { ignores: ['dist', 'node_modules'] },
+  // *.gen.ts: von tools/bakeWorld.mjs generierte Daten-Dateien (Megabyte an
+  // base64-Literalen) — nie von Hand editiert, Linting wäre nur Parser-Last.
+  { ignores: ['dist', 'node_modules', '**/*.gen.ts'] },
   js.configs.recommended,
   ...tseslint.configs.recommended,
   {

@@ -8,8 +8,7 @@ import {
   rewardTierFor,
   type TradeContractOffer,
 } from '../simulation/activities.ts';
-import type { GameState, ResourceId, SectorId } from '../types.ts';
-import { parseSectorId, sectorId } from '../types.ts';
+import type { GameState, RegionId, ResourceId } from '../types.ts';
 import { recomputeDerived, type Derived } from '../simulation/derived.ts';
 import { advance, moveInPerMin } from '../simulation/tick.ts';
 import { updateQuests, objectiveTarget } from '../simulation/quests.ts';
@@ -22,15 +21,16 @@ import { canAfford, grantGold, grantResources, spendCost, spendGold } from '../e
 import { computeIncome, type IncomeBreakdown } from '../economy/income.ts';
 import { addXp } from '../progression/levels.ts';
 import {
+  clearTiles,
   findDistrictCenterSpot,
-  isSectorAdjacentToUnlocked,
-  isSectorInBounds,
-  materializeNeighbors,
-  materializeSector,
-  sectorHasTerrain,
-  sectorUnlockCost,
-  tileAt,
+  isRegionAdjacentToUnlocked,
+  occupyTiles,
+  rebuildOccupancyIndex,
+  regionHasTerrain,
+  regionRoadCostFactorAt,
+  regionUnlockCost,
 } from '../map/world.ts';
+import { BAKED_REGIONS } from '../config/startRegion.config.ts';
 import { newId } from '../engine/rng.ts';
 
 export type CommandError =
@@ -84,6 +84,9 @@ export class GameController {
   constructor(config: GameConfig, state: GameState) {
     this.config = config;
     this.state = state;
+    // § v10 Slim-Save: Kachel-Belegung ist nicht mehr persistiert — den
+    // Laufzeit-Index einmal aus den Gebäude-Footprints aufbauen.
+    rebuildOccupancyIndex(state, config);
     this.derived = recomputeDerived(state, config);
     updateQuests(state, config);
   }
@@ -102,6 +105,7 @@ export class GameController {
    */
   resetTo(state: GameState): void {
     this.state = state;
+    rebuildOccupancyIndex(state, this.config);
     this.derived = recomputeDerived(state, this.config);
     updateQuests(state, this.config);
     this.notify({ type: 'change' });
@@ -141,8 +145,9 @@ export class GameController {
     if (placementError) return fail(placementError);
     // Escalating cost for anti-spam utilities (warehouses, §7) or a first-build
     // discount for core economy buildings (§ faster early game). Lifetime count
-    // gates the discount so demolish/rebuild can't farm it.
-    const cost = effectiveBuildCost(def, countOf(this.state, defId), this.state.stats.built[defId] ?? 0);
+    // gates the discount so demolish/rebuild can't farm it. Straßen kosten in
+    // manchen Regionen mehr (§ Welt 2.0: Gebirge) — der Faktor greift genau hier.
+    const cost = this.getBuildCost(defId, x, y);
     const spend = spendCost(this.state, cost, `build_${defId}`);
     if (!spend.ok) return fail('insufficient');
 
@@ -161,12 +166,7 @@ export class GameController {
       // stay minimal; footprint/placement were already validated above unrotated.
       ...(rotation ? { rotation } : {}),
     };
-    for (let dy = 0; dy < def.size.h; dy++) {
-      for (let dx = 0; dx < def.size.w; dx++) {
-        const tile = tileAt(this.state, x + dx, y + dy);
-        if (tile) tile.buildingId = id;
-      }
-    }
+    occupyTiles(this.state, x, y, def.size.w, def.size.h, id);
     this.state.stats.built[defId] = (this.state.stats.built[defId] ?? 0) + 1;
     if (instant) {
       addXp(this.state, this.config, this.derived, def.xpReward);
@@ -183,12 +183,7 @@ export class GameController {
     // Central buildings can't be torn down (canDemolish:false) — they relocate
     // instead (§2). `unique` implies the same protection.
     if (!def || def.canDemolish === false || def.unique) return fail('invalid');
-    for (let dy = 0; dy < def.size.h; dy++) {
-      for (let dx = 0; dx < def.size.w; dx++) {
-        const tile = tileAt(this.state, b.x + dx, b.y + dy);
-        if (tile && tile.buildingId === buildingId) delete tile.buildingId;
-      }
-    }
+    clearTiles(this.state, b.x, b.y, def.size.w, def.size.h, buildingId);
     delete this.state.buildings[buildingId];
     this.state.events = this.state.events.filter((e) => e.buildingId !== buildingId);
     // Refund a share of the invested materials so tearing down is a plannable
@@ -286,43 +281,39 @@ export class GameController {
       const spend = spendCost(this.state, def.relocationCost, `relocate_${def.id}`);
       if (!spend.ok) return fail('insufficient');
     }
-    for (let dy = 0; dy < def.size.h; dy++) {
-      for (let dx = 0; dx < def.size.w; dx++) {
-        const tile = tileAt(this.state, b.x + dx, b.y + dy);
-        if (tile && tile.buildingId === buildingId) delete tile.buildingId;
-      }
-    }
+    clearTiles(this.state, b.x, b.y, def.size.w, def.size.h, buildingId);
     b.x = x;
     b.y = y;
-    for (let dy = 0; dy < def.size.h; dy++) {
-      for (let dx = 0; dx < def.size.w; dx++) {
-        const tile = tileAt(this.state, x + dx, y + dy);
-        if (tile) tile.buildingId = buildingId;
-      }
-    }
+    occupyTiles(this.state, x, y, def.size.w, def.size.h, buildingId);
     this.afterStructuralChange();
     return ok;
   }
 
-  unlockSector(id: SectorId): CommandResult {
-    if (this.state.level.current < 5) return fail('locked'); // expansion unlocks at level 5 (§7)
-    const { sx, sy } = parseSectorId(id);
-    if (!isSectorInBounds(sx, sy)) return fail('invalid'); // no unlocking past the world edge
-    const sector = this.state.world.sectors[id] ?? materializeSector(this.state, sx, sy);
-    if (sector.status === 'unlocked') return fail('invalid');
-    if (!isSectorAdjacentToUnlocked(this.state, sx, sy)) return fail('invalid');
-    const cost = sectorUnlockCost(this.state, this.config, sx, sy);
-    const spend = spendCost(this.state, { money: cost }, 'unlock_sector');
-    if (!spend.ok) return fail('insufficient');
-    sector.status = 'unlocked';
-    // Join the district of an adjacent unlocked sector, so a far quarter (the
-    // river district) grows coherently instead of everything reading as 'main'.
-    for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]] as const) {
-      const n = this.state.world.sectors[sectorId(sx + dx, sy + dy)];
-      if (n?.status === 'unlocked' && n.districtId !== 'main') { sector.districtId = n.districtId; break; }
+  unlockRegion(id: RegionId): CommandResult {
+    const region = this.state.world.regions[String(id)];
+    if (!region || region.status === 'unlocked') return fail('invalid');
+    // § Welt 2.0: jede Freischaltung ist eine strategische Entscheidung aus der
+    // RegionDefinition — Teaser-Inseln nie, Level-Gate und Voraussetzungs-
+    // Regionen (z. B. Hochgebirgskern nur über die Randgebirge).
+    const def = this.config.regions.get(id);
+    if (!def || !def.unlockable) return fail('invalid');
+    if (this.state.level.current < def.unlockLevel) return fail('locked');
+    for (const prereq of def.prerequisiteRegionIds ?? []) {
+      if (this.state.world.regions[String(prereq)]?.status !== 'unlocked') return fail('locked');
     }
-    this.state.stats.sectorsUnlocked += 1;
-    materializeNeighbors(this.state, sx, sy);
+    if (!isRegionAdjacentToUnlocked(this.state, id)) return fail('invalid');
+    const cost = regionUnlockCost(this.config, id);
+    const spend = spendCost(this.state, { money: cost }, 'unlock_region');
+    if (!spend.ok) return fail('insufficient');
+    region.status = 'unlocked';
+    // Join the district of an adjacent unlocked region, so a far quarter (the
+    // river district) grows coherently instead of everything reading as 'main'.
+    const baked = BAKED_REGIONS[id - 1];
+    for (const n of baked?.adjacent ?? []) {
+      const nr = this.state.world.regions[String(n)];
+      if (nr?.status === 'unlocked' && nr.districtId !== 'main') { region.districtId = nr.districtId; break; }
+    }
+    this.state.stats.regionsUnlocked += 1;
     addXp(this.state, this.config, this.derived, 30);
     this.afterStructuralChange();
     return ok;
@@ -330,39 +321,32 @@ export class GameController {
 
   /**
    * Found the river district — the first far expansion (§8). A one-off project
-   * that plants a district centre in a locked river-biome sector: it unlocks the
-   * sector as a new district and seeds a fresh road network there, so the river
+   * that plants a district centre in a locked river landscape: it unlocks the
+   * region as a new district and seeds a fresh road network there, so the river
    * quarter is a self-contained build area, not a 40-tile road from downtown.
    */
-  foundDistrict(id: SectorId): CommandResult {
+  foundDistrict(id: RegionId): CommandResult {
     const bal = this.config.balancing;
     if (this.state.level.current < bal.districtUnlockLevel) return fail('locked');
-    const { sx, sy } = parseSectorId(id);
-    if (!isSectorInBounds(sx, sy)) return fail('invalid'); // no district past the world edge
-    const sector = this.state.world.sectors[id] ?? materializeSector(this.state, sx, sy);
-    if (sector.status === 'unlocked') return fail('invalid');
-    if (!sectorHasTerrain(sector, 'river')) return fail('invalid'); // must be the river biome
+    const region = this.state.world.regions[String(id)];
+    if (!region || region.status === 'unlocked') return fail('invalid');
+    if (this.config.regions.get(id)?.unlockable === false) return fail('invalid'); // keine Teaser-Insel
+    if (!regionHasTerrain(id, 'river')) return fail('invalid'); // must be a river landscape
     if (Object.values(this.state.world.districts).some((d) => d.id === 'river')) return fail('invalid'); // one for now
     const centerDef = this.config.buildings.get('district_center');
     if (!centerDef) return fail('not_found');
-    const spot = findDistrictCenterSpot(sector, centerDef.size.w);
+    const spot = findDistrictCenterSpot(this.state, id, centerDef.size.w);
     if (!spot) return fail('terrain');
     const spend = spendCost(this.state, bal.districtFoundCost, 'found_district');
     if (!spend.ok) return fail('insufficient');
 
-    sector.status = 'unlocked';
-    sector.districtId = 'river';
-    this.state.stats.sectorsUnlocked += 1;
-    materializeNeighbors(this.state, sx, sy);
+    region.status = 'unlocked';
+    region.districtId = 'river';
+    this.state.stats.regionsUnlocked += 1;
     // Plant the centre active at once, so it stores goods and seeds roads now.
     const centerId = newId(this.state, 'b');
     this.state.buildings[centerId] = { id: centerId, defId: 'district_center', x: spot.x, y: spot.y, upgradeLevel: 0, status: 'active' };
-    for (let dy = 0; dy < centerDef.size.h; dy++) {
-      for (let dx = 0; dx < centerDef.size.w; dx++) {
-        const tile = tileAt(this.state, spot.x + dx, spot.y + dy);
-        if (tile) tile.buildingId = centerId;
-      }
-    }
+    occupyTiles(this.state, spot.x, spot.y, centerDef.size.w, centerDef.size.h, centerId);
     this.state.world.districts['river'] = { id: 'river', nameKey: 'district.river', centerBuildingId: centerId };
     addXp(this.state, this.config, this.derived, 120);
     this.afterStructuralChange();
@@ -734,19 +718,26 @@ export class GameController {
 
   /** Candidate buildings for a delivery (homes) or inspection (flagged, then any). */
   private activityCandidates(def: ActivityDef): string[] {
+    // Explicit target selectors (§ A6 Fahr-Minispiele): a drive mission may aim
+    // at specific def ids (log haul → Lager) or categories (fire → Wohn-/Gewerbe).
+    const wantDefIds = def.targetDefIds ? new Set(def.targetDefIds) : undefined;
+    const wantCats = def.targetCategories ? new Set(def.targetCategories) : undefined;
     const homes: string[] = [];
     const flagged: string[] = [];
     const others: string[] = [];
+    const selected: string[] = [];
     for (const b of Object.values(this.state.buildings)) {
       if (b.status !== 'active') continue;
       const d = this.config.buildings.get(b.defId);
       if (!d || d.category === 'roads' || d.category === 'decoration') continue;
       if (d.category === 'residential') homes.push(b.id);
+      if (wantDefIds?.has(b.defId) || wantCats?.has(d.category)) selected.push(b.id);
       if (def.type === 'inspection') {
         if (this.getBuildingMarker(b.id) === 'problem') flagged.push(b.id);
         else others.push(b.id);
       }
     }
+    if (wantDefIds || wantCats) return selected;
     if (def.type === 'delivery') return homes;
     // Inspection prefers real problems and pads with spot checks.
     return flagged.length >= (def.targetCount?.min ?? 3) ? flagged : [...flagged, ...others];
@@ -838,10 +829,20 @@ export class GameController {
    * right now, accounting for escalating `costScaling` (§7). The build menu uses
    * this so the shown price matches the charged price.
    */
-  getBuildCost(defId: string): Partial<Record<ResourceId, number>> {
+  getBuildCost(defId: string, x?: number, y?: number): Partial<Record<ResourceId, number>> {
     const def = this.config.buildings.get(defId);
     if (!def) return {};
-    return effectiveBuildCost(def, countOf(this.state, defId), this.state.stats.built[defId] ?? 0);
+    const cost = effectiveBuildCost(def, countOf(this.state, defId), this.state.stats.built[defId] ?? 0);
+    // Regions-Straßenkosten-Faktor (§ Welt 2.0): nur für Straßen und nur, wenn
+    // eine Zielkachel bekannt ist (Menü ohne Ort zeigt den Basispreis). Der Ghost
+    // reicht die Hover-Kachel durch, damit der gezeigte Preis dem gezahlten gleicht.
+    if (def.category === 'roads' && x !== undefined && y !== undefined) {
+      const factor = regionRoadCostFactorAt(this.config, x, y);
+      if (factor !== 1 && cost.money !== undefined) {
+        return { ...cost, money: Math.round(cost.money * factor) };
+      }
+    }
+    return cost;
   }
 
   /**
@@ -920,25 +921,25 @@ export class GameController {
     return { count: countOf(this.state, defId), max, nextLevel: nextLimitLevel(def, this.state.level.current) };
   }
 
-  getSectorCost(id: SectorId): number {
-    const { sx, sy } = parseSectorId(id);
-    return sectorUnlockCost(this.state, this.config, sx, sy);
+  getRegionCost(id: RegionId): number {
+    return regionUnlockCost(this.config, id);
   }
 
   /**
-   * Whether a locked sector can be turned into the river district (§8), plus the
-   * project cost — drives the "found district" option in the sector dialog.
+   * Whether a locked region can be turned into the river district (§8), plus the
+   * project cost — drives the "found district" option in the region dialog.
    */
-  canFoundDistrict(id: SectorId): { eligible: boolean; cost: Partial<Record<ResourceId, number>> } {
+  canFoundDistrict(id: RegionId): { eligible: boolean; cost: Partial<Record<ResourceId, number>> } {
     const bal = this.config.balancing;
-    const sector = this.state.world.sectors[id];
+    const region = this.state.world.regions[String(id)];
     const def = this.config.buildings.get('district_center');
     const hasRiverDistrict = Object.values(this.state.world.districts).some((d) => d.id === 'river');
     const eligible =
       this.state.level.current >= bal.districtUnlockLevel &&
-      !!sector && sector.status === 'locked' && !!def &&
-      sectorHasTerrain(sector, 'river') && !hasRiverDistrict &&
-      findDistrictCenterSpot(sector, def.size.w) !== undefined;
+      !!region && region.status === 'locked' && !!def &&
+      this.config.regions.get(id)?.unlockable !== false &&
+      regionHasTerrain(id, 'river') && !hasRiverDistrict &&
+      findDistrictCenterSpot(this.state, id, def.size.w) !== undefined;
     return { eligible, cost: bal.districtFoundCost };
   }
 

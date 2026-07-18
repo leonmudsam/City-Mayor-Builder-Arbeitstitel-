@@ -14,8 +14,8 @@ function objectiveProgress(state: GameState, obj: QuestObjective): number {
       return Math.min(obj.amount, Math.floor(state.stats.produced[obj.resource] ?? 0));
     case 'level':
       return Math.min(obj.level, state.level.current);
-    case 'sectors':
-      return Math.min(obj.count, state.stats.sectorsUnlocked);
+    case 'regions':
+      return Math.min(obj.count, state.stats.regionsUnlocked);
     case 'mayorAction':
       return Math.min(obj.count, state.stats.mayorActions[obj.actionId] ?? 0);
     case 'happiness':
@@ -40,7 +40,7 @@ export function objectiveTarget(obj: QuestObjective): number {
       return obj.amount;
     case 'level':
       return obj.level;
-    case 'sectors':
+    case 'regions':
       return obj.count;
     case 'mayorAction':
       return obj.count;

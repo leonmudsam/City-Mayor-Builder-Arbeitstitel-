@@ -39,7 +39,9 @@ export const buildingDefSchema = z.object({
   id: z.string().min(1),
   category: z.enum(['roads', 'residential', 'production', 'services', 'energy', 'leisure', 'economy', 'government', 'infrastructure', 'decoration', 'special']),
   nameKey: z.string(),
-  size: z.object({ w: z.number().int().min(1).max(4), h: z.number().int().min(1).max(4) }),
+  // § Gebäudesystem 2.0: Footprints bis 8×8 (XXL); 12 lässt Luft für Hero-Bauten.
+  size: z.object({ w: z.number().int().min(1).max(12), h: z.number().int().min(1).max(12) }),
+  sizeClass: z.enum(['XS', 'S', 'M', 'L', 'XL', 'XXL']),
   requiresRoad: z.boolean(),
   unlockLevel: z.number().int().min(1),
   cost: z.record(resourceId, z.number().nonnegative()),
@@ -76,6 +78,22 @@ export const levelDefSchema = z.object({
   rewards: z.object({ money: z.number().optional(), gold: z.number().optional() }),
 });
 
+/** Region-Definitionen der organischen Landschaften (§ Welt 2.0, regions.config.ts). */
+export const regionDefSchema = z.object({
+  id: z.number().int().positive(),
+  nameKey: z.string().min(1),
+  biome: z.enum(['zentrum', 'ebene', 'wald', 'gebirge', 'huegel', 'see', 'kueste', 'fruchtbar', 'flusstal', 'insel']),
+  unlockable: z.boolean(),
+  unlockLevel: z.number().int().min(1),
+  unlockCost: z.number().nonnegative(),
+  prerequisiteRegionIds: z.array(z.number().int().positive()).optional(),
+  buildableTiles: z.number().int().nonnegative(),
+  productionModifiers: z
+    .record(z.enum(['wood', 'stone', 'food', 'water', 'energy']), z.number().positive())
+    .optional(),
+  roadCostFactor: z.number().positive().optional(),
+});
+
 export const questDefSchema = z.object({
   id: z.string(),
   titleKey: z.string(),
@@ -88,7 +106,7 @@ export const questDefSchema = z.object({
       z.object({ type: z.literal('resource'), resource: resourceId, amount: z.number().positive() }),
       z.object({ type: z.literal('produce'), resource: resourceId, amount: z.number().positive() }),
       z.object({ type: z.literal('level'), level: z.number().int().positive() }),
-      z.object({ type: z.literal('sectors'), count: z.number().int().positive() }),
+      z.object({ type: z.literal('regions'), count: z.number().int().positive() }),
       z.object({ type: z.literal('mayorAction'), actionId: z.string(), count: z.number().int().positive() }),
       z.object({ type: z.literal('happiness'), amount: z.number().positive() }),
       z.object({ type: z.literal('upgrade'), defId: z.string().optional(), count: z.number().int().positive() }),
@@ -124,6 +142,12 @@ export const activityDefSchema = z.object({
   sender: z.enum(['citizen', 'buildingDept', 'fire', 'merchant', 'mayor']),
   requiresAnyBuilding: z.array(z.string()).optional(),
   targetCount: z.object({ min: z.number().int().min(1), max: z.number().int().min(1) }).optional(),
+  drive: z.boolean().optional(),
+  vehicle: z.enum(['van', 'fire_truck', 'logging_truck', 'police_car', 'flatbed']).optional(),
+  targetCategories: z
+    .array(z.enum(['roads', 'residential', 'production', 'services', 'energy', 'leisure', 'economy', 'government', 'infrastructure', 'decoration', 'special']))
+    .optional(),
+  targetDefIds: z.array(z.string()).optional(),
   timeLimitSec: z.number().positive().optional(),
   speedBonusFactor: z.number().min(1).optional(),
   costPerTarget: z.record(resourceId, z.number().nonnegative()).optional(),
@@ -202,19 +226,21 @@ export const saveGameSchema = z.object({
   goldTransactions: z.array(
     z.object({ id: z.string(), timestamp: z.number(), amount: z.number(), reason: z.string(), balanceAfter: z.number() }),
   ),
+  // Schema v11 (§ Slim-Save + Welt 2.0): Regionen sind reine Fortschritts-Stubs —
+  // Geometrie/Terrain kommen deterministisch aus dem Insel-Bake, die
+  // Gebäude-Belegung aus `buildings`. Sparse `terrainOverrides` nur für
+  // Debug/Tests. Details: docs/SAVE_MIGRATION.md.
   world: z.object({
-    sectors: z.record(
+    regions: z.record(
       z.string(),
       z.object({
-        id: z.string(),
-        sx: z.number().int(),
-        sy: z.number().int(),
+        id: z.number().int().positive(),
         districtId: z.string(),
         status: z.enum(['locked', 'unlocked']),
-        tiles: z.array(z.object({ terrain, buildingId: z.string().optional() })),
       }),
     ),
     districts: z.record(z.string(), z.object({ id: z.string(), nameKey: z.string(), centerBuildingId: z.string() })),
+    terrainOverrides: z.record(z.string(), terrain).optional(),
   }),
   buildings: z.record(
     z.string(),
@@ -273,7 +299,7 @@ export const saveGameSchema = z.object({
     built: z.record(z.string(), z.number()),
     produced: z.record(resourceId, z.number()),
     mayorActions: z.record(z.string(), z.number()),
-    sectorsUnlocked: z.number(),
+    regionsUnlocked: z.number(),
     upgradesCompleted: z.number(),
     upgraded: z.record(z.string(), z.number()),
     tradeEarnings: z.number(),

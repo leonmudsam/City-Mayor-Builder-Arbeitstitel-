@@ -1,17 +1,35 @@
 import type { BuildingDef } from './types.ts';
 
-// Money is now on a believable municipal scale (tens of thousands and up, §4);
-// materials (wood/stone/food) stay small-scale so they remain a *separate*
-// bottleneck from money (§3). Income comes from several legible sources (§5):
-// residential tax (per capita), commercial revenue (shops/market) and
-// industrial revenue (production) — the latter two scale with staffing.
+// § Gebäudesystem 2.0 — verbindliche Größen & Progression (docs/BUILDINGS.md).
+//
+// Jedes Gebäude hat eine Größenklasse (XS 1×1 · S 2×2 · M 3×3 · L 4×4–5×5 ·
+// XL 6×6–7×7 · XXL 8×8) und einen Footprint, der zur realen Wirkung passt:
+// eine Feuerwehr (5×5 mit Vorplatz/Garagen/Hof) ist sichtbar größer als ein
+// Wohnhaus (3×3), ein Kraftwerk (8×8) dominiert ein Viertel. Footprints sind
+// FIX über alle Stufen (Nutzer-Entscheidung) und bewusst quadratisch, damit
+// Rotation rein visuell bleibt. Stufenregeln (§7 Auftrag A): Deko 1 ·
+// Geschäfte 2 · Versorgung 2–3 · Industrie 3 · Verwaltung 3–4 · Wohnen eigene
+// Ketten · Landmarken 1 — wenige, dafür deutlich sichtbare Sprünge (weniger
+// GLB-Stufenmodelle, jede Stufe ein Meilenstein).
+//
+// Wohn-Progression (Hybrid, Nutzer-Entscheidung): `house_small` ist DER
+// Begleiter durchs Spiel (6 Stufen: Kleines Haus → … → Wohnblock);
+// `residential_tower` ist das späte Prestige-Gebäude (Wohnturm → Hochhaus →
+// Wolkenkratzer, L15–L20). house_row/apartment sind entfallen (Migration v11
+// erstattet sie zu 100 %).
+//
+// Money is on a believable municipal scale (§4); materials stay small-scale so
+// they remain a separate bottleneck (§3). Income sources (§5): residential tax
+// (per capita), commercial and industrial revenue — the latter two scale with
+// staffing.
 export const buildingsConfig: BuildingDef[] = [
   // ---- Verwaltung / Regierung ----
   {
     id: 'town_hall',
     category: 'government',
     nameKey: 'building.town_hall',
-    size: { w: 3, h: 3 },
+    size: { w: 5, h: 5 },
+    sizeClass: 'L',
     requiresRoad: false,
     unlockLevel: 1,
     cost: {},
@@ -30,53 +48,52 @@ export const buildingsConfig: BuildingDef[] = [
       { type: 'storage', resource: 'food', amount: 400 },
       // Civic presence: a small attractiveness aura for the surrounding blocks
       // (§9), reusing the same ambience → happiness path as parks/zoning.
-      { type: 'ambience', amount: 2, radius: 3 },
+      { type: 'ambience', amount: 2, radius: 4 },
     ],
-    // Prestige stages (§ center prestige): the town hall is the heart of the
-    // start city, and upgrading it — more civic jobs, a bigger central store and
-    // a wider pride aura — is a long-term milestone that visibly grows the centre
-    // rather than a bare number tweak. Level-gated and increasingly costly.
+    // Monumental-Kette (§ Gebäudesystem 2.0): Rathaus → Stadtverwaltung →
+    // Stadtpalais → Monumentalrathaus. Das 5×5-Grundstück (Vorplatz, Flügel)
+    // wird je Stufe sichtbarer gefüllt; jede Stufe ist ein Stadt-Meilenstein.
     upgrades: [
       {
-        cost: { money: 120_000, wood: 120, stone: 120 },
+        cost: { money: 150_000, wood: 140, stone: 140 },
         constructionSec: 180,
         xpReward: 60,
-        unlockLevel: 5,
-        nameKey: 'building.town_hall.2',
+        unlockLevel: 6,
+        nameKey: 'building.town_hall.2', // Stadtverwaltung
         effects: [
-          { type: 'jobs', amount: 12 },
+          { type: 'jobs', amount: 14 },
           { type: 'storage', resource: 'wood', amount: 700 },
           { type: 'storage', resource: 'stone', amount: 700 },
           { type: 'storage', resource: 'food', amount: 700 },
-          { type: 'ambience', amount: 3, radius: 4 },
+          { type: 'ambience', amount: 3, radius: 5 },
         ],
       },
       {
-        cost: { money: 500_000, wood: 260, stone: 320 },
+        cost: { money: 600_000, wood: 300, stone: 380 },
         constructionSec: 360,
-        xpReward: 140,
-        unlockLevel: 9,
-        nameKey: 'building.town_hall.3',
+        xpReward: 150,
+        unlockLevel: 11,
+        nameKey: 'building.town_hall.3', // Stadtpalais
         effects: [
-          { type: 'jobs', amount: 24 },
+          { type: 'jobs', amount: 28 },
           { type: 'storage', resource: 'wood', amount: 1_100 },
           { type: 'storage', resource: 'stone', amount: 1_100 },
           { type: 'storage', resource: 'food', amount: 1_100 },
-          { type: 'ambience', amount: 4, radius: 5 },
+          { type: 'ambience', amount: 4, radius: 6 },
         ],
       },
       {
-        cost: { money: 1_500_000, wood: 500, stone: 700 },
+        cost: { money: 2_000_000, wood: 600, stone: 850 },
         constructionSec: 600,
-        xpReward: 300,
-        unlockLevel: 13,
-        nameKey: 'building.town_hall.4',
+        xpReward: 320,
+        unlockLevel: 16,
+        nameKey: 'building.town_hall.4', // Monumentalrathaus
         effects: [
-          { type: 'jobs', amount: 40 },
-          { type: 'storage', resource: 'wood', amount: 1_600 },
-          { type: 'storage', resource: 'stone', amount: 1_600 },
-          { type: 'storage', resource: 'food', amount: 1_600 },
-          { type: 'ambience', amount: 5, radius: 6 },
+          { type: 'jobs', amount: 48 },
+          { type: 'storage', resource: 'wood', amount: 1_700 },
+          { type: 'storage', resource: 'stone', amount: 1_700 },
+          { type: 'storage', resource: 'food', amount: 1_700 },
+          { type: 'ambience', amount: 6, radius: 8 },
         ],
       },
     ],
@@ -85,10 +102,11 @@ export const buildingsConfig: BuildingDef[] = [
     id: 'mayor_house',
     category: 'government',
     nameKey: 'building.mayor_house',
-    size: { w: 2, h: 2 },
+    size: { w: 3, h: 3 },
+    sizeClass: 'M',
     requiresRoad: true,
     unlockLevel: 3,
-    cost: { money: 25_000, wood: 40 },
+    cost: { money: 30_000, wood: 50 },
     constructionSec: 60,
     xpReward: 40,
     unique: true,
@@ -100,14 +118,14 @@ export const buildingsConfig: BuildingDef[] = [
 
   // District centre (MVP 2): the anchor of a far district, planted by the
   // "found district" project (not buildable from the menu). Like a small town
-  // hall — it stores goods, employs a few, lifts the local mood and, crucially,
-  // seeds its own road network so the river quarter connects without a 40-tile
-  // road back to the main city (§8).
+  // hall — it stores goods, employs a few, lifts the local mood and seeds its
+  // own road network (§8).
   {
     id: 'district_center',
     category: 'government',
     nameKey: 'building.district_center',
-    size: { w: 3, h: 3 },
+    size: { w: 4, h: 4 },
+    sizeClass: 'L',
     requiresRoad: false,
     unlockLevel: 12,
     cost: {},
@@ -117,11 +135,11 @@ export const buildingsConfig: BuildingDef[] = [
     canDemolish: false,
     canRelocate: false,
     effects: [
-      { type: 'jobs', amount: 5 },
+      { type: 'jobs', amount: 6 },
       { type: 'storage', resource: 'wood', amount: 300 },
       { type: 'storage', resource: 'stone', amount: 300 },
       { type: 'storage', resource: 'food', amount: 300 },
-      { type: 'ambience', amount: 2, radius: 3 },
+      { type: 'ambience', amount: 2, radius: 4 },
     ],
   },
 
@@ -131,6 +149,7 @@ export const buildingsConfig: BuildingDef[] = [
     category: 'roads',
     nameKey: 'building.road',
     size: { w: 1, h: 1 },
+    sizeClass: 'XS',
     requiresRoad: false,
     unlockLevel: 1,
     cost: { money: 300 },
@@ -142,297 +161,170 @@ export const buildingsConfig: BuildingDef[] = [
   },
 
   // ---- Wohnen ----
-  // Small house — suburban, low density, high quality: a single family home
-  // that reacts strongly to nearby green space and industry (§7).
+  // Das kleine Haus (§ Gebäudesystem 2.0): DER wichtigste Gebäudetyp — es
+  // begleitet den Spieler über 6 Stufen durchs ganze Spiel. 3×3-Grundstück
+  // (Haus + Garten), jede Stufe verdichtet dasselbe Grundstück sichtbar:
+  // Kleines Haus → Einfamilienhaus → Doppelhaus → Mehrfamilienhaus →
+  // Apartmenthaus → Wohnblock. Vorstädte reagieren stark auf Umgebung (§7).
   {
     id: 'house_small',
     category: 'residential',
     nameKey: 'building.house_small',
-    size: { w: 2, h: 2 },
+    size: { w: 3, h: 3 },
+    sizeClass: 'M',
     requiresRoad: true,
     unlockLevel: 1,
-    cost: { money: 9_000, wood: 22 },
+    cost: { money: 12_000, wood: 30 },
     constructionSec: 20,
     xpReward: 5,
     effects: [
       { type: 'housing', units: 1, minResidentsPerUnit: 2, maxResidentsPerUnit: 5, ambienceSensitivity: 1.4 },
-      // Water demands raised (§8) so a single well no longer covers a whole
-      // district — a growing town needs more wells and, in time, a pump.
       { type: 'demand', need: 'water', amount: 6 },
       // Residential upkeep scales with households, so it tracks population and
       // gently nets out the per-capita tax without hurting the early game.
-      { type: 'upkeep', resource: 'money', perMinute: 35 },
+      { type: 'upkeep', resource: 'money', perMinute: 40 },
     ],
-    // Long densification path (§3/§4/§5): the founder's house is meant to stay
-    // relevant for the whole game. Each stage adds households on the SAME 2×2
-    // footprint, gated behind a city level and a steeply rising price, so
-    // improving the old centre beats sprawling new boxes — and the house visibly
-    // grows (renderer skyline stages). The Doppelhaus deliberately waits until
-    // level 8 (§3): early on the small house tops out at "Ausgebautes Haus", and
-    // only a mature city turns it into a multi-family block, town house and
-    // finally a small Wohnblock rivalling a whole street of starter homes.
     upgrades: [
       {
-        cost: { money: 30_000, wood: 50, stone: 20 },
+        cost: { money: 34_000, wood: 60, stone: 25 },
         constructionSec: 90,
         xpReward: 18,
         unlockLevel: 3,
-        nameKey: 'building.house_small.2', // Ausgebautes Haus
+        nameKey: 'building.house_small.2', // Einfamilienhaus
         effects: [
-          { type: 'housing', units: 2, minResidentsPerUnit: 2, maxResidentsPerUnit: 5, ambienceSensitivity: 1.4 },
-          { type: 'demand', need: 'water', amount: 12 },
-          { type: 'upkeep', resource: 'money', perMinute: 70 },
+          { type: 'housing', units: 3, minResidentsPerUnit: 2, maxResidentsPerUnit: 5, ambienceSensitivity: 1.4 },
+          { type: 'demand', need: 'water', amount: 14 },
+          { type: 'upkeep', resource: 'money', perMinute: 95 },
         ],
       },
       {
-        // Doppelhaus — the first real density jump, held back to level 8 (§3).
-        cost: { money: 140_000, wood: 130, stone: 90 },
+        cost: { money: 160_000, wood: 150, stone: 100 },
         constructionSec: 240,
-        xpReward: 34,
-        unlockLevel: 8,
+        xpReward: 36,
+        unlockLevel: 6,
         nameKey: 'building.house_small.3', // Doppelhaus
         effects: [
-          { type: 'housing', units: 4, minResidentsPerUnit: 2, maxResidentsPerUnit: 6, ambienceSensitivity: 1.3 },
-          { type: 'demand', need: 'water', amount: 18 },
-          { type: 'upkeep', resource: 'money', perMinute: 150 },
+          { type: 'housing', units: 6, minResidentsPerUnit: 2, maxResidentsPerUnit: 6, ambienceSensitivity: 1.3 },
+          { type: 'demand', need: 'water', amount: 26 },
+          { type: 'upkeep', resource: 'money', perMinute: 210 },
         ],
       },
       {
-        // Mehrfamilienhaus.
-        cost: { money: 320_000, wood: 220, stone: 180 },
+        cost: { money: 380_000, wood: 260, stone: 220 },
         constructionSec: 300,
-        xpReward: 50,
-        // Moved to L11 (§13): L10 already introduces the apartment as a NEW
-        // residential type, so no housing upgrade shares that level.
-        unlockLevel: 11,
+        xpReward: 55,
+        unlockLevel: 9,
         nameKey: 'building.house_small.4', // Mehrfamilienhaus
         effects: [
-          { type: 'housing', units: 7, minResidentsPerUnit: 3, maxResidentsPerUnit: 6, ambienceSensitivity: 1.2 },
-          { type: 'demand', need: 'water', amount: 34 },
-          { type: 'upkeep', resource: 'money', perMinute: 280 },
-        ],
-      },
-      {
-        // Stadthaus.
-        cost: { money: 700_000, wood: 340, stone: 320 },
-        constructionSec: 420,
-        xpReward: 75,
-        // Moved to L13 (§13): L12 introduces the residential tower as a NEW
-        // type, so the Stadthaus upgrade waits a level.
-        unlockLevel: 13,
-        nameKey: 'building.house_small.5', // Stadthaus
-        effects: [
-          { type: 'housing', units: 11, minResidentsPerUnit: 3, maxResidentsPerUnit: 6, ambienceSensitivity: 1.1 },
-          { type: 'demand', need: 'water', amount: 58 },
+          { type: 'housing', units: 14, minResidentsPerUnit: 3, maxResidentsPerUnit: 6, ambienceSensitivity: 1.2 },
+          { type: 'demand', need: 'water', amount: 62 },
+          { type: 'demand', need: 'energy', amount: 24 },
           { type: 'upkeep', resource: 'money', perMinute: 480 },
         ],
       },
       {
-        // Wohnblock — the founder's lot, fully densified: a 2×2 block that houses
-        // as many as a whole street of starter homes (§ long-term parity).
-        cost: { money: 1_400_000, wood: 520, stone: 560 },
+        cost: { money: 950_000, wood: 420, stone: 440 },
+        constructionSec: 420,
+        xpReward: 85,
+        unlockLevel: 12,
+        nameKey: 'building.house_small.5', // Apartmenthaus
+        effects: [
+          { type: 'housing', units: 40, minResidentsPerUnit: 3, maxResidentsPerUnit: 5, ambienceSensitivity: 1.15 },
+          { type: 'demand', need: 'water', amount: 150 },
+          { type: 'demand', need: 'energy', amount: 95 },
+          { type: 'upkeep', resource: 'money', perMinute: 1_350 },
+        ],
+      },
+      {
+        // Wohnblock — das Gründer-Grundstück, voll verdichtet: beherbergt so
+        // viele Haushalte wie eine ganze Straße von Starterhäusern.
+        cost: { money: 2_100_000, wood: 680, stone: 720 },
         constructionSec: 540,
-        xpReward: 110,
-        unlockLevel: 14,
+        xpReward: 130,
+        unlockLevel: 15,
         nameKey: 'building.house_small.6', // Wohnblock
         effects: [
-          { type: 'housing', units: 16, minResidentsPerUnit: 3, maxResidentsPerUnit: 6, ambienceSensitivity: 1.05 },
-          { type: 'demand', need: 'water', amount: 88 },
-          { type: 'upkeep', resource: 'money', perMinute: 760 },
+          { type: 'housing', units: 90, minResidentsPerUnit: 3, maxResidentsPerUnit: 5, ambienceSensitivity: 1.1 },
+          { type: 'demand', need: 'water', amount: 300 },
+          { type: 'demand', need: 'energy', amount: 190 },
+          { type: 'upkeep', resource: 'money', perMinute: 2_900 },
         ],
       },
     ],
-    // Residential build limits per level (§1/§2): houses are no longer infinitely
-    // spammable — the cap rises with the city so growth stays possible, but past
-    // it the way forward is upgrading (denser stages) or the next housing type,
-    // not another identical box. The small house is the backbone, so it keeps the
-    // most generous cap. Tuned together with row/apartment/tower and their
-    // capacities so every level has a believable population ceiling.
-    buildLimit: [{ level: 1, max: 8 }, { level: 6, max: 10 }, { level: 9, max: 12 }, { level: 16, max: 14 }, { level: 18, max: 16 }],
+    // Wohn-Limit (§1/§2): das Haus bleibt das Rückgrat — der Deckel wächst mit
+    // der Stadt, aber Dichte kommt aus dem AUFWERTEN der Bestände, nicht aus
+    // endlosen neuen Kisten.
+    buildLimit: [{ level: 1, max: 10 }, { level: 5, max: 14 }, { level: 8, max: 18 }, { level: 11, max: 22 }, { level: 14, max: 26 }, { level: 17, max: 30 }],
   },
-  // Row house — denser: several households per footprint, medium quality,
-  // higher water/supply demand. The efficient way to grow a neighborhood (§7).
-  {
-    id: 'house_row',
-    category: 'residential',
-    nameKey: 'building.house_row',
-    size: { w: 2, h: 2 },
-    requiresRoad: true,
-    unlockLevel: 6,
-    cost: { money: 60_000, wood: 120, stone: 70 },
-    constructionSec: 120,
-    xpReward: 8,
-    effects: [
-      // Believable populations for a real city (§3/§6): a terraced row is a dozen
-      // households, not six. Water/power demand scale with the residents.
-      { type: 'housing', units: 12, minResidentsPerUnit: 3, maxResidentsPerUnit: 4, ambienceSensitivity: 1.0 },
-      { type: 'demand', need: 'water', amount: 34 },
-      { type: 'demand', need: 'energy', amount: 16 },
-      { type: 'upkeep', resource: 'money', perMinute: 260 },
-    ],
-    upgrades: [
-      {
-        cost: { money: 180_000, wood: 180, stone: 120 },
-        constructionSec: 240,
-        xpReward: 20,
-        // Moved to L9 (§13) to spread out the housing milestones: L8 already
-        // carries the Doppelhaus upgrade.
-        unlockLevel: 9,
-        nameKey: 'building.house_row.2',
-        effects: [
-          { type: 'housing', units: 18, minResidentsPerUnit: 3, maxResidentsPerUnit: 4, ambienceSensitivity: 1.0 },
-          { type: 'demand', need: 'water', amount: 52 },
-          { type: 'demand', need: 'energy', amount: 26 },
-          { type: 'upkeep', resource: 'money', perMinute: 400 },
-        ],
-      },
-      {
-        cost: { money: 420_000, wood: 280, stone: 220 },
-        constructionSec: 360,
-        xpReward: 32,
-        unlockLevel: 11,
-        nameKey: 'building.house_row.3',
-        effects: [
-          { type: 'housing', units: 26, minResidentsPerUnit: 3, maxResidentsPerUnit: 4, ambienceSensitivity: 0.95 },
-          { type: 'demand', need: 'water', amount: 76 },
-          { type: 'demand', need: 'energy', amount: 40 },
-          { type: 'upkeep', resource: 'money', perMinute: 600 },
-        ],
-      },
-    ],
-    // Row-house cap (§1/§2): the efficient mid-game density step; a handful per
-    // level, rising as the city matures.
-    buildLimit: [{ level: 6, max: 6 }, { level: 9, max: 8 }, { level: 14, max: 12 }, { level: 16, max: 14 }],
-  },
-  // Apartment — high density, many units, heavy infrastructure demand; without
-  // parks its neighborhood quality suffers (§7).
-  {
-    id: 'apartment',
-    category: 'residential',
-    nameKey: 'building.apartment',
-    size: { w: 2, h: 3 },
-    requiresRoad: true,
-    // Moved to L10 (§13): each residential type now unlocks in its own level so
-    // the player isn't handed a new building and an upgrade at once.
-    unlockLevel: 10,
-    cost: { money: 280_000, wood: 220, stone: 320 },
-    constructionSec: 360,
-    xpReward: 22,
-    effects: [
-      // A real apartment block: ~90 households (§3/§6). This — and the tower — is
-      // where a big city's population actually comes from; supply scales to match.
-      { type: 'housing', units: 90, minResidentsPerUnit: 3, maxResidentsPerUnit: 4, ambienceSensitivity: 1.15 },
-      { type: 'demand', need: 'water', amount: 210 },
-      { type: 'demand', need: 'energy', amount: 140 },
-      { type: 'upkeep', resource: 'money', perMinute: 2_600 },
-    ],
-    upgrades: [
-      {
-        cost: { money: 700_000, wood: 360, stone: 500 },
-        constructionSec: 420,
-        xpReward: 40,
-        unlockLevel: 11,
-        nameKey: 'building.apartment.2',
-        effects: [
-          { type: 'housing', units: 140, minResidentsPerUnit: 3, maxResidentsPerUnit: 4, ambienceSensitivity: 1.15 },
-          { type: 'demand', need: 'water', amount: 330 },
-          { type: 'demand', need: 'energy', amount: 220 },
-          { type: 'upkeep', resource: 'money', perMinute: 4_200 },
-        ],
-      },
-      {
-        cost: { money: 1_500_000, wood: 520, stone: 760 },
-        constructionSec: 540,
-        xpReward: 60,
-        unlockLevel: 13,
-        nameKey: 'building.apartment.3',
-        effects: [
-          { type: 'housing', units: 200, minResidentsPerUnit: 3, maxResidentsPerUnit: 4, ambienceSensitivity: 1.1 },
-          { type: 'demand', need: 'water', amount: 470 },
-          { type: 'demand', need: 'energy', amount: 320 },
-          { type: 'upkeep', resource: 'money', perMinute: 6_200 },
-        ],
-      },
-    ],
-    // Apartment cap (§1/§2): the workhorse of a real city's population; a handful
-    // per level so density comes from upgrading them, not a wall of blocks.
-    buildLimit: [{ level: 10, max: 8 }, { level: 14, max: 12 }, { level: 16, max: 14 }],
-  },
-  // Residential tower — the density endgame (MVP 2): a 3×3 high-rise housing
-  // hundreds, so a city can actually staff its office towers. Heavy on water,
-  // power and upkeep, and its residents care about their surroundings — a tower
-  // without parks nearby is a grim place to live (§6, believable populations).
+  // Wohnturm (§ Gebäudesystem 2.0): das späte Prestige-Wohngebäude auf großem
+  // 5×5-Grundstück (Turm + Plaza) — Wohnturm → Hochhaus → Wolkenkratzer. Hier
+  // kommt die Bevölkerung der Metropole her; schwere Infrastrukturlast, und
+  // seine Bewohner erwarten ein gepflegtes Umfeld (§6).
   {
     id: 'residential_tower',
     category: 'residential',
     nameKey: 'building.residential_tower',
-    size: { w: 3, h: 3 },
+    size: { w: 5, h: 5 },
+    sizeClass: 'L',
     requiresRoad: true,
-    unlockLevel: 12,
-    cost: { money: 900_000, wood: 350, stone: 700 },
+    unlockLevel: 15,
+    cost: { money: 2_800_000, wood: 600, stone: 1_200 },
     constructionSec: 600,
-    xpReward: 35,
+    xpReward: 140,
     effects: [
-      // A high-rise: ~360 apartments housing ~1 800 people (§3/§6). The density
-      // endgame — one tower replaces a whole neighbourhood of houses.
-      { type: 'housing', units: 360, minResidentsPerUnit: 3, maxResidentsPerUnit: 5, ambienceSensitivity: 1.25 },
-      { type: 'demand', need: 'water', amount: 900 },
-      { type: 'demand', need: 'energy', amount: 560 },
-      { type: 'upkeep', resource: 'money', perMinute: 7_200 },
+      { type: 'housing', units: 900, minResidentsPerUnit: 3, maxResidentsPerUnit: 5, ambienceSensitivity: 1.25 },
+      { type: 'demand', need: 'water', amount: 1_800 },
+      { type: 'demand', need: 'energy', amount: 1_100 },
+      { type: 'upkeep', resource: 'money', perMinute: 13_000 },
     ],
-    // The skyline endgame (§ visual center growth): two more stages take the
-    // tower into genuine high-rise territory, each a multi-million project gated
-    // to the very top levels — the long-term "densify the centre" motor.
+    // Skyline-Endgame: zwei Multi-Millionen-Stufen bis zum Wolkenkratzer (L20) —
+    // der langfristige „Verdichte das Zentrum"-Motor.
     upgrades: [
       {
-        cost: { money: 2_400_000, wood: 600, stone: 1_100 },
-        constructionSec: 600,
-        xpReward: 70,
-        unlockLevel: 13,
-        nameKey: 'building.residential_tower.2',
+        cost: { money: 6_000_000, wood: 900, stone: 2_000 },
+        constructionSec: 660,
+        xpReward: 220,
+        unlockLevel: 17,
+        nameKey: 'building.residential_tower.2', // Hochhaus
         effects: [
-          { type: 'housing', units: 520, minResidentsPerUnit: 3, maxResidentsPerUnit: 5, ambienceSensitivity: 1.3 },
-          { type: 'demand', need: 'water', amount: 1_300 },
-          { type: 'demand', need: 'energy', amount: 820 },
-          { type: 'upkeep', resource: 'money', perMinute: 10_500 },
+          { type: 'housing', units: 1_400, minResidentsPerUnit: 3, maxResidentsPerUnit: 5, ambienceSensitivity: 1.3 },
+          { type: 'demand', need: 'water', amount: 2_800 },
+          { type: 'demand', need: 'energy', amount: 1_700 },
+          { type: 'upkeep', resource: 'money', perMinute: 20_000 },
         ],
       },
       {
-        cost: { money: 5_000_000, wood: 900, stone: 1_800 },
-        constructionSec: 720,
-        xpReward: 110,
-        unlockLevel: 14,
-        nameKey: 'building.residential_tower.3',
+        cost: { money: 12_000_000, wood: 1_400, stone: 3_200 },
+        constructionSec: 780,
+        xpReward: 360,
+        unlockLevel: 20,
+        nameKey: 'building.residential_tower.3', // Wolkenkratzer
         effects: [
-          { type: 'housing', units: 720, minResidentsPerUnit: 3, maxResidentsPerUnit: 5, ambienceSensitivity: 1.35 },
-          { type: 'demand', need: 'water', amount: 1_820 },
-          { type: 'demand', need: 'energy', amount: 1_150 },
-          { type: 'upkeep', resource: 'money', perMinute: 14_800 },
+          { type: 'housing', units: 2_200, minResidentsPerUnit: 3, maxResidentsPerUnit: 5, ambienceSensitivity: 1.35 },
+          { type: 'demand', need: 'water', amount: 4_400 },
+          { type: 'demand', need: 'energy', amount: 2_600 },
+          { type: 'upkeep', resource: 'money', perMinute: 30_000 },
         ],
       },
     ],
-    // Tower cap (§1/§2): the skyline endgame. Few but enormous — six at first,
-    // growing to a dozen at the metropolis levels, each a multi-thousand-resident
-    // high-rise, so the very top of the population comes from towers you upgrade.
-    buildLimit: [{ level: 12, max: 6 }, { level: 14, max: 12 }, { level: 16, max: 16 }],
+    buildLimit: [{ level: 15, max: 6 }, { level: 17, max: 10 }, { level: 19, max: 16 }],
   },
 
-  // ---- Ressourcen / Produktion ----
+  // ---- Ressourcen / Produktion (Industrie: 3 Stufen, §7 Auftrag A) ----
+  // Sägewerk: 4×4-Werksgelände (Halle, Stammlager, Verladehof).
   {
     id: 'sawmill',
     category: 'production',
     nameKey: 'building.sawmill',
-    size: { w: 2, h: 2 },
+    size: { w: 4, h: 4 },
+    sizeClass: 'L',
     requiresRoad: true,
     unlockLevel: 2,
     cost: { money: 11_000 },
-    // First sawmill is free (§3): the wood loop starts the moment it unlocks, no
-    // money wait. Every later sawmill costs full price.
+    // First sawmill is free (§3): the wood loop starts the moment it unlocks.
     firstBuildDiscount: 1,
     constructionSec: 30,
     xpReward: 15,
-    // Production buildings can be re-planned as the city reshapes (§8): move the
-    // sawmill to a better forest spot instead of demolishing it.
     canRelocate: true,
     relocationCost: { money: 5_000 },
     effects: [
@@ -443,70 +335,53 @@ export const buildingsConfig: BuildingDef[] = [
       { type: 'demand', need: 'energy', amount: 8 },
       { type: 'ambience', amount: -1, radius: 4 },
     ],
-    // Mid/late production upgrades (§14): from level 7 up, a sawmill can be
-    // modernised into a far higher-output plant on the same tile — the answer to
-    // "spam vs. upgrade" for wood. Each stage costs a lot more and draws more
-    // staff/power/upkeep. Effects fully replace the previous stage.
+    // Kette: Sägewerk → Großsägewerk (L7) → Holzkombinat (L12). Drei markante
+    // Stufen statt vieler kleiner — jede füllt das Gelände sichtbar weiter.
     upgrades: [
       {
-        cost: { money: 200_000, wood: 150, stone: 120 },
+        cost: { money: 220_000, wood: 160, stone: 130 },
         constructionSec: 240,
-        xpReward: 40,
+        xpReward: 45,
         unlockLevel: 7,
-        nameKey: 'building.sawmill.2', // Verbesserte Sägen
+        nameKey: 'building.sawmill.2', // Großsägewerk
         effects: [
-          { type: 'produce', resource: 'wood', perMinute: 95 },
-          { type: 'jobs', amount: 6 },
-          { type: 'revenue', category: 'industrial', perMinute: 1_100 },
-          { type: 'upkeep', resource: 'money', perMinute: 550 },
-          { type: 'demand', need: 'energy', amount: 14 },
+          { type: 'produce', resource: 'wood', perMinute: 100 },
+          { type: 'jobs', amount: 7 },
+          { type: 'revenue', category: 'industrial', perMinute: 1_200 },
+          { type: 'upkeep', resource: 'money', perMinute: 600 },
+          { type: 'demand', need: 'energy', amount: 15 },
           { type: 'ambience', amount: -1, radius: 4 },
         ],
       },
       {
-        cost: { money: 650_000, wood: 300, stone: 260 },
-        constructionSec: 360,
-        xpReward: 70,
-        unlockLevel: 10,
-        nameKey: 'building.sawmill.3', // Automatisiertes Sägewerk
-        effects: [
-          { type: 'produce', resource: 'wood', perMinute: 170 },
-          { type: 'jobs', amount: 9 },
-          { type: 'revenue', category: 'industrial', perMinute: 1_900 },
-          { type: 'upkeep', resource: 'money', perMinute: 950 },
-          { type: 'demand', need: 'energy', amount: 24 },
-          { type: 'ambience', amount: -2, radius: 5 },
-        ],
-      },
-      {
-        cost: { money: 2_200_000, wood: 600, stone: 520 },
+        cost: { money: 1_800_000, wood: 500, stone: 450 },
         constructionSec: 480,
         xpReward: 130,
-        unlockLevel: 13,
-        nameKey: 'building.sawmill.4', // Industrie-Sägewerk
+        unlockLevel: 12,
+        nameKey: 'building.sawmill.3', // Holzkombinat
         effects: [
-          { type: 'produce', resource: 'wood', perMinute: 300 },
-          { type: 'jobs', amount: 14 },
-          { type: 'revenue', category: 'industrial', perMinute: 3_200 },
-          { type: 'upkeep', resource: 'money', perMinute: 1_700 },
-          { type: 'demand', need: 'energy', amount: 40 },
+          { type: 'produce', resource: 'wood', perMinute: 260 },
+          { type: 'jobs', amount: 13 },
+          { type: 'revenue', category: 'industrial', perMinute: 2_900 },
+          { type: 'upkeep', resource: 'money', perMinute: 1_500 },
+          { type: 'demand', need: 'energy', amount: 36 },
           { type: 'ambience', amount: -2, radius: 6 },
         ],
       },
     ],
     locationBonus: { terrain: 'forest', radius: 3, perTilePct: 5, maxPct: 50 },
-    // Few but strong (§1/§2): grows slowly with city level, never a spam build.
     buildLimit: [{ level: 2, max: 2 }, { level: 5, max: 3 }, { level: 8, max: 5 }],
   },
+  // Steinbruch: 5×5-Abbaugelände (Bruchkante, Förderband, Halden).
   {
     id: 'quarry',
     category: 'production',
     nameKey: 'building.quarry',
-    size: { w: 3, h: 3 },
+    size: { w: 5, h: 5 },
+    sizeClass: 'L',
     requiresRoad: true,
     unlockLevel: 4,
     cost: { money: 45_000, wood: 120 },
-    // First quarry half price (§3): eases the jump into stone production.
     firstBuildDiscount: 0.5,
     constructionSec: 90,
     xpReward: 25,
@@ -520,17 +395,16 @@ export const buildingsConfig: BuildingDef[] = [
       { type: 'demand', need: 'energy', amount: 12 },
       { type: 'ambience', amount: -2, radius: 5 },
     ],
-    // Stone upgrades (§14): from level 8, ever heavier extraction on the same
-    // tile — the scarcest early material scales through investment, not spam.
+    // Kette: Steinbruch → Tiefbruch (L8) → Bergbaukomplex (L13).
     upgrades: [
       {
         cost: { money: 300_000, wood: 120, stone: 140 },
         constructionSec: 300,
         xpReward: 55,
         unlockLevel: 8,
-        nameKey: 'building.quarry.2', // Bessere Fördertechnik
+        nameKey: 'building.quarry.2', // Tiefbruch
         effects: [
-          { type: 'produce', resource: 'stone', perMinute: 78 },
+          { type: 'produce', resource: 'stone', perMinute: 80 },
           { type: 'jobs', amount: 9 },
           { type: 'revenue', category: 'industrial', perMinute: 1_800 },
           { type: 'upkeep', resource: 'money', perMinute: 900 },
@@ -539,121 +413,89 @@ export const buildingsConfig: BuildingDef[] = [
         ],
       },
       {
-        cost: { money: 1_000_000, wood: 280, stone: 360 },
-        constructionSec: 420,
-        xpReward: 95,
-        unlockLevel: 11,
-        nameKey: 'building.quarry.3', // Schweres Gerät
-        effects: [
-          { type: 'produce', resource: 'stone', perMinute: 140 },
-          { type: 'jobs', amount: 13 },
-          { type: 'revenue', category: 'industrial', perMinute: 3_000 },
-          { type: 'upkeep', resource: 'money', perMinute: 1_600 },
-          { type: 'demand', need: 'energy', amount: 34 },
-          { type: 'ambience', amount: -3, radius: 6 },
-        ],
-      },
-      {
-        cost: { money: 3_200_000, wood: 600, stone: 720 },
+        cost: { money: 2_600_000, wood: 550, stone: 650 },
         constructionSec: 540,
-        xpReward: 160,
-        unlockLevel: 14,
-        nameKey: 'building.quarry.4', // Industrieller Steinbruch
+        xpReward: 150,
+        unlockLevel: 13,
+        nameKey: 'building.quarry.3', // Bergbaukomplex
         effects: [
-          { type: 'produce', resource: 'stone', perMinute: 240 },
-          { type: 'jobs', amount: 18 },
-          { type: 'revenue', category: 'industrial', perMinute: 4_800 },
-          { type: 'upkeep', resource: 'money', perMinute: 2_600 },
-          { type: 'demand', need: 'energy', amount: 52 },
+          { type: 'produce', resource: 'stone', perMinute: 210 },
+          { type: 'jobs', amount: 17 },
+          { type: 'revenue', category: 'industrial', perMinute: 4_400 },
+          { type: 'upkeep', resource: 'money', perMinute: 2_400 },
+          { type: 'demand', need: 'energy', amount: 48 },
           { type: 'ambience', amount: -4, radius: 7 },
         ],
       },
     ],
     // Mountains matter (§12): a quarry hugging the rock face gets a big, visible
-    // stone bonus — the strategic pull toward the Gebirge side of the map.
+    // stone bonus — the strategic pull toward the Gebirgs-Regionen.
     locationBonus: { terrain: 'mountain', radius: 3, perTilePct: 10, maxPct: 70 },
     buildLimit: [{ level: 4, max: 2 }, { level: 7, max: 3 }, { level: 10, max: 4 }],
   },
+  // Bauernhof: 6×6-Hofanlage — Felder, Scheune, Hof; wächst in A7 sichtbar mit
+  // Zäunen, Silos und Tieren (§ Welt 2.0 Landwirtschaft).
   {
     id: 'farm',
     category: 'production',
     nameKey: 'building.farm',
-    size: { w: 3, h: 3 },
+    size: { w: 6, h: 6 },
+    sizeClass: 'XL',
     requiresRoad: true,
     unlockLevel: 4,
     cost: { money: 28_000, wood: 80 },
-    // First farm is free (§3): food production starts without a money wait.
     firstBuildDiscount: 1,
     constructionSec: 60,
     xpReward: 20,
     canRelocate: true,
     relocationCost: { money: 8_000 },
     effects: [
-      // Food output scales for a real city (§ supply must keep up): a handful of
-      // farms feed thousands rather than dozens.
-      { type: 'produce', resource: 'food', perMinute: 220 },
-      { type: 'jobs', amount: 12 },
-      { type: 'revenue', category: 'industrial', perMinute: 700 },
-      { type: 'upkeep', resource: 'money', perMinute: 500 },
+      // Größere Hofanlage = mehr Grundertrag als die alte 3×3-Farm.
+      { type: 'produce', resource: 'food', perMinute: 260 },
+      { type: 'jobs', amount: 14 },
+      { type: 'revenue', category: 'industrial', perMinute: 800 },
+      { type: 'upkeep', resource: 'money', perMinute: 550 },
       { type: 'demand', need: 'energy', amount: 10 },
       { type: 'ambience', amount: -1, radius: 3 },
     ],
-    // Farm upgrades (§11/§14): from level 8, irrigation and mechanisation lift
-    // output enormously — but an upgraded farm also DRINKS: later stages place a
-    // real `water` demand on the grid, so scaling food production means scaling
-    // the waterworks too (a genuine mid-game trade-off, not free growth).
+    // Kette: Bauernhof → Großfarm (L8) → Agrarkomplex (L13). Spätere Stufen
+    // TRINKEN: echte Wasser-Nachfrage — Nahrung skalieren heißt Wasser skalieren.
     upgrades: [
       {
-        cost: { money: 300_000, wood: 140, stone: 120 },
+        cost: { money: 320_000, wood: 150, stone: 130 },
         constructionSec: 300,
-        xpReward: 50,
+        xpReward: 55,
         unlockLevel: 8,
-        nameKey: 'building.farm.2', // Bewässerungssystem
+        nameKey: 'building.farm.2', // Großfarm
         effects: [
-          { type: 'produce', resource: 'food', perMinute: 430 },
-          { type: 'jobs', amount: 16 },
-          { type: 'revenue', category: 'industrial', perMinute: 1_200 },
-          { type: 'upkeep', resource: 'money', perMinute: 850 },
-          { type: 'demand', need: 'energy', amount: 16 },
-          { type: 'demand', need: 'water', amount: 40 },
+          { type: 'produce', resource: 'food', perMinute: 500 },
+          { type: 'jobs', amount: 18 },
+          { type: 'revenue', category: 'industrial', perMinute: 1_300 },
+          { type: 'upkeep', resource: 'money', perMinute: 900 },
+          { type: 'demand', need: 'energy', amount: 18 },
+          { type: 'demand', need: 'water', amount: 45 },
           { type: 'ambience', amount: -1, radius: 3 },
         ],
       },
       {
-        cost: { money: 1_000_000, wood: 260, stone: 280 },
-        constructionSec: 420,
-        xpReward: 90,
-        unlockLevel: 11,
-        nameKey: 'building.farm.3', // Moderne Landwirtschaft
-        effects: [
-          { type: 'produce', resource: 'food', perMinute: 760 },
-          { type: 'jobs', amount: 22 },
-          { type: 'revenue', category: 'industrial', perMinute: 2_000 },
-          { type: 'upkeep', resource: 'money', perMinute: 1_500 },
-          { type: 'demand', need: 'energy', amount: 28 },
-          { type: 'demand', need: 'water', amount: 80 },
-          { type: 'ambience', amount: -1, radius: 4 },
-        ],
-      },
-      {
-        cost: { money: 3_000_000, wood: 520, stone: 560 },
+        cost: { money: 2_400_000, wood: 480, stone: 480 },
         constructionSec: 540,
-        xpReward: 150,
-        unlockLevel: 14,
-        nameKey: 'building.farm.4', // Automatisierte Farm
+        xpReward: 140,
+        unlockLevel: 13,
+        nameKey: 'building.farm.3', // Agrarkomplex
         effects: [
-          { type: 'produce', resource: 'food', perMinute: 1_250 },
-          { type: 'jobs', amount: 30 },
-          { type: 'revenue', category: 'industrial', perMinute: 3_200 },
-          { type: 'upkeep', resource: 'money', perMinute: 2_600 },
-          { type: 'demand', need: 'energy', amount: 44 },
-          { type: 'demand', need: 'water', amount: 130 },
+          { type: 'produce', resource: 'food', perMinute: 1_100 },
+          { type: 'jobs', amount: 28 },
+          { type: 'revenue', category: 'industrial', perMinute: 2_900 },
+          { type: 'upkeep', resource: 'money', perMinute: 2_300 },
+          { type: 'demand', need: 'energy', amount: 40 },
+          { type: 'demand', need: 'water', amount: 120 },
           { type: 'ambience', amount: -2, radius: 4 },
         ],
       },
     ],
     // Fertile soil matters (§12): a farm on rich land gets a strong, visible food
-    // bonus — the strategic pull toward the fruchtbares-Land side of the map.
+    // bonus — the strategic pull toward the fruchtbaren Regionen.
     locationBonus: { terrain: 'fertile', radius: 2, perTilePct: 6, maxPct: 50 },
     buildLimit: [{ level: 4, max: 2 }, { level: 6, max: 3 }, { level: 9, max: 5 }, { level: 12, max: 8 }],
   },
@@ -662,31 +504,25 @@ export const buildingsConfig: BuildingDef[] = [
     category: 'services',
     nameKey: 'building.well',
     size: { w: 1, h: 1 },
+    sizeClass: 'XS',
     requiresRoad: false,
     unlockLevel: 3,
     cost: { money: 6_500, wood: 10 },
-    // First well is free (§3): the water need can be answered the moment it
-    // appears, so level 3 never becomes a money-wait wall.
     firstBuildDiscount: 1,
     constructionSec: 15,
     xpReward: 12,
-    // A neighbourhood well: cheap early water with a real, but local, reach.
     canRelocate: true,
     effects: [
-      // Cut in v0.21 (§8) so a single well no longer waters a whole district;
-      // water becomes a real, but fair, constraint that grows with the city.
       { type: 'capacity', need: 'water', amount: 120, radius: 9 },
       { type: 'upkeep', resource: 'money', perMinute: 100 },
     ],
-    // Deepen the well: more capacity and a little more reach for a growing
-    // neighbourhood, without a second structure taking a tile.
     upgrades: [
       {
         cost: { money: 22_000, wood: 30, stone: 20 },
         constructionSec: 60,
         xpReward: 16,
         unlockLevel: 6,
-        nameKey: 'building.well.2',
+        nameKey: 'building.well.2', // Tiefbrunnen
         effects: [
           { type: 'capacity', need: 'water', amount: 220, radius: 11 },
           { type: 'upkeep', resource: 'money', perMinute: 170 },
@@ -694,19 +530,18 @@ export const buildingsConfig: BuildingDef[] = [
       },
     ],
   },
+  // Wasserpumpe: 3×3-Pumpwerk mit Becken — Versorgung: 2 markante Stufen.
   {
     id: 'water_pump',
     category: 'services',
     nameKey: 'building.water_pump',
-    size: { w: 2, h: 2 },
+    size: { w: 3, h: 3 },
+    sizeClass: 'M',
     requiresRoad: true,
     unlockLevel: 7,
     cost: { money: 130_000, stone: 150 },
     constructionSec: 180,
     xpReward: 50,
-    // City-scale waterworks: a wide reach AND a big capacity pool, so a handful
-    // serve a whole district instead of one pump per block (§ radius + capacity).
-    // Relocatable so growing cities can re-plan their water grid.
     canRelocate: true,
     relocationCost: { money: 15_000 },
     effects: [
@@ -715,144 +550,121 @@ export const buildingsConfig: BuildingDef[] = [
       { type: 'upkeep', resource: 'money', perMinute: 1_600 },
       { type: 'demand', need: 'energy', amount: 30 },
     ],
-    // Expand the waterworks: bigger capacity pool and reach so one upgraded plant
-    // serves a metropolis quarter — cheaper on land than a wall of pumps.
+    // Kette: Wasserpumpe → Pumpwerk (L11; bündelt die alten Stufen 2+3).
     upgrades: [
       {
-        cost: { money: 260_000, stone: 280 },
-        constructionSec: 240,
-        xpReward: 55,
-        unlockLevel: 10,
-        nameKey: 'building.water_pump.2',
-        effects: [
-          { type: 'capacity', need: 'water', amount: 3_000, radius: 20 },
-          { type: 'jobs', amount: 10 },
-          { type: 'upkeep', resource: 'money', perMinute: 2_600 },
-          { type: 'demand', need: 'energy', amount: 50 },
-        ],
-      },
-      {
-        cost: { money: 560_000, stone: 520 },
+        cost: { money: 420_000, stone: 420 },
         constructionSec: 300,
         xpReward: 75,
-        unlockLevel: 13,
-        nameKey: 'building.water_pump.3',
+        unlockLevel: 11,
+        nameKey: 'building.water_pump.2', // Pumpwerk
         effects: [
-          { type: 'capacity', need: 'water', amount: 4_600, radius: 22 },
-          { type: 'jobs', amount: 14 },
-          { type: 'upkeep', resource: 'money', perMinute: 3_800 },
-          { type: 'demand', need: 'energy', amount: 70 },
+          { type: 'capacity', need: 'water', amount: 3_800, radius: 21 },
+          { type: 'jobs', amount: 12 },
+          { type: 'upkeep', resource: 'money', perMinute: 3_000 },
+          { type: 'demand', need: 'energy', amount: 60 },
         ],
       },
     ],
     buildLimit: [{ level: 7, max: 2 }, { level: 9, max: 3 }, { level: 11, max: 5 }, { level: 13, max: 8 }],
   },
+  // Lagerhaus: 4×4-Logistikhof (Halle, Rampe, Stellflächen) — „Lagerhäuser
+  // größer" (§ Auftrag A).
   {
     id: 'warehouse',
     category: 'production',
     nameKey: 'building.warehouse',
-    size: { w: 2, h: 2 },
+    size: { w: 4, h: 4 },
+    sizeClass: 'L',
     requiresRoad: true,
     unlockLevel: 6,
-    cost: { money: 85_000, wood: 140, stone: 90 },
+    cost: { money: 95_000, wood: 160, stone: 100 },
     constructionSec: 120,
     xpReward: 18,
-    // Storage is a deliberate investment, not a spam build (§7): each warehouse
-    // you already own makes the next 40 % pricier, so a third or fourth one is a
-    // real budget decision. Upgrading production/logistics is usually the smarter
-    // play than a wall of silos. Cap still applies on top of this.
     costScaling: 1.4,
-    // First warehouse half price (§3): the first storage buffer is an easy early
-    // buy; escalating cost then makes further silos a real investment.
     firstBuildDiscount: 0.5,
     effects: [
-      // Deliberately modest storage, and capped in number (below): the goal is
-      // active play — production runs hot, storage stays tight, so you come back
-      // to spend rather than AFK-hoard. Spamming warehouses to a huge buffer is
-      // no longer possible.
-      // Build materials stay tight (active play), but the consumption goods a big
-      // population eats/drinks (food, drinking water) get a real buffer so a large
-      // city can actually store enough between production and consumption (§ scale).
-      { type: 'storage', resource: 'wood', amount: 800 },
-      { type: 'storage', resource: 'stone', amount: 800 },
-      { type: 'storage', resource: 'food', amount: 3_000 },
-      // Warehouses also buffer the freshwater product — the "Lager" step of the
-      // supply chain (§3).
-      { type: 'storage', resource: 'freshwater', amount: 3_000 },
-      { type: 'jobs', amount: 2 },
-      { type: 'upkeep', resource: 'money', perMinute: 300 },
-      { type: 'demand', need: 'energy', amount: 4 },
+      { type: 'storage', resource: 'wood', amount: 1_000 },
+      { type: 'storage', resource: 'stone', amount: 1_000 },
+      { type: 'storage', resource: 'food', amount: 4_000 },
+      { type: 'storage', resource: 'freshwater', amount: 4_000 },
+      { type: 'jobs', amount: 3 },
+      { type: 'upkeep', resource: 'money', perMinute: 350 },
+      { type: 'demand', need: 'energy', amount: 5 },
     ],
-    // Automated high-bay storage: a real capacity jump on the same footprint, the
-    // upgrade answer to the escalating cost of ever more separate warehouses (§7).
+    // Kette: Lagerhaus → Hochregallager (L10).
     upgrades: [
       {
-        cost: { money: 180_000, wood: 180, stone: 120 },
+        cost: { money: 260_000, wood: 200, stone: 150 },
         constructionSec: 180,
-        xpReward: 28,
-        unlockLevel: 9,
-        nameKey: 'building.warehouse.2',
+        xpReward: 30,
+        unlockLevel: 10,
+        nameKey: 'building.warehouse.2', // Hochregallager
         effects: [
-          { type: 'storage', resource: 'wood', amount: 1_400 },
-          { type: 'storage', resource: 'stone', amount: 1_400 },
-          { type: 'storage', resource: 'food', amount: 5_200 },
-          { type: 'storage', resource: 'freshwater', amount: 5_200 },
-          { type: 'jobs', amount: 4 },
-          { type: 'upkeep', resource: 'money', perMinute: 520 },
-          { type: 'demand', need: 'energy', amount: 6 },
+          { type: 'storage', resource: 'wood', amount: 1_800 },
+          { type: 'storage', resource: 'stone', amount: 1_800 },
+          { type: 'storage', resource: 'food', amount: 7_000 },
+          { type: 'storage', resource: 'freshwater', amount: 7_000 },
+          { type: 'jobs', amount: 5 },
+          { type: 'upkeep', resource: 'money', perMinute: 650 },
+          { type: 'demand', need: 'energy', amount: 8 },
         ],
       },
     ],
-    // Storage stays modest per building, but with pricier materials and faster
-    // production the ceiling is now raised generously (max 10) so a committed,
-    // actively-built logistics quarter can hold a real buffer — you still pay
-    // money + materials + upkeep for every one, so it's investment, not spam.
     buildLimit: [{ level: 6, max: 3 }, { level: 8, max: 6 }, { level: 10, max: 10 }],
   },
-  // Logistics depot — the first real supply chain (§1). Lifts the output of
-  // every production building it reaches, so clustering sawmills/quarries/farms
-  // around a depot is a deliberate planning play. Big, costly, jobs + upkeep,
-  // and strictly limited so it rewards placement, not spam.
+  // Logistikzentrum: 5×5-Areal (Hallen, Verladehof, Fuhrpark).
   {
     id: 'depot',
     category: 'production',
     nameKey: 'building.depot',
-    size: { w: 3, h: 3 },
+    size: { w: 5, h: 5 },
+    sizeClass: 'L',
     requiresRoad: true,
     unlockLevel: 7,
-    cost: { money: 190_000, wood: 130, stone: 180 },
+    cost: { money: 210_000, wood: 150, stone: 200 },
     constructionSec: 240,
     xpReward: 55,
     effects: [
       { type: 'logistics', boostPct: 25, radius: 6 },
-      { type: 'jobs', amount: 8 },
+      { type: 'jobs', amount: 9 },
       { type: 'upkeep', resource: 'money', perMinute: 1_500 },
       { type: 'demand', need: 'energy', amount: 12 },
     ],
+    // Kette: Logistikzentrum → Logistikhub (L14): stärkerer Boost, mehr Reichweite.
+    upgrades: [
+      {
+        cost: { money: 900_000, stone: 400 },
+        constructionSec: 360,
+        xpReward: 95,
+        unlockLevel: 14,
+        nameKey: 'building.depot.2', // Logistikhub
+        effects: [
+          { type: 'logistics', boostPct: 35, radius: 9 },
+          { type: 'jobs', amount: 14 },
+          { type: 'upkeep', resource: 'money', perMinute: 2_800 },
+          { type: 'demand', need: 'energy', amount: 20 },
+        ],
+      },
+    ],
     buildLimit: [{ level: 7, max: 1 }, { level: 9, max: 2 }, { level: 10, max: 3 }],
   },
-  // Waterworks (MVP 2 supply chain, §3): a riverside plant that turns river
-  // access into a real, stored `freshwater` product — the start of a delivery
-  // chain (waterworks → warehouse/supermarket → homes), not just background
-  // infrastructure. Must border a river tile (adjacentTerrain), holds its own
-  // buffer, and its output is boosted by nearby logistics depots like any
-  // producer.
+  // Wasseraufbereitung: 5×5-Werk am Fluss (Klärbecken, Pumpenhaus).
   {
     id: 'waterworks',
     category: 'production',
     nameKey: 'building.waterworks',
-    size: { w: 3, h: 2 },
+    size: { w: 5, h: 5 },
+    sizeClass: 'L',
     requiresRoad: true,
     unlockLevel: 11,
-    cost: { money: 260_000, wood: 80, stone: 200 },
+    cost: { money: 280_000, wood: 90, stone: 220 },
     constructionSec: 240,
     xpReward: 65,
     adjacentTerrain: 'river',
-    // Relocatable so the water grid can be re-planned as the city grows.
     canRelocate: true,
     relocationCost: { money: 25_000 },
     effects: [
-      // City-scale drinking-water output for thousands of residents.
       { type: 'produce', resource: 'freshwater', perMinute: 400 },
       { type: 'storage', resource: 'freshwater', amount: 6_000 },
       { type: 'jobs', amount: 10 },
@@ -860,44 +672,58 @@ export const buildingsConfig: BuildingDef[] = [
       { type: 'upkeep', resource: 'money', perMinute: 1_100 },
       { type: 'demand', need: 'energy', amount: 30 },
     ],
+    // Kette: Wasseraufbereitung → Klärwerk (L14).
+    upgrades: [
+      {
+        cost: { money: 800_000, stone: 450 },
+        constructionSec: 360,
+        xpReward: 110,
+        unlockLevel: 14,
+        nameKey: 'building.waterworks.2', // Klärwerk
+        effects: [
+          { type: 'produce', resource: 'freshwater', perMinute: 700 },
+          { type: 'storage', resource: 'freshwater', amount: 10_000 },
+          { type: 'jobs', amount: 16 },
+          { type: 'revenue', category: 'industrial', perMinute: 1_500 },
+          { type: 'upkeep', resource: 'money', perMinute: 1_900 },
+          { type: 'demand', need: 'energy', amount: 50 },
+        ],
+      },
+    ],
     buildLimit: [{ level: 11, max: 2 }, { level: 13, max: 3 }, { level: 15, max: 5 }],
   },
 
-  // ---- Versorgung ----
+  // ---- Versorgung / Geschäfte (2 Stufen, §7 Auftrag A) ----
+  // Markt: 3×3-Marktplatz mit Ständen.
   {
     id: 'market',
     category: 'services',
     nameKey: 'building.market',
-    size: { w: 2, h: 2 },
+    size: { w: 3, h: 3 },
+    sizeClass: 'M',
     requiresRoad: true,
     unlockLevel: 5,
     cost: { money: 55_000, wood: 90 },
-    // First market half price (§3): the food-distribution step of the loop opens
-    // at level 5 without a long money-wait — directly targets the "level 5 wall".
     firstBuildDiscount: 0.5,
     constructionSec: 90,
     xpReward: 45,
-    // Relocatable service: reorganise supply as the city reshapes (§5).
     canRelocate: true,
     relocationCost: { money: 8_000 },
     effects: [
-      // Food only reaches homes within range (§8): place the market among the
-      // houses it feeds. Wider reach so it serves a real neighbourhood, not a block.
       { type: 'distribution', need: 'food', radius: 14 },
       { type: 'jobs', amount: 20 },
-      // Market fees — commercial income that scales with staffing & happiness.
       { type: 'revenue', category: 'commercial', perMinute: 2_000 },
       { type: 'upkeep', resource: 'money', perMinute: 900 },
       { type: 'demand', need: 'energy', amount: 8 },
     ],
-    // Grow the market hall: wider delivery reach, more stalls (jobs) and takings.
+    // Kette: Markt → Markthalle (L9).
     upgrades: [
       {
-        cost: { money: 150_000, wood: 140, stone: 80 },
+        cost: { money: 160_000, wood: 150, stone: 90 },
         constructionSec: 180,
         xpReward: 55,
-        unlockLevel: 8,
-        nameKey: 'building.market.2',
+        unlockLevel: 9,
+        nameKey: 'building.market.2', // Markthalle
         effects: [
           { type: 'distribution', need: 'food', radius: 18 },
           { type: 'jobs', amount: 34 },
@@ -909,25 +735,21 @@ export const buildingsConfig: BuildingDef[] = [
     ],
     buildLimit: [{ level: 5, max: 2 }, { level: 8, max: 3 }, { level: 10, max: 4 }],
   },
-  // Supermarket (MVP 2, §4): the market's bigger successor — it distributes BOTH
-  // food and the freshwater product to nearby homes, so it's a real end-of-chain
-  // node, not just an abstract radius. It buffers freshwater it receives, shows
-  // its delivered area via the generic coverage overlay, and covers a wider
-  // radius than the basic market. Place it near dense housing.
+  // Supermarkt: 4×4 mit Parkplatz und Anlieferung.
   {
     id: 'supermarket',
     category: 'services',
     nameKey: 'building.supermarket',
-    size: { w: 3, h: 2 },
+    size: { w: 4, h: 4 },
+    sizeClass: 'L',
     requiresRoad: true,
     unlockLevel: 12,
-    cost: { money: 340_000, wood: 120, stone: 180 },
+    cost: { money: 380_000, wood: 140, stone: 200 },
     constructionSec: 300,
     xpReward: 80,
     canRelocate: true,
     relocationCost: { money: 30_000 },
     effects: [
-      // Wide, city-scale reach for both food and drinking water.
       { type: 'distribution', need: 'food', radius: 16 },
       { type: 'distribution', need: 'freshwater', radius: 16 },
       { type: 'storage', resource: 'freshwater', amount: 3_000 },
@@ -936,6 +758,25 @@ export const buildingsConfig: BuildingDef[] = [
       { type: 'upkeep', resource: 'money', perMinute: 1_100 },
       { type: 'demand', need: 'energy', amount: 12 },
     ],
+    // Kette: Supermarkt → Einkaufszentrum (L15).
+    upgrades: [
+      {
+        cost: { money: 950_000, wood: 180, stone: 320 },
+        constructionSec: 420,
+        xpReward: 130,
+        unlockLevel: 15,
+        nameKey: 'building.supermarket.2', // Einkaufszentrum
+        effects: [
+          { type: 'distribution', need: 'food', radius: 20 },
+          { type: 'distribution', need: 'freshwater', radius: 20 },
+          { type: 'storage', resource: 'freshwater', amount: 5_000 },
+          { type: 'jobs', amount: 110 },
+          { type: 'revenue', category: 'commercial', perMinute: 6_500 },
+          { type: 'upkeep', resource: 'money', perMinute: 2_000 },
+          { type: 'demand', need: 'energy', amount: 22 },
+        ],
+      },
+    ],
     buildLimit: [{ level: 12, max: 2 }, { level: 14, max: 4 }],
   },
   {
@@ -943,6 +784,7 @@ export const buildingsConfig: BuildingDef[] = [
     category: 'services',
     nameKey: 'building.bakery',
     size: { w: 2, h: 2 },
+    sizeClass: 'S',
     requiresRoad: true,
     unlockLevel: 9,
     cost: { money: 130_000, wood: 110, stone: 90 },
@@ -955,79 +797,105 @@ export const buildingsConfig: BuildingDef[] = [
       { type: 'upkeep', resource: 'money', perMinute: 700 },
       { type: 'demand', need: 'energy', amount: 8 },
     ],
+    // Kette: Bäckerei → Großbäckerei (L12).
+    upgrades: [
+      {
+        cost: { money: 320_000, wood: 150, stone: 120 },
+        constructionSec: 300,
+        xpReward: 60,
+        unlockLevel: 12,
+        nameKey: 'building.bakery.2', // Großbäckerei
+        effects: [
+          { type: 'produce', resource: 'food', perMinute: 180 },
+          { type: 'jobs', amount: 20 },
+          { type: 'revenue', category: 'industrial', perMinute: 2_200 },
+          { type: 'upkeep', resource: 'money', perMinute: 1_200 },
+          { type: 'demand', need: 'energy', amount: 14 },
+        ],
+      },
+    ],
     buildLimit: [{ level: 9, max: 2 }, { level: 12, max: 4 }],
   },
+  // Feuerwehr: 5×5-Wache mit Vorplatz, Garagen, Fahrzeughof und Grünstreifen —
+  // das Modell soll die komplette Fläche sinnvoll füllen (§ Auftrag A Beispiel).
   {
     id: 'fire_station',
     category: 'services',
     nameKey: 'building.fire_station',
-    size: { w: 2, h: 2 },
+    size: { w: 5, h: 5 },
+    sizeClass: 'L',
     requiresRoad: true,
     unlockLevel: 8,
-    cost: { money: 240_000, wood: 120, stone: 180 },
+    cost: { money: 280_000, wood: 160, stone: 220 },
     constructionSec: 360,
     xpReward: 85,
-    // Wider response area so one station protects a real district, and
-    // relocatable to re-plan coverage as the city grows (§1/§5).
     canRelocate: true,
     relocationCost: { money: 20_000 },
     effects: [
       { type: 'protection', hazard: 'fire', radius: 18 },
       { type: 'jobs', amount: 16 },
-      { type: 'upkeep', resource: 'money', perMinute: 1_600 },
+      { type: 'upkeep', resource: 'money', perMinute: 1_700 },
       { type: 'demand', need: 'energy', amount: 10 },
     ],
-    // Bigger fire HQ: a wider response area covering a metropolis quarter.
+    // Kette: Kleine Wache → Stadtfeuerwehr (L11) → Einsatzzentrum (L16).
     upgrades: [
       {
-        cost: { money: 300_000, wood: 160, stone: 220 },
+        cost: { money: 340_000, wood: 180, stone: 260 },
         constructionSec: 300,
-        xpReward: 90,
+        xpReward: 95,
         unlockLevel: 11,
-        nameKey: 'building.fire_station.2',
+        nameKey: 'building.fire_station.2', // Stadtfeuerwehr
         effects: [
           { type: 'protection', hazard: 'fire', radius: 24 },
-          { type: 'jobs', amount: 24 },
-          { type: 'upkeep', resource: 'money', perMinute: 2_600 },
+          { type: 'jobs', amount: 28 },
+          { type: 'upkeep', resource: 'money', perMinute: 2_800 },
           { type: 'demand', need: 'energy', amount: 14 },
+        ],
+      },
+      {
+        cost: { money: 1_400_000, stone: 600 },
+        constructionSec: 420,
+        xpReward: 160,
+        unlockLevel: 16,
+        nameKey: 'building.fire_station.3', // Einsatzzentrum
+        effects: [
+          { type: 'protection', hazard: 'fire', radius: 32 },
+          { type: 'jobs', amount: 44 },
+          { type: 'upkeep', resource: 'money', perMinute: 4_500 },
+          { type: 'demand', need: 'energy', amount: 24 },
         ],
       },
     ],
     buildLimit: [{ level: 8, max: 2 }, { level: 10, max: 3 }, { level: 13, max: 5 }],
   },
-  // Police station (MVP 2): safety coverage for the homes in range — the same
-  // radius-coverage machinery as the fire station, one need over. Low safety
-  // drags happiness down, so a growing city must police its neighborhoods.
+  // Polizei: 4×4-Revier mit Hof und Stellplätzen.
   {
     id: 'police_station',
     category: 'services',
     nameKey: 'building.police_station',
-    size: { w: 2, h: 2 },
+    size: { w: 4, h: 4 },
+    sizeClass: 'L',
     requiresRoad: true,
     unlockLevel: 13,
-    cost: { money: 520_000, wood: 100, stone: 260 },
+    cost: { money: 560_000, wood: 120, stone: 300 },
     constructionSec: 360,
     xpReward: 95,
-    // Radius AND capacity (§2): a wide beat, but each station only polices so
-    // many residents well — past that, in-range homes read as under-served, so a
-    // metropolis needs a few stations, not one per block. Relocatable (§5).
     canRelocate: true,
     relocationCost: { money: 40_000 },
     effects: [
       { type: 'coverage', need: 'safety', radius: 16, capacity: 8_000 },
       { type: 'jobs', amount: 30 },
-      { type: 'upkeep', resource: 'money', perMinute: 1_800 },
+      { type: 'upkeep', resource: 'money', perMinute: 1_900 },
       { type: 'demand', need: 'energy', amount: 12 },
     ],
-    // Police HQ: the capacity upgrade (§2) — polices far more residents in a
-    // wider beat, so a growing metropolis scales safety by upgrading, not spamming.
+    // Kette: Polizeiwache → Revier (L14) → Polizeipräsidium (L17).
     upgrades: [
       {
         cost: { money: 900_000, stone: 420 },
         constructionSec: 420,
         xpReward: 120,
         unlockLevel: 14,
-        nameKey: 'building.police_station.2',
+        nameKey: 'building.police_station.2', // Revier
         effects: [
           { type: 'coverage', need: 'safety', radius: 18, capacity: 14_000 },
           { type: 'jobs', amount: 46 },
@@ -1035,65 +903,86 @@ export const buildingsConfig: BuildingDef[] = [
           { type: 'demand', need: 'energy', amount: 18 },
         ],
       },
+      {
+        cost: { money: 2_400_000, stone: 700 },
+        constructionSec: 540,
+        xpReward: 190,
+        unlockLevel: 17,
+        nameKey: 'building.police_station.3', // Polizeipräsidium
+        effects: [
+          { type: 'coverage', need: 'safety', radius: 22, capacity: 26_000 },
+          { type: 'jobs', amount: 70 },
+          { type: 'upkeep', resource: 'money', perMinute: 4_400 },
+          { type: 'demand', need: 'energy', amount: 28 },
+        ],
+      },
     ],
     buildLimit: [{ level: 13, max: 2 }, { level: 15, max: 4 }],
   },
-  // Hospital (MVP 2): health coverage. Bigger footprint, heavier running costs
-  // and power draw than the police station — the city's health safety net.
+  // Krankenhaus: 6×6-Campus (Haupthaus, Nebenflügel, Zufahrt, Grün) — „deutlich
+  // größer" (§ Auftrag A).
   {
     id: 'hospital',
     category: 'services',
     nameKey: 'building.hospital',
-    size: { w: 3, h: 2 },
+    size: { w: 6, h: 6 },
+    sizeClass: 'XL',
     requiresRoad: true,
     unlockLevel: 14,
-    cost: { money: 2_200_000, wood: 200, stone: 500 },
+    cost: { money: 2_200_000, wood: 240, stone: 560 },
     constructionSec: 600,
     xpReward: 140,
-    // A large hospital serves a wide area and a big population (radius + capacity,
-    // §2) — the health backbone of a metropolis. Relocatable (§5).
     canRelocate: true,
     relocationCost: { money: 120_000 },
     effects: [
       { type: 'coverage', need: 'health', radius: 18, capacity: 15_000 },
       { type: 'jobs', amount: 80 },
-      { type: 'upkeep', resource: 'money', perMinute: 3_000 },
+      { type: 'upkeep', resource: 'money', perMinute: 3_200 },
       { type: 'demand', need: 'energy', amount: 25 },
     ],
-    // University hospital: the top-tier health project — a multi-million upgrade
-    // that nearly doubles the capacity of the city's health backbone. Available
-    // at the hospital's own level as a pure long-term money goal (§ endgame sink).
+    // Kette: Klinik → Krankenhaus (L16) → Universitätsklinikum (L19).
     upgrades: [
       {
-        cost: { money: 4_500_000, wood: 300, stone: 800 },
+        cost: { money: 4_500_000, wood: 320, stone: 850 },
         constructionSec: 720,
         xpReward: 220,
-        nameKey: 'building.hospital.2',
+        unlockLevel: 16,
+        nameKey: 'building.hospital.2', // Krankenhaus
         effects: [
           { type: 'coverage', need: 'health', radius: 20, capacity: 26_000 },
           { type: 'jobs', amount: 130 },
-          { type: 'upkeep', resource: 'money', perMinute: 5_000 },
+          { type: 'upkeep', resource: 'money', perMinute: 5_200 },
           { type: 'demand', need: 'energy', amount: 40 },
         ],
       },
+      {
+        cost: { money: 9_000_000, wood: 500, stone: 1_400 },
+        constructionSec: 840,
+        xpReward: 340,
+        unlockLevel: 19,
+        nameKey: 'building.hospital.3', // Universitätsklinikum
+        effects: [
+          { type: 'coverage', need: 'health', radius: 24, capacity: 45_000 },
+          { type: 'jobs', amount: 220 },
+          { type: 'upkeep', resource: 'money', perMinute: 8_200 },
+          { type: 'demand', need: 'energy', amount: 70 },
+        ],
+      },
     ],
-    buildLimit: [{ level: 14, max: 2 }, { level: 15, max: 3 }],
+    buildLimit: [{ level: 14, max: 2 }, { level: 16, max: 3 }],
   },
 
   // ---- Wirtschaft ----
-  // Handelskontor (§7): the active resource market. Its presence unlocks manual
-  // selling of surplus wood/stone/food/freshwater for money and (marked-up)
-  // buying — a way to turn a full store into cash or bridge a shortage without
-  // AFK income. Upgrading it (Rohstoffbörse → Exportzentrum) improves the sell
-  // rate. Early availability (L5) ties it to the moment production outpaces use.
+  // Handelskontor: 3×3 mit Hof und Waage.
   {
     id: 'trading_post',
     category: 'economy',
     nameKey: 'building.trading_post',
-    size: { w: 2, h: 2 },
+    size: { w: 3, h: 3 },
+    sizeClass: 'M',
     requiresRoad: true,
     unlockLevel: 5,
-    cost: { money: 40_000, wood: 60 },
+    cost: { money: 42_000, wood: 65 },
     constructionSec: 90,
     xpReward: 30,
     tradePost: true,
@@ -1137,52 +1026,62 @@ export const buildingsConfig: BuildingDef[] = [
     category: 'economy',
     nameKey: 'building.shop_small',
     size: { w: 2, h: 2 },
+    sizeClass: 'S',
     requiresRoad: true,
     unlockLevel: 6,
     cost: { money: 85_000, wood: 90 },
     constructionSec: 150,
     xpReward: 45,
     effects: [
-      // Trade tax — the backbone of commercial income once jobs are staffed.
       { type: 'revenue', category: 'commercial', perMinute: 4_000 },
       { type: 'jobs', amount: 40 },
       { type: 'upkeep', resource: 'money', perMinute: 1_400 },
       { type: 'demand', need: 'energy', amount: 12 },
     ],
+    // Kette: Kleiner Laden → Ladenzeile (L10).
+    upgrades: [
+      {
+        cost: { money: 260_000, wood: 140 },
+        constructionSec: 240,
+        xpReward: 70,
+        unlockLevel: 10,
+        nameKey: 'building.shop_small.2', // Ladenzeile
+        effects: [
+          { type: 'revenue', category: 'commercial', perMinute: 7_500 },
+          { type: 'jobs', amount: 70 },
+          { type: 'upkeep', resource: 'money', perMinute: 2_400 },
+          { type: 'demand', need: 'energy', amount: 20 },
+        ],
+      },
+    ],
     buildLimit: [{ level: 6, max: 2 }, { level: 9, max: 4 }, { level: 12, max: 8 }],
   },
-  // Office block — the city's main employer (§ Arbeitsversorgung). A big 4×2
-  // footprint packed with jobs, so a residential city must zone real workplaces
-  // instead of endless houses; its commercial revenue scales with staffing.
+  // Büro: 4×4-Campus — die Jobmaschine der Stadt. Kette mit 4 Stufen (§9
+  // Auftrag A): Kleines Büro → Bürogebäude → Business Center → Büroturm.
   {
     id: 'office',
     category: 'economy',
     nameKey: 'building.office',
-    size: { w: 4, h: 2 },
+    size: { w: 4, h: 4 },
+    sizeClass: 'L',
     requiresRoad: true,
     unlockLevel: 8,
     cost: { money: 850_000, wood: 260, stone: 480 },
     constructionSec: 540,
     xpReward: 200,
-    // A true downtown employer (§5/§ big-city jobs): ~2 000 jobs in a compact 4×2
-    // tower, so dense residential towers can actually be staffed and "job-centre
-    // planning" matters at metropolis scale. Commercial revenue scales with
-    // *filled* jobs, so an office without residents to staff it earns little.
     effects: [
       { type: 'jobs', amount: 2_000 },
       { type: 'revenue', category: 'commercial', perMinute: 18_000 },
       { type: 'upkeep', resource: 'money', perMinute: 6_000 },
       { type: 'demand', need: 'energy', amount: 120 },
     ],
-    // Office tower stages: many more downtown jobs on the same block, so a dense
-    // residential centre can be staffed without paving new sectors with offices.
     upgrades: [
       {
         cost: { money: 1_400_000, wood: 360, stone: 700 },
         constructionSec: 600,
         xpReward: 260,
-        unlockLevel: 11,
-        nameKey: 'building.office.2',
+        unlockLevel: 12,
+        nameKey: 'building.office.2', // Bürogebäude
         effects: [
           { type: 'jobs', amount: 3_200 },
           { type: 'revenue', category: 'commercial', perMinute: 30_000 },
@@ -1194,8 +1093,8 @@ export const buildingsConfig: BuildingDef[] = [
         cost: { money: 3_000_000, wood: 520, stone: 1_100 },
         constructionSec: 720,
         xpReward: 360,
-        unlockLevel: 13,
-        nameKey: 'building.office.3',
+        unlockLevel: 15,
+        nameKey: 'building.office.3', // Business Center
         effects: [
           { type: 'jobs', amount: 4_600 },
           { type: 'revenue', category: 'commercial', perMinute: 44_000 },
@@ -1203,113 +1102,144 @@ export const buildingsConfig: BuildingDef[] = [
           { type: 'demand', need: 'energy', amount: 270 },
         ],
       },
+      {
+        cost: { money: 6_500_000, wood: 700, stone: 1_800 },
+        constructionSec: 840,
+        xpReward: 500,
+        unlockLevel: 18,
+        nameKey: 'building.office.4', // Büroturm
+        effects: [
+          { type: 'jobs', amount: 6_500 },
+          { type: 'revenue', category: 'commercial', perMinute: 62_000 },
+          { type: 'upkeep', resource: 'money', perMinute: 19_000 },
+          { type: 'demand', need: 'energy', amount: 380 },
+        ],
+      },
     ],
     buildLimit: [{ level: 8, max: 1 }, { level: 10, max: 2 }, { level: 12, max: 4 }, { level: 14, max: 7 }],
   },
 
-  // ---- Infrastruktur / Energie (MVP 2) ----
-  // Coal plant — dense, reliable power for the whole grid, but it pollutes a
-  // wide radius (ambience −) and burns money as fuel (high upkeep). The default
-  // answer to the L11 energy crunch; you pay for it in air quality and cash.
+  // ---- Energie ----
+  // Kohlekraftwerk: 8×8 — RIESIG (§ Auftrag A), das dominante Industrie-Areal
+  // der Stadt: Kesselhaus, Kühltürme, Kohlelager, Gleisanschluss.
   {
     id: 'power_plant',
     category: 'energy',
     nameKey: 'building.power_plant',
-    size: { w: 3, h: 3 },
+    size: { w: 8, h: 8 },
+    sizeClass: 'XXL',
     requiresRoad: true,
     unlockLevel: 11,
-    cost: { money: 480_000, wood: 100, stone: 300 },
+    cost: { money: 700_000, wood: 150, stone: 450 },
     constructionSec: 480,
-    xpReward: 120,
+    xpReward: 140,
     effects: [
-      // Grid-scale output: a few plants power a metropolis (§ supply keeps up).
-      { type: 'capacity', need: 'energy', amount: 3_500 },
-      { type: 'jobs', amount: 20 },
-      { type: 'upkeep', resource: 'money', perMinute: 3_000 },
-      { type: 'ambience', amount: -3, radius: 6 },
+      { type: 'capacity', need: 'energy', amount: 5_000 },
+      { type: 'jobs', amount: 30 },
+      { type: 'upkeep', resource: 'money', perMinute: 4_000 },
+      { type: 'ambience', amount: -4, radius: 8 },
     ],
-    buildLimit: [{ level: 11, max: 2 }, { level: 13, max: 3 }, { level: 15, max: 5 }],
+    // Kette: Kohlekraftwerk → Großkraftwerk (L16).
+    upgrades: [
+      {
+        cost: { money: 2_800_000, stone: 900 },
+        constructionSec: 600,
+        xpReward: 260,
+        unlockLevel: 16,
+        nameKey: 'building.power_plant.2', // Großkraftwerk
+        effects: [
+          { type: 'capacity', need: 'energy', amount: 9_000 },
+          { type: 'jobs', amount: 50 },
+          { type: 'upkeep', resource: 'money', perMinute: 6_500 },
+          { type: 'ambience', amount: -5, radius: 9 },
+        ],
+      },
+    ],
+    // Wenige, riesige Anlagen: das 8×8-Areal ist selbst der Balancing-Hebel.
+    buildLimit: [{ level: 11, max: 1 }, { level: 13, max: 2 }, { level: 16, max: 3 }],
   },
-  // Wind farm — clean power: no pollution (mild positive ambience), far cheaper
-  // to run, but each turbine field yields less than a coal plant and eats space.
-  // The greener, land-hungry path: build several instead of one dirty plant.
+  // Windpark: 7×7-Feld mit mehreren Turbinen — großflächig, sauber, leiser
+  // Output; skaliert über Mehrfachbau statt Stufen (Landmarken-Regel: 1 Stufe).
   {
     id: 'wind_farm',
     category: 'energy',
     nameKey: 'building.wind_farm',
-    size: { w: 3, h: 3 },
+    size: { w: 7, h: 7 },
+    sizeClass: 'XL',
     requiresRoad: true,
-    // Renewable option offered at L11 alongside the coal plant (§18), so the
-    // player chooses their first power source right away.
     unlockLevel: 11,
-    cost: { money: 360_000, wood: 80, stone: 220 },
+    cost: { money: 450_000, wood: 100, stone: 260 },
     constructionSec: 300,
-    xpReward: 75,
+    xpReward: 85,
     effects: [
-      { type: 'capacity', need: 'energy', amount: 1_500 },
-      { type: 'jobs', amount: 6 },
-      { type: 'upkeep', resource: 'money', perMinute: 900 },
-      { type: 'ambience', amount: 1, radius: 4 },
+      { type: 'capacity', need: 'energy', amount: 2_200 },
+      { type: 'jobs', amount: 8 },
+      { type: 'upkeep', resource: 'money', perMinute: 1_100 },
+      { type: 'ambience', amount: 1, radius: 5 },
     ],
-    buildLimit: [{ level: 11, max: 3 }, { level: 14, max: 6 }],
+    buildLimit: [{ level: 11, max: 3 }, { level: 14, max: 6 }, { level: 17, max: 9 }],
   },
 
   // ---- Freizeit ----
+  // Park: 5×5 — „wesentlich größer" (§ Auftrag A): Wege, Teich, Baumgruppen.
   {
     id: 'park',
     category: 'leisure',
     nameKey: 'building.park',
-    size: { w: 2, h: 2 },
+    size: { w: 5, h: 5 },
+    sizeClass: 'L',
     requiresRoad: false,
     unlockLevel: 7,
-    cost: { money: 32_000, wood: 45 },
+    cost: { money: 60_000, wood: 90 },
     constructionSec: 60,
-    xpReward: 25,
+    xpReward: 30,
     effects: [
-      { type: 'coverage', need: 'leisure', radius: 11 },
-      { type: 'ambience', amount: 2, radius: 6 },
-      { type: 'upkeep', resource: 'money', perMinute: 250 },
+      { type: 'coverage', need: 'leisure', radius: 14 },
+      { type: 'ambience', amount: 3, radius: 8 },
+      { type: 'upkeep', resource: 'money', perMinute: 400 },
     ],
-    // City park: a bigger green lung with a wider leisure reach and a stronger
-    // attractiveness aura — the leisure answer for a dense, upgraded centre.
+    // Kette: Park → Stadtpark (L12).
     upgrades: [
       {
-        cost: { money: 90_000, wood: 120 },
+        cost: { money: 200_000, wood: 220 },
         constructionSec: 120,
-        xpReward: 35,
-        unlockLevel: 10,
-        nameKey: 'building.park.2',
+        xpReward: 50,
+        unlockLevel: 12,
+        nameKey: 'building.park.2', // Stadtpark
         effects: [
-          { type: 'coverage', need: 'leisure', radius: 15 },
-          { type: 'ambience', amount: 3, radius: 8 },
-          { type: 'upkeep', resource: 'money', perMinute: 450 },
+          { type: 'coverage', need: 'leisure', radius: 18 },
+          { type: 'ambience', amount: 4, radius: 10 },
+          { type: 'upkeep', resource: 'money', perMinute: 700 },
         ],
       },
     ],
   },
+  // Spielplatz: 3×3 (§ Auftrag A „größer") — Geräte, Sandkasten, Bänke.
   {
     id: 'playground',
     category: 'leisure',
     nameKey: 'building.playground',
-    size: { w: 2, h: 2 },
+    size: { w: 3, h: 3 },
+    sizeClass: 'M',
     requiresRoad: false,
     unlockLevel: 7,
-    cost: { money: 18_000, wood: 40 },
+    cost: { money: 30_000, wood: 60 },
     constructionSec: 40,
-    xpReward: 12,
+    xpReward: 15,
     effects: [
-      { type: 'coverage', need: 'leisure', radius: 7 },
-      { type: 'ambience', amount: 1, radius: 4 },
-      { type: 'upkeep', resource: 'money', perMinute: 150 },
+      { type: 'coverage', need: 'leisure', radius: 8 },
+      { type: 'ambience', amount: 1, radius: 5 },
+      { type: 'upkeep', resource: 'money', perMinute: 200 },
     ],
   },
 
-  // ---- Dekoration ----
+  // ---- Dekoration (XS, 1 Stufe — §7 Auftrag A) ----
   {
     id: 'deco_tree',
     category: 'decoration',
     nameKey: 'building.deco_tree',
     size: { w: 1, h: 1 },
+    sizeClass: 'XS',
     requiresRoad: false,
     unlockLevel: 7,
     cost: { money: 1_500 },
@@ -1322,6 +1252,7 @@ export const buildingsConfig: BuildingDef[] = [
     category: 'decoration',
     nameKey: 'building.deco_flowerbed',
     size: { w: 1, h: 1 },
+    sizeClass: 'XS',
     requiresRoad: false,
     unlockLevel: 7,
     cost: { money: 2_400 },
@@ -1334,6 +1265,7 @@ export const buildingsConfig: BuildingDef[] = [
     category: 'decoration',
     nameKey: 'building.deco_fountain',
     size: { w: 1, h: 1 },
+    sizeClass: 'XS',
     requiresRoad: false,
     unlockLevel: 7,
     cost: { money: 12_000, stone: 15 },
@@ -1346,6 +1278,7 @@ export const buildingsConfig: BuildingDef[] = [
     category: 'decoration',
     nameKey: 'building.deco_bench',
     size: { w: 1, h: 1 },
+    sizeClass: 'XS',
     requiresRoad: false,
     unlockLevel: 7,
     cost: { money: 3_000, wood: 8 },

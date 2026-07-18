@@ -114,11 +114,21 @@ export interface LocationBonusDef {
   maxPct: number;
 }
 
+/**
+ * Größenklasse eines Gebäudes (§ Gebäudesystem 2.0, verbindlich dokumentiert in
+ * docs/BUILDINGS.md): XS 1×1 Deko/Straße · S 2×2 · M 3×3 · L 4×4–5×5 ·
+ * XL 6×6–7×7 · XXL 8×8. Grundlage für Asset-Budgets, Renderer-Höhen und alle
+ * künftigen Gebäude — jede neue Def MUSS sich einer Klasse zuordnen.
+ */
+export type BuildingSizeClass = 'XS' | 'S' | 'M' | 'L' | 'XL' | 'XXL';
+
 export interface BuildingDef {
   id: BuildingDefId;
   category: BuildingCategory;
   nameKey: string;
   size: { w: number; h: number };
+  /** Größenklasse (Pflicht, § Gebäudesystem 2.0) — muss zu `size` passen. */
+  sizeClass: BuildingSizeClass;
   requiresRoad: boolean;
   unlockLevel: number;
   cost: Partial<Record<ResourceId, number>>;
@@ -280,7 +290,8 @@ export type QuestObjective =
   /** Lifetime production of a resource (production stores automatically). */
   | { type: 'produce'; resource: ResourceId; amount: number }
   | { type: 'level'; level: number }
-  | { type: 'sectors'; count: number }
+  /** Zusätzlich freigeschaltete Regionen (§ Welt 2.0; Startregion zählt nicht). */
+  | { type: 'regions'; count: number }
   | { type: 'mayorAction'; actionId: MayorActionId; count: number }
   | { type: 'happiness'; amount: number }
   /** Completed building upgrades — a specific def, or any (§ active play). */
@@ -381,6 +392,13 @@ export type ActivityDifficulty = 'easy' | 'medium' | 'hard';
 export type ActivityQuality = 'bronze' | 'silver' | 'gold';
 
 /**
+ * Fahrzeugtyp eines Fahr-Minispiels (§ Stadtarbeit / A6). Rein kosmetisch für
+ * den Renderer (Modellwahl + Farbe); die Simulation kennt nur `drive`. Drop-in-
+ * GLBs je Typ liegen unter `models/vehicles/`, sonst prozedurales Fallback.
+ */
+export type DriveVehicle = 'van' | 'fire_truck' | 'logging_truck' | 'police_car' | 'flatbed';
+
+/**
  * A Stadtarbeit activity: a short, repeatable, hands-on mayor task that only
  * exists while the player is playing. `delivery` and `inspection` put clickable
  * targets on the map; `decision` opens a trade-off popup. Trade contracts are
@@ -409,6 +427,19 @@ export interface ActivityDef {
   requiresAnyBuilding?: string[];
   /** delivery/inspection: how many map targets are picked. */
   targetCount?: { min: number; max: number };
+  /**
+   * Fahr-Minispiel (§ Stadtarbeit / A6): statt Ziele anzuklicken fährt der
+   * Spieler ein Fahrzeug (WASD, Verfolgerkamera) über das Straßennetz zu den
+   * Zielen. Rein zusätzliche Interaktionsschicht — dieselben Ziele/Belohnungen
+   * wie eine Klick-Lieferung, `progressActivity` schließt ein erreichtes Ziel ab.
+   */
+  drive?: boolean;
+  /** Fahr-Minispiel: welches Fahrzeug der Renderer spawnt (rein visuell). */
+  vehicle?: DriveVehicle;
+  /** Zielauswahl: nur Gebäude dieser Kategorien (statt der delivery-Standardhäuser). */
+  targetCategories?: BuildingCategory[];
+  /** Zielauswahl: nur Gebäude mit diesen Def-Ids (hat Vorrang vor targetCategories). */
+  targetDefIds?: string[];
   /** delivery: beating this deadline pays the speed bonus. Never fails. */
   timeLimitSec?: number;
   /** delivery: reward multiplier when finished within the time limit. */
@@ -453,6 +484,59 @@ export interface BiomeDef {
   nameKey: string;
   terrainTypes: TerrainType[];
   unlockLevel: number;
+}
+
+/** Landschafts-Charakter einer organischen Region (§ Welt 2.0). */
+export type RegionBiome =
+  | 'zentrum'
+  | 'ebene'
+  | 'wald'
+  | 'gebirge'
+  | 'huegel'
+  | 'see'
+  | 'kueste'
+  | 'fruchtbar'
+  | 'flusstal'
+  | 'insel';
+
+/**
+ * Datengetriebene Region-Definition (§ Welt 2.0): der Spieler schaltet keine
+ * Quadrate frei, sondern Landschaften. Geometrie (Kachelzugehörigkeit,
+ * Nachbarschaft, Statistik) kommt aus dem Bake (`islandRegions.gen.ts`); diese
+ * Config gibt jeder Region Namen, Charakter, Vor-/Nachteile und
+ * Freischaltbedingungen. `buildableTiles` ist informativ aus dem Bake-Report
+ * (Anzeige/Balancing-Referenz), nicht simulationswirksam.
+ */
+export interface RegionDef {
+  /** Numerische Region-Id aus dem Bake (1..REGION_COUNT). */
+  id: number;
+  nameKey: string;
+  biome: RegionBiome;
+  /** Nie freischaltbare Regionen (z. B. vorgelagerte Teaser-Inseln). */
+  unlockable: boolean;
+  /** Mindest-Stadtlevel für die Freischaltung. */
+  unlockLevel: number;
+  /** Explizite Freischaltkosten. */
+  unlockCost: number;
+  /**
+   * Zusätzlich nötige, bereits freigeschaltete Regionen (z. B. der
+   * Hochgebirgskern erst über seine Randregionen). Muss eine Teilmenge der
+   * gebackenen Nachbarschaft sein — loadConfig erzwingt das.
+   */
+  prerequisiteRegionIds?: number[];
+  /** Bebaubare Kacheln laut Bake-Report (informativ). */
+  buildableTiles: number;
+  /**
+   * Produktions-Modifikatoren der Region (× auf den Gebäude-Output, wirksam ab
+   * Phase A4): z. B. Waldregion wood 1.5, Gebirge stone 1.6 / food 0.6.
+   */
+  productionModifiers?: Partial<Record<'wood' | 'stone' | 'food' | 'water' | 'energy', number>>;
+  /**
+   * Nachteil-Malus: Faktor auf Straßen-Baukosten in dieser Region (Gebirge
+   * baut teurer, § Welt 2.0 „jede Region hat Vor- und Nachteile"). Wirksam ab
+   * Phase A4; 1/undefined = neutral.
+   */
+  roadCostFactor?: number;
 }
 
 // ---- Balancing ------------------------------------------------------------
@@ -500,7 +584,6 @@ export interface BalancingConfig {
   foodWithoutDistributionCap: number;
   startResources: Record<ResourceId, number>;
   startGold: number;
-  sectorCost: { base: number; distanceFactor: number; countFactor: number };
   /** Fire risk per production/residential building per minute (level ≥ fire unlock). */
   fireChancePerBuildingPerMin: number;
   fireDurationSec: number;

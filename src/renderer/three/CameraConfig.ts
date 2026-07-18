@@ -1,10 +1,9 @@
 // Static 3D-camera configuration (v0.30): hard limits and view presets. Pure
 // data + math — no three.js — so the CameraController and its tests can import it
-// freely. World pan-bounds are derived from the bounded world (startRegion), so
-// the camera can never fly off the finite board.
+// freely. World pan-bounds are derived from the bounded island world, so the
+// camera can never fly off the finite board.
 
-import { SECTOR_SIZE } from '../../game/map/world.ts';
-import { startRegionConfig } from '../../game/config/startRegion.config.ts';
+import { WORLD_TILES } from '../../game/config/startRegion.config.ts';
 
 const DEG = Math.PI / 180;
 
@@ -30,10 +29,12 @@ export interface CameraPresetDef {
 
 export type CameraPreset = 'city' | 'build' | 'overview' | 'center';
 
-/** Pitch/zoom limits. Pitch stays below 90° so picking & billboards stay sane. */
+/** Pitch/zoom limits. Pitch stays below 90° so picking & billboards stay sane.
+ *  maxDist 480 (§ MVP4 P3, docs/WORLD_SCALE.md): die 384er-Insel braucht einen
+ *  echten Insel-Überblick — 200 zeigte nur noch einen Ausschnitt. */
 export const CAMERA_LIMITS = {
   minDist: 10,
-  maxDist: 200,
+  maxDist: 480,
   minPitch: 28 * DEG,
   maxPitch: 84 * DEG, // near top-down, but never fully overhead
 } as const;
@@ -49,7 +50,8 @@ export const CAMERA_LIMITS = {
 export const CAMERA_PRESETS: Record<CameraPreset, CameraPresetDef> = {
   city: { pitch: 52 * DEG, dist: 62 },
   build: { pitch: 78 * DEG, dist: 46 },
-  overview: { pitch: 56 * DEG, dist: 150 },
+  // Insel-Überblick (§ MVP4 P3): weit genug für die ganze 384er-Insel.
+  overview: { pitch: 56 * DEG, dist: 420 },
   center: { pitch: 52 * DEG, dist: 70, focusCity: true },
 };
 
@@ -60,13 +62,12 @@ export const CAMERA_DEFAULTS = {
   pitch: 52 * DEG,
 } as const;
 
-/** Pan-bounds from the finite world (all sectors) plus a little padding. */
+/** Pan-bounds from the finite island world plus a little padding. */
 export function worldCameraBounds(padding = 8): CameraBounds {
-  const wb = startRegionConfig.worldBounds;
-  const minX = wb.minSx * SECTOR_SIZE - padding;
-  const maxX = (wb.maxSx + 1) * SECTOR_SIZE + padding;
-  const minZ = wb.minSy * SECTOR_SIZE - padding;
-  const maxZ = (wb.maxSy + 1) * SECTOR_SIZE + padding;
+  const minX = -padding;
+  const maxX = WORLD_TILES + padding;
+  const minZ = -padding;
+  const maxZ = WORLD_TILES + padding;
   return {
     minDist: CAMERA_LIMITS.minDist,
     maxDist: CAMERA_LIMITS.maxDist,

@@ -4,10 +4,9 @@ import { tileAt } from '../map/world.ts';
 import { terrainAt } from '../config/startRegion.config.ts';
 
 /**
- * Terrain lookup that works for any world tile: materialized sectors read
- * their (possibly hand-edited) tile state, everything else falls back to the
- * deterministic terrain function — so previews outside unlocked land agree
- * with what will materialize later.
+ * Terrain lookup that works for any world tile: inside the world it honours
+ * sparse overrides via `tileAt`, outside it falls back to the deterministic
+ * terrain function — so previews outside unlocked land agree with the world.
  */
 export function terrainOf(state: GameState, x: number, y: number): TerrainType {
   return tileAt(state, x, y)?.terrain ?? terrainAt(x, y);

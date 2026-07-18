@@ -66,6 +66,31 @@ describe('CameraController3D presets & focus', () => {
   });
 });
 
+describe('CameraController3D chase (§ A6 Fahrmodus)', () => {
+  it('places the camera behind the vehicle, looking at it', () => {
+    const cam = new CameraController3D(worldCameraBounds(), settings({ smooth: false }));
+    // Fahrtrichtung heading=0 → Vorwärts = +z; die Kamera muss dahinter (−z) sitzen.
+    cam.setChase(100, 100, 0, 7.5, 0.5, true);
+    cam.update(0.1);
+    const p = cam.pose();
+    expect(p.targetX).toBeCloseTo(100, 5);
+    expect(p.targetZ).toBeCloseTo(100, 5);
+    expect(p.posZ).toBeLessThan(100); // hinter dem Fahrzeug
+    expect(p.posX).toBeCloseTo(100, 4); // seitlich zentriert
+    expect(p.posY).toBeGreaterThan(0); // über dem Boden
+  });
+
+  it('takes the shortest yaw path when the heading flips', () => {
+    const cam = new CameraController3D(worldCameraBounds(), settings({ smooth: true }));
+    cam.setChase(100, 100, 0, 7.5, 0.5, true);
+    const before = cam.goals();
+    // Kleine Richtungsänderung darf nicht zu einem fast vollen Umlauf führen.
+    cam.setChase(100, 100, 0.2, 7.5, 0.5);
+    const after = cam.goals();
+    expect(Math.abs(after.yaw - before.yaw)).toBeLessThan(0.5);
+  });
+});
+
 describe('CameraController3D smoothing', () => {
   it('snaps immediately when smooth is off', () => {
     const cam = new CameraController3D(worldCameraBounds(), settings({ smooth: false }));

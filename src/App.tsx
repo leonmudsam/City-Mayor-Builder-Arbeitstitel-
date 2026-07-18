@@ -10,6 +10,7 @@ import { importSave } from './game/storage/exportImport.ts';
 import { setController, useUiStore } from './state/store.ts';
 import { MapView } from './components/MapView.tsx';
 import { GameHud } from './components/hud/GameHud.tsx';
+import { DriveHud } from './components/hud/DriveHud.tsx';
 import { QuickActionBar } from './components/hud/QuickActionBar.tsx';
 import { CameraControls } from './components/hud/CameraControls.tsx';
 import { BuildMenu } from './components/panels/BuildMenu.tsx';
@@ -20,7 +21,7 @@ import { CityStatusPanel } from './components/panels/CityStatusPanel.tsx';
 import { CityStatusDetail } from './components/panels/CityStatusDetail.tsx';
 import { CityWorkPanel } from './components/panels/CityWorkPanel.tsx';
 import { EconomyPanel } from './components/panels/EconomyPanel.tsx';
-import { SectorDialog } from './components/panels/SectorDialog.tsx';
+import { RegionDialog } from './components/panels/RegionDialog.tsx';
 import { SettingsPanel } from './components/panels/SettingsPanel.tsx';
 import { TradePanel } from './components/panels/TradePanel.tsx';
 import { DebugPanel } from './components/panels/DebugPanel.tsx';
@@ -40,7 +41,7 @@ export function App() {
   const [ready, setReady] = useState(false);
   const [bootError, setBootError] = useState<string>();
   // Bumped on reset/import to remount the game view (fresh Pixi renderer, no
-  // stale sector/building caches) — the controller instance itself is reused.
+  // stale region/building caches) — the controller instance itself is reused.
   const [gameKey, setGameKey] = useState(0);
   const controllerRef = useRef<GameController | undefined>(undefined);
 
@@ -62,6 +63,30 @@ export function App() {
       try {
         const config = loadConfig();
         const existing = await adapter.load(DEFAULT_SLOT);
+        // § MVP4: Ein Vor-Insel-Save (≤ v9) wurde beim Laden gesichert und der
+        // Slot geräumt — den Umzug einmalig freundlich erklären.
+        if (adapter.legacyBackupCreated) {
+          useUiStore.getState().pushToast(t('ui.legacy_save.notice'), 'success');
+        }
+        // § Ausbaustufe 2.0: Wurde der Save gerade migriert (v10→v11), den
+        // Umbau einmalig erklären — inkl. Erstattungssumme, falls Gebäude
+        // den neuen Footprints/Regionen weichen mussten.
+        if (adapter.migrationNotice) {
+          const notice = adapter.migrationNotice;
+          adapter.migrationNotice = undefined;
+          const money = notice.refunded.money ?? 0;
+          useUiStore
+            .getState()
+            .pushToast(
+              notice.removedBuildings > 0
+                ? t('ui.migration.v11_refund', {
+                    count: notice.removedBuildings,
+                    money: money.toLocaleString('de-DE'),
+                  })
+                : t('ui.migration.v11_notice'),
+              'success',
+            );
+        }
         const state = existing ?? createNewGame(config, 'Neustadt', Date.now());
         controller = new GameController(config, state);
         controllerRef.current = controller;
@@ -137,7 +162,7 @@ export function App() {
     ui.stopPlacing();
     ui.stopMoving();
     ui.selectBuilding(undefined);
-    ui.openSectorDialog(undefined);
+    ui.openRegionDialog(undefined);
     ui.setPanel(undefined);
     controller.resetTo(next);
     void adapter.save(DEFAULT_SLOT, next);
@@ -201,6 +226,7 @@ function GameScreen({ onImport, onReset }: { onImport(json: string): boolean; on
             <Eye size={18} />
             <span>{t('ui.quick.show')}</span>
           </button>
+          <DriveHud />
         </main>
         <Toasts />
       </div>
@@ -232,8 +258,9 @@ function GameScreen({ onImport, onReset }: { onImport(json: string): boolean; on
         {openPanel === 'menu' && <MenuPanel />}
 
         <FloatingBuildingSheet />
-        <SectorDialog />
+        <RegionDialog />
         {openPanel === 'build' && <BuildMenu />}
+        <DriveHud />
       </main>
       <Toasts />
       {currentEvent && <EventModal event={currentEvent} onClose={() => dismissEvent(currentEvent.id)} />}

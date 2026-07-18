@@ -36,12 +36,8 @@ export const balancingConfig: BalancingConfig = {
   foodWithoutDistributionCap: 0.3,
   startResources: { money: 45_000, wood: 60, stone: 0, food: 40, freshwater: 0 },
   startGold: 0,
-  // Expansion is a genuine "special project" sink — and now a real brake on
-  // sprawl (§7): each new sector costs more (distance) and every sector you own
-  // raises the price of the next, so spreading out is a deliberate, expensive
-  // choice and money stays valuable. Good, dense planning is rewarded over
-  // grabbing land for free.
-  sectorCost: { base: 120_000, distanceFactor: 1.7, countFactor: 0.35 },
+  // Expansion (§ Welt 2.0): Freischaltkosten stehen explizit pro Region in
+  // regions.config.ts — keine Distanz-Formel mehr.
   fireChancePerBuildingPerMin: 0.002,
   fireDurationSec: 30 * 60,
   fireDurationProtectedSec: 5 * 60,

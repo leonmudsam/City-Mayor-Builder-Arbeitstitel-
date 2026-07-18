@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { newController, setLevel, flattenTerrain, T0 } from './helpers.ts';
+import { nearTownHall, newController, setLevel, flattenTerrain, T0 } from './helpers.ts';
 import { moveInPerMin } from '../src/game/simulation/tick.ts';
+
+// Insel-Layout (v11): Startstrassen-Zeile bei Rathaus-y+5, Gebaeude ab y+6.
+const at = (dx: number, dy: number) => nearTownHall(dx, dy);
 
 const MIN = 60_000;
 
@@ -20,11 +23,11 @@ describe('long-term balancing (v0.15)', () => {
     const { controller } = newController();
     // Plenty of resources, still level 1 — isolate XP from the housing spam.
     controller.state.resources = { money: 500_000, wood: 500, stone: 100, food: 40, freshwater: 0 };
-    for (let x = 22; x <= 31; x++) controller.placeBuilding('road', x, 26);
-    // A street of small houses (2×2 footprints, spaced) beside the town-hall
+    for (let dx = 5; dx <= 17; dx++) controller.placeBuilding('road', at(dx, 5).x, at(dx, 5).y);
+    // A street of small houses (3×3 footprints, spaced) beside the town-hall
     // road strip — lots of housing capacity…
     let built = 0;
-    for (let x = 22; x <= 30; x += 2) if (controller.placeBuilding('house_small', x, 27).ok) built += 1;
+    for (const dx of [3, 6, 9, 12, 15]) if (controller.placeBuilding('house_small', at(dx, 6).x, at(dx, 6).y).ok) built += 1;
     controller.update(T0 + 30_000 + 2 * MIN); // all finish
     expect(built).toBeGreaterThanOrEqual(5);
     expect(controller.derived.capacity.housing).toBeGreaterThanOrEqual(25);
@@ -36,12 +39,12 @@ describe('long-term balancing (v0.15)', () => {
     const { controller } = newController();
     setLevel(controller, 10);
     controller.state.resources = { money: 5_000_000, wood: 5_000, stone: 5_000, food: 1_000, freshwater: 0 };
-    for (let x = 24; x <= 33; x++) controller.placeBuilding('road', x, 26);
+    for (let dx = 5; dx <= 13; dx++) controller.placeBuilding('road', at(dx, 5).x, at(dx, 5).y);
     // The first warehouse carries a first-build discount (§3), so measure the
     // escalating copies AFTER it: the third costs 40 % more than the second.
-    expect(controller.placeBuilding('warehouse', 24, 27)).toEqual({ ok: true }); // first (discounted)
+    expect(controller.placeBuilding('warehouse', at(5, 6).x, at(5, 6).y)).toEqual({ ok: true }); // first (discounted)
     const base = controller.getBuildCost('warehouse').money!; // second, full price
-    expect(controller.placeBuilding('warehouse', 26, 27)).toEqual({ ok: true }); // second
+    expect(controller.placeBuilding('warehouse', at(10, 6).x, at(10, 6).y)).toEqual({ ok: true }); // second
     const next = controller.getBuildCost('warehouse').money!; // third
     // costScaling 1.4: each further warehouse costs 40 % more than the last.
     expect(next).toBe(Math.round(base * 1.4));
@@ -74,9 +77,9 @@ describe('big-city scaling (v0.16)', () => {
     setLevel(controller, 14);
     flattenTerrain(controller);
     controller.state.resources = { money: 5_000_000, wood: 5_000, stone: 5_000, food: 5_000, freshwater: 0 };
-    for (let x = 26; x <= 33; x++) controller.placeBuilding('road', x, 26);
-    controller.placeBuilding('house_small', 26, 27);
-    expect(controller.placeBuilding('police_station', 29, 27)).toEqual({ ok: true });
+    for (let dx = 5; dx <= 10; dx++) controller.placeBuilding('road', at(dx, 5).x, at(dx, 5).y);
+    controller.placeBuilding('house_small', at(3, 6).x, at(3, 6).y);
+    expect(controller.placeBuilding('police_station', at(7, 6).x, at(7, 6).y)).toEqual({ ok: true });
     controller.update(T0 + 25_000 + 380_000, true); // house + station finish, citizens settle
     // Served-resident capacity scales with the ×20 population scale (§9): 8 000 × 20.
     expect(controller.derived.coverageCapacity.safety).toBe(160_000);
@@ -94,14 +97,13 @@ describe('big-city scaling (v0.16)', () => {
 
   it('houses realistic populations from dense buildings (§3/§4)', () => {
     const { controller } = newController();
-    setLevel(controller, 12);
+    setLevel(controller, 15); // Wohnturm-Band (§ Gebaeudesystem 2.0)
     flattenTerrain(controller);
     controller.state.resources = { money: 5_000_000, wood: 5_000, stone: 5_000, food: 5_000, freshwater: 0 };
-    for (let x = 22; x <= 33; x++) controller.placeBuilding('road', x, 26);
-    // One apartment now houses hundreds; one tower, ~1 800 — a real city scale.
-    expect(controller.placeBuilding('apartment', 22, 27)).toEqual({ ok: true });
-    expect(controller.placeBuilding('residential_tower', 26, 27)).toEqual({ ok: true });
-    controller.update(T0 + 20 * MIN); // both finish
+    for (let dx = 5; dx <= 9; dx++) controller.placeBuilding('road', at(dx, 5).x, at(dx, 5).y);
+    // One tower houses thousands — a real city scale.
+    expect(controller.placeBuilding('residential_tower', at(5, 6).x, at(5, 6).y)).toEqual({ ok: true });
+    controller.update(T0 + 20 * MIN); // finishes
     expect(controller.derived.capacity.housing).toBeGreaterThanOrEqual(2_000);
   });
 });
@@ -111,25 +113,24 @@ describe('big-city scaling (v0.16)', () => {
 describe('active-play & growth (v0.18)', () => {
   it('caps residential buildings per level and raises the cap over time (§1)', () => {
     const { controller } = newController();
-    // The backbone house is capped from level 1 (8), rising at level 6.
-    expect(controller.getBuildLimit('house_small')).toEqual({ count: 0, max: 8, nextLevel: 6 });
-    setLevel(controller, 6);
-    expect(controller.getBuildLimit('house_small')?.max).toBe(10);
-    // Tower: none at low levels, six at 12, twelve at 14 (density via upgrades).
-    setLevel(controller, 12);
+    // The backbone house is capped from level 1 (10), rising at level 5.
+    expect(controller.getBuildLimit('house_small')).toEqual({ count: 0, max: 10, nextLevel: 5 });
+    setLevel(controller, 5);
+    expect(controller.getBuildLimit('house_small')?.max).toBe(14);
+    // Tower: none at low levels, six at 15, ten at 17 (density via upgrades).
+    setLevel(controller, 15);
     expect(controller.getBuildLimit('residential_tower')?.max).toBe(6);
-    setLevel(controller, 14);
-    expect(controller.getBuildLimit('residential_tower')?.max).toBe(12);
+    setLevel(controller, 17);
+    expect(controller.getBuildLimit('residential_tower')?.max).toBe(10);
   });
 
   it('gives the first core economy building free, then charges full price (§3)', () => {
     const { controller } = newController();
     setLevel(controller, 2);
-    for (let x = 24; x <= 30; x++) controller.placeBuilding('road', x, 26);
     // First sawmill: free (firstBuildDiscount 1) — the wood loop starts at once.
     expect(controller.isFirstBuildDiscount('sawmill')).toBe(true);
     expect(controller.getBuildCost('sawmill')).toEqual({});
-    expect(controller.placeBuilding('sawmill', 24, 27)).toEqual({ ok: true });
+    expect(controller.placeBuilding('sawmill', at(1, 6).x, at(1, 6).y)).toEqual({ ok: true });
     // Second sawmill: normal price, and the discount is spent for good.
     expect(controller.isFirstBuildDiscount('sawmill')).toBe(false);
     expect(controller.getBuildCost('sawmill').money).toBe(11_000);

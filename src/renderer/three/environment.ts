@@ -82,15 +82,21 @@ interface Key {
 // Art-directed keyframes across the day. Values between two keys are linearly
 // interpolated (colours in linear RGB); the list wraps 0.86 → 1.0/0.0. Noon
 // deliberately keeps the original static look (#9fd0ef horizon) for parity.
+//
+// § MVP3 Phase 2 (Atmosphäre & Licht): daytime `ambient` was lifted a touch and
+// `hemiGround` warmed so ACES filmic tone mapping (which compresses highlights and
+// deepens shadows) does not crush the shaded terrain/mountain faces into flat mud
+// — soft bounce fill keeps the world readable and warm. Night keys are untouched
+// so the day/night contrast (and stars) stay intact.
 const KEYS: Key[] = [
   { t: 0.0, skyTop: 0x0a1230, skyHorizon: 0x16203f, fog: 0x16203f, sunColor: 0x9fb4e0, sunIntensity: 0.18, ambient: 0.1, hemiSky: 0x24304f, hemiGround: 0x10131c, hemiIntensity: 0.35, stars: 1, moon: 1 },
-  { t: 0.22, skyTop: 0x243a63, skyHorizon: 0x7a5a72, fog: 0x6f5570, sunColor: 0xd98a5a, sunIntensity: 0.28, ambient: 0.14, hemiSky: 0x3a4a72, hemiGround: 0x2a2620, hemiIntensity: 0.5, stars: 0.5, moon: 0.45 },
-  { t: 0.28, skyTop: 0x5a86c0, skyHorizon: 0xf0a878, fog: 0xf0b890, sunColor: 0xffd0a0, sunIntensity: 1.05, ambient: 0.22, hemiSky: 0x86b0e0, hemiGround: 0x6a5238, hemiIntensity: 0.85, stars: 0, moon: 0 },
-  { t: 0.36, skyTop: 0x6ea6df, skyHorizon: 0xcfe3f2, fog: 0xcfe3f2, sunColor: 0xfff0d8, sunIntensity: 1.3, ambient: 0.26, hemiSky: 0xbcd8f0, hemiGround: 0x6b7a5a, hemiIntensity: 1.0, stars: 0, moon: 0 },
-  { t: 0.5, skyTop: 0x4f97e6, skyHorizon: 0x9fd0ef, fog: 0x9fd0ef, sunColor: 0xfff6e2, sunIntensity: 1.42, ambient: 0.28, hemiSky: 0xffffff, hemiGround: 0x6b7a5a, hemiIntensity: 1.05, stars: 0, moon: 0 },
-  { t: 0.64, skyTop: 0x5f9ee0, skyHorizon: 0xbfe0f2, fog: 0xbfe0f2, sunColor: 0xfff0d0, sunIntensity: 1.3, ambient: 0.26, hemiSky: 0xbcd8f0, hemiGround: 0x6b7a5a, hemiIntensity: 1.0, stars: 0, moon: 0 },
-  { t: 0.72, skyTop: 0x55719c, skyHorizon: 0xf2915a, fog: 0xf0a878, sunColor: 0xffbf88, sunIntensity: 1.0, ambient: 0.22, hemiSky: 0x7a94c0, hemiGround: 0x6a4a30, hemiIntensity: 0.8, stars: 0, moon: 0 },
-  { t: 0.78, skyTop: 0x2e3d68, skyHorizon: 0x9a5a6e, fog: 0x7a5470, sunColor: 0xb07a70, sunIntensity: 0.4, ambient: 0.16, hemiSky: 0x3e4c74, hemiGround: 0x221e20, hemiIntensity: 0.5, stars: 0.5, moon: 0.45 },
+  { t: 0.22, skyTop: 0x243a63, skyHorizon: 0x7a5a72, fog: 0x6f5570, sunColor: 0xd98a5a, sunIntensity: 0.28, ambient: 0.15, hemiSky: 0x3a4a72, hemiGround: 0x2a2620, hemiIntensity: 0.52, stars: 0.5, moon: 0.45 },
+  { t: 0.28, skyTop: 0x5a86c0, skyHorizon: 0xf0a878, fog: 0xf0b890, sunColor: 0xffd0a0, sunIntensity: 1.05, ambient: 0.27, hemiSky: 0x86b0e0, hemiGround: 0x6a5238, hemiIntensity: 0.9, stars: 0, moon: 0 },
+  { t: 0.36, skyTop: 0x6ea6df, skyHorizon: 0xcfe3f2, fog: 0xcfe3f2, sunColor: 0xfff0d8, sunIntensity: 1.3, ambient: 0.31, hemiSky: 0xbcd8f0, hemiGround: 0x74805e, hemiIntensity: 1.05, stars: 0, moon: 0 },
+  { t: 0.5, skyTop: 0x4f97e6, skyHorizon: 0x9fd0ef, fog: 0x9fd0ef, sunColor: 0xfff6e2, sunIntensity: 1.42, ambient: 0.33, hemiSky: 0xffffff, hemiGround: 0x74805e, hemiIntensity: 1.1, stars: 0, moon: 0 },
+  { t: 0.64, skyTop: 0x5f9ee0, skyHorizon: 0xbfe0f2, fog: 0xbfe0f2, sunColor: 0xfff0d0, sunIntensity: 1.3, ambient: 0.31, hemiSky: 0xbcd8f0, hemiGround: 0x74805e, hemiIntensity: 1.05, stars: 0, moon: 0 },
+  { t: 0.72, skyTop: 0x55719c, skyHorizon: 0xf2915a, fog: 0xf0a878, sunColor: 0xffbf88, sunIntensity: 1.08, ambient: 0.27, hemiSky: 0x9aacd0, hemiGround: 0x6a4a30, hemiIntensity: 0.85, stars: 0, moon: 0 },
+  { t: 0.78, skyTop: 0x2e3d68, skyHorizon: 0x9a5a6e, fog: 0x7a5470, sunColor: 0xb07a70, sunIntensity: 0.4, ambient: 0.17, hemiSky: 0x3e4c74, hemiGround: 0x221e20, hemiIntensity: 0.52, stars: 0.5, moon: 0.45 },
   { t: 0.86, skyTop: 0x101a3c, skyHorizon: 0x1a2444, fog: 0x1a2444, sunColor: 0x9fb4e0, sunIntensity: 0.2, ambient: 0.11, hemiSky: 0x26324f, hemiGround: 0x10131c, hemiIntensity: 0.36, stars: 1, moon: 1 },
 ];
 

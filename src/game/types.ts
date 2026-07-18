@@ -18,7 +18,11 @@ export type BuildingCategory =
 
 export type BuildingDefId = string;
 export type BuildingInstanceId = string;
-export type SectorId = string; // "sx:sy" in sector grid coordinates (may be negative → open end)
+/**
+ * Numerische Id einer organischen Region (§ Welt 2.0): 1..REGION_COUNT aus dem
+ * Bake (`islandRegions.gen.ts`); 0 ist der Ozean und existiert nie als State.
+ */
+export type RegionId = number;
 export type DistrictId = string;
 export type QuestId = string;
 export type MayorActionId = string;
@@ -57,19 +61,28 @@ export interface BuildingInstance {
   rotation?: 0 | 90 | 180 | 270;
 }
 
+/**
+ * Sicht auf eine Welt-Kachel. Seit Schema v10 ABGELEITET, nicht gespeichert:
+ * `terrain` kommt aus dem gebackenen Insel-Grid (+ sparse Overrides), die
+ * Belegung aus dem Gebäude-Index (§ Slim-Save, docs/SAVE_MIGRATION.md).
+ * Mutationen laufen über die Occupancy-Helfer in `map/world.ts` — Schreiben auf
+ * dieses Objekt hätte keine Wirkung.
+ */
 export interface TileState {
   terrain: TerrainType;
   buildingId?: BuildingInstanceId;
 }
 
-export interface SectorState {
-  id: SectorId;
-  sx: number;
-  sy: number;
+/**
+ * Region-Zustand (Schema v11, § Welt 2.0): nur der Spielfortschritt. Welche
+ * Kacheln zur Region gehören, ihr Terrain und ihre Nachbarschaft sind
+ * deterministisch aus dem Bake ableitbar (`islandRegions.gen.ts`) und werden
+ * nie persistiert — das hält Saves winzig.
+ */
+export interface RegionState {
+  id: RegionId;
   districtId: DistrictId;
   status: 'locked' | 'unlocked';
-  /** Row-major SECTOR_SIZE × SECTOR_SIZE tiles. */
-  tiles: TileState[];
 }
 
 export interface DistrictState {
@@ -138,10 +151,10 @@ export interface GameStats {
   produced: Record<ResourceId, number>;
   mayorActions: Record<MayorActionId, number>;
   /**
-   * ADDITIONAL sectors the player actively unlocked (v0.21, §5): the start
-   * sector does NOT count, so "unlock your first new sector" means exactly that.
+   * ADDITIONAL regions the player actively unlocked (v0.21 §5, seit v11
+   * Regionen statt Sektoren): die Startregion zählt NICHT mit.
    */
-  sectorsUnlocked: number;
+  regionsUnlocked: number;
   /** Completed building upgrades, total and per definition (quest goals). */
   upgradesCompleted: number;
   upgraded: Record<BuildingDefId, number>;
@@ -194,8 +207,14 @@ export interface GameState {
    */
   policy: { residentialTaxRate: number; commercialTaxRate: number };
   world: {
-    sectors: Record<SectorId, SectorState>; // sparse: only materialized sectors
+    /** Alle organischen Regionen (Stubs, § v11 Welt 2.0), Key = String(RegionId). */
+    regions: Record<string, RegionState>;
     districts: Record<DistrictId, DistrictState>;
+    /**
+     * Sparse Terrain-Abweichungen vom gebackenen Insel-Grid, Key "x,y"
+     * (Debug-Werkzeuge/Tests; reguläres Gameplay verändert kein Terrain).
+     */
+    terrainOverrides?: Record<string, TerrainType>;
   };
   buildings: Record<BuildingInstanceId, BuildingInstance>;
   citizens: {
@@ -218,12 +237,3 @@ export interface GameState {
 }
 
 export type SaveGame = GameState;
-
-export function sectorId(sx: number, sy: number): SectorId {
-  return `${sx}:${sy}`;
-}
-
-export function parseSectorId(id: SectorId): { sx: number; sy: number } {
-  const [a, b] = id.split(':');
-  return { sx: Number(a), sy: Number(b) };
-}

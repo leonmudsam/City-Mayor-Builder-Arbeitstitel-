@@ -313,6 +313,19 @@ vollständig verstecken:
 > Phasen. Ebenfalls bewusst **nicht** Teil dieser Phase: lokale
 > Terrain-Einebnung unter Gebäuden (Gebäude sitzen weiter an einem
 > Höhen-Punkt, kein Footprint-Carving).
+>
+> **Umsetzungsstand (v0.47 — MVP3 Phase 2, "Atmosphäre & Licht"):** Die
+> Beleuchtung ist auf einen filmischen Look umgestellt — `ACESFilmicToneMapping`
+> (Exposure 1.2) statt harter linearer Ausgabe, weiche `PCFSoftShadowMap`-Schatten
+> (`shadow.radius`), plus `normalBias`/`bias` am Sonnenlicht gegen Shadow-Acne auf
+> den neuen Gebirgs-Terrassen (`ThreeMapRenderer`/`SkyEnvironment`). Die Tag-Keys
+> der Grade-Kurve (`environment.ts`) heben Ambient/Bounce leicht an, damit ACES die
+> Schattenflächen nicht in Matsch zieht; Nacht bleibt unangetastet. Weiterhin ein
+> Direkt-Render ohne Post-Pipeline: Ein subtiler **Bloom** wurde geprüft, aber
+> verworfen — die SDR-authored Szene hat keine saubere HDR-Highlight-Trennung
+> (Gras ≈ Luminanz 1.0), Bloom würde entweder alles auswaschen oder nichts zeigen.
+> Sinnvoll erst nach echten HDR-Emissives (Nacht-Fenster/Sonne/Marker > 1.0) —
+> eigener Folge-Schritt.
 
 ---
 

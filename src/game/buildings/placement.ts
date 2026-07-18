@@ -2,7 +2,7 @@ import type { GameConfig } from '../config/index.ts';
 import type { BuildingDef } from '../config/types.ts';
 import type { GameState } from '../types.ts';
 import type { Derived } from '../simulation/derived.ts';
-import { isTerrainBuildable, sectorOfTile, tileAt } from '../map/world.ts';
+import { isTerrainBuildable, regionOfTile, tileAt } from '../map/world.ts';
 import { unlockedBuildings } from '../progression/levels.ts';
 import { buildLimitAt, countOf } from './limits.ts';
 
@@ -11,7 +11,7 @@ export type PlacementError =
   | 'unique_exists'
   | 'limit_reached'
   | 'out_of_bounds'
-  | 'sector_locked'
+  | 'region_locked'
   | 'terrain'
   | 'occupied'
   | 'needs_road'
@@ -47,8 +47,8 @@ export function validatePlacement(
     for (let dx = 0; dx < def.size.w; dx++) {
       const tile = tileAt(state, x + dx, y + dy);
       if (!tile) return 'out_of_bounds';
-      const sector = sectorOfTile(state, x + dx, y + dy);
-      if (!sector || sector.status !== 'unlocked') return 'sector_locked';
+      const region = regionOfTile(state, x + dx, y + dy);
+      if (!region || region.status !== 'unlocked') return 'region_locked';
       if (!isTerrainBuildable(tile)) return 'terrain';
       if (tile.buildingId && tile.buildingId !== moving) return 'occupied';
     }

@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { newController, setLevel, flattenTerrain, T0 } from './helpers.ts';
+import { nearTownHall, newController, setLevel, flattenTerrain, T0 } from './helpers.ts';
+
+// Insel-Layout (v11): Startstrassen-Zeile bei Rathaus-y+5, Gebaeude ab y+6.
+const at = (dx: number, dy: number) => nearTownHall(dx, dy);
 
 // §2 critical upgrade fix: a building keeps its CURRENT stage's effects for the
 // whole upgrade — it never drops to zero mid-upgrade. The new stage only becomes
@@ -8,7 +11,7 @@ describe('upgrade keeps old effects until it completes (§2)', () => {
   it('town hall keeps its storage while the prestige upgrade is running', () => {
     const { controller } = newController();
     const th = controller.state.buildings['b_townhall']!;
-    setLevel(controller, 5);
+    setLevel(controller, 6); // Stadtverwaltung-Gate (§ Gebaeudesystem 2.0)
     controller.state.resources.money = 500_000;
     controller.state.resources.wood = 500;
     controller.state.resources.stone = 500;
@@ -35,8 +38,7 @@ describe('upgrade keeps old effects until it completes (§2)', () => {
     const { controller } = newController();
     setLevel(controller, 7);
     flattenTerrain(controller); // zero terrain bonus → exact rates
-    controller.placeBuilding('road', 26, 26);
-    controller.placeBuilding('sawmill', 26, 27);
+    controller.placeBuilding('sawmill', at(1, 6).x, at(1, 6).y); // 4x4 unter den Startstrassen
     controller.update(T0 + 40_000); // sawmill finishes (30s)
     const saw = Object.values(controller.state.buildings).find((b) => b.defId === 'sawmill')!;
     expect(controller.derived.productionPerMin.wood).toBe(45); // base stage
@@ -50,7 +52,7 @@ describe('upgrade keeps old effects until it completes (§2)', () => {
 
     controller.update(T0 + 40_000 + 260_000); // 240s upgrade completes
     expect(saw.upgradeLevel).toBe(1);
-    expect(controller.derived.productionPerMin.wood).toBe(95); // improved stage
+    expect(controller.derived.productionPerMin.wood).toBe(100); // Grosssaegewerk-Stufe
   });
 });
 
@@ -61,8 +63,9 @@ describe('trading post (§7)', () => {
   it('sells stored resources and buys them back at a markup', () => {
     const { controller } = newController();
     setLevel(controller, 5);
-    controller.placeBuilding('road', 26, 26);
-    controller.placeBuilding('trading_post', 26, 27);
+    controller.state.resources.money = 100_000;
+    controller.state.resources.wood = 200; // Kontor kostet 65 Holz (> Startvorrat)
+    expect(controller.placeBuilding('trading_post', at(3, 6).x, at(3, 6).y)).toEqual({ ok: true });
     controller.update(T0 + 100_000); // trading post active
     expect(controller.hasTradePost()).toBe(true);
 
@@ -105,8 +108,7 @@ describe('prototype cheats (§10)', () => {
     expect(controller.state.resources.food).toBe(controller.derived.storageCaps.food);
 
     // Finish a fresh build instantly.
-    controller.placeBuilding('road', 26, 26);
-    controller.placeBuilding('house_small', 26, 27);
+    controller.placeBuilding('house_small', at(3, 6).x, at(3, 6).y);
     const house = Object.values(controller.state.buildings).find((b) => b.defId === 'house_small')!;
     expect(house.status).toBe('constructing');
     controller.debugFinishConstruction('build');

@@ -13,7 +13,7 @@ import { formatMoney, t } from '../../i18n/index.ts';
 
 const EVENT_META: Record<GameEvent['kind'], { icon: LucideIcon; tone: 'primary' | 'good' | 'bad' }> = {
   levelUp: { icon: Award, tone: 'primary' },
-  sectorUnlocked: { icon: MapPin, tone: 'good' },
+  regionUnlocked: { icon: MapPin, tone: 'good' },
   fire: { icon: Flame, tone: 'bad' },
   celebrate: { icon: PartyPopper, tone: 'good' },
   activityDone: { icon: CheckCircle2, tone: 'good' },

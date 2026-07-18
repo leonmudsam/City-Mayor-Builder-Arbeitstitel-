@@ -1,5 +1,536 @@
 # Patch Notes
 
+## v0.56 — Ausbaustufe 2.0, Phase A7: Lebendige Welt — Farmen, Weidetiere, Biom-Deko
+
+**Was.** Die Welt bekommt Leben zwischen den Gebäuden (§ Auftrag B, absorbiert
+MVP4 P6):
+
+- **Bauernhof als wachsendes Areal.** Fehlt ein `farm.glb`, baut der Renderer die
+  Farm nicht mehr als Würfel, sondern als Hof-Ensemble, das mit der Stufe wächst
+  (Bauernhof → Großfarm → Agrarkomplex): Ackerboden mit Feld-Furchen, Scheune mit
+  Satteldach, **Silos** (Anzahl + Höhe je Stufe) und ein umlaufender Holzzaun mit
+  Pfosten. (Liegt ein `farm.glb` vor — wie aktuell —, hat es weiter Vorrang; dies
+  ist der garantierte Fallback.)
+- **Weidetiere (animiert).** Jeder aktive Bauernhof bekommt Tiere (Kühe/Schafe/
+  Hühner, mehr je Stufe), die auf einer **Weide neben** dem Hof grasen —
+  gemächliches Wandern im Weide-Radius mit gelegentlichem Richtungswechsel und
+  leichtem Wippen. Sie stehen auf freien Kacheln rund um das Grundstück (nie
+  unter dem Gebäudemodell), gedeckelt bei 48 Tieren fürs Draw-Call-Budget.
+- **Biom-Deko (instanziert, terrainabhängig).** Findlinge im Gebirge und Schilf
+  an Wasserkanten (Seen/Flüsse) ergänzen die bestehenden Wald-/Busch-Instanzen —
+  über denselben `InstancedMesh`-Pfad, mit Kappungen (je 400) und Distanz-Culling
+  durch das Region-Rebuild.
+- **Ferne Platzhalter-Inseln.** Ein Ring niedriger, bewaldeter Silhouetten (teils
+  mit grauem Gipfel) weit außerhalb der Weltränder gibt dem Ozean einen Horizont
+  statt ins Leere zu laufen. Einmalig mit dem Meer gebaut, rein kosmetisch.
+
+**Warum & Architektur.** §2 gewahrt — erweitert wird der bestehende
+Vegetations-/Live-Layer (`rebuildVegetation`, `liveGroup`, Animations-Loop),
+kein neues System. Tiere laufen wie der Ambient-Verkehr über den Frame-Loop
+(`seedAnimals` reseeded nur bei Farm-Änderung via `animalKey`; `animateAnimals`
+bewegt sie). Farm-Ensemble/Tier-Meshes sind prozedurale Fallbacks — Drop-in-GLBs
+(`farm.glb`, später `cow.glb` …) haben immer Vorrang (§5). Alles `three`-seitig,
+die Simulation bleibt unberührt.
+
+**Auswirkung.** Farmen fühlen sich als Höfe an statt als Klötze; die Landschaft
+wirkt bewohnt. Grundlage für die spätere Landmarken-/Deko-Erweiterung.
+
+**Umfang/Offen (ehrlich).** Der Kern steht (Farm-Ausbau, Tiere, Findlinge/Schilf,
+Platzhalter-Inseln). Der vollständige Biom-Prop-Katalog (Wasserfälle, Heuballen,
+Obsthaine, Windmühle, Pilze, Sandbänke, Boote) und dedizierte Landmarken bleiben
+einer leichteren Folgepass (A10-Politur) überlassen — bewusst gesetzt, um A7
+sauber und verifiziert zu landen.
+
+**Verifikation.** `tsc`/`eslint`/`vitest` (175)/`build` grün. Playwright-Smokes:
+Farm-Nahaufnahme (drei Farmen Stufe 0/1/2, Kühe/Schafe/Hühner grasen sichtbar in
+den Weiden), Insel-Übersicht (alle Regionen frei: Gebirge/Wald/Seen korrekt,
+Biom-Deko platziert, ferne Inseln am Horizont), keine Konsolenfehler.
+
+**Dateien.** `ThreeMapRenderer.ts` (`farmProc`, `makeAnimalMesh`, `seedAnimals`/
+`animateAnimals` + `animals`/`animalKey`, `ANIMAL_CAP`, Findling-/Schilf-Instanzen
+in `rebuildVegetation`, `buildDistantIslands`, Farm-Zweig in `proceduralBuilding`).
+
+## v0.55 — Ausbaustufe 2.0, Phase A6: Stadtarbeit selbst fahren — Fahrmodus + 5 Fahrmissionen
+
+**Was.** Die Stadtarbeit wird zum echten Fahr-Minispiel (§9 Auftrag B): statt
+Lieferziele nur anzuklicken, steigt der Spieler ins Missionsfahrzeug und fährt
+selbst über das Straßennetz.
+
+- **Fahrmodus (WASD / Pfeile, Verfolgerkamera).** Ein „Selbst fahren"-Knopf in
+  der laufenden Stadtarbeit setzt den Spieler ans Steuer: Arcade-Fahrphysik
+  (Gas/Bremse/Lenken) mit sanfter Führung auf die Fahrbahn — verlässt das
+  Fahrzeug die Straße, wird es abgebremst und zur nächsten Straßenkachel
+  gezogen. Die Kamera zieht als Verfolger hinter dem Fahrzeug her; ein
+  schwebender Zielpfeil zeigt zum nächsten offenen Ziel. Erreicht man ein Ziel,
+  schließt es sich automatisch ab (über denselben `progressActivity`-Command wie
+  die Klick-Lieferung); ist die Mission fertig oder man drückt Q/Esc, endet die
+  Fahrt und die normale Kamera kehrt zurück.
+- **Fahr-HUD.** Unten mittig: Missionsname, Restzeit, verbleibende Ziele,
+  Steuerungshinweis und „Fahrt beenden".
+- **Fünf Missionstypen** (in der geforderten Reihenfolge), jede mit eigenem,
+  deutlich unterscheidbarem Fahrzeug: **Lieferwagen** (Essen verteilen),
+  **Feuerwehr** (Löschfahrzeug zu Bränden – Wohn/Gewerbe-Ziele, kein
+  Materialverbrauch, Zufriedenheits-Bonus), **Holztransport** (Stämme vom
+  Sägewerk NUR zu Lagern – Def-Id-Zielauswahl), **Polizei** (Streife zu breiten
+  Einsatzorten), **Material** (Pritschenwagen zu Baustellen).
+
+**Warum & Architektur.** CLAUDE.md §2 („erweitern statt neu bauen") ist bindend:
+das bestehende Aktivitäts-System liefert bereits Angebote, Ziele, Zeitwertung
+(Bronze/Silber/Gold) und Belohnungs-Bänder. Statt ein paralleles
+`missions.config.ts` samt zweiter Save-Migration zu bauen, wurde `ActivityDef`
+minimal erweitert (`drive`, `vehicle`, `targetCategories`, `targetDefIds`) und
+die Zielauswahl im Controller um explizite Kategorien/Def-Ids ergänzt. **Kein
+neues persistiertes State-Feld → keine zweite Migration.** Die Simulation bleibt
+`three`/`react`-frei; der komplette Fahrmodus (Input, Verfolgerkamera,
+Fahrzeug, Zielpfeil) lebt im Renderer und meldet erreichte Ziele über
+`RendererCallbacks` zurück — die UI ruft den Command auf, nie der Renderer die
+Simulation. Die Verfolgerkamera ist eine neue, reine Methode
+`CameraController3D.setChase()` (unit-getestet).
+
+**Auswirkung.** Aktive Stadtarbeit fühlt sich hands-on an; die Straßen (A5) und
+der spätere Verkehr (A7) bekommen einen zweiten Zweck. Balancing der fünf
+Missionen (Zeit, Belohnung, Level-Gates) ist gesetzt, wird in A10 feinjustiert.
+
+**Zukunft.** A7 belebt Biome/Landwirtschaft; die Fahrzeuge bekommen in A9
+eigene Tripo-Prompts/GLB-Slots (Drop-in bereits verdrahtet: `van`→`VAN_MODELS`,
+übrige → `VEHICLE_CAR_MODELS`, sonst prozedurales Fallback).
+
+**Verifikation.** `tsc`/`eslint`/`vitest` (175, davon neu: `missions.test.ts` 6
+für Zielauswahl/Belohnung/Gating der 5 Fahrmissionen + 2 Chase-Kamera-Tests in
+`camera.test.ts`)/`build` grün. Playwright-Fahr-Smoke (Save mit laufender
+Mission → „Selbst fahren" → WASD): Fahrzeug + Verfolgerkamera + Zielpfeil + HUD
+sichtbar, keine Konsolenfehler.
+
+**Dateien.** Sim: `config/types.ts` + `config/schemas.ts` (Drive-Felder),
+`config/activities.config.ts` (5 Fahrmissionen), `commands/controller.ts`
+(`activityCandidates` mit Kategorie/Def-Id-Auswahl). Renderer/UI:
+`CameraController3D.ts` (`setChase`), `ThreeMapRenderer.ts` (Fahrmodus:
+`enterDrive`/`exitDrive`/`updateDrive`/`makeMissionVehicle`/`makeDriveArrow`),
+`IMapRenderer.ts` + `state/store.ts` (`driveActive`, MapApi-Fahrmethoden,
+Callbacks), `MapView.tsx`, `panels/CityWorkPanel.tsx` (Fahren-Knopf),
+`hud/DriveHud.tsx` (neu), `App.tsx`, `styles.css`, `i18n/de.json`.
+Tests: `tests/missions.test.ts` (neu), `tests/camera.test.ts`.
+
+## v0.54 — Ausbaustufe 2.0, Phase A5: Straßen-Redesign — heller, Gehwege, Laternen
+
+**Was.** Die Straßen wirkten „zu schwarz" und zu nackt (§11 Auftrag B) — jetzt
+lesen sie sich als echte Stadtstraßen:
+
+- **Hellere Fahrbahn.** Der Asphalt ist von 0x474d57 auf ein mittleres Grau
+  aufgehellt. Weil die Drop-in-Textur `road_asphalt` die Materialfarbe nur
+  MULTIPLIZIERT (also nie aufhellen kann), hebt ein dezenter Emissiv-Term die
+  Schwärze — die Fahrbahn bleibt bei Tag UND Nacht gut lesbar, mit leichter,
+  erwünschter Eigenhelligkeit. Gebirgsstraßen entsprechend.
+- **Gehwege.** Offene Straßenkanten (ohne Anschluss) tragen jetzt einen hellen
+  Beton-Bürgersteig mit dünnem Bordstein davor statt einer nackten Erdkante —
+  die Straßenzüge bekommen Struktur und wirken bewohnt.
+- **Straßenlaternen.** Sparsam und deterministisch (~jede vierte Randkachel)
+  steht eine Laterne an der offenen Kante: Mast, Ausleger, emissiver Kopf, der
+  nachts leuchtet. Belebt die Straßen ohne die Draw-Calls zu sprengen.
+- **Ambient-Verkehr** (bereits vorhanden) fährt weiter auf dem Straßennetz
+  (Haus → Ziel), jetzt auf den überarbeiteten Straßen.
+
+**Warum.** §11 Auftrag B nennt die Straßen als konkreten Prototyp-Tell („zu
+schwarz, zu gerade"). Helligkeit, Gehwege und Laternen sind die drei Hebel, die
+aus grauen Balken lebendige Straßenzüge machen — Grundlage für den Fahrmodus
+(A6) und die belebte Welt (A7).
+
+**Verifikation.** `tsc`/`eslint`/`vitest` (167)/`build` grün.
+Playwright-Screenshots (Straßennetz-Save, Tag + Nacht): Fahrbahn hell und
+lesbar, Gehweg-Ränder, leuchtende Laternen bei Nacht, Verkehr auf den Straßen,
+keine Konsolenfehler.
+
+**Dateien.** `ThreeMapRenderer.ts` (`getRoadMats` heller + `sidewalk`/`lampPost`/
+`lampHead`, `buildRoadTile` Gehwege + Laternen, Tile-Koordinaten durchgereicht).
+
+## v0.53 — Ausbaustufe 2.0, Phase A4: Regionen mit Charakter — Boni, Vorschau, Bürger-Hinweise
+
+**Was.** Die organischen Landschaften bekommen spürbaren Charakter und werden
+zur echten strategischen Entscheidung (absorbiert MVP4 P5):
+
+- **Produktions-Boni & -Mali wirken.** `productionModifiers` einer Region
+  fließen jetzt in die Produktion jedes Betriebs auf ihrem Boden — Wälder
+  +40–50 % Holz, Fruchtdelta +35 % Nahrung, Gebirge +50 % Stein bei −30 %
+  Nahrung. Der Faktor läuft über denselben Bonus-Pfad wie der Standort-Bonus
+  (auch NEGATIVE Werte werden gespeichert, sonst produziert der Tick voll,
+  während das Derived-Total reduziert ist — der Fix hält beide konsistent, bei
+  −100 % gekappt). Die **Startregion „Lichtungsland" ist bewusst neutral** — der
+  Bezugspunkt, an dem sich die Vor-/Nachteile der Expansion messen.
+- **Teurere Straßen im Gebirge.** `roadCostFactor` verteuert Straßen beim Bau in
+  rauen Regionen (Gebirge bis ×2). `getBuildCost` bezieht die Zielkachel ein —
+  der Ghost/das Menü zeigt den ortsgenauen Preis, gezahlt wird genau das.
+- **Charakter-Vorschau VOR der Freischaltung (§5 Auftrag B).** Der RegionDialog
+  zeigt für jede Landschaft — auch gesperrt — Baufläche und alle Vor-/Nachteile
+  mit Pfeil-Icons und Prozenten (grün = Vorteil, rot = Nachteil, Straßenkosten
+  als Nachteil markiert). Der Spieler weiß, was er kauft, bevor er zahlt.
+- **Bürger weisen den Weg (§4 Auftrag B).** Wird mit einem Level-Up eine
+  angrenzende Landschaft neu erschließbar, posten Kundschafter einen Hinweis in
+  die Bürgermeister-Nachrichten — mit Himmelsrichtung („Im Norden …") und
+  Kurzcharakter („reich an Wäldern"). Führung über die Bürger, nicht übers Menü.
+- **Regions-Vokabular durchgezogen.** Quest- und Distrikt-Texte sprechen von
+  „Landschaften" statt „Sektoren".
+
+**Warum.** §3/§4/§5 Auftrag B verlangen Landschaften mit echten Vorteilen und
+Nachteilen, die vor dem Kauf sichtbar sind und über die Bürger nahegelegt
+werden — nicht 36 austauschbare Quadrate. Erst dadurch wird Erschließung eine
+Abwägung (billiges Bauland vs. teures Gebirge mit viel Stein).
+
+**Verifikation.** `tsc`/`eslint`/`vitest` (167: neue Tests für
+Produktions-/Straßen-Faktoren pro Region, neutrale Startregion, ortsabhängige
+Straßenkosten, Bürger-Hinweis beim Level-Up)/`build` grün.
+Playwright-Screenshot: RegionDialog „Westanger" mit Baufläche 3225,
+Nahrungs-/Holzertrag +10 %, Kosten, Freischalten.
+
+**Dateien.** `map/world.ts` (`regionProductionFactorAt`/
+`regionRoadCostFactorAt`), `simulation/derived.ts` (Regions-Bonus, negativer
+Bonus gespeichert), `commands/controller.ts` (`getBuildCost` ortsabhängig),
+`progression/levels.ts` (Bürger-Hinweise), `config/regions.config.ts`
+(Startregion neutral), `panels/RegionDialog.tsx` + `styles.css` (Vorschau),
+`i18n/de.json`, `tests/regions.test.ts`.
+
+## v0.52 — Ausbaustufe 2.0, Phase A3: Größenklassen, organischer Nebel, Biom-Splat
+
+**Was.** Der Renderer setzt das Gebäudesystem-2.0-Datenmodell und die
+organischen Regionen jetzt sichtbar um (Renderer-Basis, absorbiert MVP4 P4):
+
+- **Bauhöhe nach Größenklasse.** `SIZE_CLASS_HEIGHT` (XS 0,3 · S 1 · M 1,4 ·
+  L 2,2 · XL 3 · XXL 4) ersetzt die alte Kategorie-Höhe — die Silhouette folgt
+  der Bedeutung des Gebäudes, nicht seiner Sparte. Stufen erhöhen zusätzlich,
+  auf ×3 gedeckelt (`visual.heightClass` bleibt Override). Straßen (XS) wirken
+  endlich flach neben Häusern, Kraftwerk/Klinik ragen.
+- **Ensemble-Fallbacks für große Grundstücke.** Prozedurale Gebäude der
+  Klassen L/XL/XXL (Spannweite ≥ 4) füllen ihr Grundstück als Ensemble —
+  Hofplatte + Hauptbau + Nebenflügel (XXL: dritter Baukörper) — statt als ein
+  Riesen-Würfel. Der Windpark (7×7) verteilt mehrere Turbinen übers Areal
+  (erste animiert). Kleine Klassen behalten den kompakten Block. Bis neue
+  Stufen-GLBs eingelegt sind (A9-Prompts), lesen sich große Bauten so als
+  glaubwürdige Anlagen statt als Klötze.
+- **Organischer Regions-Nebel.** Jede gesperrte Landschaft trägt ein
+  Nebel-Volumen entlang ihrer ECHTEN organischen Grenze: die Randkontur wird
+  aus dem Region-Grid extrahiert (gerichtete Randkanten → Loop-Verkettung =
+  Marching Squares auf Binärmasken), zweifach Chaikin-geglättet und zu einer
+  bodennahen Dunstdecke extrudiert (≤ 7 Einheiten hoch, oben ausdünnend).
+  Silhouetten des dominanten Bioms (Gebirgsgipfel, Baumwipfel, Hügel) ragen
+  als Teaser aus dem Dunst (§6 Auftrag B: man ahnt, was dort wartet). Ein
+  Region-Unlock startet die weiche Aufdeck-Animation (aufsteigender,
+  ausdünnender Nebel). Kein Rechteck mehr — der alte Sektor-Nebel ist Geschichte.
+- **Biom-gewichteter Splat.** Der Boden-Shader liest ein neues
+  Biom-Vertex-Attribut (aus dem gebackenen Terrain-Grid interpoliert):
+  Waldboden, Ackerland und Küstensand erscheinen ORTSGENAU dort, wo Wald/
+  fruchtbar/Sand liegen — nicht nur höhenweise. Fels/Klippe/Gebirge/Schnee
+  kommen weiter aus Höhe & Hang. Acht Splat-Ebenen (grass, forest_floor,
+  farmland, sand_coast, rock, cliff, mountain, snow), jede Drop-in — fehlt die
+  Textur, blendet die Ebene sauber auf die stilisierte Vertex-Farbe zurück
+  (nie kaputt). De-Tiling bleibt.
+
+**Warum.** Beide Aufträge verlangen, dass die Welt kein technischer Prototyp
+mehr ist (§15 Auftrag B): glaubwürdige Größenverhältnisse (§3 Auftrag A) und
+Landschaften mit Charakter, die man schon vernebelt ahnt (§6 Auftrag B). Das
+ist die Renderer-Grundlage, auf der A4 (Boni-Vorschau) und A7 (Biom-Deko)
+aufsetzen.
+
+**Verifikation.** `tsc`/`eslint`/`vitest` (164)/`build` grün.
+Playwright-Screenshots (vite preview, WebGL): Insel-Overview mit
+organischem Nebel entlang der Regionsgrenzen (Gipfel ragen heraus,
+Startregion klar), Größenvergleich Straße ≪ Wohnhaus 3×3 < Feuerwache 5×5 <
+Windpark 7×7 < Rathaus 5×5, keine Konsolenfehler.
+
+**Dateien.** `ThreeMapRenderer.ts` (`SIZE_CLASS_HEIGHT`/`buildingHeight`,
+Ensemble-Fallbacks, Region-Nebel `regionContour`/`chaikin`/`buildRegionFog`/
+`animateFog`, Biom-Vertex-Attribut + erweiterter Splat-Shader).
+
+## v0.51 — Ausbaustufe 2.0, Phase A2: Save-v11-Migration mit 100 %-Erstattung
+
+**Was.** Die in v0.50 angekündigte echte Migration v10→v11 ist da — CLAUDE.md
+§3 („Saves brechen nie") gilt für Insel-Saves wieder uneingeschränkt. Eine
+**einzige gebündelte Migration** (vom Nutzer so entschieden) übernimmt beide
+Datenmodell-Umbauten:
+
+- **Rathaus-Umzug:** deterministisch auf den neuen 5×5-Bake-Start (183,189);
+  die 5 gebackenen Startstraßen werden gratis ergänzt, wenn die Kacheln frei
+  sind.
+- **Sektoren → Regionen per Mehrheits-Überlappung:** Eine organische Region
+  gilt als freigeschaltet, wenn die Mehrheit ihrer Kacheln in zuvor
+  freigeschalteten 64er-Quadrat-Sektoren lag; die Startregion immer, Teaser-
+  Regionen (Nebelinsel) nie. Distrikt-Zentren binden ihre Region an ihren
+  Distrikt; Distrikte ohne überlebendes Zentrum lösen sich auf.
+- **Gebäude-Prüfung mit 100 %-Erstattung zu ALTEN Preisen:** In
+  deterministischer Reihenfolge (Rathaus → Zentren → Rest nach Id) wird jedes
+  Gebäude gegen die neue Welt geprüft (inkrementelle Belegung, Terrain,
+  Regions-Status — Straßenanschluss bewusst nicht, das bleibt ein
+  Diagnose-Hinweis). Entfallene Defs (`house_row`, `apartment`) und Gebäude,
+  deren gewachsener Footprint kollidiert, werden abgerissen und vollständig
+  erstattet. Die alten v10-Preise dafür liegen eingefroren in der neuen
+  `src/game/storage/legacyCosts.ts` — der Spieler bekommt zurück, was er
+  wirklich bezahlt hat. Überzählige Ausbaustufen (Sägewerk 3, Steinbruch 3,
+  Farm 3, Wasserpumpe 2) werden geclampt und die alten Spätstufen erstattet;
+  laufende Upgrades auf entfallene Stufen ebenso.
+- **Level-Rederivierung** aus den unveränderten XP mit der neuen
+  20-Level-Kurve; `stats.sectorsUnlocked` → `stats.regionsUnlocked`;
+  Brände/Aktivitäts-Ziele/Quests auf entfernte Gebäude werden bereinigt.
+- **Einmaliger Hinweis:** Die Migration meldet eine Zusammenfassung
+  (`consumeMigrationNotice()` → Adapter-Feld `migrationNotice`, Muster
+  `legacyBackupCreated`); die App zeigt einmalig einen Toast — mit Anzahl und
+  Erstattungssumme, falls Gebäude weichen mussten.
+
+**Warum.** Die fixierte Nutzer-Entscheidung: kein Reset, sondern Migration mit
+voller Erstattung. Ein v10-Spieler landet ohne Verlust in der neuen Welt —
+schlimmstenfalls mit einem prallen Konto und ein paar Bauplätzen zum
+Neuverteilen.
+
+**Verifikation.** `tsc`/`eslint`/`vitest` (164 Tests: 5 neue
+Migrations-Tests mit v10-Fixtures — Rathaus-Umzug/Regions-Stubs, Erstattung
+entfallener Defs, Footprint-Kollision 2×2→3×3, Stufen-Clamp,
+Sektor-Mehrheit + Teaser-Sperre)/`build` grün. Browser-Migrations-Smoke
+(Playwright, echter v10-Save in localStorage): Toast „Ausbaustufe 2.0 …
+erstattet" erscheint, Re-Save trägt v11, 32 Regionen, Sektoren entfernt,
+Erstattung exakt (Geld/Holz/Stein), Rathaus samt Startstraßen am neuen
+Standort, keine Konsolenfehler.
+
+**Dateien.** `migrations.ts` (Migration 10→11 + `MigrationNotice`),
+`legacyCosts.ts` (neu, eingefrorene v10-Preise), `localStorageAdapter.ts`,
+`App.tsx`, `de.json` (`ui.migration.v11_*`), `tests/storage.test.ts`,
+`docs/SAVE_MIGRATION.md`.
+
+## v0.50 — Ausbaustufe 2.0, Phase A1: Gebäudesystem-2.0-Datenmodell + organische Regionen
+
+**Was.** Erste Phase des kombinierten Programms „Ausbaustufe 2.0"
+(Gebäudesystem 2.0 + Welt 2.0, Plan siehe Programm-Briefing; ersetzt die
+offenen MVP4-Phasen P4–P8). A1 baut das komplette Sim-Fundament um — Schema
+v11 (Migration folgt in A2, bis dahin gilt ein frischer Start):
+
+- **Gebäudesystem 2.0 — neue Footprints & Größenklassen.** Alle 31 Gebäude
+  haben ein neues Pflichtfeld `sizeClass` (XS 1×1 · S 2×2 · M 3×3 · L 4×4–5×5 ·
+  XL 6×6–7×7 · XXL 8×8) und realistische, **fixe quadratische** Footprints:
+  Rathaus 5×5, Feuerwache 5×5 (Vorplatz/Garagen/Hof), Krankenhaus 6×6,
+  Kraftwerk 8×8, Windpark 7×7, Farm 6×6, Wohnhaus 3×3, Sägewerk 4×4,
+  Steinbruch 5×5 u. v. m. Straßen (1×1) wirken damit endlich schmaler als
+  Häuser — die prototypischen Größenverhältnisse sind Geschichte. Der
+  Zod-Cap für Footprints stieg von 4 auf 12.
+- **Weniger, markantere Ausbaustufen.** Stufenregeln pro Kategorie (Deko 1 ·
+  Geschäfte 2 · Versorgung 2–3 · Industrie 3 · Verwaltung 3–4 · Wohnen eigene
+  Ketten · Landmarken 1), per Test erzwungen. **Hybrid-Wohnkette:**
+  `house_small` mit 6 Stufen (Kleines Haus → … → Wohnblock, Gates L3/6/9/12/15),
+  `residential_tower` als eigenes Spätgebäude ab L15 (Wohnturm → Hochhaus →
+  Wolkenkratzer L20); **`house_row` und `apartment` entfallen** (A2 erstattet).
+  Level 15 ist das bewusste „Metropol-Band" (Wohnblock + Wohnturm zusammen).
+- **20 Level statt 14.** XP-Kurve fortgeschrieben (~×1,3/Level, L20 = 100.000);
+  L15–L20 gaten die Top-Stufen (Büroturm L18, Universitätsklinikum L19,
+  Wolkenkratzer L20, Monumentalrathaus/Großkraftwerk/Einsatzzentrum L16 …).
+- **Welt 2.0 — organische Regionen ersetzen die 36 Quadrat-Sektoren.** Der
+  Bake (`tools/bakeWorld.mjs`) segmentiert die Insel deterministisch in **32
+  organische Landschaften**: Seeds auf Biom-Clustern, kostenbasiertes
+  Dijkstra-Wachstum (Biomgrenzen +4, Flussquerung +6, Höhendelta ×4),
+  Mini-Regionen werden gemerged. Output: `islandRegions.gen.ts`
+  (Region-Id-Grid + Statistik/Adjazenzgraph), Vorschau-PNG mit
+  Regionsgrenzen, Report-Tabelle. Ozean = Region 0, nie freischaltbar;
+  Region 32 „Nebelinsel" ist ein bewusst unerreichbarer Teaser.
+- **`regions.config.ts` ersetzt `sectors.config.ts`:** 32 deutsche
+  Landschaftsnamen (Lichtungsland, Fruchtdelta, Hochgebirgskern, …), pro
+  Region Charakter mit Vor- UND Nachteilen (`productionModifiers`,
+  `roadCostFactor` bis 2× im Hochgebirge — wirksam ab A4), explizite
+  Freischaltkosten (320k–1,8 M), Level-Gates bis L18, Voraussetzungs-Regionen
+  (⊆ gebackene Adjazenz, per Config-Check erzwungen). Freischaltung nur
+  angrenzend an bereits freigeschaltetes Gebiet.
+- **Startlage neu:** Startregion „Lichtungsland" (Region 2, 5.993 bebaubare
+  Kacheln), Rathaus 5×5 auf validiertem 7×7-Grasblock (183,189), 5
+  Startstraßen an der Südkante.
+- **2D-Pixi-Renderer entfernt** (aus A10 vorgezogen, statt toten Code auf
+  Regionen zu portieren): `MapRenderer.ts`/`projection.ts` gelöscht, Moduswahl
+  raus — das Spiel ist 3D-only. Gesperrte Regionen erscheinen interim als
+  organisch gedimmter Boden (kein Rechteck-Nebel mehr); der hochwertige
+  Silhouetten-Nebel kommt in A3.
+
+**Warum.** Beide Nutzer-Aufträge verlangen dasselbe Fundament: Footprints und
+Stufenketten sind die Basis für Doku/Prompts/Assets (Auftrag A §13), das
+Region-Grid die Basis für Nebel, Boni-Vorschau und Bürger-Hinweise (Auftrag B).
+Ein gemeinsamer Datenmodell-Schnitt (ein Schema-Sprung v11) vermeidet zwei
+Migrationen hintereinander.
+
+**Auswirkung.** Neustart nötig bis A2 die v10→v11-Migration liefert (mit
+100 % Erstattung entfallener Gebäude). Saves bleiben schlank (Region-Stubs,
+nie Terrain). Bestehende GLBs werden auf die größeren Footprints skaliert —
+bis neue Stufen-Modelle eingelegt sind, wirken einige grob (A9 liefert die
+Prompts je Stufe).
+
+**Verifikation.** `tsc`/`eslint`/`vitest` (159 Tests, 24 Dateien)/`build`
+grün; Playwright-Screenshot-Smoke (vite preview, WebGL): organische
+Startregion sichtbar, gesperrte Regionen gedimmt, keine Konsolenfehler.
+
+**Dateien.** `tools/bakeWorld.mjs` (Segmentierung), `islandRegions.gen.ts`
+(neu), `islandTerrain.gen.ts` (Re-Bake), `regions.config.ts` (neu,
+`sectors.config.ts` gelöscht), `buildings.config.ts` (Neutabelle),
+`levels.config.ts` (20 Level), `quests.config.ts`, `types.ts`/`schemas.ts`,
+`newGame.ts` (v11), `map/world.ts`, `controller.ts` (`unlockRegion`),
+`placement.ts`, `startRegion.config.ts`, `de.json` (Regions-/Stufen-Keys),
+`RegionDialog.tsx` (neu, `SectorDialog.tsx` gelöscht), `MapView.tsx`,
+`IMapRenderer.ts`, `ThreeMapRenderer.ts`, `CameraConfig.ts`,
+`MapRenderer.ts`/`projection.ts` (gelöscht), Tests umfassend
+(`regions.test.ts` neu, `sectors.test.ts` gelöscht).
+
+## v0.49 — Die Insel wird sichtbar: Renderer-Terrain (MVP4 P3)
+
+**Was.** Phase 3 des Welt-Neuaufbaus (`docs/WORLD_REBUILD.md`): Der Renderer
+zeichnet jetzt die GEBACKENE Insel statt der prozeduralen Typ-Höhen.
+- **Höhen aus dem Bake:** `terrainHeightAt` sampelt `worldHeight.gen.ts`
+  (769×769 Uint16, smoothstep-bilinear, C1-stetig) — Inselform, Gebirge (~20
+  Einheiten), Seebecken, Flussrinnen und Ozean-Tiefenrampe sind exakt die
+  Referenz-Geografie. Die alte BASE-/Noise-Logik ist ersetzt; `SPLAT_BANDS`
+  exportiert die Shader-Höhenbänder aus derselben Quelle (Duplikation tot).
+- **Chunk-Boden:** Das 384²-Mesh ist in 8×8 Chunks à 48 Kacheln (~9,4k Verts)
+  zerlegt — Frustum-Culling pro Chunk, ein Sektor-Unlock baut nur die ~4
+  betroffenen Chunks neu statt 600k Vertices. Farb-/Dimm-Logik unverändert.
+- **Ein Ozean:** Eine 4096²-Wellen-Ebene auf `WATER_LEVEL` umgibt die Insel bis
+  zum Horizont und füllt zugleich Seen/Flüsse (Becken liegen unter der
+  Wasserlinie). Das Kachel-Wasser-Instancing ist komplett entfernt.
+- **Kamera & Licht auf Inselmaß:** `maxDist` 200→480, Overview-Preset 420
+  (ganze Insel), Distanz-Fog 180–520 → 520–1600 (Überblick bleibt klar, Horizont
+  verläuft atmosphärisch), Sonnen-/Schatten-Frustum folgt dem Kamera-Fokus
+  (vorher fix am Ursprung — die Stadt läge außerhalb des ±140-Fensters).
+- **Bake-Härtung:** Bebaubar-Glättung deutlich strenger (max. ΔH ≈ 0,14/Kachel,
+  Kappungs-Sweeps bis Konvergenz) — Gebäude sitzen sauber, ohne lokale Einebnung.
+
+**Verifikation.** tsc/eslint/vitest (155)/build grün; Screenshots: Insel-Overview
+(Form = Referenz, klar statt milchig), Startsektor-Nahsicht (Rathaus, Wald, de-
+tiled Gras), keine Konsolenfehler. **Dateien.** `terrainHeight.ts` (neu),
+`ThreeMapRenderer.ts` (Chunks/Ozean/Bänder), `SkyEnvironment.ts` (Schatten-Follow,
+Fog), `CameraConfig.ts`, `tools/bakeWorld.mjs`, Gen-Dateien, `tests/terrainHeight.test.ts`.
+
+## v0.48 — Die Insel: Welt-Neuaufbau P1+P2 (MVP4, Schema v10)
+
+**Was.** Beginn des verbindlichen Welt-Neuaufbaus (Auftrag „Kompletter
+Map-Neuaufbau"): Die handdesignte 128×80-Testkarte ist vollständig ersetzt durch
+eine **384×384-Insel**, deren Form 1:1 aus der Referenz-GLB
+`reference/stylized island map 3d model.glb` gebacken wird. Phasen 1+2 von 8
+(`docs/WORLD_REBUILD.md`):
+- **P1 — Bake-Pipeline:** `tools/bakeWorld.mjs` rastert alle 1,87 M Dreiecke der
+  GLB top-down (baryzentrisch, Max-Y), klassifiziert Wasser per Flood-Fill
+  (Ozean/See/Fluss-Rinnen), leitet Biome regelbasiert ab (Höhe/Hang/Wassernähe/
+  Noise), glättet bebaubares Land (die Sim kennt keine Hangprüfung) und wählt/
+  validiert den Start (Sektor (2,3), 3.933 bebaubare Kacheln, Rathaus (157,221)
+  auf einem 5×6-Gras-Block). Committete Outputs: `islandTerrain.gen.ts` (Sim,
+  ~200 KB), `worldHeight.gen.ts` (Renderer, ~1,6 MB), `tools/bake-report.md`,
+  `tools/bake-preview.png`. Die GLB (45 MB) shippt NIE im Bundle.
+- **P2 — Sim-Welt-Tausch:** `SECTOR_SIZE` 16→64 → **6×6 = 36 strategische
+  Groß-Sektoren** à 4.096 Kacheln, jeder mit datengetriebener Identität in der
+  neuen `sectors.config.ts` (Zod-validiert): deutscher Name, Biom (zentrum/ebene/
+  wald/gebirge/huegel/see/kueste/fruchtbar/ozean), explizite Freischaltkosten
+  (250k–1,8 M statt Formel), Level-Gates, Voraussetzungs-Sektoren (Gebirgskern
+  braucht beide Randsektoren), Produktions-Modifikatoren (ab P5 wirksam),
+  nie freischaltbare Ozean-Sektoren. `terrainAt()` liest das Gen-Grid.
+
+**Savegames (Schema v10, § docs/SAVE_MIGRATION.md).** Zwei Änderungen:
+1. **Slim-Save:** Sektoren persistieren nur noch `{id,sx,sy,districtId,status}` —
+   Terrain wird NIE mehr gespeichert (deterministisch ableitbar), Belegung kommt
+   aus einem Laufzeit-Index über die Gebäude (`rebuildOccupancyIndex`,
+   `occupyTiles`/`clearTiles`). Saves: ~500 KB → wenige KB.
+2. **Vor-Insel-Saves (≤ v9):** NICHT migrierbar (andere Geografie — Gebäude lägen
+   im Ozean). Sie werden einmalig unter `cmb.save.backup.v9` gesichert, der Slot
+   geräumt, das Spiel startet frisch mit freundlicher Meldung. **Bewusst
+   sanktionierte, einmalige Ausnahme von CLAUDE.md §3** (Nutzer-Entscheidung
+   „Harter Neustart + Backup", Auftrag §22). Ab v10 gilt der Vertrag wieder.
+
+**Architektur.** Sim bleibt UI-/Rendering-frei (CLAUDE.md §1): die Gen-Dateien
+sind pure base64-Daten, synchron dekodiert, node-/vitest-tauglich. API-Formen
+(`terrainAt`, `startRegionConfig`, `tileAt`) blieben stabil — Kamera und Renderer
+liefen ohne Anpassung weiter; nur die `.tiles`-Lesestellen der Renderer wurden
+auf das Grid umgestellt. `unlockSector` konsultiert jetzt die SectorDefinition.
+Kachel-Sichten (`tileAt`) sind ABGELEITET — Belegungs-Mutationen laufen
+ausschließlich über die Occupancy-Helfer.
+
+**Auswirkung.** Neue Spiele starten auf der Insel (Startsektor „Inselmitte");
+14× mehr Welt, 36 Sektor-Entscheidungen mit Biom-Identität; NewGame ohne
+147k-Kachel-Materialisierung; Screenshot-Smoke bestätigt: Insel-Geografie
+(Südsee, Wälder, Gebirgs-Outcrops, Buchten) im Spiel sichtbar, Quests/HUD/
+Platzierung funktionieren, keine Konsolenfehler.
+
+**Zukunft (P3–P8).** Renderer-Terrain aus dem Höhen-Bake (Chunks, echter Ozean,
+Kamera 480, Schatten-Follow), Splat-Ausbau mit allen 31 Texturen, Sektor-Boni in
+der Wirtschaft, Wald-Cluster/Landmarken/Placeholder-Inseln, Balancing, Bereinigung
+(2D-Renderer-Ausbau, Legacy-Dateien) + Performance-Pass.
+
+**Verifikation.** `npx tsc -b --force` · `npx eslint src tests` · `npx vitest
+run` (**155 Tests, 24 Dateien**) · `npm run build` · Playwright-Screenshot-Smoke.
+Tests umfassend angepasst: Koordinaten mechanisch +134/+198 (altes Rathaus-
+Relativ-Muster blieb erhalten), `flattenTerrain` jetzt Override-basiert,
+neue `world.gen.test.ts` (Bake-Integrität, Startgarantien, Config-Sync),
+Storage-Tests auf v10/Legacy-Backup umgestellt.
+
+**Dateien.** Neu: `tools/bakeWorld.mjs`, `tools/bake-report.md`,
+`tools/bake-preview.png`, `reference/` (beide GLBs + README),
+`src/game/config/world/islandTerrain.gen.ts`, `src/renderer/three/worldHeight.gen.ts`,
+`src/game/config/sectors.config.ts`, `tests/world.gen.test.ts`,
+`docs/WORLD_REBUILD.md`, `docs/WORLD_SCALE.md`, `docs/SAVE_MIGRATION.md`.
+Geändert: `startRegion.config.ts` (Gen-Grid), `map/world.ts` (Slim/Occupancy),
+`types.ts`, `schemas.ts`, `config/index.ts`+`config/types.ts` (SectorDef),
+`newGame.ts` (v10), `storage/migrations.ts` (Legacy-Fehler),
+`storage/localStorageAdapter.ts` (Backup), `commands/controller.ts`,
+`ThreeMapRenderer.ts`+`MapRenderer.ts` (Grid-Reads), `App.tsx`, `i18n/de.json`
+(36 Sektornamen, Biome, Legacy-Meldung), `eslint.config.js` (\*.gen.ts ignoriert),
+Tests breit.
+
+## v0.47 — Atmosphäre & Licht (MVP3 Phase 2)
+
+**Was.** Zweite Phase der MVP3-Weltneugestaltung (Reihenfolge vom Nutzer gewählt:
+Atmosphäre & Licht → Kanten/Gitter → Vegetation → Wasser). Ziel: die Szene vom
+harten „Test-Render"-Look zum warmen, hochwertigen Manor-Lords-/Foundation-Gefühl
+bringen — ohne Gameplay/Straßen/Wirtschaft/Savegames anzufassen.
+- **Filmisches Tone Mapping:** Der Renderer nutzt jetzt `ACESFilmicToneMapping`
+  (Exposure `1.2`) statt der harten linearen Ausgabe. Helle Himmel-/Sonnen-Spitzen
+  rollen weich aus, statt flach auf Weiß zu clippen — Mitten und Farben wirken
+  organischer und weniger „digital".
+- **Weiche Schatten:** `shadowMap.type = PCFSoftShadowMap` plus am Sonnenlicht
+  `shadow.radius = 3.5` — die harten, gezackten Schattenkanten (die das neue
+  terrassierte Gelände sonst betont hätte) werden zu sanften Kontaktschatten.
+- **Kein Schatten-Flimmern auf Terrassen:** `shadow.normalBias = 0.6` und
+  `shadow.bias = -0.0004` unterdrücken die Selbst-Schatten-Artefakte (Shadow Acne)
+  an den neuen steilen Gebirgs-Absätzen, ohne sichtbares „Peter-Panning".
+- **Sanftes Füll-/Bounce-Licht:** Die Tag-Keyframes der Grade-Kurve
+  (`environment.ts`) heben `ambient` leicht an und wärmen `hemiGround` — weil ACES
+  Schatten tiefer zieht, hält dieses weiche Fülllicht Gelände- und Gebirgsflächen
+  im Schatten lesbar und warm. Nacht-Keys bleiben unangetastet (Tag/Nacht-Kontrast
+  und Sterne unverändert).
+
+**Warum.** Beleuchtung/Tonwert ist der visuell höchste Hebel pro Aufwand: Er
+verändert die *ganze* Welt sofort, ohne neue Assets, und legt die Basis, auf der
+die nächsten Phasen (entschärfte Kanten, Vegetation, Wasser) erst richtig wirken.
+
+**Architektur.** Rein präsentationsseitig (CLAUDE.md §1): nur Renderer- und
+Grade-Werte, keine Sim-Berührung, **keine `SCHEMA_VERSION`-Änderung**, keine
+Migration. Die Grade-Kurve ist weiterhin die pure, in Node testbare Mathematik aus
+`environment.ts`; die vorhandenen `environment.test.ts`-Invarianten (Mittag heller
+als Mitternacht, Ambient nachts > 0.05, Sterne nur nachts, sauberer Mitternachts-
+Wrap) bleiben erfüllt. **Ein** Draw-Call/Direkt-Render bleibt erhalten — kein
+Post-Processing-Pipeline-Overhead.
+
+**Bloom bewusst verworfen.** Ein subtiler UnrealBloom (EffectComposer → RenderPass
+→ UnrealBloomPass → OutputPass, multisampled HalfFloat-Target für erhaltenes MSAA)
+wurde implementiert und im Screenshot-Smoke getestet, aber wieder entfernt: Die
+Szene ist SDR-authored — nach Summe aus Sonne + Hemisphäre + Ambient liegt schon
+das Gras bei Luminanz ~1.0, es gibt keine saubere HDR-Highlight-Trennung. Jede
+Schwelle, die die Sonne zum Glühen bringt, wäscht auch die Wiese aus; jede
+Schwelle, die die Wiese verschont, lässt nichts glühen. Ein sinnvoller Bloom
+braucht zuerst echte HDR-Emissives (Nacht-Fenster, Sonne, Marker heller als 1.0) —
+das ist ein eigener Folge-Schritt, kein Beiwerk dieser Licht-Phase.
+
+**Auswirkung.** Deutlich weichere, wärmere Tageslicht-Szene; sanfte Schatten auf
+Terrain/Gebäuden; keine Konsolen-/Render-Fehler; Performance unverändert (kein
+zusätzlicher Pass). Golden-Hour liest jetzt als stimmungsvolle Dämmerung
+(tieferes Bodenlicht bei tiefstehender Sonne) — bewusst akzeptiert, da Default-Zeit
+Vormittag/Tag ist.
+
+**Zukunft.** Nächste MVP3-Phasen: Kachel-Gitterlinien entschärfen/organische
+Terrain-Ränder, Vegetation/Wald-Patches, Wasser-/Küsten-Shader. Danach optional:
+HDR-Emissives + Bloom, Fog-of-War-Atmosphäre pro Sektor.
+
+**Verifikation.** `npx tsc -b --force`, `npx eslint src tests`, `npx vitest run`
+(152 Tests), `npm run build`; 3D-Screenshot-Smoke (Playwright, `vite preview`,
+Basis `/`) bei Mittag, Golden-Hour, Nacht und Default-Vormittag.
+
+**Dateien.** Geändert: `src/renderer/three/ThreeMapRenderer.ts`,
+`src/renderer/three/SkyEnvironment.ts`, `src/renderer/three/environment.ts`,
+`docs/3D_WORLD_ASSETS.md`, `docs/PATCHNOTES.md`.
+
 ## v0.46 — Organisches Terrain-Mesh (MVP3 Phase 1)
 
 **Was.** Der Nutzer hat ein großes Vision-Dokument/Mockup für eine

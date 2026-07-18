@@ -1,103 +1,75 @@
-import type { TerrainType } from '../types.ts';
+// Welt-Konfiguration der Insel (§ MVP4 Welt-Neuaufbau · § Welt 2.0 Regionen).
+//
+// Die Weltform kommt aus dem Offline-Bake der verbindlichen Referenz-GLB
+// (`reference/stylized island map 3d model.glb` → `tools/bakeWorld.mjs`):
+// Terrain aus `world/islandTerrain.gen.ts`, die organischen Regionen aus
+// `world/islandRegions.gen.ts`. Seit Welt 2.0 gibt es KEINE Quadrat-Sektoren
+// mehr — der Spieler erschließt Landschaften; `regionIdAt` ist die einzige
+// Zugehörigkeits-Quelle. Maßstäbe: docs/WORLD_SCALE.md.
 
-export const SECTOR_SIZE = 16;
+import type { RegionId, TerrainType } from '../types.ts';
+import { BAKED_START, TERRAIN_IDS, WORLD_TILES, terrainGrid } from './world/islandTerrain.gen.ts';
+import { BAKED_REGIONS, REGION_COUNT, regionGrid } from './world/islandRegions.gen.ts';
 
-// The start region is a hand-designed 4×4 sector area (64×64 tiles):
-// forest to the north, a river along the east (visible but locked in MVP 1),
-// fertile plains in the south-center. Sector (1,1) is the free start sector,
-// with the town hall pre-placed at its center.
+/** Weltbreite/-tiefe in Kacheln (re-export aus dem Bake für Konsumenten). */
+export { WORLD_TILES };
+
+/** Anzahl organischer Regionen (Ozean = Id 0 zählt nicht). */
+export { REGION_COUNT };
+
+/** Gebackene Region-Statistik (Kacheln, Bebaubarkeit, Nachbarn, Zentrum). */
+export { BAKED_REGIONS };
+
 export const startRegionConfig = {
-  /** Sector-grid extents of the initially materialized region. */
-  sectors: { minSx: 0, minSy: 0, maxSx: 3, maxSy: 3 },
-  /**
-   * Hard edges of the world (§ bounded world). Unlike the open-end model, the
-   * map is a large but *finite* board: every sector inside these bounds exists
-   * and is visible from the first minute (locked/dimmed until unlocked), so all
-   * biomes — forest, mountains, river, coast, plains — are on show as goals from
-   * the start, and nothing can be unlocked beyond the edge. The bounds are wider
-   * than the hand-designed start region: the extra eastern columns hold the coast
-   * and the southern row more plains, giving room for every biome to read.
-   */
-  // v0.21 (§17): the board grew two sector-columns west (minSx 0 → −2) into a
-  // mountain range cut by valley paths, so expansion toward the mountains is
-  // attractive and the quarry's rock bonus matters more. Behind the far-west
-  // wall lies unreachable land — a future biome goal for a later MVP.
-  worldBounds: { minSx: -2, minSy: 0, maxSx: 5, maxSy: 4 },
-  startSector: { sx: 1, sy: 1 },
-  townHall: { x: 23, y: 23 }, // world tile coords (3×3 footprint)
-  /** Pre-placed road tiles below the town hall so the tutorial has an anchor. */
-  startRoads: [
-    { x: 23, y: 26 },
-    { x: 24, y: 26 },
-    { x: 25, y: 26 },
-  ],
+  /** Vom Bake gewählte Startregion (zentrums-nah, ≥ 2.500 bebaubare Kacheln). */
+  startRegionId: BAKED_START.regionId as RegionId,
+  /** Rathaus (5×5, Anker links-oben): flachster 7×7-Gras-Block nahe der Regionsmitte. */
+  townHall: { x: BAKED_START.townHall.x, y: BAKED_START.townHall.y },
+  /** Vorplatzierte Tutorial-Straßen entlang der Rathaus-Südkante. */
+  startRoads: BAKED_START.startRoads.map((r) => ({ x: r.x, y: r.y })),
 };
 
-/** Small deterministic hash so terrain variation is stable per tile. */
-function tileHash(x: number, y: number): number {
-  let h = (x * 374761393 + y * 668265263) ^ 0x5bf03635;
-  h = Math.imul(h ^ (h >>> 13), 1274126177);
-  return ((h ^ (h >>> 16)) >>> 0) / 0xffffffff;
-}
-
-/** The lake ("Weiher") in the western neighbor sector — not just decoration:
- * shore tiles stay buildable and are reserved for water-side gameplay
- * (fishing hut, kayak rental …) in later MVPs. */
-export const lakeConfig = { cx: 10, cy: 42, rx: 4.2, ry: 3.2 };
-
 /**
- * Terrain for any world tile — also used for sectors materialized later,
- * so expansion beyond the start region keeps a coherent landscape (open end).
+ * Terrain jeder Welt-Kachel — die EINE Quelle des Kacheltyps, aus dem
+ * gebackenen Insel-Grid. Außerhalb der Welt: offener Ozean (`water`), damit
+ * alle Abfragen total bleiben.
  */
 export function terrainAt(x: number, y: number): TerrainType {
-  // Western mountain range (§17): the two negative-x sector columns are a rocky
-  // massif cut by two valley corridors (grass, with fertile pockets) that let
-  // roads — and later a Fernstraße — thread through. The far-west column is a
-  // near-solid wall; behind it is the next biome's land, unreachable for now.
-  if (x < 0) {
-    const inValley = (y >= 20 && y <= 25) || (y >= 51 && y <= 56);
-    if (inValley) {
-      // A passable valley floor with the odd fertile patch to reward settling it.
-      if (tileHash(x * 11, y * 13) > 0.82) return 'fertile';
-      if (tileHash(x * 7, y * 5) > 0.9) return 'mountain'; // stray boulders
-      return 'grass';
+  if (x < 0 || y < 0 || x >= WORLD_TILES || y >= WORLD_TILES) return 'water';
+  return TERRAIN_IDS[terrainGrid[y * WORLD_TILES + x]!] as TerrainType;
+}
+
+/**
+ * Region-Zugehörigkeit jeder Welt-Kachel (§ Welt 2.0): 1..REGION_COUNT, 0 für
+ * Ozean und alles außerhalb der Welt.
+ */
+export function regionIdAt(x: number, y: number): RegionId {
+  if (x < 0 || y < 0 || x >= WORLD_TILES || y >= WORLD_TILES) return 0;
+  return regionGrid[y * WORLD_TILES + x]!;
+}
+
+// Lazy berechnete Bounding-Boxen je Region (ein Scan über das Grid, danach
+// gecacht) — für Suchen innerhalb einer Region (z. B. Distrikt-Zentrum) ohne
+// die Kachellisten im Bundle zu verdoppeln.
+let regionBoundsCache: Map<RegionId, { minX: number; minY: number; maxX: number; maxY: number }> | undefined;
+
+export function regionBounds(id: RegionId): { minX: number; minY: number; maxX: number; maxY: number } | undefined {
+  if (!regionBoundsCache) {
+    regionBoundsCache = new Map();
+    for (let y = 0; y < WORLD_TILES; y++) {
+      for (let x = 0; x < WORLD_TILES; x++) {
+        const r = regionGrid[y * WORLD_TILES + x]!;
+        if (r === 0) continue;
+        const b = regionBoundsCache.get(r);
+        if (!b) regionBoundsCache.set(r, { minX: x, minY: y, maxX: x, maxY: y });
+        else {
+          if (x < b.minX) b.minX = x;
+          if (x > b.maxX) b.maxX = x;
+          if (y < b.minY) b.minY = y;
+          if (y > b.maxY) b.maxY = y;
+        }
+      }
     }
-    if (x <= -28) return 'mountain'; // solid far-west wall
-    return tileHash(x * 3, y * 5) > 0.12 ? 'mountain' : 'grass';
   }
-
-  // Eastern sea: the far-east coast biome (§ bounded world, all biomes on show).
-  // A sandy beach gives way to open water at the world's east edge — the seaside
-  // district goal (harbour/beach in a later MVP).
-  if (x >= 85) return 'water';
-  if (x >= 81) return 'sand';
-
-  // River: vertical band around x = 57 with a gentle meander.
-  const riverCenter = 57 + Math.round(Math.sin(y / 9) * 2);
-  if (x >= riverCenter - 1 && x <= riverCenter + 1) return 'river';
-  if (x === riverCenter - 2 || x === riverCenter + 2) return 'sand';
-
-  // Lake in sector (0,2) with a sandy shore ring.
-  const lakeDist = Math.hypot((x - lakeConfig.cx) / lakeConfig.rx, (y - lakeConfig.cy) / lakeConfig.ry);
-  if (lakeDist <= 1) return 'water';
-  if (lakeDist <= 1.35) return 'sand';
-
-  // Mountains on the western edge (quarry location bonus target), widened into a
-  // visible alpine wall along the far-west column so the mountain biome reads as
-  // a real region from the start (§ all biomes visible).
-  const ridgeDist = Math.hypot((x - 3) / 3.2, (y - 28) / 6.5);
-  if (ridgeDist <= 1 && tileHash(x * 3, y * 5) > 0.15) return 'mountain';
-  if (x <= 2 && tileHash(x * 5, y * 7) > 0.35) return 'mountain';
-
-  // Forest: northern band, thinning toward the south.
-  if (y < 12 && tileHash(x, y) > 0.15) return 'forest';
-  if (y < 16 && tileHash(x, y) > 0.6) return 'forest';
-
-  // Fertile plains: south-center band.
-  if (y >= 40 && y < 60 && x >= 12 && x < 48 && tileHash(x, y) > 0.35) return 'fertile';
-
-  // Scattered forest patches everywhere else.
-  if (tileHash(x * 7, y * 3) > 0.93) return 'forest';
-
-  return 'grass';
+  return regionBoundsCache.get(id);
 }

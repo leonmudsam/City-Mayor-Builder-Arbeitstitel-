@@ -23,6 +23,10 @@
   --panel-bg-2: rgba(32, 41, 55, 0.9);
   --panel-border: rgba(120, 140, 170, 0.22);
   --hud-gap: 10px;
+  /* § A8 UI-Audit: Höhe, die die untere rechte Steuerung (Bauen-Knopf +
+     Schnellaktionsleiste) einnimmt. Rechte Panels reservieren diesen Platz, damit
+     sie auf niedrigen Auflösungen (z. B. 1280×720) nicht dahinter geklippt werden. */
+  --bottom-bar-clear: 120px;
   /* Per-resource accent colours (§12) — shared by HUD cards and previews. */
   --res-money: #f0b64a;
   --res-wood: #c08a52;
@@ -112,7 +116,8 @@ body {
 /* Large right-docked detail sheet (§5): compact overviews live on the left,
    full-height detail sheets open here on the right. */
 .side-panel {
-  position: absolute; top: var(--hud-gap); right: var(--hud-gap); bottom: var(--hud-gap);
+  position: absolute; top: var(--hud-gap); right: var(--hud-gap);
+  bottom: calc(var(--hud-gap) + var(--bottom-bar-clear)); /* § A8: über der unteren Leiste enden */
   width: 420px; max-width: calc(100vw - 2 * var(--hud-gap)); max-height: none;
   overflow-y: auto; display: flex; flex-direction: column; gap: 12px;
   background: var(--panel-bg); border: 1px solid var(--panel-border); border-radius: var(--radius-lg);
@@ -297,6 +302,18 @@ body {
 .sector-district-head { display: flex; align-items: center; gap: 7px; font-weight: 700; }
 .sector-district-head svg { color: var(--primary); }
 .btn-district { margin-top: 10px; width: 100%; }
+
+/* Regions-Charakter-Vorschau (§ Welt 2.0 / A4): Baufläche + Boni/Nachteile
+   vor der Freischaltung. */
+.region-character { margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--border); }
+.region-character-head { font-weight: 700; font-size: 13px; margin-bottom: 6px; }
+.region-buildable { display: flex; align-items: center; gap: 7px; color: var(--muted); font-size: 13px; margin-bottom: 6px; }
+.region-mods { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+.region-mods li { display: flex; align-items: center; gap: 7px; font-size: 13.5px; }
+.region-mods li span:first-of-type { flex: 1; }
+.region-mod-pct { font-weight: 700; font-variant-numeric: tabular-nums; }
+.region-mod-good, .region-mod-good svg, .region-mod-good .region-mod-pct { color: #4caf50; }
+.region-mod-bad, .region-mod-bad svg, .region-mod-bad .region-mod-pct { color: #e5673b; }
 
 /* Building dialog: bigger, centered, readable (§6 UX). */
 .building-dialog { width: 440px; max-width: calc(100vw - 40px); max-height: 80vh; overflow-y: auto; }
@@ -809,7 +826,12 @@ body {
 
 .city-status { top: calc(var(--hud-gap) + 2px); left: var(--hud-gap); }
 .city-work { bottom: var(--hud-gap); left: var(--hud-gap); }
-.citizen-requests { top: calc(var(--hud-gap) + 2px); right: var(--hud-gap); max-height: calc(100% - 2 * var(--hud-gap) - 4px); }
+.citizen-requests {
+  top: calc(var(--hud-gap) + 2px); right: var(--hud-gap);
+  /* § A8: Platz für die untere rechte Leiste reservieren, sonst wird die letzte
+     Anliegen-Karte auf niedrigen Auflösungen dahinter versteckt. */
+  max-height: calc(100% - 2 * var(--hud-gap) - 4px - var(--bottom-bar-clear));
+}
 
 /* ---- City status rows (§3) ---- */
 .status-rows { display: flex; flex-direction: column; gap: 11px; }
@@ -851,6 +873,24 @@ body {
 .work-reward { display: inline-flex; align-items: center; gap: 3px; color: var(--good); font-weight: 700; font-size: 11.5px; }
 .work-feature-foot { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-top: 10px; }
 .work-hint { font-size: 10.5px; margin-top: 4px; }
+.work-drive { margin-top: 8px; width: 100%; display: inline-flex; align-items: center; justify-content: center; gap: 6px; }
+
+/* ---- § A6 Fahrmodus-HUD (unten mittig) ---- */
+.drive-hud {
+  position: absolute; bottom: var(--hud-gap); left: 50%; transform: translateX(-50%);
+  z-index: 40; display: flex; flex-direction: column; gap: 6px; min-width: 260px;
+  padding: 12px 16px; border-radius: 14px;
+  background: rgba(18, 22, 30, 0.86); backdrop-filter: blur(6px);
+  border: 1px solid rgba(255, 255, 255, 0.12); box-shadow: 0 8px 28px rgba(0, 0, 0, 0.45);
+  color: #f2f4f8; pointer-events: auto;
+}
+.drive-hud-head { display: flex; align-items: center; gap: 8px; font-weight: 600; }
+.drive-hud-name { font-size: 14px; }
+.drive-hud-stats { display: flex; gap: 16px; }
+.drive-hud-stat { display: inline-flex; align-items: center; gap: 5px; font-size: 12.5px; color: #cdd4de; }
+.drive-hud-stat.is-late { color: #e5673b; }
+.drive-hud-hint { display: flex; align-items: center; gap: 6px; font-size: 11px; color: #9aa3b0; margin: 0; }
+.drive-hud-exit { align-self: flex-start; display: inline-flex; align-items: center; gap: 5px; margin-top: 2px; }
 
 /* ---- Citizen request cards (§5) ---- */
 .request-list { display: flex; flex-direction: column; gap: 9px; overflow-y: auto; }

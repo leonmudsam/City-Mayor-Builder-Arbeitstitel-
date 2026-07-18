@@ -1,9 +1,13 @@
 import { describe, expect, it } from 'vitest';
-import { newController, setLevel, flattenTerrain, T0 } from './helpers.ts';
-import { migrateAndValidate } from '../src/game/storage/migrations.ts';
+import { nearTownHall, newController, setLevel, flattenTerrain, T0 } from './helpers.ts';
+import { LegacyWorldSaveError, migrateAndValidate } from '../src/game/storage/migrations.ts';
 import { exportSave } from '../src/game/storage/exportImport.ts';
 
 const MIN = 60_000;
+
+// Insel-Layout (v11): Rathaus 5×5, Startstraßen-Zeile bei y+5 (x..x+4);
+// Erweiterungs-Straßen ab at(5,5), Gebäude ab at(·,6).
+const at = (dx: number, dy: number) => nearTownHall(dx, dy);
 
 // v0.21 "Aktive Stadt": the whole economy runs only while the game is open and
 // visible; offline advances only build/upgrade timers and cooldowns.
@@ -12,9 +16,9 @@ describe('no AFK farming (§1/§16)', () => {
     const { controller } = newController();
     setLevel(controller, 2);
     flattenTerrain(controller);
-    for (let x = 24; x <= 31; x++) controller.placeBuilding('road', x, 26);
-    controller.placeBuilding('house_small', 24, 27);
-    expect(controller.placeBuilding('sawmill', 28, 27)).toEqual({ ok: true });
+    for (let dx = 5; dx <= 10; dx++) controller.placeBuilding('road', at(dx, 5).x, at(dx, 5).y);
+    controller.placeBuilding('house_small', at(3, 6).x, at(3, 6).y);
+    expect(controller.placeBuilding('sawmill', at(6, 6).x, at(6, 6).y)).toEqual({ ok: true });
     controller.update(T0 + 40_000, true); // buildings finish, live
 
     const wood = controller.state.resources.wood;
@@ -34,8 +38,7 @@ describe('no AFK farming (§1/§16)', () => {
 
   it('finishes a build offline (and grants its XP), because timers do run', () => {
     const { controller } = newController();
-    controller.placeBuilding('road', 26, 26);
-    controller.placeBuilding('house_small', 26, 27); // 20s
+    controller.placeBuilding('house_small', at(3, 6).x, at(3, 6).y); // 20s
     const xp0 = controller.state.level.xp;
     controller.update(T0 + 60_000, false); // offline, past the 20s build
     const house = Object.values(controller.state.buildings).find((b) => b.defId === 'house_small')!;
@@ -54,9 +57,9 @@ function deliveryCity() {
   setLevel(controller, 6);
   flattenTerrain(controller);
   controller.state.resources = { money: 100_000, wood: 500, stone: 500, food: 1_000, freshwater: 0 };
-  for (let x = 22; x <= 33; x++) controller.placeBuilding('road', x, 26);
-  for (let x = 22; x <= 30; x += 2) controller.placeBuilding('house_small', x, 27);
-  controller.placeBuilding('farm', 28, 23); // the food source (requiresAnyBuilding, 60s build)
+  for (let dx = 5; dx <= 23; dx++) controller.placeBuilding('road', at(dx, 5).x, at(dx, 5).y);
+  for (const dx of [3, 6, 9, 12, 15]) controller.placeBuilding('house_small', at(dx, 6).x, at(dx, 6).y);
+  controller.placeBuilding('farm', at(18, 6).x, at(18, 6).y); // the food source (requiresAnyBuilding, 6×6)
   controller.update(T0 + 90_000, false); // finish construction without economy noise
   return bundle;
 }
@@ -89,8 +92,8 @@ describe('Stadtarbeit activities', () => {
     setLevel(controller, 6);
     flattenTerrain(controller);
     controller.state.resources = { money: 100_000, wood: 500, stone: 500, food: 1_000, freshwater: 0 };
-    for (let x = 22; x <= 33; x++) controller.placeBuilding('road', x, 26);
-    for (let x = 22; x <= 30; x += 2) controller.placeBuilding('house_small', x, 27);
+    for (let dx = 5; dx <= 16; dx++) controller.placeBuilding('road', at(dx, 5).x, at(dx, 5).y);
+    for (const dx of [3, 6, 9, 12, 15]) controller.placeBuilding('house_small', at(dx, 6).x, at(dx, 6).y);
     controller.update(T0 + 40_000, true); // homes active, but no farm/market yet
     // No source building → cannot start, and the board flags why.
     expect(controller.startActivity('food_delivery')).toEqual({ ok: false, error: 'locked' });
@@ -142,8 +145,9 @@ describe('Stadtarbeit activities', () => {
   it('offers rotating trade contracts and pays out on fulfilment', () => {
     const { controller } = newController();
     setLevel(controller, 8);
-    controller.placeBuilding('road', 26, 26);
-    controller.placeBuilding('trading_post', 26, 27);
+    controller.state.resources.money = 100_000;
+    controller.state.resources.wood = 200; // Kontor kostet 65 Holz (> Startvorrat)
+    expect(controller.placeBuilding('trading_post', at(3, 6).x, at(3, 6).y)).toEqual({ ok: true });
     controller.update(T0 + 100_000, true); // trading post active
     const offers = controller.getTradeContracts();
     expect(offers.length).toBeGreaterThan(0);
@@ -158,28 +162,17 @@ describe('Stadtarbeit activities', () => {
   });
 });
 
-// Migration to the v0.21 schema.
-describe('v8 → v9 migration', () => {
-  it('seeds activities/stats, drops the start sector from the count, scales pop', () => {
+// § MVP4 (v10): Die Vor-Insel-Migrationskette (v1..v9) existiert nicht mehr —
+// ein v8-Save ist ein Legacy-Weltstand und wird gesichert statt migriert
+// (docs/SAVE_MIGRATION.md). Der alte v8→v9-Test ist damit obsolet.
+describe('pre-island saves (≤ v9)', () => {
+  it('are rejected as legacy world instead of being migrated', () => {
     const { controller } = newController();
     /* eslint-disable @typescript-eslint/no-explicit-any -- crafting a v8 raw save */
     const raw = JSON.parse(exportSave(controller.state)) as Record<string, any>;
     raw.schemaVersion = 8;
-    raw.citizens.population = 300;
-    raw.stats.sectorsUnlocked = 3; // v8 counted the start sector, so this = 2 real
-    delete raw.activities;
-    delete raw.stats.upgradesCompleted;
-    delete raw.stats.upgraded;
-    delete raw.stats.tradeEarnings;
-    delete raw.stats.activitiesCompleted;
     /* eslint-enable @typescript-eslint/no-explicit-any */
-    const migrated = migrateAndValidate(raw);
-    expect(migrated.schemaVersion).toBe(9);
-    expect(migrated.activities).toEqual({ cooldowns: {}, fulfilledContracts: [] });
-    expect(migrated.stats.sectorsUnlocked).toBe(2); // start sector no longer counts
-    expect(migrated.citizens.population).toBe(6_000); // ×20 scale
-    expect(migrated.stats.upgradesCompleted).toBe(0);
-    expect(migrated.stats.tradeEarnings).toBe(0);
+    expect(() => migrateAndValidate(raw)).toThrow(LegacyWorldSaveError);
   });
 });
 
@@ -187,12 +180,16 @@ describe('v8 → v9 migration', () => {
 // NEW residential building unlocks, so each level has a clear identity.
 describe('housing progression is spread out (§13)', () => {
   it('never unlocks a residential upgrade in a new-residential-building level', () => {
+    // Ausnahme (§ Gebäudesystem 2.0, fixierte Entscheidung): Level 15 ist das
+    // Metropol-Band — der Wohnblock (house_small Endstufe) und der neue
+    // Wohnturm schalten bewusst gemeinsam frei.
+    const METROPOLIS_BAND = 15;
     const { config } = newController();
     const residential = config.buildingList.filter((b) => b.category === 'residential');
     const newBuildingLevels = new Set(residential.map((b) => b.unlockLevel));
     for (const b of residential) {
       for (const up of b.upgrades ?? []) {
-        if (up.unlockLevel !== undefined) {
+        if (up.unlockLevel !== undefined && up.unlockLevel !== METROPOLIS_BAND) {
           expect(newBuildingLevels.has(up.unlockLevel)).toBe(false);
         }
       }

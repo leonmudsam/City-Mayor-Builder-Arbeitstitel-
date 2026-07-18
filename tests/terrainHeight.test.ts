@@ -7,24 +7,30 @@ import { terrainAt } from '../src/game/config/startRegion.config.ts';
 // gentle (so buildings sit cleanly), and the surface is continuous (no cliffs
 // between adjacent sample points on flat land).
 
+// Insel-Welt (v10): 384×384 Kacheln aus dem GLB-Bake — die Scans laufen über
+// das ganze Brett (Schrittweite 1 wäre 147k Iterationen; früh gefundene Treffer
+// halten die Laufzeit trotzdem klein).
+import { WORLD_TILES } from '../src/game/config/startRegion.config.ts';
+
 /** Find a world tile of a given terrain type by scanning the board. */
 function findTile(type: string): { x: number; y: number } {
-  for (let y = 0; y < 80; y++) {
-    for (let x = -32; x < 96; x++) {
+  for (let y = 0; y < WORLD_TILES; y++) {
+    for (let x = 0; x < WORLD_TILES; x++) {
       if (terrainAt(x, y) === type) return { x, y };
     }
   }
   throw new Error(`no ${type} tile`);
 }
 
-/** Find a grass tile whose whole 3×3 neighbourhood is grass (an open building
- *  site, not a lone patch wedged against a mountain). */
+/** Find a grass tile whose whole 5×5 neighbourhood is grass — a real interior
+ *  building site. (Der Bake glättet nur bebaubares Land; direkt an einer
+ *  Klippen-/Küstenkante darf der Übergang steil bleiben, deshalb 5×5 statt 3×3.) */
 function findOpenGrass(): { x: number; y: number } {
-  for (let y = 1; y < 79; y++) {
-    for (let x = -31; x < 95; x++) {
+  for (let y = 2; y < WORLD_TILES - 2; y++) {
+    for (let x = 2; x < WORLD_TILES - 2; x++) {
       let open = true;
-      for (let dx = -1; dx <= 1 && open; dx++) {
-        for (let dy = -1; dy <= 1; dy++) {
+      for (let dx = -2; dx <= 2 && open; dx++) {
+        for (let dy = -2; dy <= 2; dy++) {
           if (terrainAt(x + dx, y + dy) !== 'grass') {
             open = false;
             break;
@@ -39,12 +45,19 @@ function findOpenGrass(): { x: number; y: number } {
 
 describe('terrain height field', () => {
   it('mountains rise far above buildable land', () => {
-    const m = findTile('mountain');
+    // `mountain` umfasst auch niedrige Klippen (Slope-Klassifikation) — der
+    // Anspruch ist, dass das GEBIRGE aufragt: höchster Gipfel deutlich über Gras.
+    let peak = -Infinity;
+    for (let y = 0; y < WORLD_TILES; y += 2) {
+      for (let x = 0; x < WORLD_TILES; x += 2) {
+        if (terrainAt(x, y) !== 'mountain') continue;
+        peak = Math.max(peak, terrainHeightAt(x + 0.5, y + 0.5));
+      }
+    }
     const g = findOpenGrass();
-    const hMountain = terrainHeightAt(m.x + 0.5, m.y + 0.5);
     const hGrass = terrainHeightAt(g.x + 0.5, g.y + 0.5);
-    expect(hMountain).toBeGreaterThan(2);
-    expect(hMountain).toBeGreaterThan(hGrass + 1.5);
+    expect(peak).toBeGreaterThan(10); // Gipfel ≈ 20 (docs/WORLD_SCALE.md)
+    expect(peak).toBeGreaterThan(hGrass + 5);
   });
 
   it('water and river dip below the water surface level', () => {
@@ -77,8 +90,8 @@ describe('terrain height field', () => {
   });
 
   it('returns finite heights across the whole board', () => {
-    for (let y = 0; y < 80; y += 7) {
-      for (let x = -32; x < 96; x += 7) {
+    for (let y = 0; y < WORLD_TILES; y += 13) {
+      for (let x = 0; x < WORLD_TILES; x += 13) {
         expect(Number.isFinite(terrainHeightAt(x + 0.5, y + 0.5))).toBe(true);
       }
     }

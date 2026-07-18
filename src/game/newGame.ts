@@ -1,10 +1,16 @@
 import type { GameConfig } from './config/index.ts';
 import { startRegionConfig } from './config/startRegion.config.ts';
 import type { GameState } from './types.ts';
-import { sectorId } from './types.ts';
-import { allWorldSectors, materializeSector, tileAt } from './map/world.ts';
+import { allRegionIds, createRegionStub, occupyTiles } from './map/world.ts';
 
-export const SCHEMA_VERSION = 9;
+/**
+ * v11 (§ Gebäudesystem 2.0 + Welt 2.0): organische Regionen ersetzen die 36
+ * Quadrat-Sektoren, Gebäude haben neue Footprints/Größenklassen. v10-Saves
+ * werden migriert (Regionen übertragen, nicht mehr passende Gebäude zu 100 %
+ * erstattet — docs/SAVE_MIGRATION.md). Saves ≤ v9: Backup + Neustart (alte
+ * Geografie, sanktionierte Ausnahme von CLAUDE.md §3).
+ */
+export const SCHEMA_VERSION = 11;
 
 export function createNewGame(config: GameConfig, cityName: string, now: number): GameState {
   const state: GameState = {
@@ -16,7 +22,7 @@ export function createNewGame(config: GameConfig, cityName: string, now: number)
     gold: { balance: config.balancing.startGold },
     goldTransactions: [],
     policy: { residentialTaxRate: 1, commercialTaxRate: 1 },
-    world: { sectors: {}, districts: {} },
+    world: { regions: {}, districts: {} },
     buildings: {},
     citizens: {
       population: 0,
@@ -42,9 +48,9 @@ export function createNewGame(config: GameConfig, cityName: string, now: number)
       built: {},
       produced: { money: 0, wood: 0, stone: 0, food: 0, freshwater: 0 },
       mayorActions: {},
-      // Counts only sectors the player actively unlocks — the start sector is
+      // Counts only regions the player actively unlocks — the start region is
       // free and does not count towards expansion quests (§5).
-      sectorsUnlocked: 0,
+      regionsUnlocked: 0,
       upgradesCompleted: 0,
       upgraded: {},
       tradeEarnings: 0,
@@ -53,16 +59,18 @@ export function createNewGame(config: GameConfig, cityName: string, now: number)
     nextId: 0,
   };
 
-  // Materialize the whole finite world up front (§ bounded world): every sector
-  // inside the bounds exists and is visible (locked/dimmed) from the first
-  // minute, so all biomes are on show as goals. Only the start sector is
-  // unlocked. The board is large but hard-edged — there is no open end.
-  for (const { sx, sy } of allWorldSectors()) materializeSector(state, sx, sy);
-  const start = startRegionConfig.startSector;
-  const startSector = state.world.sectors[sectorId(start.sx, start.sy)];
-  if (startSector) startSector.status = 'unlocked';
+  // Alle organischen Regionen als Stubs anlegen (§ Welt 2.0 / Slim-Save):
+  // sichtbar ab der ersten Minute (gesperrt/vernebelt), Geometrie und Terrain
+  // kommen live aus dem Insel-Bake. Nur die vom Bake gewählte Startregion ist frei.
+  for (const id of allRegionIds()) {
+    const stub = createRegionStub(id);
+    state.world.regions[String(id)] = stub;
+  }
+  const startRegion = state.world.regions[String(startRegionConfig.startRegionId)];
+  if (startRegion) startRegion.status = 'unlocked';
 
-  // Pre-place the town hall (district center of 'main').
+  // Pre-place the town hall (district center of 'main'). Der Bake garantiert
+  // einen flachen 7×7-Gras-Block für das 5×5-Rathaus — kein Terrain-Überschreiben nötig.
   const th = startRegionConfig.townHall;
   const townHallDef = config.buildings.get('town_hall');
   if (!townHallDef) throw new Error('config: town_hall missing');
@@ -75,27 +83,15 @@ export function createNewGame(config: GameConfig, cityName: string, now: number)
     upgradeLevel: 0,
     status: 'active',
   };
-  for (let dy = 0; dy < townHallDef.size.h; dy++) {
-    for (let dx = 0; dx < townHallDef.size.w; dx++) {
-      const tile = tileAt(state, th.x + dx, th.y + dy);
-      if (tile) {
-        tile.terrain = 'grass';
-        tile.buildingId = townHallId;
-      }
-    }
-  }
+  occupyTiles(state, th.x, th.y, townHallDef.size.w, townHallDef.size.h, townHallId);
   state.world.districts['main'] = { id: 'main', nameKey: 'district.main', centerBuildingId: townHallId };
 
-  // Pre-place tutorial roads.
+  // Pre-place tutorial roads (Kacheln laut Bake garantiert Gras).
   let roadIndex = 0;
   for (const pos of startRegionConfig.startRoads) {
     const roadId = `b_startroad_${roadIndex++}`;
     state.buildings[roadId] = { id: roadId, defId: 'road', x: pos.x, y: pos.y, upgradeLevel: 0, status: 'active' };
-    const tile = tileAt(state, pos.x, pos.y);
-    if (tile) {
-      tile.terrain = 'grass';
-      tile.buildingId = roadId;
-    }
+    occupyTiles(state, pos.x, pos.y, 1, 1, roadId);
   }
   return state;
 }

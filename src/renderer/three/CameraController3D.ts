@@ -167,6 +167,33 @@ export class CameraController3D {
     this.gYaw = CAMERA_DEFAULTS.yaw;
   }
 
+  /**
+   * Chase-Kamera (§ A6 Fahrmodus): setzt alle Ziel-Werte direkt, damit die
+   * Kamera hinter dem gesteuerten Fahrzeug herzieht und es anschaut. `yaw` ist
+   * die Fahrtrichtung; die Kamera sitzt dahinter (yaw+π) und blickt nach vorn.
+   * `snapYaw` überspringt das Yaw-Easing für hartes Andocken beim Einsteigen.
+   */
+  setChase(targetX: number, targetZ: number, heading: number, dist: number, pitch: number, snapYaw = false): void {
+    this.gTargetX = targetX;
+    this.gTargetZ = targetZ;
+    this.gDist = clamp(dist, this.bounds.minDist, this.bounds.maxDist);
+    this.gPitch = clamp(pitch, this.bounds.minPitch, this.bounds.maxPitch);
+    // Kamera hinter das Fahrzeug: pose() setzt sie bei target + (sin yaw, cos yaw);
+    // für „dahinter" (−Fahrtrichtung) ist yaw = heading + π. Kürzesten Weg wählen,
+    // damit die Kamera bei Richtungswechsel nicht einmal ganz herumschwenkt.
+    const want = heading + Math.PI;
+    let d = want - this.gYaw;
+    while (d > Math.PI) d -= 2 * Math.PI;
+    while (d < -Math.PI) d += 2 * Math.PI;
+    this.gYaw += d;
+    this.clampTarget();
+    if (snapYaw) {
+      this.yaw = this.gYaw;
+      this.pitch = this.gPitch;
+      this.dist = this.gDist;
+    }
+  }
+
   // ---- per-frame update -----------------------------------------------------
 
   update(dt: number): void {

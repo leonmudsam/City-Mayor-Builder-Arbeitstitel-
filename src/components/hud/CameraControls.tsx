@@ -21,7 +21,6 @@ const PRESETS: { id: CameraPreset; icon: typeof Eye; key: string }[] = [
 ];
 
 export function CameraControls() {
-  const renderMode = useUiStore((s) => s.renderMode);
   const cameraPreset = useUiStore((s) => s.cameraPreset);
   const setCameraPreset = useUiStore((s) => s.setCameraPreset);
   const placing = useUiStore((s) => s.placingDefId);
@@ -30,7 +29,6 @@ export function CameraControls() {
   // Rotate the compass needle to the live camera yaw without re-rendering React
   // every frame (§16 performance): read the yaw in a rAF and set a transform.
   useEffect(() => {
-    if (renderMode !== 'true3d') return;
     let raf = 0;
     const tick = () => {
       const yaw = getMapApi()?.getYaw() ?? 0;
@@ -40,9 +38,7 @@ export function CameraControls() {
     };
     raf = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(raf);
-  }, [renderMode]);
-
-  if (renderMode !== 'true3d') return null;
+  }, []);
 
   return (
     <div className="camera-controls">

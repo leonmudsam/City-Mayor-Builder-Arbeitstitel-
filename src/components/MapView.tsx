@@ -1,9 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { AlertTriangle, CheckCircle2, Move, RotateCw, Sparkles } from 'lucide-react';
-import { MapRenderer, type HoverInfo, type RendererCallbacks } from '../renderer/MapRenderer.ts';
 import { ThreeMapRenderer } from '../renderer/three/ThreeMapRenderer.ts';
-import type { IMapRenderer } from '../renderer/IMapRenderer.ts';
-import { engineFor, type RenderEngine, type RenderMode } from '../renderer/projection.ts';
+import type { HoverInfo, IMapRenderer, RendererCallbacks } from '../renderer/IMapRenderer.ts';
 import { getController, setMapApi, useUiStore, type MapApi } from '../state/store.ts';
 import { ServiceOverlayBanner } from './hud/ServiceOverlayBanner.tsx';
 import { t } from '../i18n/index.ts';
@@ -15,25 +13,18 @@ interface CoverageInfo {
   capacity?: { servable: number; used: number };
 }
 
-/** Instantiate the right renderer for a mode's engine (Pixi 2D / three.js 3D). */
-function createRenderer(mode: RenderMode, callbacks: RendererCallbacks): IMapRenderer {
-  const controller = getController();
-  const renderer: IMapRenderer =
-    engineFor(mode) === 'three' ? new ThreeMapRenderer(controller, callbacks) : new MapRenderer(controller, callbacks);
-  renderer.setRenderMode(mode);
-  return renderer;
-}
-
-/** Imperative camera surface exposed to the HUD; guards the 3D-only methods so
- *  the 2D/iso debug renderer (which lacks them) is safe. */
+/** Imperative camera surface exposed to the HUD. */
 function makeMapApi(r: IMapRenderer): MapApi {
   return {
     centerOnCity: () => r.centerOnCity(),
-    applyPreset: (p) => r.applyPreset?.(p),
-    focusSelected: () => r.focusSelected?.(),
-    resetNorth: () => r.resetNorth?.(),
-    zoomStep: (d) => r.zoomStep?.(d),
-    getYaw: () => r.getYaw?.() ?? 0,
+    applyPreset: (p) => r.applyPreset(p),
+    focusSelected: () => r.focusSelected(),
+    resetNorth: () => r.resetNorth(),
+    zoomStep: (d) => r.zoomStep(d),
+    getYaw: () => r.getYaw(),
+    canDrive: () => r.canDrive(),
+    enterDrive: () => r.enterDrive(),
+    exitDrive: () => r.exitDrive(),
   };
 }
 
@@ -66,7 +57,7 @@ export function MapView() {
         }
         useUiStore.getState().selectBuilding(id);
       },
-      onClickLockedSector: (id) => useUiStore.getState().openSectorDialog(id),
+      onClickLockedRegion: (id) => useUiStore.getState().openRegionDialog(id),
       onCancelPlacement: () => {
         useUiStore.getState().stopPlacing();
         useUiStore.getState().stopMoving();
@@ -81,11 +72,17 @@ export function MapView() {
         }
       },
       onHoverInfo: (info) => setHoverInfo(info),
-      onSectorUnlocked: () => {
+      // § A6 Fahrmodus: Ein-/Ausstieg spiegeln + erreichte Ziele abschließen.
+      onDriveChange: (isActive) => useUiStore.getState().setDriveActive(isActive),
+      onDriveProgress: (id) => {
+        const result = controller.progressActivity(id);
+        if (result.ok) useUiStore.getState().pushToast(t('ui.activity.delivered'), 'success');
+      },
+      onRegionUnlocked: () => {
         useUiStore.getState().pushEvent({
-          kind: 'sectorUnlocked',
-          titleKey: 'event.sector.title',
-          bodyKey: 'event.sector.body',
+          kind: 'regionUnlocked',
+          titleKey: 'event.region.title',
+          bodyKey: 'event.region.body',
         });
       },
       onCoverageInfo: (info) => setCoverage(info),
@@ -111,32 +108,18 @@ export function MapView() {
       },
     };
 
-    // Build the renderer for the persisted mode; expose the camera to the HUD
-    // and apply the player's current camera preset (§ presets).
-    let renderer = createRenderer(ui.renderMode, callbacks);
-    let engine: RenderEngine = engineFor(ui.renderMode);
+    // Build the 3D renderer (the only render path since § Welt 2.0); expose the
+    // camera to the HUD and apply the player's current camera preset (§ presets).
+    const renderer: IMapRenderer = new ThreeMapRenderer(controller, callbacks);
     rendererRef.current = renderer;
     void renderer.init(host);
     setMapApi(makeMapApi(renderer));
-    renderer.applyPreset?.(ui.cameraPreset);
+    renderer.applyPreset(ui.cameraPreset);
 
-    // Mirror UI state into the renderer. Switching between 2D and 3D swaps the
-    // whole engine (Pixi ↔ three.js) — a within-family change (flat2d ↔ iso)
-    // just re-projects. The savegame is never touched either way.
+    // Mirror UI state into the renderer.
     const unsubscribe = useUiStore.subscribe((s) => {
-      if (engineFor(s.renderMode) !== engine) {
-        renderer.destroy();
-        renderer = createRenderer(s.renderMode, callbacks);
-        engine = engineFor(s.renderMode);
-        rendererRef.current = renderer;
-        void renderer.init(host);
-        setMapApi(makeMapApi(renderer));
-        renderer.applyPreset?.(s.cameraPreset);
-      } else {
-        renderer.setRenderMode(s.renderMode);
-      }
       renderer.setPlacing(s.placingDefId);
-      renderer.setPlacingRotation?.(s.placingRotation);
+      renderer.setPlacingRotation(s.placingRotation);
       renderer.setMoving(s.movingBuildingId);
       renderer.setSelected(s.selectedBuildingId);
     });
@@ -146,7 +129,7 @@ export function MapView() {
         useUiStore.getState().stopPlacing();
         useUiStore.getState().stopMoving();
         useUiStore.getState().selectBuilding(undefined);
-        useUiStore.getState().openSectorDialog(undefined);
+        useUiStore.getState().openRegionDialog(undefined);
       }
       // Rotate the building about to be placed, 90° per press (§ Gebäude-Rotation).
       if ((e.key === 'r' || e.key === 'R') && useUiStore.getState().placingDefId !== undefined) {

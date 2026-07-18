@@ -8,8 +8,8 @@ import { createNewGame } from '../src/game/newGame.ts';
 describe('in-place reset (resetTo)', () => {
   it('replaces the whole state and reactivates the first quest', () => {
     const { controller, config } = newController();
-    controller.placeBuilding('road', 26, 26);
-    controller.placeBuilding('house_small', 26, 27);
+    controller.placeBuilding('road', 160, 224);
+    controller.placeBuilding('house_small', 160, 225);
     controller.state.resources.money = 12_345;
     const before = controller.version;
 

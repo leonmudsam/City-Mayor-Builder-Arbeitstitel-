@@ -2,7 +2,7 @@ import type { GameConfig } from '../config/index.ts';
 import type { GameState, NeedId, ResourceId } from '../types.ts';
 import { centerOf, chebyshev, effectiveEffects, isContributing } from '../buildings/effects.ts';
 import { locationBonusPct } from '../buildings/location.ts';
-import { computeRoadNetwork } from '../map/world.ts';
+import { computeRoadNetwork, regionProductionFactorAt } from '../map/world.ts';
 
 /**
  * Values derived from the set of active buildings. Recomputed only on
@@ -149,7 +149,19 @@ export function recomputeDerived(state: GameState, config: GameConfig): Derived 
           ambienceSources.push({ cx, cy, radius: eff.radius, amount: eff.amount });
           break;
         case 'produce':
-          producers.push({ id: b.id, resource: eff.resource, perMinute: eff.perMinute, cx, cy, terrainBonus: locationBonusPct(state, def, b.x, b.y) });
+          producers.push({
+            id: b.id,
+            resource: eff.resource,
+            perMinute: eff.perMinute,
+            cx,
+            cy,
+            // Standort-Bonus (Terrain) + Regions-Charakter, beide als
+            // Prozentpunkte auf den Produktions-Bonus (§ Welt 2.0: z. B. Wald
+            // +40 % Holz, Hochgebirge −40 % Nahrung).
+            terrainBonus:
+              locationBonusPct(state, def, b.x, b.y) +
+              (regionProductionFactorAt(config, b.x, b.y, eff.resource) - 1) * 100,
+          });
           break;
       }
     }
@@ -164,8 +176,12 @@ export function recomputeDerived(state: GameState, config: GameConfig): Derived 
     for (const s of logisticsSources) {
       if (chebyshev(p.cx, p.cy, s.cx, s.cy) <= s.radius) bonus += s.boostPct;
     }
-    if (bonus > 0) productionBonus[p.id] = bonus;
-    productionPerMin[p.resource] += p.perMinute * (1 + bonus / 100);
+    // Auch NEGATIVE Boni speichern (§ Welt 2.0: Regions-Malus, z. B. Gebirge
+    // −40 % Nahrung) — sonst produziert der Tick voll, während das Derived-Total
+    // reduziert ist. Bonus wird bei −100 % gekappt (nie negative Produktion).
+    const effBonus = Math.max(-100, bonus);
+    if (effBonus !== 0) productionBonus[p.id] = effBonus;
+    productionPerMin[p.resource] += p.perMinute * (1 + effBonus / 100);
   }
 
   // Housing-weighted coverage per radius-served need + ambience per home.

@@ -108,7 +108,7 @@ export const questsConfig: QuestDef[] = [
     titleKey: 'quest.q09.title',
     descriptionKey: 'quest.q09.desc',
     unlockLevel: 5,
-    objectives: [{ type: 'sectors', count: 2 }],
+    objectives: [{ type: 'regions', count: 2 }],
     rewards: { money: 95_000, xp: 75 },
     nextQuestId: 'q10_growth',
   },
@@ -165,8 +165,10 @@ export const questsConfig: QuestDef[] = [
     titleKey: 'quest.q14.title',
     descriptionKey: 'quest.q14.desc',
     unlockLevel: 10,
+    // § Gebäudesystem 2.0: Verdichtung heißt jetzt AUFWERTEN — das kleine Haus
+    // wächst auf demselben Grundstück (Mehrfamilienhaus-Stufe statt Apartment-Neubau).
     objectives: [
-      { type: 'build', defId: 'apartment', count: 1 },
+      { type: 'upgrade', defId: 'house_small', count: 2 },
       { type: 'population', amount: 5_000 },
     ],
     rewards: { money: 280_000, xp: 190 },
@@ -179,7 +181,7 @@ export const questsConfig: QuestDef[] = [
     descriptionKey: 'quest.q15.desc',
     unlockLevel: 10,
     objectives: [
-      { type: 'sectors', count: 4 },
+      { type: 'regions', count: 4 },
       { type: 'population', amount: 8_000 },
       { type: 'happiness', amount: 80 },
     ],
@@ -281,7 +283,7 @@ export const questsConfig: QuestDef[] = [
     objectives: [{ type: 'produce', resource: 'stone', amount: 120 }],
     rewards: { money: 22_000, xp: 20 },
   },
-  // Sector quests now count only ADDITIONAL sectors (§5): the free start sector
+  // Region quests count only ADDITIONAL regions (§5): the free start region
   // doesn't count, so "unlock your first new sector" means exactly one purchase.
   {
     id: 'qe_expand',
@@ -289,7 +291,7 @@ export const questsConfig: QuestDef[] = [
     titleKey: 'quest.qe_expand.title',
     descriptionKey: 'quest.qe_expand.desc',
     unlockLevel: 5,
-    objectives: [{ type: 'sectors', count: 1 }],
+    objectives: [{ type: 'regions', count: 1 }],
     rewards: { money: 40_000, gold: 10, xp: 30 },
   },
   {
@@ -298,7 +300,7 @@ export const questsConfig: QuestDef[] = [
     titleKey: 'quest.qe_expand3.title',
     descriptionKey: 'quest.qe_expand3.desc',
     unlockLevel: 7,
-    objectives: [{ type: 'sectors', count: 3 }],
+    objectives: [{ type: 'regions', count: 3 }],
     rewards: { money: 110_000, xp: 70 },
   },
   {
@@ -307,7 +309,7 @@ export const questsConfig: QuestDef[] = [
     titleKey: 'quest.qe_expand4.title',
     descriptionKey: 'quest.qe_expand4.desc',
     unlockLevel: 9,
-    objectives: [{ type: 'sectors', count: 4 }],
+    objectives: [{ type: 'regions', count: 4 }],
     rewards: { money: 180_000, xp: 110 },
   },
   {
@@ -331,7 +333,6 @@ export const questsConfig: QuestDef[] = [
     unlockLevel: 7,
     objectives: [
       { type: 'build', defId: 'house_small', count: 10 },
-      { type: 'build', defId: 'house_row', count: 6 },
     ],
     rewards: { money: 120_000, xp: 90, resources: { wood: 200, stone: 120 } },
   },
@@ -363,7 +364,8 @@ export const questsConfig: QuestDef[] = [
     titleKey: 'quest.qe_rowhouses.title',
     descriptionKey: 'quest.qe_rowhouses.desc',
     unlockLevel: 6,
-    objectives: [{ type: 'build', defId: 'house_row', count: 4 }],
+    // § Gebäudesystem 2.0: Die Doppelhaus-Stufe (L6) ersetzt den Reihenhaus-Neubau.
+    objectives: [{ type: 'upgrade', defId: 'house_small', count: 3 }],
     rewards: { money: 45_000, xp: 45 },
   },
   {

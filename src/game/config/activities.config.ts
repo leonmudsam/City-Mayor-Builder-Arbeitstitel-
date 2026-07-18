@@ -23,6 +23,8 @@ export const activitiesConfig: ActivitiesConfig = {
       unlockLevel: 4, // as soon as farms exist food can be hand-distributed (§3)
       sender: 'citizen',
       requiresAnyBuilding: ['farm', 'market', 'supermarket'],
+      drive: true, // § A6: Lieferwagen selbst fahren (WASD, Verfolgerkamera)
+      vehicle: 'van',
       targetCount: { min: 3, max: 5 },
       timeLimitSec: 75,
       speedBonusFactor: 1.25,
@@ -45,6 +47,8 @@ export const activitiesConfig: ActivitiesConfig = {
       unlockLevel: 7,
       sender: 'buildingDept',
       requiresAnyBuilding: ['sawmill', 'quarry', 'warehouse', 'depot'],
+      drive: true, // § A6: Material selbst zur Baustelle fahren (Pritschenwagen)
+      vehicle: 'flatbed',
       targetCount: { min: 3, max: 4 },
       timeLimitSec: 60,
       speedBonusFactor: 1.25,
@@ -54,6 +58,82 @@ export const activitiesConfig: ActivitiesConfig = {
         { minLevel: 9, money: 60_000, xp: 45 },
         { minLevel: 11, money: 180_000, xp: 70 },
         { minLevel: 13, money: 380_000, xp: 100 },
+      ],
+    },
+    // -- Feuerwehr (§ A6): mit dem Löschfahrzeug zu mehreren Bränden fahren.
+    //    Ziele = bewohnte/gewerbliche Gebäude; kein Materialverbrauch, dafür
+    //    knappe Zeit. Setzt eine Feuerwache voraus.
+    {
+      id: 'fire_response',
+      type: 'delivery',
+      category: 'safety',
+      difficulty: 'hard',
+      nameKey: 'activity.fire_response',
+      descriptionKey: 'activity.fire_response.desc',
+      unlockLevel: 9,
+      sender: 'fire',
+      requiresAnyBuilding: ['fire_station'],
+      drive: true,
+      vehicle: 'fire_truck',
+      targetCategories: ['residential', 'economy', 'leisure'],
+      targetCount: { min: 3, max: 4 },
+      timeLimitSec: 70,
+      speedBonusFactor: 1.3,
+      rewardTiers: [
+        { minLevel: 9, money: 34_000, xp: 40, buff: { kind: 'happiness', amount: 3, durationSec: 10 * 60 } },
+        { minLevel: 11, money: 90_000, xp: 60, buff: { kind: 'happiness', amount: 4, durationSec: 12 * 60 } },
+        { minLevel: 14, money: 220_000, xp: 90, buff: { kind: 'happiness', amount: 5, durationSec: 15 * 60 } },
+        { minLevel: 16, money: 420_000, xp: 130, buff: { kind: 'happiness', amount: 6, durationSec: 15 * 60 } },
+      ],
+    },
+    // -- Holztransport (§ A6): Stämme vom Sägewerk ins Lager fahren. Ziele sind
+    //    ausschließlich Lagergebäude (Def-Id-Auswahl), keine Häuser.
+    {
+      id: 'log_transport',
+      type: 'delivery',
+      category: 'logistics',
+      difficulty: 'medium',
+      nameKey: 'activity.log_transport',
+      descriptionKey: 'activity.log_transport.desc',
+      unlockLevel: 8,
+      sender: 'buildingDept',
+      requiresAnyBuilding: ['sawmill'],
+      drive: true,
+      vehicle: 'logging_truck',
+      targetDefIds: ['warehouse', 'depot'],
+      targetCount: { min: 2, max: 3 },
+      timeLimitSec: 80,
+      speedBonusFactor: 1.25,
+      costPerTarget: { wood: 40 },
+      rewardTiers: [
+        { minLevel: 8, money: 30_000, xp: 34 },
+        { minLevel: 10, money: 80_000, xp: 55 },
+        { minLevel: 13, money: 210_000, xp: 85 },
+        { minLevel: 15, money: 420_000, xp: 120 },
+      ],
+    },
+    // -- Polizei (§ A6): Streifenfahrt zu mehreren Einsatzorten quer durch die
+    //    Stadt. Ziele = beliebige größere Gebäude; belohnt Zufriedenheit.
+    {
+      id: 'police_patrol',
+      type: 'delivery',
+      category: 'safety',
+      difficulty: 'medium',
+      nameKey: 'activity.police_patrol',
+      descriptionKey: 'activity.police_patrol.desc',
+      unlockLevel: 11,
+      sender: 'mayor',
+      requiresAnyBuilding: ['police_station'],
+      drive: true,
+      vehicle: 'police_car',
+      targetCategories: ['residential', 'economy', 'government', 'leisure'],
+      targetCount: { min: 4, max: 5 },
+      timeLimitSec: 90,
+      speedBonusFactor: 1.3,
+      rewardTiers: [
+        { minLevel: 11, money: 70_000, xp: 55, buff: { kind: 'happiness', amount: 3, durationSec: 12 * 60 } },
+        { minLevel: 14, money: 190_000, xp: 85, buff: { kind: 'happiness', amount: 4, durationSec: 15 * 60 } },
+        { minLevel: 17, money: 420_000, xp: 130, buff: { kind: 'happiness', amount: 5, durationSec: 15 * 60 } },
       ],
     },
     // -- Inspection: visit flagged buildings, learn what's wrong, get paid.

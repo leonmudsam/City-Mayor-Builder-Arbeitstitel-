@@ -14,6 +14,7 @@
 // models and reaches the full look purely by adding files (docs/3D_MODEL_MANIFEST.md).
 
 import {
+  ACESFilmicToneMapping,
   Box3,
   BoxGeometry,
   BufferGeometry,
@@ -22,7 +23,9 @@ import {
   Color,
   ConeGeometry,
   CylinderGeometry,
+  DoubleSide,
   EdgesGeometry,
+  ExtrudeGeometry,
   Float32BufferAttribute,
   Group,
   InstancedMesh,
@@ -33,11 +36,14 @@ import {
   MeshLambertMaterial,
   MeshStandardMaterial,
   Object3D,
+  PCFSoftShadowMap,
   PerspectiveCamera,
   PlaneGeometry,
   Raycaster,
   RepeatWrapping,
   Scene,
+  Shape,
+  SphereGeometry,
   SRGBColorSpace,
   Sprite,
   SpriteMaterial,
@@ -51,7 +57,7 @@ import {
 } from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { SkyEnvironment } from './SkyEnvironment.ts';
-import { terrainHeightAt, WATER_LEVEL } from './terrainHeight.ts';
+import { SPLAT_BANDS, terrainHeightAt, WATER_LEVEL } from './terrainHeight.ts';
 import { CameraController3D } from './CameraController3D.ts';
 import { CameraInputController, type CameraInputHost } from './CameraInputController.ts';
 import { worldCameraBounds, type CameraPreset } from './CameraConfig.ts';
@@ -59,7 +65,8 @@ import { getCameraSettings } from './cameraSettings.ts';
 import type { GameController } from '../../game/commands/controller.ts';
 import type { BuildingDef } from '../../game/config/types.ts';
 import type { BuildingInstance, TerrainType } from '../../game/types.ts';
-import { SECTOR_SIZE } from '../../game/map/world.ts';
+import { regionOfTile, worldTerrainAt } from '../../game/map/world.ts';
+import { BAKED_REGIONS, WORLD_TILES, regionBounds, regionIdAt } from '../../game/config/startRegion.config.ts';
 import { validatePlacement } from '../../game/buildings/placement.ts';
 import { locationBonusPct } from '../../game/buildings/location.ts';
 import {
@@ -109,20 +116,31 @@ const TRAFFIC_DESTINATION_CATEGORIES: ReadonlySet<string> = new Set([
   'special',
 ]);
 
-/** Default relative height per category when a def has no `visual.heightClass`. */
-const CATEGORY_HEIGHT: Record<string, number> = {
-  roads: 0.02,
-  residential: 1.4,
-  production: 1.2,
-  services: 1.3,
-  energy: 1.7,
-  economy: 1.4,
-  leisure: 0.5,
-  government: 2.0,
-  infrastructure: 1.0,
-  decoration: 0.35,
-  special: 1.7,
+/**
+ * Default-Bauhöhe je Größenklasse (§ Gebäudesystem 2.0 / A3): die Silhouette
+ * folgt der Bedeutung des Gebäudes, nicht seiner Kategorie — ein 8×8-Kraftwerk
+ * ragt, ein 1×1-Brunnen duckt sich. `visual.heightClass` bleibt der Override
+ * pro Def; Stufen erhöhen zusätzlich (gedeckelt, s. `stageHeightMul`).
+ */
+const SIZE_CLASS_HEIGHT: Record<string, number> = {
+  XS: 0.3,
+  S: 1,
+  M: 1.4,
+  L: 2.2,
+  XL: 3,
+  XXL: 4,
 };
+
+/** Stufen-Höhenfaktor, auf ×3 gedeckelt — Wolkenkratzer ja, Weltraumnadel nein. */
+function stageHeightMul(upgradeLevel: number): number {
+  return Math.min(3, 1 + upgradeLevel * 0.45);
+}
+
+/** Effektive Bauhöhe aus Größenklasse (oder Override) und Stufe. */
+function buildingHeight(def: BuildingDef, upgradeLevel: number): number {
+  const hc = def.visual?.heightClass ?? SIZE_CLASS_HEIGHT[def.sizeClass] ?? 1;
+  return Math.max(0.12, hc * 0.95 * stageHeightMul(upgradeLevel));
+}
 
 const gltfLoader = new GLTFLoader();
 /** URL → loaded scene, so a model is fetched at most once and cloned per use. */
@@ -163,15 +181,26 @@ const textureCache = new Map<string, Promise<Texture> | undefined>();
  *  kept as the default; 3 (~9x) is deliberately not used, only noted here as a
  *  possible future "high" graphics setting. */
 const GROUND_SUBDIV = 2;
+/** Boden-Chunk-Kante in Kacheln (§ MVP4 P3): 384/48 = 8×8 Chunks à ~9,4k Verts —
+ *  Frustum-Culling pro Chunk, Sektor-Unlock baut nur betroffene Chunks neu. */
+const GROUND_CHUNK = 48;
 
 /** One world unit of ground = this many texture repeats, so a 1254px "nah"-detail
  *  photo reads as close-up ground rather than a stretched smear. */
 const SPLAT_TILE_SCALE = 0.5;
+// § A3 (Welt 2.0): Biom-gewichteter Splat. grass/stone/cliff/mountain/snow
+// kommen aus Höhe & Hang, forest/farm/sand aus dem Biom-Vertex-Attribut (aus
+// dem gebackenen Terrain-Grid). Jede Textur ist Drop-in — fehlt sie, blendet
+// die Ebene sauber auf die stilisierte Vertex-Farbe zurück (nie kaputt).
 const SPLAT_LAYERS = [
   { key: 'grass', texture: 'terrain_grass_01' },
-  { key: 'earth', texture: 'terrain_earth_light' },
+  { key: 'forest', texture: 'terrain_forest_floor' },
+  { key: 'farm', texture: 'terrain_farmland' },
+  { key: 'sand', texture: 'terrain_sand_coast' },
   { key: 'stone', texture: 'terrain_rock' },
-  { key: 'sand', texture: 'terrain_sand' },
+  { key: 'cliff', texture: 'terrain_cliff' },
+  { key: 'mountain', texture: 'terrain_mountain' },
+  { key: 'snow', texture: 'terrain_snow' },
 ] as const;
 
 /** Loads (and caches, by URL) any drop-in texture — shared by the terrain splat
@@ -224,6 +253,10 @@ interface RoadMaterials {
   roundabout: MeshStandardMaterial;
   bridgeDeck: MeshStandardMaterial;
   boardwalk: MeshStandardMaterial;
+  // § A5 Straßen-Redesign: heller Gehweg-Beton, Laternenmast + emissiver Kopf.
+  sidewalk: MeshStandardMaterial;
+  lampPost: MeshStandardMaterial;
+  lampHead: MeshStandardMaterial;
 }
 
 interface BuildingNode {
@@ -268,6 +301,18 @@ export class ThreeMapRenderer implements IMapRenderer {
 
   private buildingGroup = new Group();
   private terrainGroup = new Group();
+  // Chunk-Boden (§ MVP4 P3): persistente Gruppe + Cache — bei Sektor-Unlock
+  // werden nur die betroffenen Chunks neu gebaut, nie das ganze Inselmesh.
+  private groundChunkGroup = new Group();
+  private groundChunks = new Map<string, { mesh: Mesh; sig: string }>();
+  private oceanBuilt = false;
+  // Organischer Regions-Nebel (§ Welt 2.0 / A3): ein Volumen je gesperrter
+  // Region (Randkontur + Silhouetten); Unlock startet die Aufdeck-Animation.
+  private fogGroup = new Group();
+  private fogVolumes = new Map<
+    number,
+    { group: Group; mats: { mat: MeshStandardMaterial; base: number }[]; fading: number }
+  >();
   private vegetationGroup = new Group();
   private liveGroup = new Group();
   private overlayGroup = new Group();
@@ -289,10 +334,7 @@ export class ThreeMapRenderer implements IMapRenderer {
   private nodes = new Map<string, BuildingNode>();
   private lastVersion = -1;
   private terrainKey = '';
-  private sectorStatus = new Map<string, string>();
-  /** Terrain type per tile "x,y" — lets roads detect water (→ bridge) and lets
-   *  the mountain/feature pass know where to drop hero terrain models. */
-  private terrainAt = new Map<string, TerrainType>();
+  private regionStatus = new Map<number, string>();
 
   private placingDefId: string | undefined;
   private selectedId: string | undefined;
@@ -305,12 +347,45 @@ export class ThreeMapRenderer implements IMapRenderer {
   private smokeSrc: TObject3D | undefined;
   private smokeSrcState: 'none' | 'loading' | 'ready' | 'fail' = 'none';
   private cars: Car[] = [];
+  // § A7 Weidetiere: wandern gemächlich im Weide-Radius ihres Bauernhofs;
+  // reseeded nur, wenn sich die Farmen (Position/Stufe) ändern (animalKey).
+  private animals: {
+    mesh: Object3D;
+    homeX: number;
+    homeZ: number;
+    radius: number;
+    x: number;
+    z: number;
+    heading: number;
+    speed: number;
+    turnT: number;
+    bob: number;
+  }[] = [];
+  private animalKey = '';
   private roadTiles: { x: number; y: number }[] = [];
   private roadSet = new Set<string>();
   // Active Stadtarbeit (§6): a delivery van routes along roads to the mission's
   // target houses; the camera focuses the first target when a mission starts.
   private missionKey = '';
   private missionVan: { mesh: Object3D; path: { x: number; y: number }[]; idx: number; t: number } | undefined;
+
+  // § A6 Fahrmodus: der Spieler steuert bei einer Fahr-Aktivität selbst ein
+  // Fahrzeug (WASD/Pfeile), die Kamera zieht als Verfolger hinterher, erreichte
+  // Ziele schließen sich automatisch über progressActivity ab. Rein additive
+  // Interaktionsschicht — die Simulation bleibt dieselbe Aktivitäts-Logik.
+  private drive:
+    | {
+        mesh: Object3D;
+        arrow: Object3D;
+        x: number;
+        z: number;
+        heading: number;
+        speed: number;
+        held: Set<string>;
+      }
+    | undefined;
+  private readonly driveKeyDown = (e: KeyboardEvent): void => this.driveKey(e, true);
+  private readonly driveKeyUp = (e: KeyboardEvent): void => this.driveKey(e, false);
 
   private destroyed = false;
 
@@ -325,6 +400,15 @@ export class ThreeMapRenderer implements IMapRenderer {
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     renderer.setSize(host.clientWidth || 800, host.clientHeight || 600);
     renderer.shadowMap.enabled = true;
+    // Premium look (§ MVP3 Phase 2 — Atmosphäre & Licht): filmic ACES tone mapping
+    // rolls bright sky/sun highlights off softly instead of clipping to flat white,
+    // giving the warm, high-quality feel of Manor Lords / Foundation instead of the
+    // hard "test render" look. Soft (PCF) shadows drop the jagged shadow edges the
+    // new terraced terrain would otherwise show. Exposure is tuned in tandem with
+    // the day/night grade in environment.ts.
+    renderer.toneMapping = ACESFilmicToneMapping;
+    renderer.toneMappingExposure = 1.2;
+    renderer.shadowMap.type = PCFSoftShadowMap;
     this.renderer = renderer;
     if (this.destroyed) {
       renderer.dispose();
@@ -368,6 +452,7 @@ export class ThreeMapRenderer implements IMapRenderer {
 
   destroy(): void {
     this.destroyed = true;
+    if (this.drive) this.exitDrive();
     this.resizeObs?.disconnect();
     this.input?.detach();
     const r = this.renderer;
@@ -379,16 +464,13 @@ export class ThreeMapRenderer implements IMapRenderer {
     this.env?.dispose();
     this.disposeGroup(this.buildingGroup);
     this.disposeGroup(this.terrainGroup);
+    this.disposeGroup(this.groundChunkGroup);
+    this.groundChunks.clear();
     this.disposeGroup(this.vegetationGroup);
     this.disposeGroup(this.liveGroup);
     this.disposeGroup(this.overlayGroup);
     for (const m of this.markers) this.disposeGroup(m.obj);
     for (const t of this.markerTex.values()) t.dispose();
-  }
-
-  setRenderMode(): void {
-    // A ThreeMapRenderer only ever renders true3d; MapView rebuilds the engine
-    // when the mode leaves 3D, so there is nothing to switch here.
   }
 
   setPlacing(defId: string | undefined): void {
@@ -446,6 +528,207 @@ export class ThreeMapRenderer implements IMapRenderer {
   /** Current yaw in radians — the compass reads this each frame. */
   getYaw(): number {
     return this.cam.getYaw();
+  }
+
+  // ---- § A6 Fahrmodus (Stadtarbeit selbst fahren) ---------------------------
+
+  /** Läuft gerade eine Fahr-Aktivität, die man selbst fahren kann? (UI-Button). */
+  canDrive(): boolean {
+    if (this.drive) return false;
+    return this.activeDriveDef() !== undefined && this.roadTiles.length > 1;
+  }
+
+  /** Ist der Fahrmodus gerade aktiv? */
+  isDriving(): boolean {
+    return this.drive !== undefined;
+  }
+
+  /** Die laufende Aktivität, falls sie eine Fahrmission ist (drive:true). */
+  private activeDriveDef(): { id: string; vehicle?: string } | undefined {
+    const active = this.controller.state.activities.active;
+    if (!active || active.targets.length === 0) return undefined;
+    const def = this.controller.config.activities.activities.find((a) => a.id === active.defId);
+    return def?.drive ? def : undefined;
+  }
+
+  /**
+   * Steigt in das gesteuerte Fahrzeug ein: Kamera-Input aus, Verfolgerkamera an,
+   * Fahrzeug am naheliegendsten Straßenpunkt (Quelle/erstes Ziel) spawnen, eigene
+   * WASD-Listener registrieren. Gibt false zurück, wenn keine Fahrmission läuft.
+   */
+  enterDrive(): boolean {
+    const def = this.activeDriveDef();
+    if (this.drive || !def || this.roadTiles.length < 2) return false;
+    const active = this.controller.state.activities.active!;
+    const firstTarget = active.targets.find((t) => !t.done) ?? active.targets[0]!;
+    const tb = this.controller.state.buildings[firstTarget.buildingId];
+    const tdef = tb && this.controller.config.buildings.get(tb.defId);
+    const spawn =
+      this.deliverySourceTile() ??
+      (tb && tdef ? this.roadTileAdjacent(tb.x, tb.y, tdef.size.w, tdef.size.h) : undefined) ??
+      this.roadTiles[0]!;
+    const mesh = makeMissionVehicle(def.vehicle);
+    this.liveGroup.add(mesh);
+    // Drop-in-Fahrzeug je Typ (§ Fahrzeuge): eigenes GLB ersetzt das Prozedurale.
+    const modelList = DRIVE_VEHICLE_MODELS[def.vehicle ?? 'van'] ?? VAN_MODELS;
+    const url = firstModel(vehicleModel, modelList);
+    if (url) void this.swapInModel(url, mesh, { targetHeight: 0.5 });
+    const arrow = makeDriveArrow();
+    this.liveGroup.add(arrow);
+    // Anfangsrichtung: zu einem Straßen-Nachbarn zeigen, damit es sofort losgeht.
+    const nb = this.roadNeighbors(spawn)[0];
+    const heading = nb ? Math.atan2(nb.x - spawn.x, nb.y - spawn.y) : 0;
+    this.drive = { mesh, arrow, x: spawn.x + 0.5, z: spawn.y + 0.5, heading, speed: 0, held: new Set() };
+    this.input?.detach(); // Kamera-Steuerung ruht, solange gefahren wird
+    window.addEventListener('keydown', this.driveKeyDown);
+    window.addEventListener('keyup', this.driveKeyUp);
+    this.cam.setChase(this.drive.x, this.drive.z, heading, DRIVE_CAM_DIST, DRIVE_CAM_PITCH, true);
+    this.callbacks.onDriveChange?.(true);
+    return true;
+  }
+
+  /** Steigt aus: Fahrzeug/Arrow entfernen, Listener lösen, Kamera-Input zurück. */
+  exitDrive(): void {
+    const d = this.drive;
+    if (!d) return;
+    window.removeEventListener('keydown', this.driveKeyDown);
+    window.removeEventListener('keyup', this.driveKeyUp);
+    this.liveGroup.remove(d.mesh);
+    this.disposeGroup(d.mesh);
+    this.liveGroup.remove(d.arrow);
+    this.disposeGroup(d.arrow);
+    this.drive = undefined;
+    if (!this.destroyed) this.input?.attach();
+    this.callbacks.onDriveChange?.(false);
+    this.missionKey = ''; // erzwingt frisches updateMission (Kamera-Fokus)
+  }
+
+  private driveKey(e: KeyboardEvent, down: boolean): void {
+    if (!this.drive) return;
+    const target = e.target as HTMLElement | null;
+    if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable)) return;
+    const k = e.key.toLowerCase();
+    if (down && (k === 'escape' || k === 'q')) {
+      this.exitDrive();
+      return;
+    }
+    if (DRIVE_KEYS.has(k)) {
+      if (down) this.drive.held.add(k);
+      else this.drive.held.delete(k);
+      e.preventDefault();
+    }
+  }
+
+  /**
+   * Ein Fahr-Schritt (§ A6): Arcade-Physik (Gas/Bremse/Lenken) mit sanfter
+   * Führung auf die Fahrbahn — verlässt das Fahrzeug die Straße, wird es
+   * abgebremst und zur Mitte der nächsten Straßenkachel gezogen. Erreichte Ziele
+   * lösen `progressActivity` aus; ist die Mission vorbei, endet der Fahrmodus.
+   */
+  private updateDrive(dt: number): void {
+    const d = this.drive;
+    if (!d) return;
+    const def = this.activeDriveDef();
+    if (!def) {
+      this.exitDrive();
+      return;
+    }
+    const h = d.held;
+    const fwd = (h.has('w') || h.has('arrowup') ? 1 : 0) - (h.has('s') || h.has('arrowdown') ? 1 : 0);
+    const steer = (h.has('d') || h.has('arrowright') ? 1 : 0) - (h.has('a') || h.has('arrowleft') ? 1 : 0);
+    // Längsdynamik: Gas beschleunigt, sonst rollt es aus; Rückwärts halb so schnell.
+    if (fwd > 0) d.speed += DRIVE_ACCEL * dt;
+    else if (fwd < 0) d.speed -= DRIVE_ACCEL * dt;
+    else d.speed *= Math.exp(-dt * 2.4);
+    d.speed = MathUtils.clamp(d.speed, -DRIVE_MAX_SPEED * 0.5, DRIVE_MAX_SPEED);
+    if (Math.abs(d.speed) < 0.02) d.speed = 0;
+    // Lenken nur bei Bewegung; Vorzeichen dreht sich beim Rückwärtsfahren.
+    if (steer !== 0 && Math.abs(d.speed) > 0.05) {
+      d.heading += steer * DRIVE_STEER * dt * Math.sign(d.speed) * Math.min(1, Math.abs(d.speed) / 1.5 + 0.35);
+    }
+    // Vorwärtsvektor (Konvention rotation.y = atan2(hx,hz)): (sin,cos).
+    let nx = d.x + Math.sin(d.heading) * d.speed * dt;
+    let nz = d.z + Math.cos(d.heading) * d.speed * dt;
+    // Fahrbahn-Führung: liegt das Ziel-Tile nicht auf einer Straße, abbremsen und
+    // zur nächstgelegenen Straßenkachel-Mitte ziehen (sanft „auf die Straße").
+    if (!this.roadSet.has(`${Math.floor(nx)},${Math.floor(nz)}`)) {
+      const near = this.nearestRoadTile(nx, nz);
+      if (near) {
+        const cx = near.x + 0.5;
+        const cz = near.y + 0.5;
+        nx += (cx - nx) * Math.min(1, dt * 6);
+        nz += (cz - nz) * Math.min(1, dt * 6);
+      }
+      d.speed *= 0.86; // Reibung abseits der Fahrbahn
+    } else {
+      // Auf der Straße: leicht zur Kachelmitte-Querachse ziehen (sauberes Fahren).
+      const cx = Math.floor(nx) + 0.5;
+      const cz = Math.floor(nz) + 0.5;
+      const perpX = Math.cos(d.heading); // quer zur Fahrtrichtung
+      const perpZ = -Math.sin(d.heading);
+      const off = (nx - cx) * perpX + (nz - cz) * perpZ;
+      nx -= perpX * off * Math.min(1, dt * 3);
+      nz -= perpZ * off * Math.min(1, dt * 3);
+    }
+    d.x = nx;
+    d.z = nz;
+    const y = terrainHeightAt(d.x, d.z) + 0.32;
+    d.mesh.position.set(d.x, y, d.z);
+    d.mesh.rotation.y = d.heading;
+
+    // Ziel erreicht? Nächstes offenes Ziel abschließen, wenn nah genug.
+    const active = this.controller.state.activities.active;
+    let nearestTarget: { cx: number; cz: number } | undefined;
+    let nearestDist = Infinity;
+    for (const t of active?.targets ?? []) {
+      if (t.done) continue;
+      const b = this.controller.state.buildings[t.buildingId];
+      const bdef = b && this.controller.config.buildings.get(b.defId);
+      if (!b || !bdef) continue;
+      const cx = b.x + bdef.size.w / 2;
+      const cz = b.y + bdef.size.h / 2;
+      const reach = Math.max(bdef.size.w, bdef.size.h) / 2 + 1.4;
+      const dist = Math.hypot(cx - d.x, cz - d.z);
+      if (dist < reach) {
+        this.callbacks.onDriveProgress?.(t.buildingId);
+        return; // Version-Bump führt zu erneutem updateMission/rebuild
+      }
+      if (dist < nearestDist) {
+        nearestDist = dist;
+        nearestTarget = { cx, cz };
+      }
+    }
+    // Zielpfeil über dem Fahrzeug in Richtung des nächsten offenen Ziels drehen.
+    d.arrow.position.set(d.x, y + 1.5, d.z);
+    if (nearestTarget) {
+      d.arrow.visible = true;
+      d.arrow.rotation.y = Math.atan2(nearestTarget.cx - d.x, nearestTarget.cz - d.z);
+    } else {
+      d.arrow.visible = false;
+    }
+    // Verfolgerkamera nachführen.
+    this.cam.setChase(d.x, d.z, d.heading, DRIVE_CAM_DIST, DRIVE_CAM_PITCH);
+  }
+
+  /** Nächstgelegene Straßenkachel zu einem Weltpunkt (kleiner Suchradius). */
+  private nearestRoadTile(x: number, z: number): { x: number; y: number } | undefined {
+    const bx = Math.floor(x);
+    const bz = Math.floor(z);
+    let best: { x: number; y: number } | undefined;
+    let bestD = Infinity;
+    for (let dz = -2; dz <= 2; dz++) {
+      for (let dx = -2; dx <= 2; dx++) {
+        const tx = bx + dx;
+        const tz = bz + dz;
+        if (!this.roadSet.has(`${tx},${tz}`)) continue;
+        const dd = Math.hypot(tx + 0.5 - x, tz + 0.5 - z);
+        if (dd < bestD) {
+          bestD = dd;
+          best = { x: tx, y: tz };
+        }
+      }
+    }
+    return best;
   }
 
   private focusBuilding(id: string): void {
@@ -540,11 +823,9 @@ export class ThreeMapRenderer implements IMapRenderer {
     }
     const t = this.pickTileAt(clientX, clientY);
     if (t) {
-      const sx = Math.floor(t.x / SECTOR_SIZE);
-      const sy = Math.floor(t.y / SECTOR_SIZE);
-      const sector = this.controller.state.world.sectors[`${sx}:${sy}`];
-      if (sector && sector.status === 'locked') {
-        this.callbacks.onClickLockedSector(sector.id);
+      const region = regionOfTile(this.controller.state, t.x, t.y);
+      if (region && region.status === 'locked') {
+        this.callbacks.onClickLockedRegion(region.id);
         return;
       }
     }
@@ -640,134 +921,165 @@ export class ThreeMapRenderer implements IMapRenderer {
   // ---- terrain --------------------------------------------------------------
 
   private rebuildTerrainIfNeeded(): void {
-    const sectors = Object.values(this.controller.state.world.sectors);
-    const key = sectors.map((s) => `${s.id}:${s.status}`).join(',');
+    const regions = Object.values(this.controller.state.world.regions);
+    const key = regions.map((r) => `${r.id}:${r.status}`).join(',');
     if (key === this.terrainKey) return;
-    // Fire the "new area" popup for sectors that just unlocked.
-    for (const s of sectors) {
-      const prev = this.sectorStatus.get(s.id);
-      if (prev === 'locked' && s.status === 'unlocked') this.callbacks.onSectorUnlocked(s.id);
-      this.sectorStatus.set(s.id, s.status);
+    // Fire the "new area" popup for regions that just unlocked.
+    for (const r of regions) {
+      const prev = this.regionStatus.get(r.id);
+      if (prev === 'locked' && r.status === 'unlocked') this.callbacks.onRegionUnlocked(r.id);
+      this.regionStatus.set(r.id, r.status);
     }
     this.terrainKey = key;
 
     this.disposeGroup(this.terrainGroup);
     this.terrainGroup.clear();
-    this.terrainAt.clear();
 
+    // Chunk-Boden (§ MVP4 P3): das 384²-Inselmesh ist in 8×8 Chunks à 48 Kacheln
+    // zerlegt — nur Chunks, deren Sperr-Signatur sich geändert hat, werden neu
+    // gebaut (Region-Unlock berührt wenige Chunks statt 600k Vertices). Gesperrte
+    // Regionen werden PRO KACHEL gedimmt — die Grenze ist damit organisch
+    // (§ Welt 2.0: keine Rechtecke); der hochwertige Nebel folgt in Phase A3.
+    this.buildGroundChunks(regions);
+
+    // Ein Ozean statt Kachelwasser (§ MVP4 P3): eine große Wellen-Ebene auf
+    // WATER_LEVEL — Seen/Flüsse liegen im gebackenen Höhenfeld unter der
+    // Wasserlinie und teilen dieselbe Fläche. Einmalig gebaut, bleibt stehen.
+    this.buildOcean();
+
+    // Organischer Nebel über gesperrten Landschaften (§ Welt 2.0 / A3).
+    this.buildRegionFog(regions);
+
+    // Drop-in terrain models (§ Gebirge/Map): nur für FREIGESCHALTETE Regionen
+    // eingesammelt (147k-Kachel-Scans über die ganze Insel wären Verschwendung).
     const tiles: { x: number; y: number; terrain: TerrainType; locked: boolean }[] = [];
-    for (const s of sectors) {
-      const ox = s.sx * SECTOR_SIZE;
-      const oy = s.sy * SECTOR_SIZE;
-      for (let ly = 0; ly < SECTOR_SIZE; ly++) {
-        for (let lx = 0; lx < SECTOR_SIZE; lx++) {
-          const tile = s.tiles[ly * SECTOR_SIZE + lx];
-          if (!tile) continue;
-          const x = ox + lx;
-          const y = oy + ly;
-          tiles.push({ x, y, terrain: tile.terrain, locked: s.status === 'locked' });
-          this.terrainAt.set(`${x},${y}`, tile.terrain);
+    for (const r of regions) {
+      if (r.status !== 'unlocked') continue;
+      const b = regionBounds(r.id);
+      if (!b) continue;
+      for (let y = b.minY; y <= b.maxY; y++) {
+        for (let x = b.minX; x <= b.maxX; x++) {
+          if (regionIdAt(x, y) !== r.id) continue;
+          tiles.push({ x, y, terrain: worldTerrainAt(this.controller.state, x, y), locked: false });
         }
       }
     }
-
-    // Organic heightfield ground (v0.39): one continuous, vertex-coloured, lit
-    // mesh whose vertices ride the terrain-height field, so hills slope, mountains
-    // tower and water dips — no blocky tiles. Everything else reads the SAME field
-    // (terrainHeightAt) so buildings/roads/props sit exactly on the ground.
-    this.buildGroundMesh(tiles);
-
-    // Rippling water surface over every unlocked water/river tile (v0.37).
-    this.buildWater(tiles);
-
-    // Dense drifting fog over every locked sector (§ Sektor-Nebel, on top of the
-    // dimmed ground tint from buildGroundMesh): hides detail while letting tall
-    // silhouettes (mountains, future landmarks) hint through, per World Graphics V2.
-    this.buildSectorFog(sectors);
-
-    // Drop-in terrain models on top of the coloured base (§ Gebirge/Map): any
-    // `.glb` in models/terrain/… replaces the flat tile for its type. Runs async
-    // so a slow model never blocks the frame; aborts if the world changed.
     void this.decorateTerrain(key, tiles);
   }
 
   /**
-   * The organic ground (v0.39, subdivided v0.46): a single vertex-coloured,
-   * lit heightfield mesh spanning the whole materialized board. Every grid
-   * vertex sits at `terrainHeightAt`, so slopes/terraces/canyons rise
-   * smoothly; vertex colours blend the terrain types of the meeting tiles
-   * (locked sectors dimmed). `computeVertexNormals` gives the slopes real
-   * shading. One draw call regardless of `GROUND_SUBDIV`.
-   *
-   * Two passes: first the colour at each *tile corner* (unchanged from
-   * pre-v0.46, one `TERRAIN_COLORS` blend per corner), then a denser
-   * `GROUND_SUBDIV`x grid whose positions sample `terrainHeightAt` directly
-   * (already continuous, so this is free) and whose colours are bilinearly
-   * blended from the cached corner grid — no repeated terrain lookups.
+   * Chunk-Boden der Insel (§ MVP4 P3): das 384²-Höhenfeld ist in
+   * `GROUND_CHUNK`-Kachel-Chunks zerlegt (8×8 = 64 Meshes à ~9,4k Vertices bei
+   * `GROUND_SUBDIV` 2). Vertex-Höhen kommen aus `terrainHeightAt` (gebackenes
+   * Grid), Vertex-Farben aus den Terrain-Typen (gesperrte Sektoren gedimmt).
+   * Frustum-Culling pro Chunk ist gratis (eigene Bounding-Sphären); bei einem
+   * Sektor-Unlock werden nur Chunks mit geänderter Sperr-Signatur neu gebaut.
    */
-  private buildGroundMesh(tiles: { x: number; y: number; terrain: TerrainType; locked: boolean }[]): void {
-    if (tiles.length === 0) return;
-    const info = new Map<string, { terrain: TerrainType; locked: boolean }>();
-    let minX = Infinity;
-    let minY = Infinity;
-    let maxX = -Infinity;
-    let maxY = -Infinity;
-    for (const t of tiles) {
-      info.set(`${t.x},${t.y}`, t);
-      if (t.x < minX) minX = t.x;
-      if (t.y < minY) minY = t.y;
-      if (t.x > maxX) maxX = t.x;
-      if (t.y > maxY) maxY = t.y;
+  private buildGroundChunks(regions: { id: number; status: string }[]): void {
+    if (!this.groundChunkGroup.parent) this.scene.add(this.groundChunkGroup);
+    const status = new Map<number, string>();
+    for (const r of regions) status.set(r.id, r.status);
+    // Ozean (Region 0) gilt als "frei" — offenes Meer wird nie gedimmt.
+    const lockedAt = (tx: number, ty: number): boolean => {
+      const id = regionIdAt(tx, ty);
+      return id !== 0 && status.get(id) !== 'unlocked';
+    };
+
+    const chunksPerAxis = Math.ceil(WORLD_TILES / GROUND_CHUNK);
+    for (let cy = 0; cy < chunksPerAxis; cy++) {
+      for (let cx = 0; cx < chunksPerAxis; cx++) {
+        const key = `${cx},${cy}`;
+        // Sperr-Signatur: Status aller Regionen, die diesen Chunk berühren
+        // (organische Grenzen → per Kachel-Scan eingesammelt, ~2,3k Reads).
+        const touching = new Set<number>();
+        const x1 = Math.min(WORLD_TILES, cx * GROUND_CHUNK + GROUND_CHUNK);
+        const y1 = Math.min(WORLD_TILES, cy * GROUND_CHUNK + GROUND_CHUNK);
+        for (let ty = cy * GROUND_CHUNK; ty < y1; ty++) {
+          for (let tx = cx * GROUND_CHUNK; tx < x1; tx++) touching.add(regionIdAt(tx, ty));
+        }
+        const sig = [...touching]
+          .sort((a, b) => a - b)
+          .map((id) => `${id}:${id === 0 ? 'u' : status.get(id) ?? '?'}`)
+          .join(',');
+        const cached = this.groundChunks.get(key);
+        if (cached && cached.sig === sig) continue;
+        if (cached) {
+          this.groundChunkGroup.remove(cached.mesh);
+          cached.mesh.geometry.dispose();
+          (cached.mesh.material as Material).dispose();
+        }
+        const mesh = this.buildGroundChunk(cx * GROUND_CHUNK, cy * GROUND_CHUNK, lockedAt);
+        this.groundChunkGroup.add(mesh);
+        this.groundChunks.set(key, { mesh, sig });
+      }
     }
-    const W = maxX - minX + 1;
-    const H = maxY - minY + 1;
+  }
+
+  /** Baut EIN Boden-Chunk-Mesh (`GROUND_CHUNK`² Kacheln ab (minX,minY)). */
+  private buildGroundChunk(minX: number, minY: number, lockedAt: (tx: number, ty: number) => boolean): Mesh {
+    const W = Math.min(GROUND_CHUNK, WORLD_TILES - minX);
+    const H = Math.min(GROUND_CHUNK, WORLD_TILES - minY);
     const nx0 = W + 1;
     const ny0 = H + 1;
     const cornerColors = new Float32Array(nx0 * ny0 * 3);
+    // Biom-Anteile je Eckpunkt (r=forest, g=fertile, b=sand) — das Splat-Shader
+    // liest sie als Vertex-Attribut, damit Waldboden/Ackerland/Küstensand
+    // genau dort erscheinen, wo das gebackene Grid sie hat (nicht nur höhenweise).
+    const cornerBiome = new Float32Array(nx0 * ny0 * 3);
     const tmp = new Color();
     const out = new Color();
+    const state = this.controller.state;
 
     for (let iy = 0; iy < ny0; iy++) {
       for (let ix = 0; ix < nx0; ix++) {
         const vx = minX + ix;
         const vy = minY + iy;
         const o = (iy * nx0 + ix) * 3;
-        // Colour = mean of the (up to 4) tiles meeting at this corner; a dimmed
-        // tint when the majority of them are still locked (fog of war).
+        // Colour = mean of the 4 tiles meeting at this corner (Nachbar-Chunks
+        // eingeschlossen — worldTerrainAt ist total); dimmed when mostly locked.
         let r = 0;
         let g = 0;
         let b = 0;
         let cnt = 0;
         let lock = 0;
+        let forest = 0;
+        let fertile = 0;
+        let sand = 0;
         for (const [tx, ty] of [
           [vx - 1, vy - 1],
           [vx, vy - 1],
           [vx - 1, vy],
           [vx, vy],
         ] as const) {
-          const ti = info.get(`${tx},${ty}`);
-          if (!ti) continue;
-          tmp.set(TERRAIN_COLORS[ti.terrain]);
+          if (tx < 0 || ty < 0 || tx >= WORLD_TILES || ty >= WORLD_TILES) continue;
+          const terrain = worldTerrainAt(state, tx, ty);
+          tmp.set(TERRAIN_COLORS[terrain]);
           r += tmp.r;
           g += tmp.g;
           b += tmp.b;
           cnt++;
-          if (ti.locked) lock++;
+          if (terrain === 'forest') forest++;
+          else if (terrain === 'fertile') fertile++;
+          else if (terrain === 'sand') sand++;
+          if (lockedAt(tx, ty)) lock++;
         }
         if (cnt === 0) {
-          tmp.set(TERRAIN_COLORS.grass);
+          tmp.set(TERRAIN_COLORS.water);
           r = tmp.r;
           g = tmp.g;
           b = tmp.b;
           cnt = 1;
         }
         out.setRGB(r / cnt, g / cnt, b / cnt);
-        // A touch of per-vertex lightness jitter so large fields aren't a flat sheet.
-        out.offsetHSL(0, 0, (hash01(`${vx},${vy}`) - 0.5) * 0.05);
+        // A faint per-corner lightness jitter so large fields aren't a flat sheet.
+        out.offsetHSL(0, 0, (hash01(`${vx},${vy}`) - 0.5) * 0.03);
         if (lock / cnt > 0.5) out.multiplyScalar(0.42);
         cornerColors[o] = out.r;
         cornerColors[o + 1] = out.g;
         cornerColors[o + 2] = out.b;
+        cornerBiome[o] = forest / cnt;
+        cornerBiome[o + 1] = fertile / cnt;
+        cornerBiome[o + 2] = sand / cnt;
       }
     }
 
@@ -776,6 +1088,7 @@ export class ThreeMapRenderer implements IMapRenderer {
     const ny = H * S + 1;
     const positions = new Float32Array(nx * ny * 3);
     const colors = new Float32Array(nx * ny * 3);
+    const biome = new Float32Array(nx * ny * 3);
 
     for (let iy = 0; iy < ny; iy++) {
       const cy0 = Math.min(Math.floor(iy / S), H - 1);
@@ -790,8 +1103,7 @@ export class ThreeMapRenderer implements IMapRenderer {
         positions[o + 1] = terrainHeightAt(vx, vy);
         positions[o + 2] = vy;
 
-        // Bilinear blend of the 4 surrounding tile-corner colours — mirrors
-        // how terrainHeightAt itself interpolates height between corners.
+        // Bilinear blend of the 4 surrounding tile-corner colours + biome mix.
         const c00 = (cy0 * nx0 + cx0) * 3;
         const c10 = (cy0 * nx0 + cx0 + 1) * 3;
         const c01 = ((cy0 + 1) * nx0 + cx0) * 3;
@@ -800,6 +1112,9 @@ export class ThreeMapRenderer implements IMapRenderer {
           const top = cornerColors[c00 + ch]! + (cornerColors[c10 + ch]! - cornerColors[c00 + ch]!) * fx;
           const bot = cornerColors[c01 + ch]! + (cornerColors[c11 + ch]! - cornerColors[c01 + ch]!) * fx;
           colors[o + ch] = top + (bot - top) * fy;
+          const btop = cornerBiome[c00 + ch]! + (cornerBiome[c10 + ch]! - cornerBiome[c00 + ch]!) * fx;
+          const bbot = cornerBiome[c01 + ch]! + (cornerBiome[c11 + ch]! - cornerBiome[c01 + ch]!) * fx;
+          biome[o + ch] = btop + (bbot - btop) * fy;
         }
       }
     }
@@ -818,13 +1133,14 @@ export class ThreeMapRenderer implements IMapRenderer {
     const geo = new BufferGeometry();
     geo.setAttribute('position', new Float32BufferAttribute(positions, 3));
     geo.setAttribute('color', new Float32BufferAttribute(colors, 3));
+    geo.setAttribute('aBiome', new Float32BufferAttribute(biome, 3));
     geo.setIndex(indices);
     geo.computeVertexNormals();
     const mat = new MeshStandardMaterial({ vertexColors: true, roughness: 1, metalness: 0 });
     const mesh = new Mesh(geo, mat);
     mesh.receiveShadow = true;
-    this.terrainGroup.add(mesh);
     void this.applyGroundSplat(mat, this.terrainKey);
+    return mesh;
   }
 
   /**
@@ -859,10 +1175,11 @@ export class ThreeMapRenderer implements IMapRenderer {
     mat.onBeforeCompile = (shader) => {
       for (const a of active) shader.uniforms[`uTex_${a.key}`] = { value: a.tex };
       shader.vertexShader =
-        'varying float vSplatH;\nvarying float vSplatSlope;\nvarying vec2 vSplatUv;\n' +
+        'attribute vec3 aBiome;\nvarying vec3 vBiome;\nvarying float vSplatH;\nvarying float vSplatSlope;\nvarying vec2 vSplatUv;\n' +
         shader.vertexShader.replace(
           '#include <begin_vertex>',
           `#include <begin_vertex>
+           vBiome = aBiome;
            vSplatH = position.y;
            vSplatSlope = 1.0 - abs(normal.y);
            vSplatUv = position.xz * ${SPLAT_TILE_SCALE.toFixed(4)};`,
@@ -873,30 +1190,76 @@ export class ThreeMapRenderer implements IMapRenderer {
         .map((l) => `${cap(l.key)} = 0.0;`)
         .join('\n');
       const sumTerms = SPLAT_LAYERS.map((l) => cap(l.key)).join(' + ');
-      const sampleTerms = active.map((a) => `texture2D(uTex_${a.key}, vSplatUv).rgb * ${cap(a.key)}`).join(' + ');
+      // De-tiled sampling (§ MVP3 Phase 3 — "keine sichtbare Wiederholung"): each
+      // material is read at two incommensurate scales and blended, so the texture
+      // never repeats visibly across the board (the old single-scale repeat was
+      // the tile grid the world showed at distance). See cmbDetile below.
+      const sampleTerms = active.map((a) => `cmbDetile(uTex_${a.key}, vSplatUv) * ${cap(a.key)}`).join(' + ');
+      // Value-noise + de-tile helpers, prepended at file scope (before main()).
+      const helpers = `
+        varying vec3 vBiome;
+        varying float vSplatH;
+        varying float vSplatSlope;
+        varying vec2 vSplatUv;
+        ${samplerDecls}
+        float cmbHash(vec2 p){ p = fract(p * vec2(123.34, 345.45)); p += dot(p, p + 34.345); return fract(p.x * p.y); }
+        float cmbNoise(vec2 p){
+          vec2 i = floor(p); vec2 f = fract(p); vec2 u = f * f * (3.0 - 2.0 * f);
+          float a = cmbHash(i); float b = cmbHash(i + vec2(1.0, 0.0));
+          float c = cmbHash(i + vec2(0.0, 1.0)); float d = cmbHash(i + vec2(1.0, 1.0));
+          return mix(mix(a, b, u.x), mix(c, d, u.x), u.y);
+        }
+        vec3 cmbDetile(sampler2D tex, vec2 uv){
+          // Two reads at a non-harmonic ratio (1.0 : 0.37) break the periodicity.
+          // The blend ratio itself is driven by a low-frequency noise so the two
+          // repeat grids never line up into one consistent seam, and a macro
+          // brightness noise dissolves what's left — result reads as one organic
+          // field, no straight tile lines. Cheap: two samples + noise per layer.
+          vec3 s1 = texture2D(tex, uv).rgb;
+          vec3 s2 = texture2D(tex, uv * 0.37 + vec2(3.1, 1.7)).rgb;
+          float blend = 0.3 + 0.4 * cmbNoise(uv * 0.5);
+          float m = cmbNoise(uv * 0.13);
+          return mix(s1, s2, blend) * (0.88 + 0.24 * m);
+        }`;
       shader.fragmentShader =
-        `varying float vSplatH;\nvarying float vSplatSlope;\nvarying vec2 vSplatUv;\n${samplerDecls}\n` +
+        `${helpers}\n` +
         shader.fragmentShader.replace(
           '#include <map_fragment>',
           `#include <map_fragment>
            {
-             // Bands calibrated against the REAL terrainHeightAt() ranges (see
-             // terrainHeight.ts BASE table), not the aspirational metre figures in
-             // docs/TERRAIN_TEXTURES.md: grass/fertile/sand all sit within roughly
-             // 0.0–0.25, forest up to ~0.6, mountains start at 2.6 — so the sand→
-             // grass→stone transitions have to happen in that much smaller range.
+             // Höhen-/Hang-Bänder aus SPLAT_BANDS (terrainHeight.ts, § MVP4 P3):
+             // ONE source, an die gebackenen Höhen kalibriert (Strand < ~0.9,
+             // bebaubar ~0.05–3, Fels ab ~4.5, Gipfel bis 20). Biom-Anteile
+             // (vBiome: r=Wald, g=fruchtbar, b=Sand) aus dem gebackenen Grid
+             // wählen Waldboden/Ackerland/Küstensand ortsgenau (§ A3).
              float h = vSplatH;
              float slope = clamp(vSplatSlope, 0.0, 1.0);
              float wSlope = smoothstep(0.28, 0.55, slope);
-             float wSand = max(1.0 - smoothstep(-0.05, 0.12, h) - wSlope * 0.5, 0.0);
-             float wGrass = max((smoothstep(-0.02, 0.15, h) - smoothstep(1.4, 2.4, h)) * (1.0 - wSlope), 0.0);
-             float wStone = max(smoothstep(1.4, 2.4, h), wSlope);
-             float wEarth = max((smoothstep(-0.05, 0.3, h) - smoothstep(1.2, 2.0, h)) * 0.4 + wSand * 0.25, 0.0);
+             float bForest = clamp(vBiome.r, 0.0, 1.0);
+             float bFertile = clamp(vBiome.g, 0.0, 1.0);
+             float bSand = clamp(vBiome.b, 0.0, 1.0);
+             // Fels/Gipfel/Schnee rein höhenweise (Gebirge trägt kein Biom-Flag).
+             float rock = smoothstep(${SPLAT_BANDS.stoneStart.toFixed(3)}, ${SPLAT_BANDS.stoneFull.toFixed(3)}, h);
+             float wCliff = max(rock, wSlope);
+             float wMountain = smoothstep(${SPLAT_BANDS.stoneFull.toFixed(3)}, ${(SPLAT_BANDS.stoneFull + 5).toFixed(3)}, h);
+             float wSnow = smoothstep(13.0, 17.0, h);
+             float wStone = wCliff * 0.5;
+             // Auf bebaubarem Land (geringer Hang, unter der Felsgrenze) verteilen
+             // sich die Biom-Layer; Gras füllt den Rest.
+             float lowland = (1.0 - wCliff) * (1.0 - wSlope);
+             float wSand = max(bSand + (1.0 - smoothstep(${SPLAT_BANDS.sandFadeStart.toFixed(3)}, ${SPLAT_BANDS.sandFadeEnd.toFixed(3)}, h)) * 0.5, 0.0) * lowland;
+             float wForest = bForest * lowland;
+             float wFarm = bFertile * lowland;
+             float wGrass = max(1.0 - bForest - bFertile - bSand, 0.0) * lowland
+               * smoothstep(${SPLAT_BANDS.grassFadeStart.toFixed(3)}, ${SPLAT_BANDS.grassFadeEnd.toFixed(3)}, h);
              ${zeroInactive}
              float wTotal = ${sumTerms};
-             float coverage = clamp(wTotal, 0.0, 1.0);
              if (wTotal > 0.0005) {
                vec3 splatColor = (${sampleTerms}) / wTotal;
+               // Cap the blend: the clean, stylized vertex colour stays the base
+               // (Tiny-Glade/Fabledom look) and the photo material is only a subtle
+               // detail on top — never a full photographic replace.
+               float coverage = clamp(wTotal, 0.0, 1.0) * 0.7;
                diffuseColor.rgb = mix(diffuseColor.rgb, splatColor, coverage);
              }
            }`,
@@ -912,12 +1275,19 @@ export class ThreeMapRenderer implements IMapRenderer {
    * at night; the frame loop retints it to the current sky colour. Sits just above
    * the coloured lakebed tile. Rebuilt with the terrain (owns its own material).
    */
-  private buildWater(tiles: { x: number; y: number; terrain: TerrainType; locked: boolean }[]): void {
-    this.waterMat = undefined;
-    const water = tiles.filter((t) => !t.locked && (t.terrain === 'water' || t.terrain === 'river'));
-    if (water.length === 0) return;
+  /**
+   * DER Ozean (§ MVP4 P3): eine große Wellen-Ebene auf `WATER_LEVEL`, die die
+   * ganze Insel umgibt UND alle Seen/Flüsse füllt — deren Becken liegen im
+   * gebackenen Höhenfeld unter der Wasserlinie, der farbige Grund unter der
+   * halbtransparenten Fläche liefert die Tiefen-Tönung. Ersetzt das alte
+   * Kachel-Instancing komplett; einmalig gebaut, vom Himmel pro Frame getönt.
+   */
+  private buildOcean(): void {
+    if (this.oceanBuilt) return;
+    this.oceanBuilt = true;
 
-    const geo = new PlaneGeometry(1, 1, 6, 6);
+    const SIZE = 4096; // weit über die Weltränder hinaus — Meer bis zum Horizont
+    const geo = new PlaneGeometry(SIZE, SIZE, 96, 96);
     geo.rotateX(-Math.PI / 2); // lay the plane flat (Y up)
     const mat = new MeshStandardMaterial({
       color: 0x2a6a94,
@@ -926,9 +1296,9 @@ export class ThreeMapRenderer implements IMapRenderer {
       transparent: true,
       opacity: 0.86,
     });
-    // A gentle two-wave ripple injected into the standard vertex shader; the phase
-    // varies per tile via the instance translation so the whole lake rolls.
-    mat.customProgramCacheKey = () => 'cmb-water';
+    // A gentle two-wave ripple injected into the standard vertex shader; the
+    // phase varies with the vertex' world position so the whole sea rolls.
+    mat.customProgramCacheKey = () => 'cmb-ocean';
     mat.onBeforeCompile = (shader) => {
       shader.uniforms['uTime'] = this.waterTime;
       shader.vertexShader =
@@ -936,75 +1306,280 @@ export class ThreeMapRenderer implements IMapRenderer {
         shader.vertexShader.replace(
           '#include <begin_vertex>',
           `#include <begin_vertex>
-           vec2 wp = vec2(instanceMatrix[3][0], instanceMatrix[3][2]);
-           float ph = wp.x * 1.7 + wp.y * 1.3;
-           transformed.y += sin(uTime * 1.3 + ph) * 0.045 + cos(uTime * 0.85 + wp.x * 2.1) * 0.03;`,
+           float ph = position.x * 0.35 + position.z * 0.27;
+           transformed.y += sin(uTime * 1.3 + ph) * 0.045 + cos(uTime * 0.85 + position.x * 0.21) * 0.03;`,
         );
     };
 
-    const inst = new InstancedMesh(geo, mat, water.length);
-    inst.receiveShadow = true;
-    const dummy = new Object3D();
-    for (let i = 0; i < water.length; i++) {
-      const t = water[i]!;
-      dummy.position.set(t.x + 0.5, WATER_LEVEL, t.y + 0.5);
-      dummy.updateMatrix();
-      inst.setMatrixAt(i, dummy.matrix);
-    }
-    inst.instanceMatrix.needsUpdate = true;
-    this.terrainGroup.add(inst);
+    const sea = new Mesh(geo, mat);
+    sea.position.set(WORLD_TILES / 2, WATER_LEVEL, WORLD_TILES / 2);
+    sea.receiveShadow = true;
+    this.scene.add(sea);
     this.waterMat = mat;
+
+    this.buildDistantIslands();
   }
 
   /**
-   * Dense, softly drifting fog over every locked sector (§ Sektor-Nebel, World
-   * Graphics V2 §9): one translucent plane per sector, gently undulating via the
-   * same shared time uniform as the water shader. Sits ABOVE the dimmed ground
-   * tint from buildGroundMesh (belt and braces) at a modest height, so a tall
-   * mountain or future landmark inside the sector still pokes a silhouette
-   * through — "keine komplette Sicht", not a total blackout.
+   * § A7 — ferne Platzhalter-Inseln am Horizont: ein Ring niedriger, bewaldeter
+   * Silhouetten weit außerhalb der Weltränder, damit der Ozean nicht ins Leere
+   * läuft. Einmalig gebaut (mit dem Meer), rein kosmetisch, deterministisch
+   * platziert. Ersetzbar durch echte Modelle über den späteren Landmarken-Pfad.
    */
-  private buildSectorFog(sectors: { sx: number; sy: number; status: string }[]): void {
-    const locked = sectors.filter((s) => s.status === 'locked');
-    if (locked.length === 0) return;
+  private buildDistantIslands(): void {
+    const cx = WORLD_TILES / 2;
+    const cz = WORLD_TILES / 2;
+    const landMat = new MeshStandardMaterial({ color: 0x3f6b46, roughness: 1 });
+    const beachMat = new MeshStandardMaterial({ color: 0xbfb08a, roughness: 1 });
+    const peakMat = new MeshStandardMaterial({ color: 0x6f7378, roughness: 1 });
+    const group = new Group();
+    const COUNT = 9;
+    for (let i = 0; i < COUNT; i++) {
+      const h = hash01(`island${i}`);
+      const ang = (i / COUNT) * Math.PI * 2 + (h - 0.5) * 0.4;
+      const dist = WORLD_TILES * (0.85 + h * 0.5);
+      const ix = cx + Math.cos(ang) * dist;
+      const iz = cz + Math.sin(ang) * dist;
+      const scale = 20 + h * 40;
+      const isle = new Group();
+      const beach = new Mesh(new CylinderGeometry(scale, scale * 1.15, 1.5, 10), beachMat);
+      beach.position.y = WATER_LEVEL + 0.4;
+      const land = new Mesh(new CylinderGeometry(scale * 0.7, scale * 0.95, scale * 0.35, 9), landMat);
+      land.position.y = WATER_LEVEL + scale * 0.18;
+      isle.add(beach, land);
+      // Größere Inseln bekommen einen grauen Gipfel als Silhouette.
+      if (h > 0.5) {
+        const peak = new Mesh(new ConeGeometry(scale * 0.5, scale * 0.7, 8), peakMat);
+        peak.position.y = WATER_LEVEL + scale * 0.5;
+        isle.add(peak);
+      }
+      isle.position.set(ix, 0, iz);
+      isle.rotation.y = h * Math.PI;
+      group.add(isle);
+    }
+    this.scene.add(group);
+  }
 
-    const geo = new PlaneGeometry(SECTOR_SIZE * 0.98, SECTOR_SIZE * 0.98, 8, 8);
-    geo.rotateX(-Math.PI / 2);
-    const mat = new MeshStandardMaterial({
-      color: 0xdbe1e6,
+  // ---- Organischer Regions-Nebel (§ Welt 2.0 / A3) ---------------------------
+  // Jede gesperrte Landschaft trägt ein Nebel-Volumen entlang ihrer ECHTEN
+  // organischen Grenze: die Randkontur wird aus dem Region-Grid extrahiert
+  // (gerichtete Randkanten → Loop-Verkettung, entspricht Marching Squares auf
+  // Binärmasken), zweifach Chaikin-geglättet und zu einem halbtransparenten
+  // Volumen extrudiert. Silhouetten des dominanten Bioms (Gipfel, Baumwipfel,
+  // Hügel) ragen als Teaser aus dem Dunst (§6 Auftrag B: man ahnt, was dort
+  // wartet). Ein Unlock startet die weiche Aufdeck-Animation (aufsteigender,
+  // ausdünnender Nebel), danach wird das Volumen entsorgt.
+
+  /** Größte geschlossene Randkontur einer Region (Kachel-Ecken, Uhrzeigersinn). */
+  private regionContour(id: number): { x: number; y: number }[] | undefined {
+    const b = regionBounds(id);
+    if (!b) return undefined;
+    // Gerichtete Randkanten mit Regions-Innenseite links einsammeln.
+    const edges = new Map<string, { x: number; y: number }[]>();
+    const pk = (x: number, y: number): string => `${x},${y}`;
+    const addEdge = (x1: number, y1: number, x2: number, y2: number): void => {
+      const list = edges.get(pk(x1, y1));
+      if (list) list.push({ x: x2, y: y2 });
+      else edges.set(pk(x1, y1), [{ x: x2, y: y2 }]);
+    };
+    for (let y = b.minY; y <= b.maxY; y++) {
+      for (let x = b.minX; x <= b.maxX; x++) {
+        if (regionIdAt(x, y) !== id) continue;
+        if (regionIdAt(x, y - 1) !== id) addEdge(x, y, x + 1, y);
+        if (regionIdAt(x + 1, y) !== id) addEdge(x + 1, y, x + 1, y + 1);
+        if (regionIdAt(x, y + 1) !== id) addEdge(x + 1, y + 1, x, y + 1);
+        if (regionIdAt(x - 1, y) !== id) addEdge(x, y + 1, x, y);
+      }
+    }
+    // Kanten zu geschlossenen Loops verketten; die flächengrößte ist der
+    // Außenrand (innere Loops sind Löcher — Seen etc. — und bleiben vernebelt).
+    let best: { x: number; y: number }[] | undefined;
+    let bestArea = 0;
+    while (edges.size > 0) {
+      const [startKey, startList] = edges.entries().next().value as [string, { x: number; y: number }[]];
+      const [sx, sy] = startKey.split(',').map(Number) as [number, number];
+      const loop: { x: number; y: number }[] = [{ x: sx, y: sy }];
+      let cur = startList.pop()!;
+      if (startList.length === 0) edges.delete(startKey);
+      let guard = 200_000;
+      while ((cur.x !== sx || cur.y !== sy) && guard-- > 0) {
+        loop.push(cur);
+        const key = pk(cur.x, cur.y);
+        const list = edges.get(key);
+        if (!list || list.length === 0) break; // offene Kette (sollte nicht passieren)
+        const next = list.pop()!;
+        if (list.length === 0) edges.delete(key);
+        cur = next;
+      }
+      // Shoelace-Fläche des Loops.
+      let area = 0;
+      for (let i = 0; i < loop.length; i++) {
+        const a = loop[i]!;
+        const c = loop[(i + 1) % loop.length]!;
+        area += a.x * c.y - c.x * a.y;
+      }
+      area = Math.abs(area) / 2;
+      if (area > bestArea) {
+        bestArea = area;
+        best = loop;
+      }
+    }
+    return best && best.length >= 8 ? best : undefined;
+  }
+
+  /** Chaikin-Eckenschnitt (geschlossen) — macht die Kachel-Treppen organisch. */
+  private static chaikin(pts: { x: number; y: number }[], iterations: number): { x: number; y: number }[] {
+    let cur = pts;
+    for (let it = 0; it < iterations; it++) {
+      const next: { x: number; y: number }[] = [];
+      for (let i = 0; i < cur.length; i++) {
+        const a = cur[i]!;
+        const c = cur[(i + 1) % cur.length]!;
+        next.push(
+          { x: a.x * 0.75 + c.x * 0.25, y: a.y * 0.75 + c.y * 0.25 },
+          { x: a.x * 0.25 + c.x * 0.75, y: a.y * 0.25 + c.y * 0.75 },
+        );
+      }
+      cur = next;
+    }
+    return cur;
+  }
+
+  /** Baut Nebel-Volumen für gesperrte Regionen; startet Aufdecken bei Unlock. */
+  private buildRegionFog(regions: { id: number; status: string }[]): void {
+    if (!this.fogGroup.parent) this.scene.add(this.fogGroup);
+    const locked = new Set(regions.filter((r) => r.status !== 'unlocked').map((r) => r.id));
+    for (const id of locked) {
+      if (!this.fogVolumes.has(id)) {
+        const vol = this.createFogVolume(id);
+        if (vol) this.fogVolumes.set(id, vol);
+      }
+    }
+    for (const [id, vol] of this.fogVolumes) {
+      if (!locked.has(id) && vol.fading < 0) vol.fading = 0; // Aufdeck-Animation starten
+    }
+  }
+
+  private createFogVolume(
+    id: number,
+  ): { group: Group; mats: { mat: MeshStandardMaterial; base: number }[]; fading: number } | undefined {
+    const contour = this.regionContour(id);
+    const bounds = regionBounds(id);
+    const baked = BAKED_REGIONS[id - 1];
+    if (!contour || !bounds || !baked) return undefined;
+
+    // Höhenspanne der Region (grob abgetastet) → Volumen von Tal bis über die Gipfel.
+    let minH = Infinity;
+    let maxH = -Infinity;
+    for (let y = bounds.minY; y <= bounds.maxY; y += 3) {
+      for (let x = bounds.minX; x <= bounds.maxX; x += 3) {
+        if (regionIdAt(x, y) !== id) continue;
+        const h = terrainHeightAt(x + 0.5, y + 0.5);
+        if (h < minH) minH = h;
+        if (h > maxH) maxH = h;
+      }
+    }
+    if (!Number.isFinite(minH)) return undefined;
+    const bottom = Math.max(WATER_LEVEL - 0.4, minH - 0.8);
+    // Bodennahe Nebeldecke statt turmhoher Wand: max. ~7 Einheiten hoch, damit
+    // Gebirgsgipfel und Silhouetten aus dem Dunst ragen (§6: man ahnt das Land).
+    const top = Math.min(maxH + 2.2, bottom + 7);
+    const depth = Math.max(2.5, top - bottom);
+
+    const group = new Group();
+    const mats: { mat: MeshStandardMaterial; base: number }[] = [];
+
+    // Volumen: geglättete Kontur → Shape (Y gespiegelt, s. rotateX unten) → Extrusion.
+    const smooth = ThreeMapRenderer.chaikin(contour, 2);
+    const shape = new Shape();
+    shape.moveTo(smooth[0]!.x, -smooth[0]!.y);
+    for (let i = 1; i < smooth.length; i++) shape.lineTo(smooth[i]!.x, -smooth[i]!.y);
+    shape.closePath();
+    const geo = new ExtrudeGeometry(shape, { depth, bevelEnabled: false });
+    geo.rotateX(-Math.PI / 2); // Shape-XY → Welt-XZ, Extrusionsachse → +Y
+    const fogMat = new MeshStandardMaterial({
+      color: 0xaebccd,
+      transparent: true,
+      opacity: 0.58,
       roughness: 1,
       metalness: 0,
-      transparent: true,
-      opacity: 0.5,
-      depthWrite: false, // several overlapping fog planes must blend, never occlude
+      depthWrite: false,
+      side: DoubleSide,
     });
-    mat.customProgramCacheKey = () => 'cmb-sectorfog';
-    mat.onBeforeCompile = (shader) => {
-      shader.uniforms['uTime'] = this.waterTime;
+    // Weicher Verlauf: unten dicht, zum Nebeldeckel hin ausdünnend.
+    fogMat.customProgramCacheKey = () => 'cmb-region-fog';
+    fogMat.onBeforeCompile = (shader) => {
+      shader.uniforms['uFogDepth'] = { value: depth };
       shader.vertexShader =
-        'uniform float uTime;\n' +
-        shader.vertexShader.replace(
-          '#include <begin_vertex>',
-          `#include <begin_vertex>
-           vec2 wp = vec2(instanceMatrix[3][0], instanceMatrix[3][2]);
-           float ph = wp.x * 0.6 + wp.y * 0.4;
-           transformed.y += sin(uTime * 0.35 + ph) * 0.22 + cos(uTime * 0.22 + wp.x * 0.3) * 0.14;`,
+        'varying float vFogY;\n' +
+        shader.vertexShader.replace('#include <begin_vertex>', '#include <begin_vertex>\n vFogY = position.y;');
+      shader.fragmentShader =
+        'varying float vFogY;\nuniform float uFogDepth;\n' +
+        shader.fragmentShader.replace(
+          '#include <dithering_fragment>',
+          '#include <dithering_fragment>\n gl_FragColor.a *= mix(1.0, 0.45, smoothstep(uFogDepth * 0.25, uFogDepth, vFogY));',
         );
     };
+    const fog = new Mesh(geo, fogMat);
+    fog.position.y = bottom;
+    fog.renderOrder = 3;
+    group.add(fog);
+    mats.push({ mat: fogMat, base: fogMat.opacity });
 
-    const inst = new InstancedMesh(geo, mat, locked.length);
-    inst.renderOrder = 5; // after opaque ground/vegetation so the blend is correct
-    const dummy = new Object3D();
-    for (let i = 0; i < locked.length; i++) {
-      const s = locked[i]!;
-      const cx = s.sx * SECTOR_SIZE + SECTOR_SIZE / 2;
-      const cz = s.sy * SECTOR_SIZE + SECTOR_SIZE / 2;
-      dummy.position.set(cx, terrainHeightAt(cx, cz) + 1.8, cz);
-      dummy.updateMatrix();
-      inst.setMatrixAt(i, dummy.matrix);
+    // Silhouetten-Teaser des dominanten Bioms — dunkle Formen im Dunst.
+    const silMat = new MeshStandardMaterial({
+      color: 0x3a4557,
+      transparent: true,
+      opacity: 0.5,
+      roughness: 1,
+      metalness: 0,
+      depthWrite: false,
+    });
+    mats.push({ mat: silMat, base: silMat.opacity });
+    const spreadX = (bounds.maxX - bounds.minX) * 0.32;
+    const spreadY = (bounds.maxY - bounds.minY) * 0.32;
+    const silhouettes: { geo: BufferGeometry; count: number; hMin: number; hMax: number }[] =
+      baked.dominant === 'mountain'
+        ? [{ geo: new ConeGeometry(1, 1, 6), count: 4, hMin: 5, hMax: 9 }]
+        : baked.dominant === 'forest'
+          ? [{ geo: new ConeGeometry(1, 1, 7), count: 9, hMin: 2.2, hMax: 3.6 }]
+          : [{ geo: new SphereGeometry(1, 10, 7, 0, Math.PI * 2, 0, Math.PI / 2), count: 4, hMin: 1.4, hMax: 2.6 }];
+    for (const sil of silhouettes) {
+      for (let i = 0; i < sil.count; i++) {
+        const px = baked.centroid.x + (hash01(`${id}sx${i}`) - 0.5) * 2 * spreadX;
+        const pz = baked.centroid.y + (hash01(`${id}sz${i}`) - 0.5) * 2 * spreadY;
+        if (regionIdAt(Math.round(px), Math.round(pz)) !== id) continue;
+        const h = sil.hMin + hash01(`${id}sh${i}`) * (sil.hMax - sil.hMin);
+        const m = new Mesh(sil.geo, silMat);
+        const groundY = terrainHeightAt(px, pz);
+        m.scale.set(h * (baked.dominant === 'mountain' ? 0.9 : 0.45), h, h * (baked.dominant === 'mountain' ? 0.9 : 0.45));
+        // Kegel: Ursprung in der Mitte → um h/2 anheben; Halbkugel sitzt am Boden.
+        m.position.set(px, groundY + (sil.geo instanceof ConeGeometry ? h / 2 : 0.1), pz);
+        m.renderOrder = 2;
+        group.add(m);
+      }
     }
-    inst.instanceMatrix.needsUpdate = true;
-    this.terrainGroup.add(inst);
+
+    this.fogGroup.add(group);
+    return { group, mats, fading: -1 };
+  }
+
+  /** Aufdeck-Animation: Nebel steigt und dünnt aus, dann wird er entsorgt. */
+  private animateFog(dt: number): void {
+    if (this.fogVolumes.size === 0) return;
+    const DURATION = 1.8;
+    for (const [id, vol] of this.fogVolumes) {
+      if (vol.fading < 0) continue;
+      vol.fading += dt;
+      const k = Math.min(1, vol.fading / DURATION);
+      vol.group.position.y = k * 6; // Nebel hebt ab …
+      for (const { mat, base } of vol.mats) mat.opacity = base * (1 - k) * (1 - k); // … und löst sich auf
+      if (k >= 1) {
+        this.fogGroup.remove(vol.group);
+        this.disposeGroup(vol.group);
+        this.fogVolumes.delete(id);
+      }
+    }
   }
 
   /** Terrain type → candidate model names (first match wins). Lets you drop in a
@@ -1056,9 +1631,9 @@ export class ThreeMapRenderer implements IMapRenderer {
   /** Vegetation is a separate, culled pass (§7): trees/bushes only on FREE tiles
    *  (never on a building or road footprint), rebuilt when the city changes. */
   private rebuildVegetation(): void {
-    const sectors = Object.values(this.controller.state.world.sectors).filter((s) => s.status === 'unlocked');
-    // Only rebuild when the occupancy or sector set actually changed.
-    const key = `${sectors.map((s) => s.id).join(',')}|${this.occupied.size}|${[...this.occupied].join(',')}`;
+    const regions = Object.values(this.controller.state.world.regions).filter((r) => r.status === 'unlocked');
+    // Only rebuild when the occupancy or region set actually changed.
+    const key = `${regions.map((r) => r.id).join(',')}|${this.occupied.size}|${[...this.occupied].join(',')}`;
     if (key === this.vegKey) return;
     this.vegKey = key;
     this.disposeGroup(this.vegetationGroup);
@@ -1067,19 +1642,32 @@ export class ThreeMapRenderer implements IMapRenderer {
     const dummy = new Object3D();
     const trees: { x: number; y: number }[] = [];
     const bushes: { x: number; y: number }[] = [];
-    for (const s of sectors) {
-      const ox = s.sx * SECTOR_SIZE;
-      const oy = s.sy * SECTOR_SIZE;
-      for (let ly = 0; ly < SECTOR_SIZE; ly++) {
-        for (let lx = 0; lx < SECTOR_SIZE; lx++) {
-          const tile = s.tiles[ly * SECTOR_SIZE + lx];
-          if (!tile) continue;
-          const x = ox + lx;
-          const y = oy + ly;
+    // § A7 Biom-Deko: Findlinge im Gebirge, Schilf am Wasser.
+    const rocks: { x: number; y: number }[] = [];
+    const reeds: { x: number; y: number }[] = [];
+    const isWater = (tx: number, ty: number): boolean => {
+      const tt = worldTerrainAt(this.controller.state, tx, ty);
+      return tt === 'water' || tt === 'river';
+    };
+    for (const r of regions) {
+      const b = regionBounds(r.id);
+      if (!b) continue;
+      for (let y = b.minY; y <= b.maxY; y++) {
+        for (let x = b.minX; x <= b.maxX; x++) {
+          if (regionIdAt(x, y) !== r.id) continue;
           if (this.occupied.has(`${x},${y}`)) continue; // never on the city
+          const terrain = worldTerrainAt(this.controller.state, x, y); // § v10: aus dem Insel-Grid
           const h = hash01(`${x},${y}`);
-          if (tile.terrain === 'forest' && (lx + ly) % 2 === 0) trees.push({ x, y });
-          else if (tile.terrain === 'grass' && h > 0.86) bushes.push({ x, y });
+          if (terrain === 'forest' && (x + y) % 2 === 0) trees.push({ x, y });
+          else if (terrain === 'grass' && h > 0.86) bushes.push({ x, y });
+          else if (terrain === 'mountain' && h > 0.62) rocks.push({ x, y });
+          else if (
+            (terrain === 'grass' || terrain === 'sand' || terrain === 'fertile') &&
+            h > 0.55 &&
+            (isWater(x + 1, y) || isWater(x - 1, y) || isWater(x, y + 1) || isWater(x, y - 1))
+          ) {
+            reeds.push({ x, y });
+          }
         }
       }
     }
@@ -1156,6 +1744,48 @@ export class ThreeMapRenderer implements IMapRenderer {
       bush.instanceMatrix.needsUpdate = true;
       this.vegetationGroup.add(bush);
     }
+
+    // § A7 Findlinge (Gebirge): graue Blöcke in zwei Größen, instanziert.
+    const nR = Math.min(rocks.length, 400);
+    if (nR > 0) {
+      const rockG = new BoxGeometry(0.5, 0.4, 0.55);
+      const rockM = new MeshStandardMaterial({ color: 0x8b8d90, roughness: 1 });
+      const rock = new InstancedMesh(rockG, rockM, nR);
+      rock.castShadow = true;
+      rock.receiveShadow = true;
+      for (let i = 0; i < nR; i++) {
+        const t = rocks[i]!;
+        const jt = hash01(`r${t.x},${t.y}`);
+        const sc = 0.5 + jt * 1.1;
+        dummy.rotation.set(jt * 0.4, jt * Math.PI * 2, jt * 0.3);
+        dummy.position.set(t.x + 0.5, terrainHeightAt(t.x + 0.5, t.y + 0.5) + 0.15 * sc, t.y + 0.5);
+        dummy.scale.set(sc, sc * (0.7 + jt * 0.5), sc);
+        dummy.updateMatrix();
+        rock.setMatrixAt(i, dummy.matrix);
+      }
+      rock.instanceMatrix.needsUpdate = true;
+      this.vegetationGroup.add(rock);
+    }
+
+    // § A7 Schilf (Wasserkante): schmale grüne Halme, instanziert.
+    const nRe = Math.min(reeds.length, 400);
+    if (nRe > 0) {
+      const reedG = new ConeGeometry(0.06, 0.6, 4);
+      const reedM = new MeshLambertMaterial({ color: 0x5f7a37 });
+      const reed = new InstancedMesh(reedG, reedM, nRe);
+      for (let i = 0; i < nRe; i++) {
+        const t = reeds[i]!;
+        const jt = hash01(`re${t.x},${t.y}`);
+        const sc = 0.7 + jt * 0.7;
+        dummy.rotation.set(0, jt * Math.PI * 2, (jt - 0.5) * 0.3);
+        dummy.position.set(t.x + 0.5, terrainHeightAt(t.x + 0.5, t.y + 0.5) + 0.3 * sc, t.y + 0.5);
+        dummy.scale.set(1, sc, 1);
+        dummy.updateMatrix();
+        reed.setMatrixAt(i, dummy.matrix);
+      }
+      reed.instanceMatrix.needsUpdate = true;
+      this.vegetationGroup.add(reed);
+    }
   }
 
   // ---- buildings ------------------------------------------------------------
@@ -1208,6 +1838,91 @@ export class ThreeMapRenderer implements IMapRenderer {
     }
     this.rebuildVegetation();
     this.seedCars();
+    this.seedAnimals();
+  }
+
+  /**
+   * § A7 Weidetiere: pro aktivem Bauernhof ein paar Tiere (mehr je Stufe) auf
+   * einer Weide-Ecke des Grundstücks. Nur neu setzen, wenn sich die Farmen
+   * geändert haben (Position/Stufe) — sonst bleiben die Tiere ruhig stehen.
+   */
+  private seedAnimals(): void {
+    const farms = Object.values(this.controller.state.buildings).filter((b) => b.status === 'active' && b.defId === 'farm');
+    const key = farms.map((f) => `${f.id}:${f.x},${f.y}:${f.upgradeLevel}`).sort().join('|');
+    if (key === this.animalKey) return;
+    this.animalKey = key;
+    for (const a of this.animals) {
+      this.liveGroup.remove(a.mesh);
+      this.disposeGroup(a.mesh);
+    }
+    this.animals = [];
+    const kinds = ['cow', 'sheep', 'chicken'] as const;
+    let total = 0;
+    for (const f of farms) {
+      const def = this.controller.config.buildings.get(f.defId);
+      if (!def) continue;
+      // Weide-Kacheln: freier Ring rund um das Grundstück (nicht auf der Farm
+      // selbst — sonst verdeckt das Gebäudemodell die Tiere). Nur unbebaute,
+      // nicht-Wasser-Kacheln zählen.
+      const paddock: { x: number; y: number }[] = [];
+      for (let dy = -1; dy <= def.size.h; dy++) {
+        for (let dx = -1; dx <= def.size.w; dx++) {
+          const inFoot = dx >= 0 && dx < def.size.w && dy >= 0 && dy < def.size.h;
+          if (inFoot) continue;
+          const tx = f.x + dx;
+          const ty = f.y + dy;
+          if (this.occupied.has(`${tx},${ty}`)) continue;
+          const tt = worldTerrainAt(this.controller.state, tx, ty);
+          if (tt === 'water' || tt === 'river') continue;
+          paddock.push({ x: tx, y: ty });
+        }
+      }
+      if (paddock.length === 0) continue; // kein Platz für eine Weide
+      const count = 3 + f.upgradeLevel;
+      for (let i = 0; i < count && total < ANIMAL_CAP; i++, total++) {
+        const kind = kinds[(f.x + f.y + i) % kinds.length]!;
+        const mesh = makeAnimalMesh(kind);
+        const tile = paddock[Math.floor(hash01(`${f.id}tile${i}`) * paddock.length)]!;
+        const homeX = tile.x + 0.5;
+        const homeZ = tile.y + 0.5;
+        const x = homeX + (hash01(`${f.id}px${i}`) - 0.5) * 0.6;
+        const z = homeZ + (hash01(`${f.id}pz${i}`) - 0.5) * 0.6;
+        mesh.position.set(x, terrainHeightAt(x, z) + 0.02, z);
+        this.liveGroup.add(mesh);
+        this.animals.push({
+          mesh,
+          homeX,
+          homeZ,
+          radius: 0.5,
+          x,
+          z,
+          heading: hash01(`${f.id}h${i}`) * Math.PI * 2,
+          speed: 0.14 + hash01(`${f.id}s${i}`) * 0.16,
+          turnT: hash01(`${f.id}t${i}`) * 3,
+          bob: hash01(`${f.id}b${i}`) * Math.PI * 2,
+        });
+      }
+    }
+  }
+
+  private animateAnimals(dt: number): void {
+    for (const a of this.animals) {
+      a.turnT -= dt;
+      if (a.turnT <= 0) {
+        // Gelegentlich die Richtung leicht ändern (gemächliches Grasen).
+        a.heading += (Math.random() - 0.5) * 1.4;
+        a.turnT = 1.5 + Math.random() * 3;
+      }
+      // Über den Weiderand hinaus? Zurück zur Mitte steuern.
+      const dx = a.homeX - a.x;
+      const dz = a.homeZ - a.z;
+      if (Math.hypot(dx, dz) > a.radius) a.heading = Math.atan2(dx, dz);
+      a.x += Math.sin(a.heading) * a.speed * dt;
+      a.z += Math.cos(a.heading) * a.speed * dt;
+      a.bob += dt * 6;
+      a.mesh.position.set(a.x, terrainHeightAt(a.x, a.z) + 0.02 + Math.abs(Math.sin(a.bob)) * 0.015, a.z);
+      a.mesh.rotation.y = a.heading;
+    }
   }
 
   /** 4-bit road-neighbour mask: 1=N(-y) 2=E(+x) 4=S(+y) 8=W(-x). */
@@ -1524,7 +2239,7 @@ export class ThreeMapRenderer implements IMapRenderer {
     const holder = new Group();
     group.add(holder);
     const cls = roadClassFor(def.id);
-    const terrain = this.terrainAt.get(`${b.x},${b.y}`);
+    const terrain = worldTerrainAt(this.controller.state, b.x, b.y);
     const overWater = terrain === 'water' || terrain === 'river';
 
     if (overWater) {
@@ -1533,7 +2248,7 @@ export class ThreeMapRenderer implements IMapRenderer {
       return;
     }
 
-    this.buildRoadTile(holder, mask, cls, terrain);
+    this.buildRoadTile(holder, mask, cls, terrain, b.x, b.y);
     // Straßen dürfen niemals schweben (§ Gelände-Anpassung): tilt the tile to the
     // local ground gradient and skirt its edges, so neighbouring segments on
     // sloped land (forest/grass) never show a floating gap or step.
@@ -1544,7 +2259,7 @@ export class ThreeMapRenderer implements IMapRenderer {
    *  a crossing as a single-tile boardwalk ("Steg") vs. a wider bridge. */
   private waterSpanAt(x: number, y: number): number {
     const isWater = (tx: number, ty: number) => {
-      const t = this.terrainAt.get(`${tx},${ty}`);
+      const t = worldTerrainAt(this.controller.state, tx, ty);
       return t === 'water' || t === 'river';
     };
     let ew = 1;
@@ -1624,13 +2339,20 @@ export class ThreeMapRenderer implements IMapRenderer {
   private getRoadMats(): RoadMaterials {
     if (this.roadMats) return this.roadMats;
     const mats: RoadMaterials = {
-      asphalt: new MeshStandardMaterial({ color: 0x474d57, roughness: 0.95 }),
-      mountain: new MeshStandardMaterial({ color: 0x6b6258, roughness: 1 }),
-      edge: new MeshStandardMaterial({ color: 0x929aa4, roughness: 1 }),
-      dash: new MeshStandardMaterial({ color: 0xe4d98f, roughness: 1, transparent: true }),
-      roundabout: new MeshStandardMaterial({ color: 0x3c424b, roughness: 0.9 }),
-      bridgeDeck: new MeshStandardMaterial({ color: 0x4a5058, roughness: 0.95 }),
+      // § A5: Asphalt spürbar aufgehellt (vorher 0x474d57 „zu schwarz"). Da die
+      // Drop-in-Textur `road_asphalt` die Farbe nur MULTIPLIZIERT (also nie
+      // aufhellen kann), hebt ein dezenter Emissiv-Term die Schwärze — Fahrbahn
+      // bleibt gut lesbar, auch nachts (leichte Eigenhelligkeit ist erwünscht).
+      asphalt: new MeshStandardMaterial({ color: 0x7a808a, roughness: 0.92, emissive: 0x2b2e34, emissiveIntensity: 1 }),
+      mountain: new MeshStandardMaterial({ color: 0x8a8074, roughness: 1, emissive: 0x2e2a24, emissiveIntensity: 1 }),
+      edge: new MeshStandardMaterial({ color: 0x9aa2ac, roughness: 1 }),
+      dash: new MeshStandardMaterial({ color: 0xf0e6a0, roughness: 1, transparent: true }),
+      roundabout: new MeshStandardMaterial({ color: 0x5f656f, roughness: 0.9 }),
+      bridgeDeck: new MeshStandardMaterial({ color: 0x6a7079, roughness: 0.95 }),
       boardwalk: new MeshStandardMaterial({ color: 0x7a5a3a, roughness: 0.9 }),
+      sidewalk: new MeshStandardMaterial({ color: 0xb7bcc4, roughness: 1 }),
+      lampPost: new MeshStandardMaterial({ color: 0x3a3f47, roughness: 0.8, metalness: 0.3 }),
+      lampHead: new MeshStandardMaterial({ color: 0xffe9a8, emissive: 0xffcf6b, emissiveIntensity: 0.9 }),
     };
     this.roadMats = mats;
     this.applyRoadTex(loadRoadTexture('road_asphalt'), mats.asphalt);
@@ -1666,7 +2388,14 @@ export class ThreeMapRenderer implements IMapRenderer {
    * road type. Mountain-terrain tiles get the rougher `road_mountain` surface
    * instead of asphalt — covers "Bergstraße"/"Pass" as a pure texture swap.
    */
-  private buildRoadTile(g: Group, mask: number, cls: RoadClass, terrainType: TerrainType | undefined): void {
+  private buildRoadTile(
+    g: Group,
+    mask: number,
+    cls: RoadClass,
+    terrainType: TerrainType | undefined,
+    gx = 0,
+    gz = 0,
+  ): void {
     const spec = ROAD_SPECS[cls];
     const mats = this.getRoadMats();
     const yAsph = 0.03;
@@ -1713,12 +2442,44 @@ export class ThreeMapRenderer implements IMapRenderer {
           g.add(mark);
         }
       } else {
-        // Open edge → soft edge-blend strip into the surrounding terrain.
-        const kerb = new Mesh(new BoxGeometry(dx !== 0 ? 0.1 : 0.98, 0.1, dz !== 0 ? 0.1 : 0.98), mats.edge);
-        kerb.position.set(dx * 0.45, yKerb, dz * 0.45);
+        // § A5 Straßen-Redesign: offene Kante = Gehweg statt nackter Erdkante.
+        // Ein heller Beton-Streifen (leicht erhöht) mit dünnem Bordstein davor —
+        // liest sich als Bürgersteig, nicht als schwebende Platte.
+        const sidewalk = new Mesh(
+          new BoxGeometry(dx !== 0 ? 0.16 : 0.98, 0.08, dz !== 0 ? 0.16 : 0.98),
+          mats.sidewalk,
+        );
+        sidewalk.position.set(dx * 0.42, yKerb + 0.02, dz * 0.42);
+        sidewalk.receiveShadow = true;
+        g.add(sidewalk);
+        const kerb = new Mesh(new BoxGeometry(dx !== 0 ? 0.05 : 0.98, 0.1, dz !== 0 ? 0.05 : 0.98), mats.edge);
+        kerb.position.set(dx * 0.33, yKerb, dz * 0.33);
         kerb.receiveShadow = true;
         g.add(kerb);
       }
+    }
+
+    // § A5: Straßenlaternen — sparsam (deterministisch ~ jede 4. Kachel) an einer
+    // offenen Kante, damit Straßenzüge belebt wirken ohne die Draw-Calls zu
+    // sprengen. Nachts leuchtet der emissive Kopf (Material ist immer emissiv).
+    const openDirs = dirs.filter((d) => !(mask & d.bit));
+    if (openDirs.length > 0 && hash01(`${gx},${gz}lamp`) < 0.28) {
+      const spot = openDirs[Math.floor(hash01(`${gx},${gz}spot`) * openDirs.length)]!;
+      const lamp = new Group();
+      const post = new Mesh(new CylinderGeometry(0.03, 0.04, 0.9, 6), mats.lampPost);
+      post.position.y = 0.45;
+      post.castShadow = true;
+      lamp.add(post);
+      const arm = new Mesh(new BoxGeometry(0.18, 0.04, 0.04), mats.lampPost);
+      arm.position.set(0.09, 0.88, 0);
+      lamp.add(arm);
+      const head = new Mesh(new SphereGeometry(0.07, 8, 6), mats.lampHead);
+      head.position.set(0.18, 0.86, 0);
+      lamp.add(head);
+      // An die offene Kante stellen, Arm zeigt zur Fahrbahn.
+      lamp.position.set(spot.dx * 0.46, 0, spot.dz * 0.46);
+      lamp.rotation.y = Math.atan2(-spot.dx, -spot.dz);
+      g.add(lamp);
     }
   }
 
@@ -1732,8 +2493,7 @@ export class ThreeMapRenderer implements IMapRenderer {
     const g = new Group();
     const w = def.size.w * 0.86;
     const d = def.size.h * 0.86;
-    const hc = def.visual?.heightClass ?? CATEGORY_HEIGHT[def.category] ?? 1;
-    const height = Math.max(0.12, hc * 0.95 * (1 + b.upgradeLevel * 0.5));
+    const height = buildingHeight(def, b.upgradeLevel);
     const baseColor = new Color(CATEGORY_COLORS[def.category] ?? 0x999999);
     const jitter = (hash01(b.id) - 0.5) * 0.18;
     baseColor.offsetHSL(0, 0, jitter);
@@ -1742,13 +2502,21 @@ export class ThreeMapRenderer implements IMapRenderer {
     let smoke: Vector3 | undefined;
 
     if (def.category === 'roads') {
-      this.buildRoadTile(g, roadMask, roadClassFor(def.id), this.terrainAt.get(`${b.x},${b.y}`));
+      this.buildRoadTile(g, roadMask, roadClassFor(def.id), worldTerrainAt(this.controller.state, b.x, b.y), b.x, b.y);
       return { group: g };
     }
 
     if (def.category === 'decoration') {
       // Correctly-proportioned procedural prop per id (a bench is NOT tree-sized).
       g.add(...decorationProc(def.id));
+      return { group: g };
+    }
+
+    // § A7: Die Farm ist kein Würfel, sondern ein Areal — Felder/Zaun/Scheune/
+    // Silos, die mit der Stufe wachsen. (Ein Drop-in `farm.glb` ersetzt das
+    // ohnehin über den Modell-Pfad; dies ist der lebendige Fallback.)
+    if (def.id === 'farm' && !constructing) {
+      g.add(...farmProc(def, b.upgradeLevel));
       return { group: g };
     }
 
@@ -1760,8 +2528,60 @@ export class ThreeMapRenderer implements IMapRenderer {
       roughness: 0.85,
       metalness: def.category === 'services' || def.category === 'economy' ? 0.15 : 0,
     });
-    const body = new Mesh(new BoxGeometry(w, height, d), bodyMat);
-    body.position.y = height / 2;
+
+    // § A3 (Gebäudesystem 2.0): Große Klassen (L/XL/XXL, Spannweite ≥ 4) füllen
+    // ihr Grundstück als ENSEMBLE — Hofplatte + Hauptgebäude + Nebenflügel —
+    // statt als ein einziger Riesen-Würfel. Windpark bleibt bewusst offen
+    // (Turbinen statt Halle). Kleine Klassen behalten den kompakten Block.
+    const span = Math.max(def.size.w, def.size.h);
+    const ensemble = span >= 4 && def.id !== 'wind_farm';
+    // Maße/Lage des Hauptbaukörpers — Dach/Kamin richten sich danach.
+    let bw = w;
+    let bd = d;
+    let bx = 0;
+    let bz = 0;
+    if (ensemble) {
+      const yardColor =
+        def.category === 'production' || def.category === 'energy'
+          ? 0x5d6066 // Werkshof-Asphalt
+          : def.category === 'leisure'
+            ? 0x7da05e // Parkwiese
+            : 0x8f8a80; // heller Vorplatz
+      const lot = new Mesh(
+        new BoxGeometry(def.size.w * 0.96, 0.07, def.size.h * 0.96),
+        new MeshStandardMaterial({ color: yardColor, roughness: 0.96 }),
+      );
+      lot.position.y = 0.035;
+      lot.receiveShadow = true;
+      g.add(lot);
+
+      bw = w * 0.62;
+      bd = d * 0.55;
+      bx = -w * 0.09;
+      bz = -d * 0.17;
+      const wing = new Mesh(new BoxGeometry(w * 0.34, height * 0.55, d * 0.42), bodyMat);
+      wing.position.set(w * 0.28, height * 0.275, d * 0.2);
+      wing.castShadow = true;
+      wing.receiveShadow = true;
+      g.add(wing);
+      const wingCap = new Mesh(
+        new BoxGeometry(w * 0.34 * 0.94, 0.1, d * 0.42 * 0.94),
+        new MeshStandardMaterial({ color: 0x3a414c }),
+      );
+      wingCap.position.set(w * 0.28, height * 0.55 + 0.05, d * 0.2);
+      g.add(wingCap);
+      if (span >= 7) {
+        // XXL: dritter Baukörper — das Areal liest sich als Komplex.
+        const annex = new Mesh(new BoxGeometry(w * 0.24, height * 0.4, d * 0.3), bodyMat);
+        annex.position.set(-w * 0.3, height * 0.2, d * 0.3);
+        annex.castShadow = true;
+        annex.receiveShadow = true;
+        g.add(annex);
+      }
+    }
+
+    const body = new Mesh(new BoxGeometry(bw, height, bd), bodyMat);
+    body.position.set(bx, height / 2, bz);
     body.castShadow = true;
     body.receiveShadow = true;
     g.add(body);
@@ -1778,43 +2598,55 @@ export class ThreeMapRenderer implements IMapRenderer {
     const roofColor = new Color(0xb5462f).offsetHSL(hash01(b.id + 'r') * 0.08 - 0.04, 0, 0);
     if (height < 2.6 && def.category !== 'production') {
       const roof = new Mesh(
-        new ConeGeometry(Math.max(w, d) * 0.72, 0.5 + height * 0.18, 4),
+        new ConeGeometry(Math.max(bw, bd) * 0.72, 0.5 + height * 0.18, 4),
         new MeshStandardMaterial({ color: roofColor, roughness: 0.9 }),
       );
       roof.rotation.y = Math.PI / 4;
-      roof.position.y = height + (0.5 + height * 0.18) / 2 - 0.02;
+      roof.position.set(bx, height + (0.5 + height * 0.18) / 2 - 0.02, bz);
       roof.castShadow = true;
       g.add(roof);
     } else {
-      const cap = new Mesh(new BoxGeometry(w * 0.9, 0.16, d * 0.9), new MeshStandardMaterial({ color: 0x333a44 }));
-      cap.position.y = height + 0.08;
+      const cap = new Mesh(new BoxGeometry(bw * 0.9, 0.16, bd * 0.9), new MeshStandardMaterial({ color: 0x333a44 }));
+      cap.position.set(bx, height + 0.08, bz);
       g.add(cap);
     }
 
-    // Wind turbine: a spinnable rotor node.
+    // Windpark (7×7): mehrere Turbinen verteilt über das Areal — die erste
+    // trägt den animierten Rotor-Knoten, die übrigen stehen versetzt.
     if (def.id === 'wind_farm') {
-      const mast = new Mesh(new CylinderGeometry(0.09, 0.13, height * 1.4), new MeshStandardMaterial({ color: 0xf2f2f2 }));
-      mast.position.y = height * 0.7;
-      g.add(mast);
-      const r = new Group();
-      r.position.set(0, height * 1.4, d * 0.12);
-      for (let i = 0; i < 3; i++) {
-        const blade = new Mesh(new BoxGeometry(0.06, 1.5, 0.16), new MeshStandardMaterial({ color: 0xffffff }));
-        blade.position.y = 0.75;
-        const holder = new Group();
-        holder.rotation.z = (i * Math.PI * 2) / 3;
-        holder.add(blade);
-        r.add(holder);
+      const mastMat = new MeshStandardMaterial({ color: 0xf2f2f2 });
+      const bladeMat = new MeshStandardMaterial({ color: 0xffffff });
+      const spots: [number, number, number][] = [
+        [0, 0, 1], // x-Anteil, z-Anteil, Größenfaktor
+        [-w * 0.3, d * 0.28, 0.8],
+        [w * 0.3, -d * 0.26, 0.85],
+      ];
+      for (const [tx, tz, s] of spots) {
+        const mastH = height * 1.4 * s;
+        const mast = new Mesh(new CylinderGeometry(0.09 * s, 0.13 * s, mastH), mastMat);
+        mast.position.set(tx, mastH / 2, tz);
+        mast.castShadow = true;
+        g.add(mast);
+        const r = new Group();
+        r.position.set(tx, mastH, tz + 0.12 * s);
+        for (let i = 0; i < 3; i++) {
+          const blade = new Mesh(new BoxGeometry(0.06 * s, 1.5 * s, 0.16 * s), bladeMat);
+          blade.position.y = 0.75 * s;
+          const holder = new Group();
+          holder.rotation.z = (i * Math.PI * 2) / 3 + (rotor ? hash01(b.id + tx) * 2 : 0);
+          holder.add(blade);
+          r.add(holder);
+        }
+        g.add(r);
+        rotor ??= r; // nur die erste Turbine wird aktiv gedreht
       }
-      g.add(r);
-      rotor = r;
     }
 
     // Chimney + smoke anchor for active production / energy buildings.
-    if ((def.category === 'production' || def.category === 'energy') && b.status === 'active') {
+    if ((def.category === 'production' || def.category === 'energy') && def.id !== 'wind_farm' && b.status === 'active') {
       const chim = new Mesh(new BoxGeometry(0.22, 0.6, 0.22), new MeshStandardMaterial({ color: 0x6c6f77 }));
-      const chx = w * 0.28;
-      const chz = -d * 0.28;
+      const chx = bx + bw * 0.33;
+      const chz = bz - bd * 0.33;
       chim.position.set(chx, height + 0.3, chz);
       g.add(chim);
       const px = this.pxFromGroup(def, b, chx);
@@ -2046,6 +2878,12 @@ export class ThreeMapRenderer implements IMapRenderer {
   // ---- active Stadtarbeit: mission van + camera focus (§6) -------------------
 
   private updateMission(): void {
+    // Im Fahrmodus fährt der Spieler selbst — kein ambienter Missionsvan, keine
+    // automatische Kamerafokussierung (die Verfolgerkamera hat Vorrang).
+    if (this.drive) {
+      this.clearMissionVan();
+      return;
+    }
     const active = this.controller.state.activities.active;
     if (!active || active.targets.length === 0) {
       this.clearMissionVan();
@@ -2200,8 +3038,7 @@ export class ThreeMapRenderer implements IMapRenderer {
 
   /** Approximate a building's top height (for anchoring markers/smoke). */
   private approxHeight(def: BuildingDef, upgradeLevel: number): number {
-    const hc = def.visual?.heightClass ?? CATEGORY_HEIGHT[def.category] ?? 1;
-    return Math.max(0.4, hc * 0.95 * (1 + upgradeLevel * 0.5));
+    return Math.max(0.4, buildingHeight(def, upgradeLevel));
   }
 
   private markerTexture(kind: MarkerKind): CanvasTexture {
@@ -2292,8 +3129,10 @@ export class ThreeMapRenderer implements IMapRenderer {
       this.updateMission();
     }
 
-    // Advance camera: apply held keys/edge-scroll, ease toward goals, write pose.
-    this.input?.update(dt);
+    // Advance camera: im Fahrmodus steuert das Fahrzeug die Verfolgerkamera,
+    // sonst die normale Kamera-Eingabe (Tasten/Edge-Scroll).
+    if (this.drive) this.updateDrive(dt);
+    else this.input?.update(dt);
     this.cam.update(dt);
     this.writeCamera();
 
@@ -2309,8 +3148,10 @@ export class ThreeMapRenderer implements IMapRenderer {
     }
     this.animateSmoke(dt);
     this.animateCars(dt);
+    this.animateAnimals(dt);
     this.animateMission(dt);
     this.animateMarkers();
+    this.animateFog(dt);
 
     this.renderer.render(this.scene, this.camera);
   }
@@ -2455,6 +3296,137 @@ function decorationProc(id: string): Object3D[] {
   return [trunk, crown, crown2];
 }
 
+/**
+ * § A7 — Bauernhof/Farm als lebendiges Areal: das Grundstück füllt sich mit
+ * Feldern (Furchen), Zaun, Scheune und Silos, die mit der Ausbaustufe wachsen
+ * (Bauernhof → Großfarm → Agrarkomplex). Ersetzt für die Farm das generische
+ * Ensemble. Zentriert auf (0,0), Grundfläche = def.size (Weltkacheln).
+ */
+function farmProc(def: BuildingDef, upgradeLevel: number): Object3D[] {
+  const W = def.size.w;
+  const D = def.size.h;
+  const stage = upgradeLevel; // 0 Bauernhof · 1 Großfarm · 2 Agrarkomplex
+  const parts: Object3D[] = [];
+
+  // Ackerboden als Basisplatte.
+  const soil = new Mesh(new BoxGeometry(W * 0.96, 0.06, D * 0.96), new MeshStandardMaterial({ color: 0x6f5133, roughness: 1 }));
+  soil.position.y = 0.03;
+  soil.receiveShadow = true;
+  parts.push(soil);
+
+  // Felder als parallele Furchen (füllen die Fläche außer der Scheunen-Ecke).
+  const cropCols = [0x7fae3f, 0x6b9a34, 0xa9b24a];
+  const rows = Math.min(9, Math.round(D * 1.2));
+  for (let i = 0; i < rows; i++) {
+    const z = -D * 0.42 + (i / Math.max(1, rows - 1)) * D * 0.84;
+    const furrow = new Mesh(
+      new BoxGeometry(W * 0.82, 0.12 + (i % 2) * 0.05, D * 0.5 / rows),
+      new MeshStandardMaterial({ color: cropCols[i % cropCols.length]!, roughness: 0.95 }),
+    );
+    furrow.position.set(-W * 0.05, 0.11, z);
+    furrow.castShadow = false;
+    parts.push(furrow);
+  }
+
+  // Scheune (rot, Satteldach) in der Ecke +x/−z.
+  const barnH = 0.9 + stage * 0.35;
+  const barnW = W * 0.3;
+  const barnD = D * 0.3;
+  const barnX = W * 0.3;
+  const barnZ = -D * 0.3;
+  const barn = new Mesh(new BoxGeometry(barnW, barnH, barnD), new MeshStandardMaterial({ color: 0xb23b2e, roughness: 0.7 }));
+  barn.position.set(barnX, 0.06 + barnH / 2, barnZ);
+  barn.castShadow = true;
+  barn.receiveShadow = true;
+  parts.push(barn);
+  const roof = new Mesh(new ConeGeometry(barnW * 0.78, barnH * 0.6, 4), new MeshStandardMaterial({ color: 0x6b2b22, roughness: 0.8 }));
+  roof.rotation.y = Math.PI / 4;
+  roof.position.set(barnX, 0.06 + barnH + barnH * 0.28, barnZ);
+  roof.castShadow = true;
+  parts.push(roof);
+
+  // Silos (metallisch, Kegeldach) — Anzahl/Höhe wachsen mit der Stufe.
+  const siloCount = 1 + stage;
+  const siloMat = new MeshStandardMaterial({ color: 0xb9c0c8, roughness: 0.45, metalness: 0.35 });
+  const siloTopMat = new MeshStandardMaterial({ color: 0x8b939c, roughness: 0.5, metalness: 0.3 });
+  for (let i = 0; i < siloCount; i++) {
+    const sh = 1.2 + stage * 0.35;
+    const r = 0.26;
+    const sx = W * 0.06 - i * (r * 2.4);
+    const sz = -D * 0.34;
+    const silo = new Mesh(new CylinderGeometry(r, r, sh, 12), siloMat);
+    silo.position.set(sx, 0.06 + sh / 2, sz);
+    silo.castShadow = true;
+    parts.push(silo);
+    const cap = new Mesh(new ConeGeometry(r * 1.05, r * 0.9, 12), siloTopMat);
+    cap.position.set(sx, 0.06 + sh + r * 0.4, sz);
+    parts.push(cap);
+  }
+
+  // Zaun ringsum: dünne Pfosten + Riegel entlang der vier Kanten.
+  const fenceMat = new MeshStandardMaterial({ color: 0x8a6a3a, roughness: 0.85 });
+  const half = { x: W * 0.47, z: D * 0.47 };
+  const railY = 0.22;
+  const addRail = (len: number, x: number, z: number, horizontal: boolean): void => {
+    const rail = new Mesh(new BoxGeometry(horizontal ? len : 0.05, 0.05, horizontal ? 0.05 : len), fenceMat);
+    rail.position.set(x, railY, z);
+    parts.push(rail);
+  };
+  addRail(W * 0.94, 0, -half.z, true);
+  addRail(W * 0.94, 0, half.z, true);
+  addRail(D * 0.94, -half.x, 0, false);
+  addRail(D * 0.94, half.x, 0, false);
+  const posts = Math.max(3, Math.round(W / 1.4));
+  for (let i = 0; i <= posts; i++) {
+    const fx = -half.x + (i / posts) * W * 0.94;
+    for (const fz of [-half.z, half.z]) {
+      const post = new Mesh(new BoxGeometry(0.07, 0.4, 0.07), fenceMat);
+      post.position.set(fx, 0.2, fz);
+      parts.push(post);
+    }
+  }
+  return parts;
+}
+
+/** § A7 — einfaches Weidetier (Kuh/Schaf/Huhn) als Fallback-Mesh. Front +z. */
+function makeAnimalMesh(kind: 'cow' | 'sheep' | 'chicken'): Group {
+  const g = new Group();
+  const mk = (color: number, rough = 0.85): MeshStandardMaterial => new MeshStandardMaterial({ color, roughness: rough });
+  if (kind === 'chicken') {
+    const body = new Mesh(new BoxGeometry(0.12, 0.12, 0.16), mk(0xf2ede4));
+    body.position.y = 0.1;
+    body.castShadow = true;
+    const head = new Mesh(new BoxGeometry(0.08, 0.09, 0.08), mk(0xf2ede4));
+    head.position.set(0, 0.19, 0.08);
+    const comb = new Mesh(new BoxGeometry(0.03, 0.04, 0.05), mk(0xd23b2e));
+    comb.position.set(0, 0.25, 0.08);
+    g.add(body, head, comb);
+    return g;
+  }
+  const bodyColor = kind === 'cow' ? 0x4a3a30 : 0xe8e4dc;
+  const body = new Mesh(new BoxGeometry(0.2, 0.16, 0.34), mk(bodyColor));
+  body.position.y = 0.2;
+  body.castShadow = true;
+  const head = new Mesh(new BoxGeometry(0.13, 0.12, 0.13), mk(bodyColor));
+  head.position.set(0, 0.24, 0.2);
+  g.add(body, head);
+  if (kind === 'cow') {
+    // ein paar helle Flecken
+    const patch = new Mesh(new BoxGeometry(0.205, 0.02, 0.14), mk(0xe9e2d6));
+    patch.position.set(0, 0.28, -0.02);
+    g.add(patch);
+  }
+  const legMat = mk(kind === 'cow' ? 0x2f2620 : 0xcfc7ba);
+  for (const lx of [-0.07, 0.07]) {
+    for (const lz of [-0.11, 0.11]) {
+      const leg = new Mesh(new BoxGeometry(0.04, 0.14, 0.04), legMat);
+      leg.position.set(lx, 0.07, lz);
+      g.add(leg);
+    }
+  }
+  return g;
+}
+
 const CAR_COLORS = [0xd94f4f, 0x4f7fd9, 0xe0b03a, 0xf2f2f2, 0x5fb35f, 0x333a44];
 
 /** A small shaped car (body + cabin + tinted windows) — clearer than a bare box.
@@ -2482,6 +3454,90 @@ function makeVanMesh(): Group {
   const stripe = new Mesh(new BoxGeometry(0.42, 0.06, 0.4), new MeshStandardMaterial({ color: 0xe0a03a }));
   stripe.position.set(0, 0.2, -0.05);
   g.add(body, cab, stripe);
+  return g;
+}
+
+// ---- § A6 Fahrmodus: Konstanten + Fahrzeug/Zielpfeil-Fallbacks --------------
+
+const ANIMAL_CAP = 48; // § A7: Obergrenze aller Weidetiere (Draw-Call-Budget)
+const DRIVE_KEYS: ReadonlySet<string> = new Set(['w', 'a', 's', 'd', 'arrowup', 'arrowdown', 'arrowleft', 'arrowright']);
+const DRIVE_ACCEL = 6.5; // Welt-Einheiten/s² (Tiles/s²)
+const DRIVE_MAX_SPEED = 5.5; // Tiles/s
+const DRIVE_STEER = 2.6; // rad/s bei voller Fahrt
+const DRIVE_CAM_DIST = 8.5;
+const DRIVE_CAM_PITCH = 0.64; // rad über der Horizontalen (Verfolgerblick von schräg oben)
+
+/** Drop-in-Modelllisten je Fahrzeugtyp (§ Fahrzeuge / Drop-in-Assets). */
+const DRIVE_VEHICLE_MODELS: Record<string, readonly string[]> = {
+  van: VAN_MODELS,
+  fire_truck: VEHICLE_CAR_MODELS,
+  logging_truck: VEHICLE_CAR_MODELS,
+  police_car: VEHICLE_CAR_MODELS,
+  flatbed: VEHICLE_CAR_MODELS,
+};
+
+/** Prozedurales, deutlich unterscheidbares Missionsfahrzeug je Typ (Fallback,
+ *  bis ein GLB eingelegt wird). Front zeigt nach +z (wie alle Fahrzeuge hier). */
+function makeMissionVehicle(vehicle: string | undefined): Group {
+  const g = new Group();
+  const paint = (color: number, rough = 0.5): MeshStandardMaterial => new MeshStandardMaterial({ color, roughness: rough, metalness: 0.15 });
+  const addBox = (w: number, hgt: number, l: number, x: number, y: number, z: number, mat: MeshStandardMaterial): Mesh => {
+    const m = new Mesh(new BoxGeometry(w, hgt, l), mat);
+    m.position.set(x, y, z);
+    m.castShadow = true;
+    g.add(m);
+    return m;
+  };
+  const beacon = (color: number, emissive: number): void => {
+    const bar = addBox(0.34, 0.07, 0.14, 0, 0.4, 0.06, new MeshStandardMaterial({ color, emissive, emissiveIntensity: 1.1, roughness: 0.4 }));
+    bar.castShadow = false;
+  };
+  switch (vehicle) {
+    case 'fire_truck': {
+      addBox(0.46, 0.32, 0.9, 0, 0.2, -0.05, paint(0xc62828)); // roter Aufbau
+      addBox(0.46, 0.26, 0.28, 0, 0.17, 0.38, paint(0x8e1f1f)); // Kabine
+      addBox(0.5, 0.05, 0.5, 0, 0.24, -0.1, paint(0xf2f2f2)); // weißer Streifen
+      beacon(0xff5252, 0xff2a2a);
+      break;
+    }
+    case 'police_car': {
+      addBox(0.4, 0.2, 0.78, 0, 0.13, 0, paint(0xf4f4f4)); // weiße Karosse
+      addBox(0.36, 0.16, 0.3, 0, 0.26, -0.02, paint(0x1f2c46)); // Dach/Kabine
+      addBox(0.42, 0.06, 0.42, 0, 0.13, 0, paint(0x1c3f7a)); // blauer Seitenstreifen
+      beacon(0x2f6bff, 0x1e4fd0);
+      break;
+    }
+    case 'logging_truck': {
+      addBox(0.42, 0.28, 0.3, 0, 0.18, 0.34, paint(0x2f6d3a)); // grüne Zugmaschine
+      addBox(0.44, 0.14, 0.62, 0, 0.12, -0.18, paint(0x3a2a1c)); // Ladefläche
+      addBox(0.14, 0.16, 0.56, -0.12, 0.26, -0.18, paint(0x6b4a2a)); // Stamm
+      addBox(0.14, 0.16, 0.56, 0.12, 0.26, -0.18, paint(0x7a5632)); // Stamm
+      break;
+    }
+    case 'flatbed': {
+      addBox(0.42, 0.28, 0.3, 0, 0.18, 0.34, paint(0xcf8b2a)); // orange Zugmaschine
+      addBox(0.46, 0.1, 0.66, 0, 0.1, -0.16, paint(0x4a4f57)); // Pritsche
+      addBox(0.34, 0.22, 0.34, 0, 0.24, -0.16, paint(0xb0793a)); // Materialkiste
+      break;
+    }
+    default: {
+      // van: weißer Kastenwagen (wie die ambiente Lieferung, etwas größer).
+      addBox(0.44, 0.34, 0.72, 0, 0.2, -0.03, paint(0xf2f2f2));
+      addBox(0.44, 0.24, 0.22, 0, 0.16, 0.34, paint(0xe0a03a));
+      addBox(0.46, 0.06, 0.44, 0, 0.24, -0.06, paint(0xe0a03a));
+    }
+  }
+  return g;
+}
+
+/** Schwebender Richtungspfeil über dem Fahrzeug (zeigt nach +z, Gruppe wird
+ *  per rotation.y aufs nächste Ziel gedreht). Bright + emissiv, gut sichtbar. */
+function makeDriveArrow(): Group {
+  const g = new Group();
+  const mat = new MeshStandardMaterial({ color: 0xffd23f, emissive: 0xffb300, emissiveIntensity: 0.9, roughness: 0.4 });
+  const cone = new Mesh(new ConeGeometry(0.22, 0.5, 4), mat);
+  cone.rotation.x = Math.PI / 2; // Spitze zeigt nach +z
+  g.add(cone);
   return g;
 }
 

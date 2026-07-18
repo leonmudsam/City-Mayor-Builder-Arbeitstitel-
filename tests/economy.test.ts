@@ -23,7 +23,7 @@ describe('economy service', () => {
     const { controller } = newController();
     // Build enough to reach level 3 (90 XP): roads are 1 XP each… use quests+houses instead is slow;
     // simply verify the reward wiring via addXp path: place 2 houses & claim quests to level 2.
-    for (let i = 0; i < 5; i++) controller.placeBuilding('road', 26 + i, 26);
+    for (let i = 0; i < 5; i++) controller.placeBuilding('road', 160 + i, 224);
     controller.claimQuest('q01_roads');
     expect(controller.state.level.current).toBeGreaterThanOrEqual(1);
   });

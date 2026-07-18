@@ -3,6 +3,61 @@ import type { GameState } from '../types.ts';
 import { grantGold, grantResources } from '../economy/economyService.ts';
 import type { Derived } from '../simulation/derived.ts';
 import { newId } from '../engine/rng.ts';
+import { isRegionAdjacentToUnlocked } from '../map/world.ts';
+import { BAKED_REGIONS, startRegionConfig } from '../config/startRegion.config.ts';
+
+/** Kurzcharakter einer Region als Bürger-Hinweis-Schlüssel (§4 Auftrag B). */
+function regionBoonKey(mods: Partial<Record<string, number>> | undefined, roadCostFactor: number | undefined, buildable: number): string {
+  // Stärksten Vorteil hervorheben; sonst „viel Platz" oder — bei teurem
+  // Gelände ohne klaren Bonus — eine ehrliche Warnung.
+  let bestKey: string | undefined;
+  let bestFactor = 1;
+  for (const [key, factor] of Object.entries(mods ?? {})) {
+    if (factor !== undefined && factor > bestFactor) {
+      bestFactor = factor;
+      bestKey = key;
+    }
+  }
+  if (bestKey) return `ui.region.boon.${bestKey}`;
+  if ((roadCostFactor ?? 1) > 1.3) return 'ui.region.boon.tough';
+  if (buildable >= 3000) return 'ui.region.boon.space';
+  return 'ui.region.boon.space';
+}
+
+/** Himmelsrichtung der Region relativ zum Rathaus (grobe Dominanzachse). */
+function regionDirectionKey(centroid: { x: number; y: number }): string {
+  const dx = centroid.x - startRegionConfig.townHall.x;
+  const dy = centroid.y - startRegionConfig.townHall.y;
+  if (Math.abs(dx) >= Math.abs(dy)) return dx >= 0 ? 'ui.dir.east' : 'ui.dir.west';
+  return dy >= 0 ? 'ui.dir.south' : 'ui.dir.north';
+}
+
+/**
+ * Bürger-Hinweise auf Landschaften, die gerade (mit diesem Level) erschließbar
+ * geworden sind und an bereits erschlossenes Land grenzen (§4 Auftrag B:
+ * Führung über Bürger, nicht Menüs). Ein Hinweis je neu freigeschalteter,
+ * angrenzender Region.
+ */
+function hintNewlyReachableRegions(state: GameState, config: GameConfig): void {
+  for (const def of config.regionList) {
+    if (!def.unlockable || def.unlockLevel !== state.level.current) continue;
+    if (state.world.regions[String(def.id)]?.status === 'unlocked') continue;
+    if (!isRegionAdjacentToUnlocked(state, def.id)) continue;
+    const baked = BAKED_REGIONS[def.id - 1];
+    if (!baked) continue;
+    state.mayor.messages.unshift({
+      id: newId(state, 'msg'),
+      textKey: 'message.region_hint',
+      params: {
+        direction: regionDirectionKey(baked.centroid),
+        name: def.nameKey,
+        boon: regionBoonKey(def.productionModifiers, def.roadCostFactor, def.buildableTiles),
+      },
+      kind: 'info',
+      createdAt: state.meta.lastSimTime,
+    });
+  }
+}
 
 export function levelForXp(config: GameConfig, xp: number): number {
   let level = 1;
@@ -37,6 +92,8 @@ export function addXp(state: GameState, config: GameConfig, derived: Derived, am
       createdAt: state.meta.lastSimTime,
     });
     state.mayor.reputation += 2;
+    // Bürger weisen den Weg zu neu erreichbaren Landschaften (§4 Auftrag B).
+    hintNewlyReachableRegions(state, config);
   }
   return gained;
 }

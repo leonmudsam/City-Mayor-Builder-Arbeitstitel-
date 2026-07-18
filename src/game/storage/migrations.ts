@@ -1,167 +1,318 @@
+// Save-Migrationen (§ CLAUDE.md 3: Insel-Saves brechen nie).
+//
+// Mit v10 wurde die Welt vollständig ersetzt (Insel aus dem GLB-Bake statt der
+// alten Testkarte) UND das Save-Format verschlankt (Sektoren ohne Kachel-Arrays).
+// Saves ≤ v9 beschreiben eine Geografie, die es nicht mehr gibt — eine
+// Koordinaten-Migration wäre Unsinn (Gebäude lägen im Ozean). Sie werfen deshalb
+// `LegacyWorldSaveError`; der Storage-Adapter sichert den alten Stand unter
+// einem Backup-Key und startet frisch (docs/SAVE_MIGRATION.md; vom Auftrag §22
+// sanktionierte Ausnahme von CLAUDE.md §3, einmalig für die Prototyp-Phase).
+//
+// Ab v10 gilt wieder der alte Vertrag: jede Schema-Änderung ergänzt GENAU EINE
+// Migration n→n+1 in `migrations`. Die erste ist v10→v11 (§ Ausbaustufe 2.0):
+// organische Regionen statt Quadrat-Sektoren, neue Gebäude-Footprints — nicht
+// mehr passende Gebäude werden zu 100 % zum ALTEN Preis erstattet
+// (`legacyCosts.ts`), nichts geht stillschweigend verloren.
+
 import { SCHEMA_VERSION } from '../newGame.ts';
 import { saveGameSchema } from '../config/schemas.ts';
-import { SECTOR_SIZE, startRegionConfig, terrainAt } from '../config/startRegion.config.ts';
-import type { SaveGame } from '../types.ts';
+import { buildingsConfig } from '../config/buildings.config.ts';
+import { levelsConfig } from '../config/levels.config.ts';
+import { questsConfig } from '../config/quests.config.ts';
+import { regionsConfig } from '../config/regions.config.ts';
+import { regionIdAt, startRegionConfig, WORLD_TILES, terrainAt } from '../config/startRegion.config.ts';
+import type { ResourceId, SaveGame } from '../types.ts';
+import { addCost, legacyInvestedCost, legacyStageCost } from './legacyCosts.ts';
 
 type Migration = (raw: Record<string, unknown>) => Record<string, unknown>;
 
+/** Erste Version der neuen Insel-Welt; ältere Saves sind nicht migrierbar. */
+export const ISLAND_BASE_VERSION = 10;
+
+/** Sektor-Kantenlänge der v10-Welt (historische Konstante, nur für die Migration). */
+const V10_SECTOR_SIZE = 64;
+
 /**
- * Migration chain: migrations[n] upgrades a save from schemaVersion n to n+1.
- * Every future schema change adds exactly one entry here — old saves survive
- * every release (§15).
+ * Ergebnis-Zusammenfassung der letzten v10→v11-Migration — die UI zeigt daraus
+ * einmalig einen Hinweis (Muster `legacyBackupCreated`). Modul-lokal statt im
+ * Save, weil das validierte Schema keine Transienten kennt.
  */
-const migrations: Record<number, Migration> = {
-  // v1 → v2: manual collecting removed (buffers credited to storage once),
-  // stats.collected renamed to stats.produced, and unbuilt tiles re-derive
-  // their terrain so the new lake/mountain features appear in old saves.
-  1: (raw) => {
-    const resources = { ...(raw.resources as Record<string, number>) };
-    const buildings: Record<string, Record<string, unknown>> = {};
-    for (const [id, b] of Object.entries(raw.buildings as Record<string, Record<string, unknown>>)) {
-      const { buffer, ...rest } = b;
-      buildings[id] = rest;
-      if (typeof buffer === 'number' && buffer > 0) {
-        const def = String(b.defId);
-        const resource = def === 'sawmill' ? 'wood' : def === 'quarry' ? 'stone' : def === 'shop_small' ? 'money' : 'food';
-        resources[resource] = (resources[resource] ?? 0) + Math.floor(buffer);
+export interface MigrationNotice {
+  fromVersion: number;
+  /** Entfernte (voll erstattete) Gebäude. */
+  removedBuildings: number;
+  /** Gesamterstattung (alte Preise, § legacyCosts). */
+  refunded: Partial<Record<ResourceId, number>>;
+}
+
+let pendingNotice: MigrationNotice | undefined;
+
+/** Holt die letzte Migrations-Zusammenfassung ab (einmalig, danach geleert). */
+export function consumeMigrationNotice(): MigrationNotice | undefined {
+  const notice = pendingNotice;
+  pendingNotice = undefined;
+  return notice;
+}
+
+// ---- v10 → v11 (§ Ausbaustufe 2.0: Regionen + Gebäudesystem 2.0) -----------
+
+// Lose Sichten auf den unvalidierten v10-Rohsave — nur die Felder, die die
+// Migration wirklich liest. Alles andere wird unverändert durchgereicht und am
+// Ende von `saveGameSchema` validiert.
+interface RawBuilding {
+  id: string;
+  defId: string;
+  x: number;
+  y: number;
+  upgradeLevel: number;
+  status: 'constructing' | 'active' | 'paused';
+  targetUpgradeLevel?: number;
+  constructionEndsAt?: number;
+}
+
+interface RawV10Sector {
+  sx: number;
+  sy: number;
+  status: string;
+}
+
+const UNBUILDABLE_TERRAIN = new Set(['river', 'water', 'mountain']);
+
+const migrateV10ToV11: Migration = (raw) => {
+  const world = (raw.world ?? {}) as Record<string, unknown>;
+  const newBuildingDefs = new Map(buildingsConfig.map((d) => [d.id, d]));
+  const refunded: Partial<Record<ResourceId, number>> = {};
+  let removedBuildings = 0;
+
+  // 1) Sektor-Freischaltungen → Regionen: Eine Region gilt als freigeschaltet,
+  //    wenn die Mehrheit ihrer Kacheln in zuvor freigeschalteten Sektoren lag.
+  //    Die Startregion ist immer frei.
+  const unlockedSectors = new Set<string>();
+  for (const sector of Object.values((world.sectors ?? {}) as Record<string, RawV10Sector>)) {
+    if (sector && sector.status === 'unlocked') unlockedSectors.add(`${sector.sx},${sector.sy}`);
+  }
+  const totalTiles = new Map<number, number>();
+  const unlockedTiles = new Map<number, number>();
+  for (let y = 0; y < WORLD_TILES; y++) {
+    for (let x = 0; x < WORLD_TILES; x++) {
+      const id = regionIdAt(x, y);
+      if (id === 0) continue;
+      totalTiles.set(id, (totalTiles.get(id) ?? 0) + 1);
+      if (unlockedSectors.has(`${Math.floor(x / V10_SECTOR_SIZE)},${Math.floor(y / V10_SECTOR_SIZE)}`)) {
+        unlockedTiles.set(id, (unlockedTiles.get(id) ?? 0) + 1);
       }
     }
-    const stats = raw.stats as Record<string, unknown>;
-    const world = raw.world as { sectors: Record<string, { sx: number; sy: number; tiles: { terrain: string; buildingId?: string }[] }> };
-    for (const sector of Object.values(world.sectors)) {
-      sector.tiles.forEach((tile, i) => {
-        if (tile.buildingId) return;
-        tile.terrain = terrainAt(sector.sx * SECTOR_SIZE + (i % SECTOR_SIZE), sector.sy * SECTOR_SIZE + Math.floor(i / SECTOR_SIZE));
-      });
+  }
+  const regionDefs = new Map(regionsConfig.map((r) => [r.id, r]));
+  const regions: Record<string, { id: number; districtId: string; status: 'locked' | 'unlocked' }> = {};
+  let regionsUnlockedCount = 0;
+  for (const [id, total] of totalTiles) {
+    const isStart = id === startRegionConfig.startRegionId;
+    // Nie freischaltbare Teaser-Regionen bleiben gesperrt, egal welche
+    // Sektoren der Spieler in v10 besaß.
+    const unlockable = regionDefs.get(id)?.unlockable !== false;
+    const unlocked = isStart || (unlockable && (unlockedTiles.get(id) ?? 0) * 2 > total);
+    if (unlocked && !isStart) regionsUnlockedCount += 1;
+    regions[String(id)] = { id, districtId: 'main', status: unlocked ? 'unlocked' : 'locked' };
+  }
+
+  // 2) Gebäude prüfen — Rathaus zuerst (deterministisch auf den neuen
+  //    Bake-Start verschoben), dann Distrikt-Zentren, dann alle übrigen in
+  //    Id-Reihenfolge. Inkrementelle Belegung + Terrain + Regions-Status; wer
+  //    nicht mehr passt (größerer Footprint, entfallene Def, gesperrte
+  //    Region), wird abgerissen und zu 100 % zum alten Preis erstattet.
+  const buildings = (raw.buildings ?? {}) as Record<string, RawBuilding>;
+  raw.buildings = buildings;
+  const removedIds = new Set<string>();
+  const occupied = new Set<string>();
+
+  const rank = (b: RawBuilding): number => (b.defId === 'town_hall' ? 0 : b.defId === 'district_center' ? 1 : 2);
+  const ordered = Object.values(buildings).sort((a, b) => rank(a) - rank(b) || a.id.localeCompare(b.id));
+
+  const removeWithRefund = (b: RawBuilding): void => {
+    addCost(refunded, legacyInvestedCost(b.defId, b.upgradeLevel));
+    // Eine laufende Stufen-Erweiterung war bereits bezahlt — auch erstatten.
+    if (b.targetUpgradeLevel !== undefined && b.targetUpgradeLevel > b.upgradeLevel) {
+      addCost(refunded, legacyStageCost(b.defId, b.targetUpgradeLevel));
     }
-    return {
-      ...raw,
-      schemaVersion: 2,
-      resources,
-      buildings,
-      stats: { ...stats, produced: (stats.collected as Record<string, number> | undefined) ?? { money: 0, wood: 0, stone: 0, food: 0 }, collected: undefined },
-    };
-  },
-  // v2 → v3: money moved to a realistic municipal scale (§4). Stored cash is
-  // scaled up so an old save keeps its relative wealth instead of being
-  // bankrupt against the new costs. Housing/income are config-derived, so they
-  // update automatically. Materials (wood/stone/food) keep their small scale.
-  2: (raw) => {
-    const resources = { ...(raw.resources as Record<string, number>) };
-    if (typeof resources.money === 'number') resources.money = Math.round(resources.money * MONEY_SCALE_V3);
-    return { ...raw, schemaVersion: 3, resources };
-  },
-  // v3 → v4: energy grid (MVP 2). The new `energy` need is seeded on old saves
-  // so the citizens state stays complete; it only starts biting once the city
-  // reaches its unlock level and buildings draw power.
-  3: (raw) => {
-    const citizens = { ...(raw.citizens as Record<string, unknown>) };
-    const needs = { ...((citizens.needs as Record<string, unknown>) ?? {}) };
-    needs.energy ??= { supply: 0, demand: 0, fulfillment: 1 };
-    return { ...raw, schemaVersion: 4, citizens: { ...citizens, needs } };
-  },
-  // v4 → v5: emergency services (MVP 2). Seed the safety & health coverage needs
-  // so old saves stay complete; they only bite once the city reaches their level.
-  4: (raw) => {
-    const citizens = { ...(raw.citizens as Record<string, unknown>) };
-    const needs = { ...((citizens.needs as Record<string, unknown>) ?? {}) };
-    needs.safety ??= { supply: 0, demand: 0, fulfillment: 1 };
-    needs.health ??= { supply: 0, demand: 0, fulfillment: 1 };
-    return { ...raw, schemaVersion: 5, citizens: { ...citizens, needs } };
-  },
-  // v5 → v6: mayor tax policy (§ tax sliders). Old saves start at neutral rates.
-  5: (raw) => ({
-    ...raw,
-    schemaVersion: 6,
-    policy: (raw.policy as unknown) ?? { residentialTaxRate: 1, commercialTaxRate: 1 },
-  }),
-  // v6 → v7: drinking-water supply chain. Seed the freshwater resource, need and
-  // produced-stat so old saves stay complete; the chain only matters from L12.
-  6: (raw) => {
-    const resources = { ...(raw.resources as Record<string, number>) };
-    resources.freshwater ??= 0;
-    const citizens = { ...(raw.citizens as Record<string, unknown>) };
-    const needs = { ...((citizens.needs as Record<string, unknown>) ?? {}) };
-    needs.freshwater ??= { supply: 0, demand: 0, fulfillment: 1 };
-    const stats = { ...(raw.stats as Record<string, unknown>) };
-    const produced = { ...((stats.produced as Record<string, number>) ?? {}) };
-    produced.freshwater ??= 0;
-    return { ...raw, schemaVersion: 7, resources, citizens: { ...citizens, needs }, stats: { ...stats, produced } };
-  },
-  // v7 → v8: the world became a large but *bounded* board (§ bounded world). Fill
-  // in every in-bounds sector an old (open-end) save never materialized, as
-  // locked/visible, so all biomes now show from the start. Existing sectors —
-  // including anything the player already unlocked or built beyond the new bounds
-  // — are kept untouched; only missing in-bounds sectors are added.
-  7: (raw) => ({ ...raw, schemaVersion: 8, world: fillMissingInBoundsSectors(raw.world) }),
-  // v8 → v9 (v0.21 "Aktive Stadt"):
-  // 1. Seed the Stadtarbeit activity state and its lifetime stats.
-  // 2. sectorsUnlocked now counts only ADDITIONAL sectors (§5): the free start
-  //    sector no longer counts, so drop one from existing saves.
-  // 3. Population moved to a realistic scale (§9): homes hold ~20× the
-  //    residents, so an old save's citizens are scaled up to keep its relative
-  //    occupancy against the new capacities.
-  // 4. The world grew west (§17): materialize the new mountain-valley sectors.
-  8: (raw) => {
-    const stats = { ...(raw.stats as Record<string, unknown>) };
-    stats.sectorsUnlocked = Math.max(0, Number(stats.sectorsUnlocked ?? 1) - 1);
-    stats.upgradesCompleted ??= 0;
-    stats.upgraded ??= {};
-    stats.tradeEarnings ??= 0;
-    stats.activitiesCompleted ??= 0;
-    const citizens = { ...(raw.citizens as Record<string, unknown>) };
-    citizens.population = Number(citizens.population ?? 0) * POPULATION_SCALE_V9;
-    return {
-      ...raw,
-      schemaVersion: 9,
-      stats,
-      citizens,
-      activities: (raw.activities as unknown) ?? { cooldowns: {}, fulfilledContracts: [] },
-      world: fillMissingInBoundsSectors(raw.world),
-    };
-  },
+    removedIds.add(b.id);
+    removedBuildings += 1;
+    delete buildings[b.id];
+  };
+
+  for (const b of ordered) {
+    const def = newBuildingDefs.get(b.defId);
+    if (!def) {
+      removeWithRefund(b); // entfallene Defs (house_row, apartment)
+      continue;
+    }
+    if (b.defId === 'town_hall') {
+      b.x = startRegionConfig.townHall.x;
+      b.y = startRegionConfig.townHall.y;
+    }
+    // Passt der (ggf. gewachsene) Footprint noch? Straßenanschluss wird bewusst
+    // NICHT geprüft — fehlende Straßen sind ein Diagnose-Hinweis, kein Abriss.
+    let fits = true;
+    for (let dy = 0; dy < def.size.h && fits; dy++) {
+      for (let dx = 0; dx < def.size.w && fits; dx++) {
+        const tx = b.x + dx;
+        const ty = b.y + dy;
+        if (tx < 0 || ty < 0 || tx >= WORLD_TILES || ty >= WORLD_TILES) fits = false;
+        else if (occupied.has(`${tx},${ty}`)) fits = false;
+        else if (b.defId !== 'town_hall') {
+          // Der Bake garantiert den Rathaus-Block; alle anderen brauchen
+          // bebaubares Terrain in einer freigeschalteten Region.
+          if (UNBUILDABLE_TERRAIN.has(terrainAt(tx, ty))) fits = false;
+          else if (regions[String(regionIdAt(tx, ty))]?.status !== 'unlocked') fits = false;
+        }
+      }
+    }
+    if (!fits) {
+      removeWithRefund(b);
+      continue;
+    }
+    for (let dy = 0; dy < def.size.h; dy++) {
+      for (let dx = 0; dx < def.size.w; dx++) occupied.add(`${b.x + dx},${b.y + dy}`);
+    }
+    // Stufen auf das neue Maximum clampen; überzählige (alte) Stufen erstatten.
+    const maxStage = def.upgrades?.length ?? 0;
+    if (b.upgradeLevel > maxStage) {
+      for (let stage = maxStage + 1; stage <= b.upgradeLevel; stage++) {
+        addCost(refunded, legacyStageCost(b.defId, stage));
+      }
+      b.upgradeLevel = maxStage;
+    }
+    if (b.targetUpgradeLevel !== undefined && b.targetUpgradeLevel > maxStage) {
+      addCost(refunded, legacyStageCost(b.defId, b.targetUpgradeLevel));
+      delete b.targetUpgradeLevel;
+      delete b.constructionEndsAt;
+      b.status = 'active';
+    }
+  }
+
+  // Die 5 gebackenen Startstraßen an der neuen Rathaus-Südkante ergänzen
+  // (Gratis-Vorplatz wie im Neustart), sofern die Kacheln frei sind.
+  let nextId = typeof raw.nextId === 'number' ? raw.nextId : 0;
+  for (const pos of startRegionConfig.startRoads) {
+    if (occupied.has(`${pos.x},${pos.y}`)) continue;
+    const id = `b_${nextId++}_migroad`;
+    buildings[id] = { id, defId: 'road', x: pos.x, y: pos.y, upgradeLevel: 0, status: 'active' };
+    occupied.add(`${pos.x},${pos.y}`);
+  }
+  raw.nextId = nextId;
+
+  // 3) Distrikte: Zentren, die den Umbau nicht überlebt haben, lösen ihren
+  //    Distrikt auf; jede Region mit überlebendem Zentrum gehört dessen Distrikt.
+  const districts = (world.districts ?? {}) as Record<string, { id: string; centerBuildingId: string }>;
+  for (const [key, district] of Object.entries(districts)) {
+    const center = district ? buildings[district.centerBuildingId] : undefined;
+    if (!center) {
+      if (key !== 'main') delete districts[key];
+      continue;
+    }
+    const regionId = regionIdAt(center.x, center.y);
+    const region = regions[String(regionId)];
+    if (region) region.districtId = district.id;
+  }
+
+  // 4) Welt/Statistiken/Level auf v11-Form bringen.
+  world.regions = regions;
+  delete world.sectors;
+  raw.world = world;
+
+  const stats = (raw.stats ?? {}) as Record<string, unknown>;
+  stats.regionsUnlocked = regionsUnlockedCount;
+  delete stats.sectorsUnlocked;
+  for (const key of ['built', 'upgraded'] as const) {
+    const record = stats[key] as Record<string, number> | undefined;
+    if (!record) continue;
+    for (const defId of Object.keys(record)) {
+      if (!newBuildingDefs.has(defId)) delete record[defId];
+    }
+  }
+  raw.stats = stats;
+
+  // Erstattung gutschreiben (alte Preise, 100 %).
+  const resources = (raw.resources ?? {}) as Partial<Record<ResourceId, number>>;
+  for (const [res, amount] of Object.entries(refunded)) {
+    resources[res as ResourceId] = (resources[res as ResourceId] ?? 0) + (amount ?? 0);
+  }
+  raw.resources = resources;
+
+  // Level aus XP mit der neuen 20er-Kurve re-derivieren (XP bleibt erhalten).
+  const level = (raw.level ?? {}) as { current?: number; xp?: number };
+  const xp = typeof level.xp === 'number' ? level.xp : 0;
+  let current = 1;
+  for (const def of levelsConfig) if (xp >= def.xpRequired && def.level > current) current = def.level;
+  level.current = current;
+  raw.level = level;
+
+  // 5) Verweise auf entfernte Gebäude bereinigen: Brände löschen, eine
+  //    laufende Aktivität mit verlorenem Ziel abbrechen, aktive Quests auf die
+  //    neue Zielstruktur normalisieren (Fortschritt wird im nächsten Tick neu
+  //    berechnet).
+  if (Array.isArray(raw.events)) {
+    raw.events = (raw.events as { buildingId?: string }[]).filter(
+      (e) => !e.buildingId || !removedIds.has(e.buildingId),
+    );
+  }
+  const activities = (raw.activities ?? {}) as {
+    active?: { targets?: { buildingId: string }[] };
+  };
+  if (activities.active?.targets?.some((t) => removedIds.has(t.buildingId))) {
+    delete activities.active;
+  }
+  const quests = (raw.quests ?? {}) as {
+    active?: { questId: string; progress: number[]; claimable: boolean }[];
+  };
+  if (Array.isArray(quests.active)) {
+    const questDefs = new Map(questsConfig.map((q) => [q.id, q]));
+    quests.active = quests.active
+      .filter((a) => questDefs.has(a.questId))
+      .map((a) => {
+        const objectives = questDefs.get(a.questId)!.objectives.length;
+        const progress = Array.from({ length: objectives }, (_, i) => a.progress[i] ?? 0);
+        return { ...a, progress, claimable: false };
+      });
+  }
+
+  raw.schemaVersion = 11;
+  pendingNotice = { fromVersion: 10, removedBuildings, refunded };
+  return raw;
 };
 
 /**
- * Adds every in-bounds sector a save has never materialized, as locked/visible
- * terrain. Used whenever `worldBounds` grows (v8 bounded world, v9 western
- * mountains) — existing sectors, unlocked or built, are never touched.
+ * Migration chain: migrations[n] upgrades a save from schemaVersion n to n+1.
+ * Beginnt bei v10 (Insel-Basis).
  */
-function fillMissingInBoundsSectors(rawWorld: unknown): Record<string, unknown> {
-  const world = { ...(rawWorld as { sectors: Record<string, unknown>; districts: unknown }) };
-  const sectors = { ...(world.sectors as Record<string, unknown>) };
-  const { minSx, minSy, maxSx, maxSy } = startRegionConfig.worldBounds;
-  for (let sy = minSy; sy <= maxSy; sy++) {
-    for (let sx = minSx; sx <= maxSx; sx++) {
-      const id = `${sx}:${sy}`;
-      if (sectors[id]) continue;
-      const tiles: { terrain: string }[] = [];
-      for (let ly = 0; ly < SECTOR_SIZE; ly++) {
-        for (let lx = 0; lx < SECTOR_SIZE; lx++) {
-          tiles.push({ terrain: terrainAt(sx * SECTOR_SIZE + lx, sy * SECTOR_SIZE + ly) });
-        }
-      }
-      sectors[id] = { id, sx, sy, districtId: 'main', status: 'locked', tiles };
-    }
-  }
-  return { ...world, sectors };
-}
-
-/** Money rescale applied when upgrading v2 saves to the v3 economy. */
-const MONEY_SCALE_V3 = 100;
-
-/** Population rescale applied when upgrading v8 saves to the v9 city scale. */
-const POPULATION_SCALE_V9 = 20;
+const migrations: Record<number, Migration> = {
+  10: migrateV10ToV11,
+};
 
 export class SaveValidationError extends Error {}
+
+/**
+ * Ein strukturell gültiger, aber vor-Insel-Save (≤ v9): nicht ladbar, aber
+ * wertvoll genug für ein Backup statt stillen Verlusts.
+ */
+export class LegacyWorldSaveError extends Error {
+  constructor(public readonly version: number) {
+    super(`Save schemaVersion ${version} stammt aus der Vor-Insel-Welt (< v${ISLAND_BASE_VERSION})`);
+  }
+}
 
 export function migrateAndValidate(rawInput: unknown): SaveGame {
   if (typeof rawInput !== 'object' || rawInput === null) {
     throw new SaveValidationError('Save is not an object');
   }
   let raw = rawInput as Record<string, unknown>;
+  // Nie eine Notice aus einem früheren (ggf. gescheiterten) Lauf durchsickern lassen.
+  pendingNotice = undefined;
   let version = typeof raw.schemaVersion === 'number' ? raw.schemaVersion : 0;
-  if (version < 1 || version > SCHEMA_VERSION) {
+  if (version >= 1 && version < ISLAND_BASE_VERSION) {
+    throw new LegacyWorldSaveError(version);
+  }
+  if (version < ISLAND_BASE_VERSION || version > SCHEMA_VERSION) {
     throw new SaveValidationError(`Unsupported save schemaVersion ${version}`);
   }
   while (version < SCHEMA_VERSION) {
@@ -177,6 +328,7 @@ export function migrateAndValidate(rawInput: unknown): SaveGame {
   }
   const parsed = saveGameSchema.safeParse(raw);
   if (!parsed.success) {
+    pendingNotice = undefined; // halbmigrierter Stand → keine Erfolgs-Meldung
     throw new SaveValidationError(`Save validation failed: ${parsed.error.issues[0]?.message ?? 'unknown'}`);
   }
   return parsed.data as SaveGame;

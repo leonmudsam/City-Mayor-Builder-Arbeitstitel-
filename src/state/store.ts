@@ -1,24 +1,8 @@
 import { create } from 'zustand';
 import { useSyncExternalStore } from 'react';
 import type { GameController } from '../game/commands/controller.ts';
-import type { SectorId } from '../game/types.ts';
-import type { RenderMode } from '../renderer/projection.ts';
+import type { RegionId } from '../game/types.ts';
 import type { CameraPreset } from '../renderer/three/CameraConfig.ts';
-
-// v0.30: 3D is the default (and the long-term single mode). During the prototype
-// the 2D/iso engines stay user-selectable in Settings — easier testing & telling
-// building types apart — persisted via this override key (3D clears it). The
-// setting is presentation-only (localStorage, never the savegame).
-const DEBUG_RENDER_KEY = 'cmb.mapMode';
-function loadRenderMode(): RenderMode {
-  try {
-    const v = localStorage.getItem(DEBUG_RENDER_KEY);
-    if (v === 'flat2d' || v === 'isometric2d') return v; // dev fallback only
-  } catch {
-    /* ignore storage failures */
-  }
-  return 'true3d';
-}
 
 // The React side never mutates game state directly: it reads snapshots off
 // the controller (re-rendering via the version counter) and sends commands.
@@ -48,6 +32,12 @@ export interface MapApi {
   zoomStep(dir: number): void;
   /** Current camera yaw in radians (for the compass). */
   getYaw(): number;
+  /** § A6: Läuft eine selbst-fahrbare Fahrmission (Button zeigen)? */
+  canDrive(): boolean;
+  /** § A6: In das Missionsfahrzeug einsteigen (false, wenn nicht möglich). */
+  enterDrive(): boolean;
+  /** § A6: Fahrmodus verlassen. */
+  exitDrive(): void;
 }
 
 let mapApi: MapApi | undefined;
@@ -79,7 +69,7 @@ export interface Toast {
 /** A staged, acknowledge-me moment shown in an EventModal (§9). */
 export interface GameEvent {
   id: number;
-  kind: 'levelUp' | 'sectorUnlocked' | 'fire' | 'celebrate' | 'activityDone';
+  kind: 'levelUp' | 'regionUnlocked' | 'fire' | 'celebrate' | 'activityDone';
   titleKey: string;
   bodyKey: string;
   params?: Record<string, string | number>;
@@ -112,13 +102,13 @@ interface UiState {
    *  a small restore button stays visible to bring the chrome back. */
   uiHidden: boolean;
   toggleUiHidden(): void;
-  /** Effective map render mode. Players always get 'true3d'; 'flat2d'/'isometric2d'
-   *  are a developer fallback set from the debug panel (§ 3D-only). */
-  renderMode: RenderMode;
-  setRenderMode(mode: RenderMode): void;
   /** Player-facing 3D camera preset (replaces the old mode switch). */
   cameraPreset: CameraPreset;
   setCameraPreset(preset: CameraPreset): void;
+  /** § A6 Fahrmodus aktiv: der Renderer meldet Ein-/Ausstieg, die UI zeigt das
+   *  Fahr-HUD (Timer, verbleibende Ziele, „Fahrt beenden") statt der Panels. */
+  driveActive: boolean;
+  setDriveActive(active: boolean): void;
   placingDefId: string | undefined;
   /** Cosmetic facing (degrees) chosen for the building about to be placed
    *  (§ Gebäude-Rotation). Resets to 0 whenever placement starts/stops. */
@@ -127,7 +117,7 @@ interface UiState {
   /** Building currently being relocated (hold-drag or "Verschieben" button). */
   movingBuildingId: string | undefined;
   selectedBuildingId: string | undefined;
-  sectorDialog: SectorId | undefined;
+  regionDialog: RegionId | undefined;
   toasts: Toast[];
   events: GameEvent[];
   setPanel(panel: PanelId): void;
@@ -136,7 +126,7 @@ interface UiState {
   startMoving(id: string): void;
   stopMoving(): void;
   selectBuilding(id?: string): void;
-  openSectorDialog(id?: SectorId): void;
+  openRegionDialog(id?: RegionId): void;
   pushToast(text: string, kind?: Toast['kind']): void;
   removeToast(id: number): void;
   pushEvent(event: Omit<GameEvent, 'id'>): void;
@@ -152,29 +142,19 @@ export const useUiStore = create<UiState>((set) => ({
   toggleOverlay: () => set((s) => ({ overlayMode: !s.overlayMode })),
   uiHidden: false,
   toggleUiHidden: () => set((s) => ({ uiHidden: !s.uiHidden })),
-  renderMode: loadRenderMode(),
-  setRenderMode: (mode) =>
-    set(() => {
-      try {
-        // Only 2D/iso are persisted (dev fallback); 3D clears the override.
-        if (mode === 'true3d') localStorage.removeItem(DEBUG_RENDER_KEY);
-        else localStorage.setItem(DEBUG_RENDER_KEY, mode);
-      } catch {
-        /* ignore storage failures */
-      }
-      return { renderMode: mode };
-    }),
   cameraPreset: 'city',
   setCameraPreset: (preset) => {
     getMapApi()?.applyPreset(preset);
     set({ cameraPreset: preset });
   },
+  driveActive: false,
+  setDriveActive: (active) => set({ driveActive: active }),
   placingDefId: undefined,
   placingRotation: 0,
   rotatePlacing: () => set((s) => ({ placingRotation: (((s.placingRotation + 90) % 360) as 0 | 90 | 180 | 270) })),
   movingBuildingId: undefined,
   selectedBuildingId: undefined,
-  sectorDialog: undefined,
+  regionDialog: undefined,
   toasts: [],
   events: [],
   setPanel: (panel) => set((s) => ({ openPanel: s.openPanel === panel ? undefined : panel })),
@@ -184,17 +164,17 @@ export const useUiStore = create<UiState>((set) => ({
       placingRotation: 0,
       movingBuildingId: undefined,
       selectedBuildingId: undefined,
-      sectorDialog: undefined,
+      regionDialog: undefined,
       openPanel: undefined,
     }),
   stopPlacing: () => set({ placingDefId: undefined, placingRotation: 0 }),
   startMoving: (id) =>
-    set({ movingBuildingId: id, placingDefId: undefined, selectedBuildingId: undefined, sectorDialog: undefined, openPanel: undefined }),
+    set({ movingBuildingId: id, placingDefId: undefined, selectedBuildingId: undefined, regionDialog: undefined, openPanel: undefined }),
   stopMoving: () => set({ movingBuildingId: undefined }),
   selectBuilding: (id) =>
-    set(id ? { selectedBuildingId: id, placingDefId: undefined, sectorDialog: undefined } : { selectedBuildingId: undefined }),
-  openSectorDialog: (id) =>
-    set(id ? { sectorDialog: id, selectedBuildingId: undefined, placingDefId: undefined } : { sectorDialog: undefined }),
+    set(id ? { selectedBuildingId: id, placingDefId: undefined, regionDialog: undefined } : { selectedBuildingId: undefined }),
+  openRegionDialog: (id) =>
+    set(id ? { regionDialog: id, selectedBuildingId: undefined, placingDefId: undefined } : { regionDialog: undefined }),
   pushToast: (text, kind = 'info') =>
     set((s) => {
       toastId += 1;

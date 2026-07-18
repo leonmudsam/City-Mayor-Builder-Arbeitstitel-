@@ -1,12 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { newController, setLevel, T0 } from './helpers.ts';
+import { nearTownHall, newController, setLevel, T0 } from './helpers.ts';
 
 describe('mayor actions', () => {
   function withMayorHouse(level = 3) {
     const { controller } = newController();
     setLevel(controller, level);
-    controller.placeBuilding('road', 26, 26);
-    controller.placeBuilding('mayor_house', 26, 27); // 60s construction
+    const p = nearTownHall(1, 6); // 3×3 unter den Startstraßen
+    controller.placeBuilding('mayor_house', p.x, p.y); // 60s construction
     controller.update(T0 + 61_000);
     return controller;
   }

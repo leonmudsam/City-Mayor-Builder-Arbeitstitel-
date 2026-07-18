@@ -12,7 +12,7 @@ Zielordner: `src/assets/models/buildings/<kategorie>/`, **Dateiname = Gebäude-I
 
 ## Gebäude (aus buildings.config.ts)
 
-### `town_hall.glb` — 3×3
+### `town_hall.glb` — 5×5
 
 ```text
 Low-poly stylized 3D city-builder game asset, colorful cartoon look, clean shapes, soft bevels, hand-painted feel, optimized for realtime rendering, embedded textures, no lights, no cameras, centered object, pivot at bottom center, +Y up, front facing +Z — a grand town hall with a clock tower, columns, a flag and a red roof, a small plaza in front
@@ -21,16 +21,16 @@ Low-poly stylized 3D city-builder game asset, colorful cartoon look, clean shape
 **Spec:** Größenklasse `building_large` — großes Gebäude (2 000–6 000 Tris, ≤ 1024², 2–3 Materialien) · Pivot unten-mittig (X/Z zentriert, Unterkante Y = 0) · Front +Z · **live** (bereits verdrahtet)
 > Stufen: `town_hall_stage2`…`town_hall_stage4` (sichtbar weiterentwickelt) · Baustelle: `town_hall_construction.glb` · Eingang zeigt zur Straße, Gehweg wird automatisch ergänzt.
 
-### `mayor_house.glb` — 2×2
+### `mayor_house.glb` — 3×3
 
 ```text
 Low-poly stylized 3D city-builder game asset, colorful cartoon look, clean shapes, soft bevels, hand-painted feel, optimized for realtime rendering, embedded textures, no lights, no cameras, centered object, pivot at bottom center, +Y up, front facing +Z — an elegant mayor's residence, larger than a normal house, with a small portico, bay windows and a tidy front garden
 ```
 
-**Spec:** Größenklasse `building_small` — kleines Gebäude (500–2 000 Tris, ≤ 512², 1–2 Materialien) · Pivot unten-mittig (X/Z zentriert, Unterkante Y = 0) · Front +Z · **live** (bereits verdrahtet)
+**Spec:** Größenklasse `building_large` — großes Gebäude (2 000–6 000 Tris, ≤ 1024², 2–3 Materialien) · Pivot unten-mittig (X/Z zentriert, Unterkante Y = 0) · Front +Z · **live** (bereits verdrahtet)
 > Baustelle optional: `mayor_house_construction.glb` · Eingang zeigt zur Straße, Gehweg wird automatisch ergänzt.
 
-### `district_center.glb` — 3×3
+### `district_center.glb` — 4×4
 
 ```text
 Low-poly stylized 3D city-builder game asset, colorful cartoon look, clean shapes, soft bevels, hand-painted feel, optimized for realtime rendering, embedded textures, no lights, no cameras, centered object, pivot at bottom center, +Y up, front facing +Z — a modern district administration building, wide facade with a glass entrance, flags and a small forecourt
@@ -39,34 +39,16 @@ Low-poly stylized 3D city-builder game asset, colorful cartoon look, clean shape
 **Spec:** Größenklasse `building_large` — großes Gebäude (2 000–6 000 Tris, ≤ 1024², 2–3 Materialien) · Pivot unten-mittig (X/Z zentriert, Unterkante Y = 0) · Front +Z · **live** (bereits verdrahtet)
 > Baustelle optional: `district_center_construction.glb` · Eingang zeigt zur Straße, Gehweg wird automatisch ergänzt.
 
-### `house_small.glb` — 2×2
+### `house_small.glb` — 3×3
 
 ```text
 Low-poly stylized 3D city-builder game asset, colorful cartoon look, clean shapes, soft bevels, hand-painted feel, optimized for realtime rendering, embedded textures, no lights, no cameras, centered object, pivot at bottom center, +Y up, front facing +Z — a small cozy family house with a red pitched roof, a chimney, a tiny front garden and warm windows
 ```
 
-**Spec:** Größenklasse `building_small` — kleines Gebäude (500–2 000 Tris, ≤ 512², 1–2 Materialien) · Pivot unten-mittig (X/Z zentriert, Unterkante Y = 0) · Front +Z · **live** (bereits verdrahtet)
+**Spec:** Größenklasse `building_large` — großes Gebäude (2 000–6 000 Tris, ≤ 1024², 2–3 Materialien) · Pivot unten-mittig (X/Z zentriert, Unterkante Y = 0) · Front +Z · **live** (bereits verdrahtet)
 > Stufen: `house_small_stage2`…`house_small_stage6` (sichtbar weiterentwickelt) · Baustelle: `house_small_construction.glb` · Eingang zeigt zur Straße, Gehweg wird automatisch ergänzt.
 
-### `house_row.glb` — 2×2
-
-```text
-Low-poly stylized 3D city-builder game asset, colorful cartoon look, clean shapes, soft bevels, hand-painted feel, optimized for realtime rendering, embedded textures, no lights, no cameras, centered object, pivot at bottom center, +Y up, front facing +Z — a short terraced row house of two to three joined units with pitched roofs and small doorsteps
-```
-
-**Spec:** Größenklasse `building_small` — kleines Gebäude (500–2 000 Tris, ≤ 512², 1–2 Materialien) · Pivot unten-mittig (X/Z zentriert, Unterkante Y = 0) · Front +Z · **live** (bereits verdrahtet)
-> Stufen: `house_row_stage2`…`house_row_stage3` (sichtbar weiterentwickelt) · Baustelle: `house_row_construction.glb` · Eingang zeigt zur Straße, Gehweg wird automatisch ergänzt.
-
-### `apartment.glb` — 2×3
-
-```text
-Low-poly stylized 3D city-builder game asset, colorful cartoon look, clean shapes, soft bevels, hand-painted feel, optimized for realtime rendering, embedded textures, no lights, no cameras, centered object, pivot at bottom center, +Y up, front facing +Z — a mid-rise apartment building, three to four floors, balconies, a low roof and a tidy entrance
-```
-
-**Spec:** Größenklasse `building_large` — großes Gebäude (2 000–6 000 Tris, ≤ 1024², 2–3 Materialien) · Pivot unten-mittig (X/Z zentriert, Unterkante Y = 0) · Front +Z · **live** (bereits verdrahtet)
-> Stufen: `apartment_stage2`…`apartment_stage3` (sichtbar weiterentwickelt) · Baustelle: `apartment_construction.glb` · Eingang zeigt zur Straße, Gehweg wird automatisch ergänzt.
-
-### `residential_tower.glb` — 3×3
+### `residential_tower.glb` — 5×5
 
 ```text
 Low-poly stylized 3D city-builder game asset, colorful cartoon look, clean shapes, soft bevels, hand-painted feel, optimized for realtime rendering, embedded textures, no lights, no cameras, centered object, pivot at bottom center, +Y up, front facing +Z — a tall residential tower with many balconies, a flat roof and a modern colorful facade
@@ -75,32 +57,32 @@ Low-poly stylized 3D city-builder game asset, colorful cartoon look, clean shape
 **Spec:** Größenklasse `building_large` — großes Gebäude (2 000–6 000 Tris, ≤ 1024², 2–3 Materialien) · Pivot unten-mittig (X/Z zentriert, Unterkante Y = 0) · Front +Z · **live** (bereits verdrahtet)
 > Stufen: `residential_tower_stage2`…`residential_tower_stage3` (sichtbar weiterentwickelt) · Baustelle: `residential_tower_construction.glb` · Eingang zeigt zur Straße, Gehweg wird automatisch ergänzt.
 
-### `sawmill.glb` — 2×2
+### `sawmill.glb` — 4×4
 
 ```text
 Low-poly stylized 3D city-builder game asset, colorful cartoon look, clean shapes, soft bevels, hand-painted feel, optimized for realtime rendering, embedded textures, no lights, no cameras, centered object, pivot at bottom center, +Y up, front facing +Z — a wooden sawmill with a pitched roof, log piles, a saw shed and a chimney (name the chimney node 'chimney')
 ```
 
-**Spec:** Größenklasse `building_small` — kleines Gebäude (500–2 000 Tris, ≤ 512², 1–2 Materialien) · Pivot unten-mittig (X/Z zentriert, Unterkante Y = 0) · Front +Z · **live** (bereits verdrahtet)
-> Stufen: `sawmill_stage2`…`sawmill_stage4` (sichtbar weiterentwickelt) · Baustelle: `sawmill_construction.glb` · Eingang zeigt zur Straße, Gehweg wird automatisch ergänzt.
+**Spec:** Größenklasse `building_large` — großes Gebäude (2 000–6 000 Tris, ≤ 1024², 2–3 Materialien) · Pivot unten-mittig (X/Z zentriert, Unterkante Y = 0) · Front +Z · **live** (bereits verdrahtet)
+> Stufen: `sawmill_stage2`…`sawmill_stage3` (sichtbar weiterentwickelt) · Baustelle: `sawmill_construction.glb` · Eingang zeigt zur Straße, Gehweg wird automatisch ergänzt.
 
-### `quarry.glb` — 3×3
+### `quarry.glb` — 5×5
 
 ```text
 Low-poly stylized 3D city-builder game asset, colorful cartoon look, clean shapes, soft bevels, hand-painted feel, optimized for realtime rendering, embedded textures, no lights, no cameras, centered object, pivot at bottom center, +Y up, front facing +Z — a stone quarry site with terraced rock, a small crane, gravel piles and a work shed
 ```
 
 **Spec:** Größenklasse `building_large` — großes Gebäude (2 000–6 000 Tris, ≤ 1024², 2–3 Materialien) · Pivot unten-mittig (X/Z zentriert, Unterkante Y = 0) · Front +Z · **live** (bereits verdrahtet)
-> Stufen: `quarry_stage2`…`quarry_stage4` (sichtbar weiterentwickelt) · Baustelle: `quarry_construction.glb` · Eingang zeigt zur Straße, Gehweg wird automatisch ergänzt.
+> Stufen: `quarry_stage2`…`quarry_stage3` (sichtbar weiterentwickelt) · Baustelle: `quarry_construction.glb` · Eingang zeigt zur Straße, Gehweg wird automatisch ergänzt.
 
-### `farm.glb` — 3×3
+### `farm.glb` — 6×6
 
 ```text
 Low-poly stylized 3D city-builder game asset, colorful cartoon look, clean shapes, soft bevels, hand-painted feel, optimized for realtime rendering, embedded textures, no lights, no cameras, centered object, pivot at bottom center, +Y up, front facing +Z — a farm with a barn, a farmhouse, silos and fenced fields, warm rural look
 ```
 
 **Spec:** Größenklasse `building_large` — großes Gebäude (2 000–6 000 Tris, ≤ 1024², 2–3 Materialien) · Pivot unten-mittig (X/Z zentriert, Unterkante Y = 0) · Front +Z · **live** (bereits verdrahtet)
-> Stufen: `farm_stage2`…`farm_stage4` (sichtbar weiterentwickelt) · Baustelle: `farm_construction.glb` · Eingang zeigt zur Straße, Gehweg wird automatisch ergänzt.
+> Stufen: `farm_stage2`…`farm_stage3` (sichtbar weiterentwickelt) · Baustelle: `farm_construction.glb` · Eingang zeigt zur Straße, Gehweg wird automatisch ergänzt.
 
 ### `well.glb` — 1×1
 
@@ -111,59 +93,59 @@ Low-poly stylized 3D city-builder game asset, colorful cartoon look, clean shape
 **Spec:** Größenklasse `building_small` — kleines Gebäude (500–2 000 Tris, ≤ 512², 1–2 Materialien) · Pivot unten-mittig (X/Z zentriert, Unterkante Y = 0) · Front +Z · **live** (bereits verdrahtet)
 > Stufen: `well_stage2`…`well_stage2` (sichtbar weiterentwickelt) · Baustelle: `well_construction.glb` · Eingang zeigt zur Straße, Gehweg wird automatisch ergänzt.
 
-### `water_pump.glb` — 2×2
+### `water_pump.glb` — 3×3
 
 ```text
 Low-poly stylized 3D city-builder game asset, colorful cartoon look, clean shapes, soft bevels, hand-painted feel, optimized for realtime rendering, embedded textures, no lights, no cameras, centered object, pivot at bottom center, +Y up, front facing +Z — a compact water pumping station: a small building with pipes, valves and a tank
 ```
 
-**Spec:** Größenklasse `building_small` — kleines Gebäude (500–2 000 Tris, ≤ 512², 1–2 Materialien) · Pivot unten-mittig (X/Z zentriert, Unterkante Y = 0) · Front +Z · **live** (bereits verdrahtet)
-> Stufen: `water_pump_stage2`…`water_pump_stage3` (sichtbar weiterentwickelt) · Baustelle: `water_pump_construction.glb` · Eingang zeigt zur Straße, Gehweg wird automatisch ergänzt.
+**Spec:** Größenklasse `building_large` — großes Gebäude (2 000–6 000 Tris, ≤ 1024², 2–3 Materialien) · Pivot unten-mittig (X/Z zentriert, Unterkante Y = 0) · Front +Z · **live** (bereits verdrahtet)
+> Stufen: `water_pump_stage2`…`water_pump_stage2` (sichtbar weiterentwickelt) · Baustelle: `water_pump_construction.glb` · Eingang zeigt zur Straße, Gehweg wird automatisch ergänzt.
 
-### `warehouse.glb` — 2×2
+### `warehouse.glb` — 4×4
 
 ```text
 Low-poly stylized 3D city-builder game asset, colorful cartoon look, clean shapes, soft bevels, hand-painted feel, optimized for realtime rendering, embedded textures, no lights, no cameras, centered object, pivot at bottom center, +Y up, front facing +Z — a rectangular storage warehouse with large roller doors, a flat roof and loading bays
 ```
 
-**Spec:** Größenklasse `building_small` — kleines Gebäude (500–2 000 Tris, ≤ 512², 1–2 Materialien) · Pivot unten-mittig (X/Z zentriert, Unterkante Y = 0) · Front +Z · **live** (bereits verdrahtet)
+**Spec:** Größenklasse `building_large` — großes Gebäude (2 000–6 000 Tris, ≤ 1024², 2–3 Materialien) · Pivot unten-mittig (X/Z zentriert, Unterkante Y = 0) · Front +Z · **live** (bereits verdrahtet)
 > Stufen: `warehouse_stage2`…`warehouse_stage2` (sichtbar weiterentwickelt) · Baustelle: `warehouse_construction.glb` · Eingang zeigt zur Straße, Gehweg wird automatisch ergänzt.
 
-### `depot.glb` — 3×3
+### `depot.glb` — 5×5
 
 ```text
 Low-poly stylized 3D city-builder game asset, colorful cartoon look, clean shapes, soft bevels, hand-painted feel, optimized for realtime rendering, embedded textures, no lights, no cameras, centered object, pivot at bottom center, +Y up, front facing +Z — a logistics depot: a large shed with loading docks, crates, a small yard and parked trailers
 ```
 
 **Spec:** Größenklasse `building_large` — großes Gebäude (2 000–6 000 Tris, ≤ 1024², 2–3 Materialien) · Pivot unten-mittig (X/Z zentriert, Unterkante Y = 0) · Front +Z · **live** (bereits verdrahtet)
-> Baustelle optional: `depot_construction.glb` · Eingang zeigt zur Straße, Gehweg wird automatisch ergänzt.
+> Stufen: `depot_stage2`…`depot_stage2` (sichtbar weiterentwickelt) · Baustelle: `depot_construction.glb` · Eingang zeigt zur Straße, Gehweg wird automatisch ergänzt.
 
-### `waterworks.glb` — 3×2
+### `waterworks.glb` — 5×5
 
 ```text
 Low-poly stylized 3D city-builder game asset, colorful cartoon look, clean shapes, soft bevels, hand-painted feel, optimized for realtime rendering, embedded textures, no lights, no cameras, centered object, pivot at bottom center, +Y up, front facing +Z — a waterworks facility with round filtration tanks, pipes and a control building
 ```
 
 **Spec:** Größenklasse `building_large` — großes Gebäude (2 000–6 000 Tris, ≤ 1024², 2–3 Materialien) · Pivot unten-mittig (X/Z zentriert, Unterkante Y = 0) · Front +Z · **live** (bereits verdrahtet)
-> Baustelle optional: `waterworks_construction.glb` · Eingang zeigt zur Straße, Gehweg wird automatisch ergänzt.
+> Stufen: `waterworks_stage2`…`waterworks_stage2` (sichtbar weiterentwickelt) · Baustelle: `waterworks_construction.glb` · Eingang zeigt zur Straße, Gehweg wird automatisch ergänzt.
 
-### `market.glb` — 2×2
+### `market.glb` — 3×3
 
 ```text
 Low-poly stylized 3D city-builder game asset, colorful cartoon look, clean shapes, soft bevels, hand-painted feel, optimized for realtime rendering, embedded textures, no lights, no cameras, centered object, pivot at bottom center, +Y up, front facing +Z — a small market hall with striped awnings, crates of produce and a paved front
 ```
 
-**Spec:** Größenklasse `building_small` — kleines Gebäude (500–2 000 Tris, ≤ 512², 1–2 Materialien) · Pivot unten-mittig (X/Z zentriert, Unterkante Y = 0) · Front +Z · **live** (bereits verdrahtet)
+**Spec:** Größenklasse `building_large` — großes Gebäude (2 000–6 000 Tris, ≤ 1024², 2–3 Materialien) · Pivot unten-mittig (X/Z zentriert, Unterkante Y = 0) · Front +Z · **live** (bereits verdrahtet)
 > Stufen: `market_stage2`…`market_stage2` (sichtbar weiterentwickelt) · Baustelle: `market_construction.glb` · Eingang zeigt zur Straße, Gehweg wird automatisch ergänzt.
 
-### `supermarket.glb` — 3×2
+### `supermarket.glb` — 4×4
 
 ```text
 Low-poly stylized 3D city-builder game asset, colorful cartoon look, clean shapes, soft bevels, hand-painted feel, optimized for realtime rendering, embedded textures, no lights, no cameras, centered object, pivot at bottom center, +Y up, front facing +Z — a modern supermarket: a wide flat building with a big storefront, a sign board and a small parking strip
 ```
 
 **Spec:** Größenklasse `building_large` — großes Gebäude (2 000–6 000 Tris, ≤ 1024², 2–3 Materialien) · Pivot unten-mittig (X/Z zentriert, Unterkante Y = 0) · Front +Z · **live** (bereits verdrahtet)
-> Baustelle optional: `supermarket_construction.glb` · Eingang zeigt zur Straße, Gehweg wird automatisch ergänzt.
+> Stufen: `supermarket_stage2`…`supermarket_stage2` (sichtbar weiterentwickelt) · Baustelle: `supermarket_construction.glb` · Eingang zeigt zur Straße, Gehweg wird automatisch ergänzt.
 
 ### `bakery.glb` — 2×2
 
@@ -172,42 +154,42 @@ Low-poly stylized 3D city-builder game asset, colorful cartoon look, clean shape
 ```
 
 **Spec:** Größenklasse `building_small` — kleines Gebäude (500–2 000 Tris, ≤ 512², 1–2 Materialien) · Pivot unten-mittig (X/Z zentriert, Unterkante Y = 0) · Front +Z · **live** (bereits verdrahtet)
-> Baustelle optional: `bakery_construction.glb` · Eingang zeigt zur Straße, Gehweg wird automatisch ergänzt.
+> Stufen: `bakery_stage2`…`bakery_stage2` (sichtbar weiterentwickelt) · Baustelle: `bakery_construction.glb` · Eingang zeigt zur Straße, Gehweg wird automatisch ergänzt.
 
-### `fire_station.glb` — 2×2
+### `fire_station.glb` — 5×5
 
 ```text
 Low-poly stylized 3D city-builder game asset, colorful cartoon look, clean shapes, soft bevels, hand-painted feel, optimized for realtime rendering, embedded textures, no lights, no cameras, centered object, pivot at bottom center, +Y up, front facing +Z — a fire station with a red facade, large garage doors, a small tower and a flag
 ```
 
-**Spec:** Größenklasse `building_small` — kleines Gebäude (500–2 000 Tris, ≤ 512², 1–2 Materialien) · Pivot unten-mittig (X/Z zentriert, Unterkante Y = 0) · Front +Z · **live** (bereits verdrahtet)
-> Stufen: `fire_station_stage2`…`fire_station_stage2` (sichtbar weiterentwickelt) · Baustelle: `fire_station_construction.glb` · Eingang zeigt zur Straße, Gehweg wird automatisch ergänzt.
+**Spec:** Größenklasse `building_large` — großes Gebäude (2 000–6 000 Tris, ≤ 1024², 2–3 Materialien) · Pivot unten-mittig (X/Z zentriert, Unterkante Y = 0) · Front +Z · **live** (bereits verdrahtet)
+> Stufen: `fire_station_stage2`…`fire_station_stage3` (sichtbar weiterentwickelt) · Baustelle: `fire_station_construction.glb` · Eingang zeigt zur Straße, Gehweg wird automatisch ergänzt.
 
-### `police_station.glb` — 2×2
+### `police_station.glb` — 4×4
 
 ```text
 Low-poly stylized 3D city-builder game asset, colorful cartoon look, clean shapes, soft bevels, hand-painted feel, optimized for realtime rendering, embedded textures, no lights, no cameras, centered object, pivot at bottom center, +Y up, front facing +Z — a police station: a sturdy civic building with blue accents, an entrance porch and a flag
 ```
 
-**Spec:** Größenklasse `building_small` — kleines Gebäude (500–2 000 Tris, ≤ 512², 1–2 Materialien) · Pivot unten-mittig (X/Z zentriert, Unterkante Y = 0) · Front +Z · **live** (bereits verdrahtet)
-> Stufen: `police_station_stage2`…`police_station_stage2` (sichtbar weiterentwickelt) · Baustelle: `police_station_construction.glb` · Eingang zeigt zur Straße, Gehweg wird automatisch ergänzt.
+**Spec:** Größenklasse `building_large` — großes Gebäude (2 000–6 000 Tris, ≤ 1024², 2–3 Materialien) · Pivot unten-mittig (X/Z zentriert, Unterkante Y = 0) · Front +Z · **live** (bereits verdrahtet)
+> Stufen: `police_station_stage2`…`police_station_stage3` (sichtbar weiterentwickelt) · Baustelle: `police_station_construction.glb` · Eingang zeigt zur Straße, Gehweg wird automatisch ergänzt.
 
-### `hospital.glb` — 3×2
+### `hospital.glb` — 6×6
 
 ```text
 Low-poly stylized 3D city-builder game asset, colorful cartoon look, clean shapes, soft bevels, hand-painted feel, optimized for realtime rendering, embedded textures, no lights, no cameras, centered object, pivot at bottom center, +Y up, front facing +Z — a hospital with a clean white facade, a red cross sign, an ambulance bay and many windows
 ```
 
 **Spec:** Größenklasse `building_large` — großes Gebäude (2 000–6 000 Tris, ≤ 1024², 2–3 Materialien) · Pivot unten-mittig (X/Z zentriert, Unterkante Y = 0) · Front +Z · **live** (bereits verdrahtet)
-> Stufen: `hospital_stage2`…`hospital_stage2` (sichtbar weiterentwickelt) · Baustelle: `hospital_construction.glb` · Eingang zeigt zur Straße, Gehweg wird automatisch ergänzt.
+> Stufen: `hospital_stage2`…`hospital_stage3` (sichtbar weiterentwickelt) · Baustelle: `hospital_construction.glb` · Eingang zeigt zur Straße, Gehweg wird automatisch ergänzt.
 
-### `trading_post.glb` — 2×2
+### `trading_post.glb` — 3×3
 
 ```text
 Low-poly stylized 3D city-builder game asset, colorful cartoon look, clean shapes, soft bevels, hand-painted feel, optimized for realtime rendering, embedded textures, no lights, no cameras, centered object, pivot at bottom center, +Y up, front facing +Z — a trading post / merchant house with crates, barrels, an awning and a hanging sign
 ```
 
-**Spec:** Größenklasse `building_small` — kleines Gebäude (500–2 000 Tris, ≤ 512², 1–2 Materialien) · Pivot unten-mittig (X/Z zentriert, Unterkante Y = 0) · Front +Z · **live** (bereits verdrahtet)
+**Spec:** Größenklasse `building_large` — großes Gebäude (2 000–6 000 Tris, ≤ 1024², 2–3 Materialien) · Pivot unten-mittig (X/Z zentriert, Unterkante Y = 0) · Front +Z · **live** (bereits verdrahtet)
 > Stufen: `trading_post_stage2`…`trading_post_stage3` (sichtbar weiterentwickelt) · Baustelle: `trading_post_construction.glb` · Eingang zeigt zur Straße, Gehweg wird automatisch ergänzt.
 
 ### `shop_small.glb` — 2×2
@@ -217,27 +199,27 @@ Low-poly stylized 3D city-builder game asset, colorful cartoon look, clean shape
 ```
 
 **Spec:** Größenklasse `building_small` — kleines Gebäude (500–2 000 Tris, ≤ 512², 1–2 Materialien) · Pivot unten-mittig (X/Z zentriert, Unterkante Y = 0) · Front +Z · **live** (bereits verdrahtet)
-> Baustelle optional: `shop_small_construction.glb` · Eingang zeigt zur Straße, Gehweg wird automatisch ergänzt.
+> Stufen: `shop_small_stage2`…`shop_small_stage2` (sichtbar weiterentwickelt) · Baustelle: `shop_small_construction.glb` · Eingang zeigt zur Straße, Gehweg wird automatisch ergänzt.
 
-### `office.glb` — 4×2
+### `office.glb` — 4×4
 
 ```text
 Low-poly stylized 3D city-builder game asset, colorful cartoon look, clean shapes, soft bevels, hand-painted feel, optimized for realtime rendering, embedded textures, no lights, no cameras, centered object, pivot at bottom center, +Y up, front facing +Z — a wide low-rise office building with a glass facade, clean modern lines and an entrance plaza
 ```
 
 **Spec:** Größenklasse `building_large` — großes Gebäude (2 000–6 000 Tris, ≤ 1024², 2–3 Materialien) · Pivot unten-mittig (X/Z zentriert, Unterkante Y = 0) · Front +Z · **live** (bereits verdrahtet)
-> Stufen: `office_stage2`…`office_stage3` (sichtbar weiterentwickelt) · Baustelle: `office_construction.glb` · Eingang zeigt zur Straße, Gehweg wird automatisch ergänzt.
+> Stufen: `office_stage2`…`office_stage4` (sichtbar weiterentwickelt) · Baustelle: `office_construction.glb` · Eingang zeigt zur Straße, Gehweg wird automatisch ergänzt.
 
-### `power_plant.glb` — 3×3
+### `power_plant.glb` — 8×8
 
 ```text
 Low-poly stylized 3D city-builder game asset, colorful cartoon look, clean shapes, soft bevels, hand-painted feel, optimized for realtime rendering, embedded textures, no lights, no cameras, centered object, pivot at bottom center, +Y up, front facing +Z — a coal power plant: a large hall with tall smokestacks emitting steam (name a smokestack node 'chimney')
 ```
 
 **Spec:** Größenklasse `building_large` — großes Gebäude (2 000–6 000 Tris, ≤ 1024², 2–3 Materialien) · Pivot unten-mittig (X/Z zentriert, Unterkante Y = 0) · Front +Z · **live** (bereits verdrahtet)
-> Baustelle optional: `power_plant_construction.glb` · Eingang zeigt zur Straße, Gehweg wird automatisch ergänzt.
+> Stufen: `power_plant_stage2`…`power_plant_stage2` (sichtbar weiterentwickelt) · Baustelle: `power_plant_construction.glb` · Eingang zeigt zur Straße, Gehweg wird automatisch ergänzt.
 
-### `wind_farm.glb` — 3×3
+### `wind_farm.glb` — 7×7
 
 ```text
 Low-poly stylized 3D city-builder game asset, colorful cartoon look, clean shapes, soft bevels, hand-painted feel, optimized for realtime rendering, embedded textures, no lights, no cameras, centered object, pivot at bottom center, +Y up, front facing +Z — a wind power station: a base building with a white wind turbine; put the rotor blades on a node named 'rotor' so they can spin
@@ -246,22 +228,22 @@ Low-poly stylized 3D city-builder game asset, colorful cartoon look, clean shape
 **Spec:** Größenklasse `building_large` — großes Gebäude (2 000–6 000 Tris, ≤ 1024², 2–3 Materialien) · Pivot unten-mittig (X/Z zentriert, Unterkante Y = 0) · Front +Z · **live** (bereits verdrahtet)
 > Baustelle optional: `wind_farm_construction.glb` · Eingang zeigt zur Straße, Gehweg wird automatisch ergänzt.
 
-### `park.glb` — 2×2
+### `park.glb` — 5×5
 
 ```text
 Low-poly stylized 3D city-builder game asset, colorful cartoon look, clean shapes, soft bevels, hand-painted feel, optimized for realtime rendering, embedded textures, no lights, no cameras, centered object, pivot at bottom center, +Y up, front facing +Z — a small green park with trees, paths, benches and a lawn, low and flat
 ```
 
-**Spec:** Größenklasse `building_small` — kleines Gebäude (500–2 000 Tris, ≤ 512², 1–2 Materialien) · Pivot unten-mittig (X/Z zentriert, Unterkante Y = 0) · Front +Z · **live** (bereits verdrahtet)
+**Spec:** Größenklasse `building_large` — großes Gebäude (2 000–6 000 Tris, ≤ 1024², 2–3 Materialien) · Pivot unten-mittig (X/Z zentriert, Unterkante Y = 0) · Front +Z · **live** (bereits verdrahtet)
 > Stufen: `park_stage2`…`park_stage2` (sichtbar weiterentwickelt) · Baustelle: `park_construction.glb` · Eingang zeigt zur Straße, Gehweg wird automatisch ergänzt.
 
-### `playground.glb` — 2×2
+### `playground.glb` — 3×3
 
 ```text
 Low-poly stylized 3D city-builder game asset, colorful cartoon look, clean shapes, soft bevels, hand-painted feel, optimized for realtime rendering, embedded textures, no lights, no cameras, centered object, pivot at bottom center, +Y up, front facing +Z — a children playground with a swing, a slide, a sandbox and colorful equipment on a soft ground
 ```
 
-**Spec:** Größenklasse `building_small` — kleines Gebäude (500–2 000 Tris, ≤ 512², 1–2 Materialien) · Pivot unten-mittig (X/Z zentriert, Unterkante Y = 0) · Front +Z · **live** (bereits verdrahtet)
+**Spec:** Größenklasse `building_large` — großes Gebäude (2 000–6 000 Tris, ≤ 1024², 2–3 Materialien) · Pivot unten-mittig (X/Z zentriert, Unterkante Y = 0) · Front +Z · **live** (bereits verdrahtet)
 > Baustelle optional: `playground_construction.glb` · Eingang zeigt zur Straße, Gehweg wird automatisch ergänzt.
 
 ### `deco_tree.glb` — 1×1

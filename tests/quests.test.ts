@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { newController, T0 } from './helpers.ts';
+import { nearTownHall, newController, T0 } from './helpers.ts';
 
 describe('quests', () => {
   it('activates the first quest at game start', () => {
@@ -9,7 +9,10 @@ describe('quests', () => {
 
   it('tracks progress, becomes claimable, and pays out on claim', () => {
     const { controller } = newController();
-    for (let i = 0; i < 5; i++) controller.placeBuilding('road', 26 + i, 26);
+    for (let i = 0; i < 5; i++) {
+      const p = nearTownHall(5 + i, 5);
+      controller.placeBuilding('road', p.x, p.y);
+    }
     const active = controller.state.quests.active.find((a) => a.questId === 'q01_roads');
     expect(active?.claimable).toBe(true);
     const moneyBefore = controller.state.resources.money;

@@ -24,6 +24,7 @@ import {
   SphereGeometry,
   Sprite,
   SpriteMaterial,
+  Vector3,
   type BufferGeometry,
 } from 'three';
 import { grade, sunDirection, sunElevation, wrap01, type EnvGrade } from './environment.ts';
@@ -98,6 +99,14 @@ export class SkyEnvironment {
     this.sun = new DirectionalLight(0xfff2d8, 1.35);
     this.sun.castShadow = true;
     this.sun.shadow.mapSize.set(2048, 2048);
+    // Soft-shadow tuning (§ MVP3 Phase 2). `radius` widens the PCF blur kernel so
+    // shadows read as gentle contact shadows, not hard stamps. `normalBias` pushes
+    // the sample along the surface normal to kill the shadow acne the new terraced
+    // mountain slopes would otherwise self-cast; `bias` trims the last shimmer
+    // without introducing visible peter-panning at this frustum size.
+    this.sun.shadow.radius = 3.5;
+    this.sun.shadow.bias = -0.0004;
+    this.sun.shadow.normalBias = 0.6;
     const sc = this.sun.shadow.camera;
     sc.near = 1;
     sc.far = 400;
@@ -105,10 +114,16 @@ export class SkyEnvironment {
     sc.right = 140;
     sc.top = 140;
     sc.bottom = -140;
-    this.scene.add(this.hemi, this.ambient, this.sun);
+    // § MVP4 P3: Auf der 384er-Insel folgt das ±140-Schatten-Fenster dem
+    // Kamera-Fokus (Sonne + Target werden je Frame mitgeführt) — vorher war es
+    // fix am Ursprung verankert und die Stadt läge außerhalb.
+    this.scene.add(this.hemi, this.ambient, this.sun, this.sun.target);
 
     // --- fog + background fallback (behind the dome, in case it is ever removed).
-    this.fog = new Fog(0x9fd0ef, 180, 520);
+    // § MVP4 P3: Distanzen auf die 384er-Insel skaliert — der Insel-Überblick
+    // (Kameradistanz ~480) bleibt klar, nur der Horizont hinter dem Ozean
+    // verläuft atmosphärisch (kein "milchiges" Gesamtbild mehr).
+    this.fog = new Fog(0x9fd0ef, 520, 1600);
     this.scene.fog = this.fog;
     this.scene.background = new Color(0x9fd0ef);
 
@@ -165,7 +180,15 @@ export class SkyEnvironment {
     // from the opposite side (grade already carries the moonlit intensity/colour).
     const elev = sunElevation(this.tod);
     const dir = elev >= 0 ? sunDirection(this.tod) : { x: -sunDirection(this.tod).x, y: -sunDirection(this.tod).y, z: sunDirection(this.tod).z };
-    this.sun.position.set(dir.x * 180, Math.max(20, dir.y * 180), dir.z * 180);
+    // Boden-Fokus der Kamera (§ MVP4 P3): Blickstrahl auf y=0 projiziert — Sonne
+    // und Schatten-Target wandern mit, damit das Schatten-Fenster die Stadt trifft.
+    const fwd = new Vector3();
+    this.camera.getWorldDirection(fwd);
+    const t = fwd.y < -0.05 ? this.camera.position.y / -fwd.y : 0;
+    const fx = this.camera.position.x + fwd.x * t;
+    const fz = this.camera.position.z + fwd.z * t;
+    this.sun.position.set(fx + dir.x * 180, Math.max(20, dir.y * 180), fz + dir.z * 180);
+    this.sun.target.position.set(fx, 0, fz);
     this.sun.color.copy(g.sunColor);
     this.sun.intensity = g.sunIntensity;
 
@@ -185,7 +208,7 @@ export class SkyEnvironment {
 
   dispose(): void {
     this.unsub();
-    this.scene.remove(this.group, this.hemi, this.ambient, this.sun);
+    this.scene.remove(this.group, this.hemi, this.ambient, this.sun, this.sun.target);
     this.dome.geometry.dispose();
     (this.dome.material as MeshBasicMaterial).dispose();
     this.stars.geometry.dispose();

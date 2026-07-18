@@ -1,126 +1,217 @@
 import { describe, expect, it } from 'vitest';
-import { newController, T0 } from './helpers.ts';
+import { nearTownHall, newController, T0 } from './helpers.ts';
+import {
+  REGION_COUNT,
+  regionIdAt,
+  startRegionConfig,
+  terrainAt,
+} from '../src/game/config/startRegion.config.ts';
 import { exportSave, importSave } from '../src/game/storage/exportImport.ts';
-import { migrateAndValidate, SaveValidationError } from '../src/game/storage/migrations.ts';
+import {
+  consumeMigrationNotice,
+  LegacyWorldSaveError,
+  migrateAndValidate,
+  SaveValidationError,
+} from '../src/game/storage/migrations.ts';
 
-describe('save/load', () => {
+// Schema v11 (§ Welt 2.0 + Gebäudesystem 2.0): Regionen sind schlanke Stubs,
+// Terrain wird nie persistiert. Saves ≤ v9 stammen aus der Vor-Insel-Welt und
+// sind bewusst NICHT migrierbar (LegacyWorldSaveError → Backup + Neustart im
+// Adapter, docs/SAVE_MIGRATION.md); v10 wird per echter Migration übernommen
+// (Sektoren→Regionen, Rathaus-Umzug, 100 %-Erstattung zu ALTEN Preisen).
+
+describe('save/load (v11 Insel-Welt, Regionen)', () => {
   it('round-trips a live game through export/import', () => {
     const { controller } = newController();
-    controller.placeBuilding('road', 26, 26);
-    controller.placeBuilding('house_small', 26, 27);
+    const r = nearTownHall(5, 5);
+    const h = nearTownHall(3, 6);
+    expect(controller.placeBuilding('road', r.x, r.y).ok).toBe(true);
+    controller.placeBuilding('house_small', h.x, h.y);
     controller.update(T0 + 5 * 60_000);
     const json = exportSave(controller.state);
     const restored = importSave(json);
     expect(restored).toEqual(JSON.parse(JSON.stringify(controller.state)));
   });
 
+  it('keeps saves slim: no tile arrays, region stubs only', () => {
+    // flatten:false — die Test-Glättung schreibt sonst tausende Overrides in den Save.
+    const { controller } = newController(undefined, { flatten: false });
+    const raw = JSON.parse(exportSave(controller.state)) as {
+      world: { regions: Record<string, { tiles?: unknown }> };
+    };
+    const regions = Object.values(raw.world.regions);
+    expect(regions.length).toBe(REGION_COUNT);
+    expect(regions.every((s) => s.tiles === undefined)).toBe(true);
+    // Der gesamte Save bleibt klein (früher: >500 KB Kachel-Arrays).
+    expect(exportSave(controller.state).length).toBeLessThan(50_000);
+  });
+
+  it('persists sparse terrain overrides (debug/tests) through save/load', () => {
+    const { controller } = newController();
+    const p = nearTownHall(5, 5);
+    controller.state.world.terrainOverrides = { [`${p.x},${p.y}`]: 'river' };
+    const restored = importSave(exportSave(controller.state));
+    expect(restored.world.terrainOverrides?.[`${p.x},${p.y}`]).toBe('river');
+  });
+
   it('rejects corrupt saves instead of silently resetting', () => {
-    expect(() => importSave('{"schemaVersion": 1, "meta": "broken"}')).toThrow(SaveValidationError);
+    expect(() => importSave('{"schemaVersion": 10, "meta": "broken"}')).toThrow(SaveValidationError);
     expect(() => migrateAndValidate(null)).toThrow(SaveValidationError);
     expect(() => migrateAndValidate({ schemaVersion: 99 })).toThrow(SaveValidationError);
   });
 
-  it('migrates v1 saves: buffers into storage, produced stats, fresh terrain', () => {
-    const { controller } = newController();
-    controller.placeBuilding('road', 26, 26);
-    /* eslint-disable @typescript-eslint/no-explicit-any -- building an intentionally outdated v1 raw save */
-    const raw = JSON.parse(exportSave(controller.state)) as Record<string, any>;
-    raw.schemaVersion = 1;
-    raw.stats.collected = { money: 0, wood: 12, stone: 0, food: 0 };
-    delete raw.stats.produced;
-    for (const b of Object.values(raw.buildings as Record<string, any>)) b.buffer = 0;
-    /* eslint-enable @typescript-eslint/no-explicit-any */
-    // A v1 sawmill with 25 uncollected wood.
-    const sawmillId = 'b_test_sawmill';
-    raw.buildings[sawmillId] = { id: sawmillId, defId: 'sawmill', x: 28, y: 27, upgradeLevel: 0, status: 'active', buffer: 25.7 };
-    // v1 terrain did not know the lake: force grass at its center tile (10,42).
-    const lakeSector = raw.world.sectors['0:2'];
-    lakeSector.tiles[(42 - 32) * 16 + 10].terrain = 'grass';
-
-    const woodBefore = raw.resources.wood as number;
-    const migrated = migrateAndValidate(raw);
-    expect(migrated.schemaVersion).toBe(9);
-    expect(migrated.resources.wood).toBe(woodBefore + 25);
-    expect(migrated.stats.produced.wood).toBe(12);
-    expect('buffer' in migrated.buildings[sawmillId]!).toBe(false);
-    expect(migrated.world.sectors['0:2']!.tiles[(42 - 32) * 16 + 10]!.terrain).toBe('water');
-  });
-
-  it('migrates v2 saves onto the v3 money scale', () => {
-    const { controller } = newController();
-    /* eslint-disable @typescript-eslint/no-explicit-any -- crafting a v2 raw save */
-    const raw = JSON.parse(exportSave(controller.state)) as Record<string, any>;
-    raw.schemaVersion = 2;
-    raw.resources.money = 500;
-    /* eslint-enable @typescript-eslint/no-explicit-any */
-    const migrated = migrateAndValidate(raw);
-    expect(migrated.schemaVersion).toBe(9);
-    expect(migrated.resources.money).toBe(50_000); // ×100 rescale
-  });
-
-  it('migrates v3/v4 saves by seeding the new needs (energy, safety, health)', () => {
-    const { controller } = newController();
-    /* eslint-disable @typescript-eslint/no-explicit-any -- crafting a v3 raw save */
-    const raw = JSON.parse(exportSave(controller.state)) as Record<string, any>;
-    raw.schemaVersion = 3;
-    delete raw.citizens.needs.energy; // v3 saves predate the energy grid
-    delete raw.citizens.needs.safety; // and the emergency services
-    delete raw.citizens.needs.health;
-    /* eslint-enable @typescript-eslint/no-explicit-any */
-    const migrated = migrateAndValidate(raw);
-    expect(migrated.schemaVersion).toBe(9);
-    expect(migrated.citizens.needs.energy).toEqual({ supply: 0, demand: 0, fulfillment: 1 });
-    expect(migrated.citizens.needs.safety).toEqual({ supply: 0, demand: 0, fulfillment: 1 });
-    expect(migrated.citizens.needs.health).toEqual({ supply: 0, demand: 0, fulfillment: 1 });
-  });
-
-  it('migrates v5 saves by seeding neutral tax policy', () => {
-    const { controller } = newController();
-    /* eslint-disable @typescript-eslint/no-explicit-any -- crafting a v5 raw save */
-    const raw = JSON.parse(exportSave(controller.state)) as Record<string, any>;
-    raw.schemaVersion = 5;
-    delete raw.policy; // v5 saves predate the tax sliders
-    /* eslint-enable @typescript-eslint/no-explicit-any */
-    const migrated = migrateAndValidate(raw);
-    expect(migrated.schemaVersion).toBe(9);
-    expect(migrated.policy).toEqual({ residentialTaxRate: 1, commercialTaxRate: 1 });
-  });
-
-  it('migrates v6 saves by seeding the freshwater supply chain', () => {
-    const { controller } = newController();
-    /* eslint-disable @typescript-eslint/no-explicit-any -- crafting a v6 raw save */
-    const raw = JSON.parse(exportSave(controller.state)) as Record<string, any>;
-    raw.schemaVersion = 6;
-    delete raw.resources.freshwater; // v6 saves predate drinking water
-    delete raw.citizens.needs.freshwater;
-    delete raw.stats.produced.freshwater;
-    /* eslint-enable @typescript-eslint/no-explicit-any */
-    const migrated = migrateAndValidate(raw);
-    expect(migrated.schemaVersion).toBe(9);
-    expect(migrated.resources.freshwater).toBe(0);
-    expect(migrated.citizens.needs.freshwater).toEqual({ supply: 0, demand: 0, fulfillment: 1 });
-    expect(migrated.stats.produced.freshwater).toBe(0);
-  });
-
-  it('migrates v7 saves by filling in the bounded world (all biomes visible)', () => {
-    const { controller } = newController();
-    /* eslint-disable @typescript-eslint/no-explicit-any -- crafting a sparse v7 raw save */
-    const raw = JSON.parse(exportSave(controller.state)) as Record<string, any>;
-    raw.schemaVersion = 7;
-    // A v7 (open-end) save only ever materialized what the player explored: keep
-    // just the start sector, drop the rest so migration must re-fill the board.
-    raw.world.sectors = { '1:1': raw.world.sectors['1:1'] };
-    const startBuildings = raw.world.sectors['1:1'].tiles.filter((t: any) => t.buildingId).length;
-    /* eslint-enable @typescript-eslint/no-explicit-any */
-    const migrated = migrateAndValidate(raw);
-    expect(migrated.schemaVersion).toBe(9);
-    // Every in-bounds sector (8×5 after the v0.21 western extension) now exists…
-    expect(Object.keys(migrated.world.sectors).length).toBe(40);
-    // …the start sector is preserved (still unlocked, still holds its buildings)…
-    expect(migrated.world.sectors['1:1']!.status).toBe('unlocked');
-    expect(migrated.world.sectors['1:1']!.tiles.filter((t) => t.buildingId).length).toBe(startBuildings);
-    // …the rest are locked, and far biomes (the eastern sea) are on show.
-    expect(migrated.world.sectors['0:0']!.status).toBe('locked');
-    expect(migrated.world.sectors['5:2']!.tiles.some((t) => t.terrain === 'water')).toBe(true);
+  it('flags pre-island saves (≤ v9) as legacy world instead of migrating', () => {
+    // Jede Vor-Insel-Version wirft den spezifischen Legacy-Fehler, den der
+    // Storage-Adapter in Backup + Neustart übersetzt.
+    for (const version of [1, 5, 9]) {
+      let caught: unknown;
+      try {
+        migrateAndValidate({ schemaVersion: version });
+      } catch (error) {
+        caught = error;
+      }
+      expect(caught).toBeInstanceOf(LegacyWorldSaveError);
+      expect((caught as LegacyWorldSaveError).version).toBe(version);
+    }
   });
 });
+
+// ---- v10 → v11 (§ Ausbaustufe 2.0, docs/SAVE_MIGRATION.md) -----------------
+
+/* eslint-disable @typescript-eslint/no-explicit-any -- v10-Rohsaves haben kein v11-Typmodell */
+
+/** Alte v10-Startlage (Sektor (2,3) der 6×6-Welt, Rathaus 3×3 @ (157,221)). */
+const V10_TOWN_HALL = { x: 157, y: 221 };
+
+/**
+ * Baut einen strukturell vollständigen v10-Rohsave aus einem frischen
+ * v11-Spielstand: Regionen → 36 Quadrat-Sektoren zurückverwandelt, Rathaus an
+ * den alten Platz, Startstraßen entfernt (kein Störfaktor für exakte
+ * Erstattungs-Prüfungen).
+ */
+function makeV10Save(mutate?: (raw: any) => void): any {
+  const { controller } = newController(undefined, { flatten: false });
+  const raw = JSON.parse(exportSave(controller.state)) as any;
+  raw.schemaVersion = 10;
+  delete raw.world.regions;
+  const sectors: Record<string, unknown> = {};
+  for (let sy = 0; sy < 6; sy++) {
+    for (let sx = 0; sx < 6; sx++) {
+      const id = `s${sx}_${sy}`;
+      sectors[id] = { id, sx, sy, districtId: 'main', status: sx === 2 && sy === 3 ? 'unlocked' : 'locked' };
+    }
+  }
+  raw.world.sectors = sectors;
+  raw.stats.sectorsUnlocked = 0;
+  delete raw.stats.regionsUnlocked;
+  raw.buildings['b_townhall'].x = V10_TOWN_HALL.x;
+  raw.buildings['b_townhall'].y = V10_TOWN_HALL.y;
+  for (const id of Object.keys(raw.buildings)) {
+    if (id.startsWith('b_startroad_')) delete raw.buildings[id];
+  }
+  mutate?.(raw);
+  return raw;
+}
+
+/** Erste rein-grasige Fläche in der Startregion südlich des Rathaus-Blocks. */
+function findGrassArea(w: number, h: number, fromY = startRegionConfig.townHall.y + 9): { x: number; y: number } {
+  const th = startRegionConfig.townHall;
+  for (let y = fromY; y < fromY + 80; y++) {
+    for (let x = th.x - 40; x < th.x + 40; x++) {
+      let ok = true;
+      for (let dy = 0; dy < h && ok; dy++) {
+        for (let dx = 0; dx < w && ok; dx++) {
+          if (regionIdAt(x + dx, y + dy) !== startRegionConfig.startRegionId || terrainAt(x + dx, y + dy) !== 'grass') {
+            ok = false;
+          }
+        }
+      }
+      if (ok) return { x, y };
+    }
+  }
+  throw new Error(`kein ${w}×${h}-Gras-Testareal gefunden`);
+}
+
+describe('migration v10 → v11 (Ausbaustufe 2.0)', () => {
+  it('moves the town hall to the new bake start and replaces sectors with regions', () => {
+    const save = migrateAndValidate(makeV10Save());
+    const th = save.buildings['b_townhall']!;
+    expect({ x: th.x, y: th.y }).toEqual(startRegionConfig.townHall);
+    expect(Object.keys(save.world.regions).length).toBe(REGION_COUNT);
+    expect((save.world as any).sectors).toBeUndefined();
+    expect(save.world.regions[String(startRegionConfig.startRegionId)]?.status).toBe('unlocked');
+    // Die 5 gebackenen Startstraßen wurden als Gratis-Vorplatz ergänzt.
+    const roads = Object.values(save.buildings).filter((b) => b.defId === 'road');
+    expect(roads.length).toBe(startRegionConfig.startRoads.length);
+    // Buchhaltung: Zähler passt zu den tatsächlich freigeschalteten Regionen.
+    const unlocked = Object.values(save.world.regions).filter((r) => r.status === 'unlocked').length;
+    expect(save.stats.regionsUnlocked).toBe(unlocked - 1); // Startregion zählt nicht
+    const notice = consumeMigrationNotice();
+    expect(notice?.fromVersion).toBe(10);
+    expect(notice?.removedBuildings).toBe(0);
+    expect(consumeMigrationNotice()).toBeUndefined(); // einmalig
+  });
+
+  it('refunds removed defs (house_row/apartment) at 100 % of the OLD prices', () => {
+    const raw = makeV10Save((r) => {
+      r.buildings['b_row'] = { id: 'b_row', defId: 'house_row', x: 150, y: 220, upgradeLevel: 1, status: 'active' };
+      r.buildings['b_apt'] = { id: 'b_apt', defId: 'apartment', x: 140, y: 210, upgradeLevel: 0, status: 'active' };
+    });
+    const moneyBefore = raw.resources.money as number;
+    const save = migrateAndValidate(raw);
+    expect(save.buildings['b_row']).toBeUndefined();
+    expect(save.buildings['b_apt']).toBeUndefined();
+    // house_row: 60k + Stufe 1 180k · apartment: 280k — alles alte v10-Preise.
+    expect(save.resources.money).toBe(moneyBefore + 60_000 + 180_000 + 280_000);
+    expect(consumeMigrationNotice()?.removedBuildings).toBe(2);
+  });
+
+  it('demolishes footprint collisions with full refund (2×2 → 3×3 houses)', () => {
+    const spot = findGrassArea(5, 3);
+    const raw = makeV10Save((r) => {
+      // In v10 (2×2) standen beide Häuser konfliktfrei nebeneinander — mit den
+      // neuen 3×3-Footprints überlappen sie; das später geprüfte weicht.
+      r.buildings['b_h1'] = { id: 'b_h1', defId: 'house_small', x: spot.x, y: spot.y, upgradeLevel: 0, status: 'active' };
+      r.buildings['b_h2'] = { id: 'b_h2', defId: 'house_small', x: spot.x + 2, y: spot.y, upgradeLevel: 0, status: 'active' };
+    });
+    const moneyBefore = raw.resources.money as number;
+    const save = migrateAndValidate(raw);
+    const houses = Object.values(save.buildings).filter((b) => b.defId === 'house_small');
+    expect(houses.length).toBe(1);
+    expect(houses[0]!.id).toBe('b_h1'); // Id-Reihenfolge entscheidet deterministisch
+    expect(save.resources.money).toBe(moneyBefore + 9_000); // alter Hauspreis
+    expect(consumeMigrationNotice()?.removedBuildings).toBe(1);
+  });
+
+  it('clamps upgrade stages to the new maximum and refunds the old late stages', () => {
+    const sawSpot = findGrassArea(4, 4);
+    const pumpSpot = findGrassArea(3, 3, sawSpot.y + 6);
+    const raw = makeV10Save((r) => {
+      // Sägewerk hatte in v10 drei Stufen (neu: 2), Wasserpumpe zwei (neu: 1).
+      r.buildings['b_saw'] = { id: 'b_saw', defId: 'sawmill', x: sawSpot.x, y: sawSpot.y, upgradeLevel: 3, status: 'active' };
+      r.buildings['b_pump'] = { id: 'b_pump', defId: 'water_pump', x: pumpSpot.x, y: pumpSpot.y, upgradeLevel: 2, status: 'active' };
+    });
+    const moneyBefore = raw.resources.money as number;
+    const save = migrateAndValidate(raw);
+    expect(save.buildings['b_saw']?.upgradeLevel).toBe(2);
+    expect(save.buildings['b_pump']?.upgradeLevel).toBe(1);
+    // Erstattet: alte Sägewerk-Stufe 3 (2,2 M) + alte Pumpen-Stufe 2 (560k).
+    expect(save.resources.money).toBe(moneyBefore + 2_200_000 + 560_000);
+    expect(consumeMigrationNotice()?.removedBuildings).toBe(0);
+  });
+
+  it('unlocks regions by sector majority; teaser regions stay locked', () => {
+    const raw = makeV10Save((r) => {
+      for (const sector of Object.values(r.world.sectors) as { status: string }[]) sector.status = 'unlocked';
+    });
+    const save = migrateAndValidate(raw);
+    for (const region of Object.values(save.world.regions)) {
+      // Region 32 (Nebelinsel) ist als Teaser nie freischaltbar — auch nicht
+      // durch die Migration; alle anderen waren vollständig in Spielerbesitz.
+      expect(region.status).toBe(region.id === 32 ? 'locked' : 'unlocked');
+    }
+    expect(save.stats.regionsUnlocked).toBe(REGION_COUNT - 2); // ohne Start + Teaser
+  });
+});
+
+/* eslint-enable @typescript-eslint/no-explicit-any */
