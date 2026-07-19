@@ -14,6 +14,8 @@
 //   src/assets/ui/activities/<name>.png          e.g. activity_food_delivery.png
 //   src/assets/ui/events/<name>.png              e.g. event_city_festival.png
 //   src/assets/ui/rewards/<name>.png             e.g. reward_money.png
+//   src/assets/ui/brand/<name>.png               e.g. mayor_crest.png
+//   src/assets/environment/<name>.webp           e.g. cloud_bank.webp
 //   src/assets/vehicles/<name>.png               e.g. truck_food.png
 //   src/assets/overlays/<name>.png               e.g. overlay_water.png
 //
@@ -62,6 +64,12 @@ const EVENT_IMAGES = keyed(
 const REWARD_IMAGES = keyed(
   import.meta.glob('./ui/rewards/*.{png,webp,jpg,jpeg}', { eager: true, query: '?url', import: 'default' }) as UrlMap,
 );
+const BRAND_IMAGES = keyed(
+  import.meta.glob('./ui/brand/*.{png,webp,jpg,jpeg}', { eager: true, query: '?url', import: 'default' }) as UrlMap,
+);
+const ENVIRONMENT_IMAGES = keyed(
+  import.meta.glob('./environment/*.{png,webp,jpg,jpeg}', { eager: true, query: '?url', import: 'default' }) as UrlMap,
+);
 const VEHICLE_IMAGES = keyed(
   import.meta.glob('./vehicles/*.{png,webp,jpg,jpeg}', { eager: true, query: '?url', import: 'default' }) as UrlMap,
 );
@@ -102,6 +110,12 @@ export function eventImage(id: string): string | undefined {
 }
 export function rewardImage(id: string): string | undefined {
   return REWARD_IMAGES[id];
+}
+export function brandImage(id: string): string | undefined {
+  return BRAND_IMAGES[id];
+}
+export function environmentImage(id: string): string | undefined {
+  return ENVIRONMENT_IMAGES[id];
 }
 export function vehicleImage(id: string): string | undefined {
   return VEHICLE_IMAGES[id];

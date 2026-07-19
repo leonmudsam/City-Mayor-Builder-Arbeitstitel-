@@ -18,8 +18,8 @@ läuft im Browser (Dev/Test) und in der nativen Tauri-App, später auf Mobile.
 | Ordner | Inhalt |
 |---|---|
 | `src/game/` | **Reine Simulation.** `config/`, `simulation/` (Tick), `commands/` (Controller), `economy/`, `buildings/`, `map/`, `progression/`, `storage/` (Saves+Migration), `engine/` (RNG), `types.ts`, `newGame.ts`. Keine Rendering-/React-Imports. |
-| `src/renderer/` | Rendering-Engines: `three/ThreeMapRenderer.ts` (3D), `MapRenderer.ts` (Pixi 2D/Iso), Kontrakt `IMapRenderer.ts`, `projection.ts`, `colors.ts`. Atmosphäre (rein visuell): `three/environment.ts` (Tag/Nacht-Grading, testbar), `three/SkyEnvironment.ts` (Himmel/Sonne/Mond/Sterne/Lichter/Fog), `three/environmentSettings.ts` (persistenter Store, nicht im Save). Vorschau-Bilder: `three/modelThumbnail.ts` rendert Gebäude-`.glb` offscreen zu Thumbnails (Baumenü/Sheet), Fallback PNG→SVG. Boden: `three/terrainHeight.ts` (organisches Höhenfeld, **eine** Höhenquelle für Boden-Mesh + alle Platzierungen). |
-| `src/components/` | React-UI: `MapView.tsx` + `hud/`, `panels/`, `common/`, `art/`. |
+| `src/renderer/` | Einziger aktiver Renderer: `three/ThreeMapRenderer.ts` hinter `IMapRenderer.ts`; kein 2D-/Iso-Modus. Atmosphäre (rein visuell): `three/environment.ts` (Tag/Nacht-Grading), `three/SkyEnvironment.ts` (Himmel, Wolken, Sonne/Mond/Sterne, Licht/Fog), `three/environmentSettings.ts` (localStorage, nicht im Save). Vorschau-Bilder: `three/modelThumbnail.ts` rendert Gebäude-`.glb` offscreen zu Thumbnails, Fallback PNG→SVG. Boden: `three/terrainHeight.ts` ist die einzige Höhenquelle für Boden-Mesh und Platzierungen. |
+| `src/components/` | React-UI: `MapView.tsx` + `hud/`, `panels/`, `common/`, `art/`. `hud/WorldMiniMap.tsx` liest Welt, Gebäude, Diagnosen und Missionsziele aus Snapshot/Config; die Kamerapose kommt über `MapApi`. `panels/ActivityRoutePlanner.tsx` projiziert Terrain, Gebäude und eine RNG-neutrale Aktivitätsvorschau in einen Top-down-Planer; gestartet wird weiterhin über den Controller. |
 | `src/state/` | Zustand-Store + Controller-/Map-Bridges (`store.ts`). Der React↔Sim-Seam. |
 | `src/assets/` | Statische Kunst + `models/` (3D-`.glb`-Baum, Drop-in), `registry.ts`, `modelManifest.ts`. |
 | `src/i18n/`, `src/services/` | Lokalisierung, Querschnittsdienste. |
@@ -39,14 +39,16 @@ Sie liest Snapshots und schickt Commands.
 - **Zustand-Store** (`src/state/store.ts`): `gameController`-Bridge +
   `useGame()` (via `useSyncExternalStore` an `controller.subscribe` und
   `() => controller.version`). Daneben reiner **UI-State** (`useUiStore`: offenes
-  Panel, Auswahl, Platzierung, `renderMode`, Kamera-Preset) — berührt nie den Save.
-  `MapApi`-Bridge = kleine imperative Kamera-Oberfläche für die HUD.
-- **Engine-Abstraktion** (`src/renderer/IMapRenderer.ts`): `init/destroy/setPlacing/
-  setSelected/centerOnCity` + optionale 3D-Kamera-Methoden. Implementiert von der
-  three.js- und der Pixi-Engine. `MapView.tsx` erzeugt/zerstört die Engine nur beim
-  Wechsel über die 2D↔3D-Grenze (`engineFor(mode)`); beide bekommen denselben
-  `controller` und ein gemeinsames `RendererCallbacks`-Objekt, das Karten-Interaktion
-  in Controller-Commands übersetzt. Der Save wird dabei nie angefasst.
+  Panel, Auswahl, Platzierung, Kamera-Preset) — berührt nie den Save. Der Store
+  erzwingt die Ein-Sheet-Regel: Panel, Gebäude-Sheet und Regionsdialog schließen
+  einander.
+  `MapApi`-Bridge = kleine imperative Kamera-Oberfläche für das HUD
+  (`getCameraView` und `focusGround` versorgen die Live-Minimap).
+- **Renderer-Kontrakt** (`src/renderer/IMapRenderer.ts`): `init/destroy/setPlacing/
+  setSelected/centerOnCity` plus 3D-Kamera-Methoden. `MapView.tsx` besitzt genau
+  eine `ThreeMapRenderer`-Instanz. Sie erhält denselben `controller` und ein
+  `RendererCallbacks`-Objekt, das Karteninteraktionen in Controller-Commands
+  übersetzt. Der Save wird dabei nie direkt angefasst.
 
 **Konsequenz:** Die Simulation ist server-/plattformfähig. Commands bilden 1:1 auf
 eine spätere Server-/Netzwerk-API ab; das Rendering ist austauschbar.
@@ -70,7 +72,7 @@ und die `README.md` je Modellordner wird daraus generiert (Test:
 `tests/modelReadmes.test.ts`). Fehlt ein Modell → prozeduraler Fallback.
 
 ## 6. Speicherstände & Migration (dürfen nie brechen)
-`SCHEMA_VERSION` in `src/game/newGame.ts` (aktuell 9). Migrationen in
+`SCHEMA_VERSION` in `src/game/newGame.ts` (aktuell 11). Migrationen in
 `src/game/storage/migrations.ts` als lineare Kette (`migrations[n]`: v`n`→v`n+1`).
 `migrateAndValidate()` wendet die Kette an und validiert am Ende mit
 `saveGameSchema` (Zod). Persistenz heute: `localStorage` (`cmb.save.*`) — funktioniert

@@ -27,6 +27,30 @@ Low-poly stylized 3D city-builder game asset, colorful cartoon look, clean shape
 
 **Spec:** Größenklasse `prop` — kleines Prop (< 500 Tris, ≤ 256², 1 Material) · Höhe ≈0.5 Kacheln · Pivot unten-mittig (X/Z zentriert, Unterkante Y = 0) · Front +Z · Biom: Wald, Grasland · platzierbar auf: grass, forest, fertile · nie auf: Straße, Gebäude-Footprint, Wasser · Instancing: ja · **live** (bereits verdrahtet)
 
+### `boat_small.glb` — 1×2
+
+```text
+Low-poly stylized 3D city-builder game asset, colorful cartoon look, clean shapes, soft bevels, hand-painted feel, optimized for realtime rendering, embedded textures, no lights, no cameras, centered object, pivot at bottom center, +Y up, front facing +Z — a small rowing/fishing boat, front facing +Z, low-poly
+```
+
+**Spec:** Größenklasse `prop_large` — großes Prop / Setpiece (500–1 500 Tris, ≤ 512², 1–2 Materialien) · Pivot unten-mittig (X/Z zentriert, Unterkante Y = 0) · Front +Z · Biom: Küste, See · platzierbar auf: an Pier/Ufer, im Wasser · Instancing: nein · **live** (bereits verdrahtet)
+
+### `windmill_small.glb` — 2×2
+
+```text
+Low-poly stylized 3D city-builder game asset, colorful cartoon look, clean shapes, soft bevels, hand-painted feel, optimized for realtime rendering, embedded textures, no lights, no cameras, centered object, pivot at bottom center, +Y up, front facing +Z — a small rustic windmill with four turning sails on a node named 'rotor', stone or wooden base, low-poly
+```
+
+**Spec:** Größenklasse `prop_large` — großes Prop / Setpiece (500–1 500 Tris, ≤ 512², 1–2 Materialien) · Höhe ≈2.5 Kacheln · Pivot unten-mittig (X/Z zentriert, Unterkante Y = 0) · Front +Z · Biom: Fruchtbares Land · Instancing: nein · Animations-Node: `rotor (drehende Flügel, für spätere Animation reserviert)` · **live** (bereits verdrahtet)
+
+### `lighthouse.glb` — 2×2
+
+```text
+Low-poly stylized 3D city-builder game asset, colorful cartoon look, clean shapes, soft bevels, hand-painted feel, optimized for realtime rendering, embedded textures, no lights, no cameras, centered object, pivot at bottom center, +Y up, front facing +Z — a red-and-white striped lighthouse on a rocky base with a lantern room
+```
+
+**Spec:** Größenklasse `landmark` — Landmarke (6 000–12 000 Tris, ≤ 1024², 2–4 Materialien) · Höhe ≈4–6 Kacheln · Pivot unten-mittig (X/Z zentriert, Unterkante Y = 0) · Front +Z · Biom: Küste · platzierbar auf: Küstenklippe/Landzunge, Wasserzugang · Instancing: nein · **live** (bereits verdrahtet)
+
 ### `construction_site.glb` — 1–3 Kacheln
 
 ```text
@@ -159,14 +183,6 @@ Low-poly stylized 3D city-builder game asset, colorful cartoon look, clean shape
 
 **Spec:** Größenklasse `prop` — kleines Prop (< 500 Tris, ≤ 256², 1 Material) · Pivot unten-mittig (X/Z zentriert, Unterkante Y = 0) · Front +Z · Biom: Stadtzentrum, Markt · Instancing: nein · *geplant* (noch nicht verdrahtet)
 
-### `boat_small.glb` — 1×2
-
-```text
-Low-poly stylized 3D city-builder game asset, colorful cartoon look, clean shapes, soft bevels, hand-painted feel, optimized for realtime rendering, embedded textures, no lights, no cameras, centered object, pivot at bottom center, +Y up, front facing +Z — a small rowing/fishing boat, front facing +Z, low-poly
-```
-
-**Spec:** Größenklasse `prop_large` — großes Prop / Setpiece (500–1 500 Tris, ≤ 512², 1–2 Materialien) · Pivot unten-mittig (X/Z zentriert, Unterkante Y = 0) · Front +Z · Biom: Küste, See · platzierbar auf: an Pier/Ufer, im Wasser · Instancing: nein · *geplant* (noch nicht verdrahtet)
-
 ### `hay_bale.glb` — 1×1
 
 ```text
@@ -214,14 +230,6 @@ Low-poly stylized 3D city-builder game asset, colorful cartoon look, clean shape
 ```
 
 **Spec:** Größenklasse `prop` — kleines Prop (< 500 Tris, ≤ 256², 1 Material) · Höhe ≈0.8 Kacheln · Pivot unten-mittig (X/Z zentriert, Unterkante Y = 0) · Front +Z · Biom: Fruchtbares Land, Farm · platzierbar auf: im Feld · Instancing: ja · *geplant* (noch nicht verdrahtet)
-
-### `windmill_small.glb` — 2×2
-
-```text
-Low-poly stylized 3D city-builder game asset, colorful cartoon look, clean shapes, soft bevels, hand-painted feel, optimized for realtime rendering, embedded textures, no lights, no cameras, centered object, pivot at bottom center, +Y up, front facing +Z — a small rustic windmill with four turning sails on a node named 'rotor', stone or wooden base, low-poly
-```
-
-**Spec:** Größenklasse `prop_large` — großes Prop / Setpiece (500–1 500 Tris, ≤ 512², 1–2 Materialien) · Höhe ≈2.5 Kacheln · Pivot unten-mittig (X/Z zentriert, Unterkante Y = 0) · Front +Z · Biom: Fruchtbares Land · Instancing: nein · Animations-Node: `reserved: rotor (drehende Flügel)` · *geplant* (noch nicht verdrahtet)
 
 ## Geplant — Gelände-Anpassung für Straßen (props/infrastructure/)
 

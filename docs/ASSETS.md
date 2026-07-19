@@ -18,6 +18,9 @@ Solange ein Bild fehlt, rendert die eingebaute SVG-Grafik als Platzhalter weiter
   - `src/assets/resources/<id>.png` — Ressourcen
   - `src/assets/buildings/<id>.png` — Gebäude (**optional** ab v0.38, siehe Hinweis oben)
   - `src/assets/portraits/<name>.png` — Bürger/Berater
+  - `src/assets/ui/brand/<id>.png` — HUD-Marke/Wappen
+  - `src/assets/ui/events/<id>.webp` — breite Ereignis-/Regions-Heros
+  - `src/assets/environment/<id>.webp` — Umgebungs-/Alpha-Texturen
 - Der Dateiname **muss exakt** der ID unten entsprechen (klein, mit Unterstrich),
   z. B. `house_small.png`, `power_plant.png`, `freshwater.png`.
 - Beim nächsten Build (`npm run build` / `npm run dev`) werden neue Dateien via
@@ -125,14 +128,12 @@ viele; das Spiel wählt automatisch pro Anliegen eine Figur):
 | `citizen_5.png` | a friendly woman citizen with blonde hair, colorful jacket |
 | `citizen_6.png` | a friendly older man citizen with a cap, warm coat |
 
-## 4. Optional / später
+## 4. Erweiterte Assets
 
-Diese Flächen sind noch nicht an die Asset-Pipeline angebunden (aktuell weiter
-Prototyp-Grafik). Wenn du willst, ziehe ich sie in einem Folgeschritt nach:
-
-- **Kartengebäude** im 2D-Renderer (die Kacheln auf der Karte selbst).
-- **Karten-Marker** (Problem-/Service-/Ziel-Marker) und Service-Overlay-Symbole.
-- **Aktivitäts-/Event-Illustrationen** als eigene große Bildkarten.
+Marker, Aktivitäts-/Event-Illustrationen, HUD-Buttons, Fahrzeugbilder und Overlays
+sind über die in `docs/UI_ASSETS.md` dokumentierten Drop-in-Ordner angebunden.
+3D-Modelle folgen dem generierten Manifest unter
+`src/assets/models/**/README.md` und `PROMPTS.md`.
 
 ## Verifikation
 

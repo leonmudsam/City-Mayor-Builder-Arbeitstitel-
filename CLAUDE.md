@@ -59,3 +59,14 @@ weiter). Save-Schema steht bei **v11** (Regionen). Balancing/Progression sind ü
 gegen Regressionen gesichert. Bewusst offen (drop-in-fähig, Prompts existieren):
 der erweiterte Biom-Prop-Katalog (Wasserfälle/Windmühlen/Boote/Landmarken) —
 prozedurale Fallbacks decken den Kern, echte `.glb` einfach einlegen.
+
+## Status: Overhaul 3.0 begonnen (v0.60)
+Die visuelle Mockup-Grundlage ist umgesetzt: maritimes Glas-HUD, vertikale linke
+Hauptnavigation, Live-Inselkarte, Bürger-Kompakt-/Detailansicht,
+KI-Regions-Hero, Ein-Sheet-Regel, organischere Vegetation, Küstenschaum,
+Wolken-/Regionsnebel sowie Drop-in-Boote, -Windmühlen und -Leuchttürme. Einstieg:
+`docs/agents/README.md`; Designregeln: `docs/agents/UI_SYSTEM.md`; Restphasen:
+`docs/OVERHAUL_3_PLAN.md`. Save-Schema bleibt **v11**. Der
+Stadtarbeit-Routenplaner erweitert das bestehende Aktivitätssystem; seine
+Belastungsfarben sind bis O9 Schätzwerte und dürfen nicht als parallele
+Verkehrssimulation weitergebaut werden.

@@ -1,4 +1,4 @@
-import { Car, ClipboardList, Gift, MapPin, PackageCheck, Search, Timer } from 'lucide-react';
+import { Car, ClipboardList, Gift, MapPin, PackageCheck, Route, Search, Timer } from 'lucide-react';
 import { getMapApi, useGame, useUiStore } from '../../state/store.ts';
 import { formatDuration, formatMoney, t } from '../../i18n/index.ts';
 import { playFeedback } from '../../services/feedback.ts';
@@ -13,7 +13,7 @@ const TYPE_ICON = { delivery: PackageCheck, inspection: Search, decision: Clipbo
 
 export function CityWorkPanel() {
   const game = useGame();
-  const { setPanel, pushToast } = useUiStore();
+  const { setPanel, pushToast, openActivityPlanner } = useUiStore();
   const driveActive = useUiStore((s) => s.driveActive);
 
   const board = game.getActivityBoard();
@@ -47,6 +47,10 @@ export function CityWorkPanel() {
   const startFeatured = () => {
     if (featured.type === 'decision') {
       setPanel('activities');
+      return;
+    }
+    if (featured.drive) {
+      openActivityPlanner(featured.id);
       return;
     }
     const result = game.startActivity(featured.id);
@@ -107,17 +111,22 @@ export function CityWorkPanel() {
               </span>
             </div>
             {featured.drive ? (
-              <button
-                className="btn-primary btn-tiny work-drive"
-                disabled={driveActive}
-                onClick={() => {
-                  const api = getMapApi();
-                  if (api?.canDrive() && api.enterDrive()) playFeedback('activity_start');
-                  else pushToast(t('ui.drive.unavailable'), 'error');
-                }}
-              >
-                <Car size={13} /> {driveActive ? t('ui.drive.driving') : t('ui.drive.start')}
-              </button>
+              <div className="work-drive-actions">
+                <button className="btn-secondary btn-tiny" disabled={driveActive} onClick={() => openActivityPlanner(featured.id)}>
+                  <Route size={13} /> {t('ui.route.title')}
+                </button>
+                <button
+                  className="btn-primary btn-tiny work-drive"
+                  disabled={driveActive}
+                  onClick={() => {
+                    const api = getMapApi();
+                    if (api?.canDrive() && api.enterDrive()) playFeedback('activity_start');
+                    else pushToast(t('ui.drive.unavailable'), 'error');
+                  }}
+                >
+                  <Car size={13} /> {driveActive ? t('ui.drive.driving') : t('ui.drive.start')}
+                </button>
+              </div>
             ) : (
               <p className="muted work-hint">{t('ui.activity.click_targets')}</p>
             )}

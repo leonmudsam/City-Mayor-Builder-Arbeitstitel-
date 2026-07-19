@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Eye, Grid3x3, Maximize2, Crosshair, Plus, Minus, Compass, Sun, Moon } from 'lucide-react';
+import { Eye, Grid3x3, Maximize2, Crosshair, Plus, Minus, Compass, Sun, Pause, Play } from 'lucide-react';
 import { getMapApi, useUiStore } from '../../state/store.ts';
 import type { CameraPreset } from '../../renderer/three/CameraConfig.ts';
 import {
@@ -82,7 +82,6 @@ export function CameraControls() {
             <Minus size={16} />
           </button>
         </div>
-        <DayNightControl />
       </div>
     </div>
   );
@@ -99,32 +98,43 @@ function clock(tod: number): string {
 /** Day/night HUD: toggle the auto-cycle and scrub the time of day (§ Atmosphäre,
  *  v0.37). Reads/writes the shared environmentSettings store the SkyEnvironment
  *  also listens to, so changes apply live. Purely visual — no game effect. */
-function DayNightControl() {
+export function DayNightControl() {
   const [env, setEnv] = useState(getEnvironmentSettings());
   useEffect(() => subscribeEnvironmentSettings(() => setEnv(getEnvironmentSettings())), []);
+  const visualSpeed = env.dayLengthMin <= 4 ? 4 : env.dayLengthMin <= 8 ? 2 : 1;
 
   return (
-    <div className="env-controls">
+    <div className="hud-environment">
+      <Sun className="hud-environment-sun" size={22} />
+      <div className="hud-environment-copy">
+        <strong>{t('ui.env.season')} · {clock(env.timeOfDay)}</strong>
+        <span>{t('ui.env.day')} · {env.cycle ? t('ui.env.running') : t('ui.env.paused')}</span>
+        <input
+          type="range"
+          className="env-time"
+          min={0}
+          max={0.999}
+          step={0.001}
+          value={env.timeOfDay}
+          onChange={(e) => setEnvironmentSettings({ timeOfDay: Number(e.target.value), cycle: false })}
+          title={t('ui.env.time')}
+          aria-label={t('ui.env.time')}
+        />
+      </div>
       <button
-        className={`env-toggle${env.cycle ? ' active' : ''}`}
+        className={`env-cycle${env.cycle ? ' active' : ''}`}
         onClick={() => setEnvironmentSettings({ cycle: !env.cycle })}
         title={t('ui.env.cycle')}
       >
-        {env.cycle ? <Sun size={16} /> : <Moon size={16} />}
-        <span>{clock(env.timeOfDay)}</span>
+        {env.cycle ? <Pause size={16} /> : <Play size={16} />}
       </button>
-      <input
-        type="range"
-        className="env-time"
-        min={0}
-        max={0.999}
-        step={0.001}
-        value={env.timeOfDay}
-        // Scrubbing pauses the cycle so the chosen moment holds.
-        onChange={(e) => setEnvironmentSettings({ timeOfDay: Number(e.target.value), cycle: false })}
-        title={t('ui.env.time')}
-        aria-label={t('ui.env.time')}
-      />
+      <button
+        className="hud-env-speed"
+        onClick={() => setEnvironmentSettings({ dayLengthMin: visualSpeed === 1 ? 8 : visualSpeed === 2 ? 4 : 16 })}
+        title={t('ui.env.speed')}
+      >
+        {visualSpeed}x
+      </button>
     </div>
   );
 }

@@ -25,6 +25,8 @@ export interface CameraPresetDef {
   yaw?: number; // radians; usually kept, so undefined
   /** Recentre the target on the town hall (Zentrum). */
   focusCity?: boolean;
+  /** Centre the complete island instead of keeping the current city focus. */
+  focusWorld?: boolean;
 }
 
 export type CameraPreset = 'city' | 'build' | 'overview' | 'center';
@@ -51,7 +53,7 @@ export const CAMERA_PRESETS: Record<CameraPreset, CameraPresetDef> = {
   city: { pitch: 52 * DEG, dist: 62 },
   build: { pitch: 78 * DEG, dist: 46 },
   // Insel-Überblick (§ MVP4 P3): weit genug für die ganze 384er-Insel.
-  overview: { pitch: 56 * DEG, dist: 420 },
+  overview: { pitch: 56 * DEG, dist: 420, focusWorld: true },
   center: { pitch: 52 * DEG, dist: 70, focusCity: true },
 };
 

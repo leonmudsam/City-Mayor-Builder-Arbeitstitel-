@@ -22,6 +22,8 @@ function makeMapApi(r: IMapRenderer): MapApi {
     resetNorth: () => r.resetNorth(),
     zoomStep: (d) => r.zoomStep(d),
     getYaw: () => r.getYaw(),
+    getCameraView: () => r.getCameraView(),
+    focusGround: (x, z, dist) => r.focusGround(x, z, dist),
     canDrive: () => r.canDrive(),
     enterDrive: () => r.enterDrive(),
     exitDrive: () => r.exitDrive(),

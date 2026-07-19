@@ -15,6 +15,15 @@ export interface HoverInfo {
   bonusPct: number;
 }
 
+/** Renderer-owned camera state exposed as plain numbers for lightweight HUDs. */
+export interface MapCameraView {
+  targetX: number;
+  targetZ: number;
+  dist: number;
+  yaw: number;
+  pitch: number;
+}
+
 export interface RendererCallbacks {
   onSelectBuilding(id: string | undefined): void;
   /** Klick auf eine gesperrte Landschaft → Erschließen-Dialog (§ Welt 2.0). */
@@ -63,6 +72,9 @@ export interface IMapRenderer {
   resetNorth(): void;
   zoomStep(dir: number): void;
   getYaw(): number;
+  getCameraView(): MapCameraView;
+  /** Focus a world position selected through a HUD surface such as the minimap. */
+  focusGround(x: number, z: number, dist?: number): void;
   /** § A6: Läuft eine selbst-fahrbare Fahrmission (Button zeigen)? */
   canDrive(): boolean;
   /** § A6: Ist der Fahrmodus gerade aktiv? */

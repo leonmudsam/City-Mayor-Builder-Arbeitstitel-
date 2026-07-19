@@ -43,6 +43,12 @@ export const MOUNTAIN_FEATURE_MODELS = [
 /** Vegetation props (models/props/nature/), culled off the city footprint. */
 export const TREE_MODELS = ['pine_tree', 'tree_pine', 'tree', 'tree_deciduous'] as const;
 export const BUSH_MODELS = ['bush_small', 'bush', 'bush_medium'] as const;
+/** Hand-placed scenic landmarks used by the island-overview pass. */
+export const SCENIC_PROP_MODELS = {
+  boat: ['boat_small', 'ship_sailing'],
+  windmill: ['windmill_small'],
+  lighthouse: ['lighthouse'],
+} as const;
 
 /** Traffic car + delivery van (models/vehicles/). Author facing +z. */
 export const VEHICLE_CAR_MODELS = ['car', 'car_small', 'car_sedan', 'car_van'] as const;
@@ -230,6 +236,9 @@ export const MODEL_FOLDER_DOCS: ModelFolderDoc[] = [
     rows: [
       { purpose: 'Baum', names: TREE_MODELS, note: 'gecullt, instanziert' },
       { purpose: 'Busch', names: BUSH_MODELS, note: 'gecullt, instanziert' },
+      { purpose: 'Szenisches Boot', names: SCENIC_PROP_MODELS.boat, note: 'handplatziert auf Küstenwasser' },
+      { purpose: 'Szenische Windmühle', names: SCENIC_PROP_MODELS.windmill, note: 'handplatziert im fruchtbaren Land' },
+      { purpose: 'Küsten-Leuchtturm', names: SCENIC_PROP_MODELS.lighthouse, note: 'handplatziert auf einer Landzunge' },
       { purpose: 'Baustelle (Bau & Upgrade)', names: CONSTRUCTION_MODELS, note: 'generisch; pro Gebäude: <id>_construction.glb' },
     ],
   },
@@ -761,6 +770,9 @@ export const FOLDER_PROMPTS: FolderPrompts[] = [
         entries: [
           { name: 'pine_tree', footprint: '1×1', sizeClass: 'prop', heightRange: '≈1.4–1.8 Kacheln', biome: 'Wald, Grasland, fruchtbares Land', placeOn: 'grass, forest, fertile', neverOn: 'Straße, Gebäude-Footprint, Bauplatz, Wasser, Gebirge', minSpacing: '0.3–0.5 Kacheln', randomize: 'Zufallsrotation + Zufallsskalierung (±15%)', instancing: true, status: 'live', motif: 'a single stylized low-poly pine tree, slightly irregular' },
           { name: 'bush_small', footprint: '1×1', sizeClass: 'prop', heightRange: '≈0.5 Kacheln', biome: 'Wald, Grasland', placeOn: 'grass, forest, fertile', neverOn: 'Straße, Gebäude-Footprint, Wasser', instancing: true, status: 'live', motif: 'a small round low-poly bush' },
+          { name: 'boat_small', footprint: '1×2', sizeClass: 'prop_large', frontFacing: '+Z', biome: 'Küste, See', placeOn: 'an Pier/Ufer, im Wasser', instancing: false, status: 'live', motif: 'a small rowing/fishing boat, front facing +Z, low-poly' },
+          { name: 'windmill_small', footprint: '2×2', sizeClass: 'prop_large', heightRange: '≈2.5 Kacheln', biome: 'Fruchtbares Land', animationNodes: 'rotor (drehende Flügel, für spätere Animation reserviert)', instancing: false, status: 'live', motif: "a small rustic windmill with four turning sails on a node named 'rotor', stone or wooden base, low-poly" },
+          { name: 'lighthouse', footprint: '2×2', sizeClass: 'landmark', heightRange: '≈4–6 Kacheln', biome: 'Küste', placeOn: 'Küstenklippe/Landzunge, Wasserzugang', instancing: false, status: 'live', motif: 'a red-and-white striped lighthouse on a rocky base with a lantern room' },
           { name: 'construction_site', footprint: '1–3 Kacheln', sizeClass: 'prop_large', biome: 'überall (temporär)', placeOn: 'Gebäude im Bau/Upgrade', instancing: false, status: 'live', motif: 'a construction site prop: scaffolding, a small crane and barriers with warning stripes, to sit over a building under construction' },
         ],
       },
@@ -783,14 +795,12 @@ export const FOLDER_PROMPTS: FolderPrompts[] = [
           { name: 'street_lamp', footprint: '1×1', sizeClass: 'prop', heightRange: '≈0.9 Kacheln', biome: 'Stadt', placeOn: 'entlang Gehweg/Straße', animationNodes: 'reserved: light_window/glow bei Nacht', instancing: true, status: 'planned', motif: 'a stylized street lamp post with a glowing lamp head' },
           { name: 'bench', footprint: '1×1', sizeClass: 'prop', heightRange: '≈0.4 Kacheln', biome: 'Stadt, Park', instancing: true, status: 'planned', motif: 'a simple park bench, low-poly' },
           { name: 'market_stall', footprint: '1×1', sizeClass: 'prop', biome: 'Stadtzentrum, Markt', instancing: false, status: 'planned', motif: 'a market stall with a striped awning and crates of goods' },
-          { name: 'boat_small', footprint: '1×2', sizeClass: 'prop_large', frontFacing: '+Z', biome: 'Küste, See', placeOn: 'an Pier/Ufer, im Wasser', instancing: false, status: 'planned', motif: 'a small rowing/fishing boat, front facing +Z, low-poly' },
           { name: 'hay_bale', footprint: '1×1', sizeClass: 'prop', biome: 'Fruchtbares Land', instancing: true, status: 'planned', motif: 'a round hay bale, low-poly' },
           { name: 'tractor_small', footprint: '1×1', sizeClass: 'prop', frontFacing: '+Z', biome: 'Fruchtbares Land', instancing: false, status: 'planned', motif: 'a small farm tractor, front facing +Z, low-poly' },
           { name: 'field_crop_rows', footprint: '1×1', sizeClass: 'prop', heightRange: '≈0.3 Kacheln', biome: 'Fruchtbares Land, Farm', placeOn: 'freie Kacheln im Farm-Footprint', instancing: true, randomize: 'Zufallsrotation (0/90°), Frucht-Farbvariante', status: 'planned', motif: 'a patch of neat crop rows (wheat or vegetables) on ploughed soil, tileable, low-poly' },
           { name: 'fence_wooden', footprint: '1×1, modular', sizeClass: 'prop', heightRange: '≈0.5 Kacheln', biome: 'Farm, Weide', placeOn: 'Rand des Farm-/Weide-Grundstücks', instancing: true, status: 'planned', motif: 'a wooden farm fence segment with posts and rails, tileable side to side, low-poly' },
           { name: 'farm_gate', footprint: '1×1', sizeClass: 'prop', heightRange: '≈0.6 Kacheln', biome: 'Farm, Weide', placeOn: 'Zaun-Öffnung zur Straße', instancing: false, status: 'planned', motif: 'a simple wooden farm gate in a fence line, low-poly' },
           { name: 'scarecrow', footprint: '1×1', sizeClass: 'prop', heightRange: '≈0.8 Kacheln', biome: 'Fruchtbares Land, Farm', placeOn: 'im Feld', instancing: true, status: 'planned', motif: 'a straw scarecrow on a wooden cross frame standing in a field, low-poly' },
-          { name: 'windmill_small', footprint: '2×2', sizeClass: 'prop_large', heightRange: '≈2.5 Kacheln', biome: 'Fruchtbares Land', animationNodes: 'reserved: rotor (drehende Flügel)', instancing: false, status: 'planned', motif: "a small rustic windmill with four turning sails on a node named 'rotor', stone or wooden base, low-poly" },
         ],
       },
       {

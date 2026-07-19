@@ -47,8 +47,13 @@ describe('CameraController3D presets & focus', () => {
 
   it('overview zooms further out than city', () => {
     const cam = new CameraController3D(worldCameraBounds(), settings());
+    cam.focusGround(12, 18);
     cam.applyPreset('overview');
-    const dist = cam.goals().dist;
+    const overview = cam.goals();
+    const dist = overview.dist;
+    const bounds = worldCameraBounds();
+    expect(overview.targetX).toBeCloseTo((bounds.minX + bounds.maxX) / 2, 5);
+    expect(overview.targetZ).toBeCloseTo((bounds.minZ + bounds.maxZ) / 2, 5);
     cam.applyPreset('city');
     expect(dist).toBeGreaterThan(cam.goals().dist);
   });

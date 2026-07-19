@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { ClipboardList, Gift, MapPin, PackageCheck, Search, Store, Timer, X } from 'lucide-react';
+import { ClipboardList, Gift, MapPin, PackageCheck, Route, Search, Store, Timer, X } from 'lucide-react';
 import { useGame, useUiStore } from '../../state/store.ts';
 import { DecisionModal } from '../common/DecisionModal.tsx';
 import { RESOURCE_ICON } from '../common/icons.tsx';
@@ -19,7 +19,7 @@ const TYPE_ICON = { delivery: PackageCheck, inspection: Search, decision: Clipbo
 
 export function ActivityPanel() {
   const game = useGame();
-  const { setPanel, pushToast } = useUiStore();
+  const { setPanel, pushToast, openActivityPlanner } = useUiStore();
   const [decision, setDecision] = useState<ActivityDef | undefined>();
 
   const now = game.state.meta.lastSimTime;
@@ -61,6 +61,11 @@ export function ActivityPanel() {
             <button className="btn-secondary btn-tiny" onClick={() => game.abandonActivity()}>
               {t('ui.activity.abandon')}
             </button>
+            {activeDef.drive && (
+              <button className="btn-primary btn-tiny" onClick={() => openActivityPlanner(activeDef.id)}>
+                <Route size={12} /> {t('ui.route.title')}
+              </button>
+            )}
           </div>
           <p className="muted activity-hint">
             {t('ui.activity.click_targets')}
@@ -76,6 +81,10 @@ export function ActivityPanel() {
           const start = () => {
             if (def.type === 'decision') {
               setDecision(def);
+              return;
+            }
+            if (def.drive) {
+              openActivityPlanner(def.id);
               return;
             }
             const result = game.startActivity(def.id);

@@ -1,4 +1,4 @@
-# UI-Grafik-Assets — Anleitung & Prompt-Liste (v0.26)
+# UI-Grafik-Assets — Anleitung & Prompt-Liste (v0.60)
 
 Ergänzung zu `docs/ASSETS.md`. Dieses Dokument listet die **UI-/Chrome-Grafiken**
 (Buttons, Kategorien, Marker, Aktivitäten, Events, Belohnungen, Fahrzeuge,
@@ -22,6 +22,17 @@ Glyph in getönter Kachel oder vorhandene Vektorgrafik) — das Spiel crasht nie
 | Belohnungen | `src/assets/ui/rewards/` | `rewardImage(id)` |
 | Fahrzeuge | `src/assets/vehicles/` | `vehicleImage(id)` |
 | Overlays | `src/assets/overlays/` | `overlayImage(id)` |
+| HUD-Marke/Wappen | `src/assets/ui/brand/` | `brandImage(id)` |
+| Umgebungs-Texturen | `src/assets/environment/` | `environmentImage(id)` |
+
+Seit v0.60 sind drei Referenz-Assets bereits eingebunden:
+
+- `ui/brand/mayor_crest.png` — KI-generiertes Bürgermeisterwappen im Levelblock.
+- `environment/cloud_bank.webp` — KI-generierte Graustufen-Alpha-Textur für
+  Himmelswolken und horizontalen Regionsnebel. Fehlt sie, bleibt ein
+  prozeduraler Canvas-Fallback aktiv.
+- `ui/events/region_unlock_hero.webp` — KI-generiertes 16:9-Inselpanorama für
+  den großen Regionsdialog. Fehlt es, bleibt der CSS-Landschaftsfallback aktiv.
 
 ## Technische Vorgaben (für ALLE UI-Assets)
 
@@ -155,7 +166,7 @@ Verwendung: Service-Overlay-Legende/Kartensymbole (`overlayImage`).
 
 ---
 
-## Spätere 3D-/Isometrie-Konsistenz (§14)
+## 3D-Konsistenz (§14)
 
 `BuildingDef` besitzt jetzt ein optionales `art`-Feld für eine konsistente visuelle
 Identität über alle Darstellungen hinweg:
@@ -164,16 +175,13 @@ Identität über alle Darstellungen hinweg:
 art?: {
   cardArt?: string;    // Baushop-Vorschau (Standard: buildings/<id>.png)
   sheetArt?: string;   // großes Gebäude-Detail-Sheet
-  mapSprite2d?: string;// späteres 2D-Kartensprite
-  isoPreview?: string; // spätere isometrische Vorschau
-  model3dRef?: string; // Referenz auf ein späteres 3D-Modell
+  model3dRef?: string; // Referenz auf ein 3D-Modell
 }
 ```
 
-Der Renderer ignoriert diese Felder aktuell (2D-Karte bleibt). Sie dienen dazu,
-dass Baushop-Vorschau, Detail-Sheet, Kartensprite und spätere 3D-/Iso-Variante
-**dieselbe Asset-Familie** je Gebäudetyp referenzieren. Fehlen die Felder, greift
-weiter `buildings/<id>.png` bzw. die eingebaute Vektorgrafik.
+Der aktive Three.js-Renderer und die Modell-Thumbnail-Pipeline sorgen dafür, dass
+Baushop-Vorschau, Detail-Sheet und Welt **dieselbe Asset-Familie** je Gebäudetyp
+nutzen. Fehlen Modelle oder Bilder, greifen prozedurale bzw. SVG-Fallbacks.
 
 ## Verifikation
 

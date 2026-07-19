@@ -19,8 +19,8 @@ Spiel bricht nie. **Kein Code-Change pro Modell.**
 > generieren lässt: Zielbild, Stilphilosophie, Ordnerstruktur, Fallback-Regeln und
 > die Konzepte für die noch ausstehenden Rendering-/Gameplay-Phasen.
 
-Ergänzt `docs/3D_MODEL_MANIFEST.md` (kurzer Namens-Index, testgeprüft) und
-`docs/ISO_ASSETS.md`. Gameplay-Grid und Savegames bleiben unberührt — die Optik
+Ergänzt `docs/3D_MODEL_MANIFEST.md` (kurzer Namens-Index, testgeprüft).
+Gameplay-Grid und Savegames bleiben unberührt — die Optik
 darf organischer wirken als die darunterliegende Logik (siehe §8).
 
 ---
@@ -426,6 +426,15 @@ Pathing-Logik.
 ---
 
 ## 13. Lebendige Welt & Landmarken
+
+**Stand v0.60:** Drei kleine, KI-erstellte und lokal als GLB exportierte
+Szenenmodelle sind aktiv: `boat_small.glb`, `windmill_small.glb` und
+`lighthouse.glb`. `SCENIC_PROP_MODELS` in `modelManifest.ts` ist die zentrale
+Namensquelle. `ThreeMapRenderer.buildScenicLandmarks()` wählt wenige
+deterministische, biom-/küstengeeignete Positionen, lädt die Modelle über
+`propModel()` und behält für jedes Motiv einen prozeduralen Fallback. Damit
+bleiben Ladezeit und Draw-Call-Budget kontrolliert; es gibt keine Simulation und
+keine Save-Auswirkung.
 
 **Lebendige Welt (§10 der ursprünglichen Anfrage):** Vögel, Schmetterlinge, Wind
 in Bäumen, Wolkenschatten, Wasserbewegung, Brandung, Rauch, drehende Windräder,

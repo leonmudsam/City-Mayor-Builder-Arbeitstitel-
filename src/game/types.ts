@@ -167,7 +167,8 @@ export interface GameStats {
 /**
  * A running Stadtarbeit activity (§ aktives Stadtmanagement). Targets are
  * building instances the player must click on the map; `done` flips per
- * delivery/inspection. Completion, rewards and cooldowns are handled by
+ * delivery/inspection. For drive missions the array order is the planned,
+ * numbered stop order. Completion, rewards and cooldowns are handled by
  * controller commands — never by the tick, so nothing completes offline.
  */
 export interface ActiveActivity {

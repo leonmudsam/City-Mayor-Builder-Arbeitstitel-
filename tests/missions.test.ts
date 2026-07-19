@@ -67,13 +67,24 @@ describe('A6 Holztransport — Ziele nur Lager', () => {
 
     const money0 = controller.state.resources.money;
     const wood0 = controller.state.resources.wood;
-    expect(controller.startActivity('log_transport')).toEqual({ ok: true });
+    const rngBeforePlan = controller.state.rngSeed;
+    const plan = controller.getActivityRoutePlan('log_transport');
+    expect(plan).toBeTruthy();
+    expect(controller.state.rngSeed).toBe(rngBeforePlan); // reine UI-Vorschau
+    const plannedOrder = [...plan!.targetBuildingIds].reverse();
+    expect(controller.startActivity('log_transport', plannedOrder)).toEqual({ ok: true });
 
     const targets = targetIds(controller);
+    expect(targets).toEqual(plannedOrder);
     expect(targets.length).toBeGreaterThanOrEqual(2);
     for (const id of targets) expect(['warehouse', 'depot']).toContain(defOf(controller, id));
 
-    for (const id of targets) controller.progressActivity(id);
+    const rerouted = [...targets].reverse();
+    expect(controller.setActiveActivityRoute(rerouted)).toEqual({ ok: true });
+    expect(targetIds(controller)).toEqual(rerouted);
+    // Fahrmissionen übernehmen die nummerierte Reihenfolge aus der Planung.
+    expect(controller.progressActivity(rerouted[1]!)).toEqual({ ok: false, error: 'invalid' });
+    for (const id of rerouted) controller.progressActivity(id);
     expect(controller.state.activities.active).toBeUndefined();
     expect(controller.state.resources.money).toBeGreaterThan(money0);
     // costPerTarget wood:40 je Ziel wird abgebucht.

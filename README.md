@@ -8,10 +8,13 @@ Codebasis. Der Browser bleibt Entwicklungs- und Test-Umgebung.
 > Verbindliche Richtung: **[docs/PROJECT_STRATEGY.md](docs/PROJECT_STRATEGY.md)** ·
 > Architektur: **[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)** ·
 > Änderungen: **[docs/PATCHNOTES.md](docs/PATCHNOTES.md)** · Konzept:
-> **[docs/CONCEPT.md](docs/CONCEPT.md)**
+> **[docs/CONCEPT.md](docs/CONCEPT.md)** · UI:
+> **[docs/UI_DESIGN_SYSTEM.md](docs/UI_DESIGN_SYSTEM.md)** · Übergabe:
+> **[docs/HANDOFF_CLAUDE.md](docs/HANDOFF_CLAUDE.md)** · Agenten-Einstieg:
+> **[docs/agents/README.md](docs/agents/README.md)**
 
 ## Tech-Stack
-React 18 · TypeScript (strict) · Vite 6 · three.js (3D-Karte) · PixiJS (2D/Iso-Debug) ·
+React 18 · TypeScript (strict) · Vite 6 · three.js (3D-Karte) ·
 Zustand · Zod · Vitest · **Tauri 2** (Desktop-Wrapper).
 
 ## Zwei Laufmodi
@@ -43,7 +46,7 @@ Browser-Pfad (`npm run dev`/`build`) funktioniert plattformunabhängig.
 ## Projektstruktur (Kurzfassung)
 - `src/game/` — **reine Simulation** (Config, Tick, Commands, Wirtschaft, Karte,
   Speicherstände). Keine Rendering-/React-Imports.
-- `src/renderer/` — Rendering-Engines (three.js 3D, Pixi 2D/Iso) hinter `IMapRenderer`.
+- `src/renderer/` — der Three.js-3D-Renderer hinter `IMapRenderer`.
 - `src/components/` — React-UI. `src/state/` — Zustand-Store + Controller-Bridge.
 - `src/assets/models/` — **Drop-in-3D-Modelle** (`.glb` mit korrektem Namen → wird
   automatisch genutzt; pro Ordner eine `README.md`).

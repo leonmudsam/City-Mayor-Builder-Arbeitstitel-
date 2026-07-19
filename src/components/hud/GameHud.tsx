@@ -3,8 +3,10 @@ import { useGame, useUiStore } from '../../state/store.ts';
 import { xpForNextLevel } from '../../game/progression/levels.ts';
 import { formatMoney, t } from '../../i18n/index.ts';
 import { ResourceArt } from '../art/index.ts';
+import { brandImage } from '../../assets/registry.ts';
 import { ResourceCard } from './ResourceCard.tsx';
 import { ResourceDetailPopover } from './ResourceDetailPopover.tsx';
+import { DayNightControl } from './CameraControls.tsx';
 
 const int = (n: number) => Math.floor(n).toLocaleString('de-DE');
 const perMin = (n: number) => (n === 0 ? undefined : `${n > 0 ? '+' : '−'}${int(Math.abs(n))}/min`);
@@ -16,6 +18,8 @@ const perMin = (n: number) => (n === 0 ? undefined : `${n > 0 ? '+' : '−'}${in
  */
 export function GameHud() {
   const game = useGame();
+  const openPanel = useUiStore((s) => s.openPanel);
+  const setPanel = useUiStore((s) => s.setPanel);
   const { state, derived } = game;
   const res = state.resources;
   const caps = derived.storageCaps;
@@ -31,11 +35,15 @@ export function GameHud() {
   const happiness = Math.round(state.citizens.happiness);
   const hasFreshwater = caps.freshwater > 0;
   const waterFulfil = Math.round(state.citizens.needs.water.fulfillment * 100);
+  const crest = brandImage('mayor_crest');
 
   return (
     <header className="game-hud">
       <div className="hud-level" title={`${int(state.level.xp)} XP`}>
-        <div className="hud-level-badge">{level}</div>
+        <div className="hud-level-crest">
+          {crest ? <img src={crest} alt="" aria-hidden="true" /> : <span className="hud-level-badge">{level}</span>}
+          {crest && <span className="hud-level-number">{level}</span>}
+        </div>
         <div className="hud-level-text">
           <span className="hud-level-label">{t('ui.level')} {level}</span>
           <div className="hud-xpbar">
@@ -44,6 +52,11 @@ export function GameHud() {
           <span className="hud-xp-nums">
             {int(state.level.xp)} / {nextXp === undefined ? '—' : int(nextXp)} XP
           </span>
+          {game.config.features.goldSystem && (
+            <span className="hud-level-gold">
+              <ResourceArt id="gold" size={14} /> {int(state.gold.balance)}
+            </span>
+          )}
         </div>
       </div>
 
@@ -58,14 +71,6 @@ export function GameHud() {
           title={t('resource.money')}
           detail={<ResourceDetailPopover id="money" />}
         />
-        {game.config.features.goldSystem && (
-          <ResourceCard
-            icon={<ResourceArt id="gold" size={30} />}
-            value={int(state.gold.balance)}
-            accent="var(--res-gold)"
-            title={t('ui.gold')}
-          />
-        )}
         <ResourceCard
           icon={<ResourceArt id="wood" size={30} />}
           value={int(res.wood)}
@@ -134,7 +139,12 @@ export function GameHud() {
         />
       </div>
 
-      <button className="hud-menu-btn" onClick={() => useUiStore.getState().setPanel('menu')} title={t('ui.menu')}>
+      <DayNightControl />
+      <button
+        className={`hud-menu-btn${openPanel === 'menu' ? ' active' : ''}`}
+        onClick={() => setPanel('menu')}
+        title={t('ui.menu')}
+      >
         <Menu size={20} />
       </button>
     </header>

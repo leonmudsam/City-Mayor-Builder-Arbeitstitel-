@@ -1,11 +1,9 @@
-# 3D-Kamerasteuerung (v0.30)
+# 3D-Kamerasteuerung (v0.60)
 
 Die Karte läuft nur noch in **3D** (three.js). Die Kamera fühlt sich wie in einem
 modernen Aufbauspiel an: greifen & schieben, weich zoomen, bewusst drehen/neigen,
 mit weichen Übergängen und harten Weltgrenzen. Es gibt **keinen 2D/Iso/3D-Umschalter**
-mehr — stattdessen **Kamera-Presets** (Stadt/Bau/Übersicht/Zentrum). Der alte
-2D/Iso-Renderer existiert nur noch als Debug-Fallback (Einstellungen → Debug →
-Render-Engine).
+mehr — stattdessen **Kamera-Presets** (Stadt/Bau/Übersicht/Zentrum).
 
 ## Maussteuerung (Desktop)
 
@@ -60,7 +58,7 @@ Zoom und Zielpunkt ändern sich, weich animiert.
 |---|---|---|
 | **Stadtansicht** | schöne schräge Spielansicht (Standard) | ~52° |
 | **Bauansicht** | fast von oben — ideal für Straßen & Platzierung | ~78° |
-| **Übersicht** | weit herausgezoomt, Stadt + Biome | ~56°, große Distanz |
+| **Übersicht** | zentriert die ganze Insel und zoomt bis zur Küste heraus | ~56°, Distanz 420 |
 | **Zentrum** | zurück aufs Rathaus | ~52° |
 
 Im **Baumodus** erscheint zusätzlich ein prominenter **„Bauansicht"**-Knopf, der
@@ -68,7 +66,8 @@ die Kamera schnell in die steile Planungsansicht bringt (erneut klicken →
 Stadtansicht). Der Straßenbau/Ghost bleibt dabei präzise (Boden-Raycast).
 
 Daneben: **Kompass** (zeigt die Blickrichtung, Klick = Ausrichtung zurücksetzen)
-und **Zoom +/−**.
+und **Zoom +/−**. Die Inselkarte unten links bietet zusätzlich direkte
+Schaltflächen für Stadt- und Inselansicht.
 
 ## Fokus-Funktionen
 
@@ -81,7 +80,7 @@ Alle Fokusfahrten sind weich (kein Sprung).
 
 Definiert in `src/renderer/three/CameraConfig.ts`:
 
-- **Zoom:** `minDist = 10`, `maxDist = 200` (nicht durch den Boden, nicht ins Nichts).
+- **Zoom:** `minDist = 10`, `maxDist = 480` (Stadt-Nahansicht bis Inselübersicht).
 - **Neigung:** `minPitch = 28°` (schräg) … `maxPitch = 84°` (fast top-down, nie
   komplett überkopf — sonst leidet Klickerkennung/Billboards).
 - **Schwenk:** an die endliche Welt (`startRegion.worldBounds`) geklemmt, mit
@@ -134,7 +133,8 @@ in localStorage):
 | `src/renderer/three/CameraInputController.ts` | Alle Eingaben (Maus/Rad/Tastatur/Touch) → Kamera-Intents + Klick/Platzierung; Baumodus-Gating, Cursor-Feedback. |
 | `src/renderer/three/cameraSettings.ts` | Gespeicherte Feineinstellungen (framework-agnostisch). |
 | `src/renderer/three/ThreeMapRenderer.ts` | Liest pro Frame `pose()` und schreibt die three-Kamera; Billboard-Marker. |
-| `src/components/hud/CameraControls.tsx` | Presets + Kompass + Zoom (nur im 3D-Modus). |
+| `src/components/hud/CameraControls.tsx` | Presets + Kompass + Zoom. |
+| `src/components/hud/WorldMiniMap.tsx` | Live-Canvas-Inselkarte aus Welt-/Snapshot-Daten; Kamerarahmen über `getCameraView()`, Klickfokus über `focusGround()`. |
 
 Die Kamera-Mathematik ist bewusst von three.js getrennt, damit sie ohne Browser
 testbar ist (Grenzen, Presets, Fokus, Smoothing — `tests/camera.test.ts`).
@@ -145,6 +145,6 @@ testbar ist (Grenzen, Presets, Fokus, Smoothing — `tests/camera.test.ts`).
   bleiben.
 - Randscrollen ist bewusst konservativ (Standard aus) und kennt keine
   UI-Panel-Ränder — nur bei Bedarf aktivieren.
-- Geplant: Mini-Map, Fokus auf Problem-/Bürgeranliegen-Ziele per Knopf,
+- Geplant: Fokus auf Problem-/Bürgeranliegen-Ziele per Knopf,
   animierte Kamerafahrt bei Sektor-Freischaltung, Screenshot-Preset ohne UI,
   Gamepad-Support.

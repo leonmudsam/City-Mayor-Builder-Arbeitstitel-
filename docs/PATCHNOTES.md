@@ -1,5 +1,136 @@
 # Patch Notes
 
+## v0.60 — Overhaul 3.0: Mockup-HUD, Inselkarte, Weltatmosphäre & KI-Assets
+
+**Was.** Die drei beigefügten ChatGPT-Mockups wurden als visuelle Leitlinie in
+die bestehende 3D-Anwendung übertragen:
+
+- **Maritime Civic Glass.** Das HUD nutzt nun dunkles blaugrünes Glas, feine
+  Rahmen, warme Goldakzente und eine klarere Typohierarchie. Der Levelblock trägt
+  ein eigenes Bürgermeisterwappen; Ressourcen, Änderungsrate, Zufriedenheit und
+  Zeitsteuerung sind kompakter und lassen der Welt mehr Raum.
+- **Neue Navigation.** Die Hauptziele Stadt, Bauen, Stadtarbeit, Regionen,
+  Statistiken und Rathaus sitzen nach dem zuletzt gelieferten Master-Mockup als
+  kompakte vertikale Leiste links. Overlay-, Ausblend-, Handels- und
+  Menüfunktionen bilden eine kleinere Hilfsgruppe; die Kamera-Presets bleiben
+  unten mittig. Jede Schaltfläche verwendet bestehende Panels,
+  Kamera-Presets und Commands.
+- **Bürger-Kompakt- und Detailansicht.** Anliegen bleiben als kleine Inbox rechts
+  sichtbar. Ein Klick öffnet ein großes Sheet mit Portrait, vollständiger
+  Beschreibung, Teilzielen, Fortschritt und Belohnungen. Andere Kontexte
+  schließen dieses Detail automatisch.
+- **Bildstarke Regionsfreischaltung.** Der Regionsdialog besitzt nun ein breites
+  KI-generiertes Inselpanorama und ordnet Region, Biom, Boni, Nachteile, Kosten
+  und Bestätigung in derselben Fensterhierarchie wie das Master-Mockup an.
+- **Stadtarbeit-Routenplanung.** Fahrmissionen öffnen vor dem Start einen
+  vollflächigen Top-down-Planer nach dem Stadtarbeit-Mockup: Quelle,
+  nummerierte Ziele, farbige Belastungssegmente, Routenlänge, Zeit,
+  Kreuzungen, Staurisiko, Effizienz-/Medaillenprognose, Zielreihenfolge,
+  Zurücksetzen, Speichern/Laden und automatische Nächster-Nachbar-Optimierung.
+  Die geplante Reihenfolge wird beim Start validiert an den bestehenden
+  `GameController` übergeben und im manuellen Fahrmodus verbindlich abgefahren.
+- **Kollisionsfreies HUD.** Hauptnavigation, Stadtstatus und Inselkarte belegen
+  getrennte linke Zonen; rechts bleibt ausschließlich die Bürger-Inbox.
+  Stadtarbeit ist über die Hauptnavigation erreichbar. Responsive Regeln
+  für 1420/1120 px und geringe Höhe halten die Navigation erreichbar. Der
+  UI-Store erzwingt zusätzlich eine Ein-Sheet-Regel zwischen Panel,
+  Gebäudeauswahl und Regionsdialog.
+- **Live-Inselkarte.** `WorldMiniMap` zeichnet Terrain, organische
+  Regionsgrenzen, Freischaltstatus, Gebäude, Straßen, Probleme, Missionsziele
+  und Rathausposition aus echten Config-/Snapshot-Daten. Ein Live-Rahmen zeigt
+  Ziel, Orientierung und Zoom der 3D-Kamera; ein Klick fokussiert die
+  entsprechende Weltposition. Es existiert kein zweiter Kartenrenderer.
+- **Weltpolish.** Der Ozean verdeckt die endliche Heightfield-Fläche und geht in
+  der Fernansicht atmosphärisch weiter. Eine gebatchte Schaumlinie markiert
+  Land-Wasser-Kanten. Gesperrte Regionen bleiben im Überblick lesbar.
+  Vegetation steht in deterministischen Clustern mit Größenvariation statt im
+  Schachbrett. Die frühere senkrechte Glaswand wurde durch horizontale,
+  mehrschichtige Wolkenbänke mit Bodensilhouetten ersetzt.
+- **Landmarken und Atmosphäre.** Ein festes Budget von zehn Himmelswolken sorgt
+  für Tiefe. Wenige deterministisch gesetzte Boote, Windmühlen und Leuchttürme
+  geben Küsten und fruchtbaren Regionen markante Silhouetten. Die
+  Inselübersicht zentriert nun die gesamte 384×384-Welt.
+
+**Warum.** Das bisherige UI war funktional, aber visuell fragmentiert und nahm
+der Welt durch große, konkurrierende Flächen die Bühne. Die Fernansicht zeigte
+eine endliche rechteckige Bodenfläche, Wälder wirkten gerastert und der
+Regionsnebel wie eine Wand. v0.60 schafft die gemeinsame visuelle Sprache der
+Mockups und beseitigt diese Brüche, ohne vorzeitig neue Gameplay- oder
+Save-Systeme einzuführen.
+
+**Architektur.** Simulation und Darstellung bleiben getrennt. `src/game/**`
+wurde nicht um UI-/Three-Abhängigkeiten erweitert. `WorldMiniMap` liest nur
+Snapshots und statische Weltfunktionen; `getCameraView()`/`focusGround()`
+erweitern die kleine `MapApi`, ohne Renderer-Interna in die UI zu tragen.
+Navigation mutiert ausschließlich den UI-Store bzw. ruft diese Brücke auf.
+`SCENIC_PROP_MODELS` ist die
+zentrale Modell-Namensquelle, `registry.ts` die Drop-in-Quelle für Wappen und
+Umgebungstextur. Jedes neue Bild/Modell besitzt einen prozeduralen oder
+Icon-Fallback. Die Wolken-, Landmarken-, Schaum- und Vegetationsmengen sind
+begrenzt; wiederholte Naturmodelle bleiben instanziert. **Save-Schema bleibt
+v11**, keine Migration.
+
+Der Routenplaner ist eine UI-Projektion des bestehenden Aktivitätssystems:
+`getActivityRoutePlan()` erzeugt eine RNG-neutrale Vorschau,
+`startActivity(defId, plannedTargetIds)` validiert und übernimmt die Reihenfolge.
+Die aktive Aktivität verwendet weiterhin dieselbe Save-Struktur und denselben
+Belohnungs-/Fortschrittsweg. Belastungsfarben und Prognose sind in v0.60 bewusst
+eine deterministische Planungsschätzung; ein echtes Verkehrsmodell bleibt O9.
+
+**KI-Assets.**
+
+- `src/assets/ui/brand/mayor_crest.png` — generiertes goldenes
+  Bürgermeister-/Kompasswappen, transparent optimiert auf 256×256.
+- `src/assets/environment/cloud_bank.webp` — generierte Graustufen-Wolkenmaske
+  für Himmel und Regionsnebel, 1024×1024 WebP.
+- `src/assets/ui/events/region_unlock_hero.webp` — KI-generiertes, auf
+  1280×720 und ca. 171 kB optimiertes Inselpanorama für den Regionsdialog.
+- `boat_small.glb`, `windmill_small.glb`, `lighthouse.glb` — lokal
+  KI-generierte, prozedural modellierte Low-Poly-GLBs mit kleinen Dateibudgets
+  (ca. 14/26/24 kB), über die bestehende Prop-Registry geladen.
+
+**Auswirkung.** Der aktive Spielablauf, Ökonomie, Balancing und gespeicherte
+Fortschritt bleiben unverändert. UI und Welt sind auf 1280×720 ohne
+Konsolenfehler geprüft; Hauptansicht, Bürgerdetail und Gebäudekatalog bleiben
+lesbar und kollisionsfrei. Alle überarbeiteten UI-Schriften sind mindestens
+12 px groß. Die drei GLBs sowie Wappen, Wolkenmaske und Regions-Hero werden im
+Produktions-Build korrekt gebündelt.
+
+**Bewusst offen / Zukunft.** Der Routenplaner ist vollständig bedienbar, nutzt
+aber noch keine reale Verkehrssimulation: Belastungssegmente sind eine
+deterministische Schätzung, und die tatsächliche Bronze-/Silber-/Gold-Auszahlung
+bleibt wie bisher zeitbasiert. Ein echter Straßengraph mit Verkehrsdaten,
+Stauprognose und Routenbewertung folgt zusammen mit O9/O10. Ebenfalls offen
+bleiben Ausbauflächen (O4), bestätigungspflichtige Straßenplanung (O6),
+spielerisches Wetter (O11) sowie der O2-Rest aus Platzierungs-Ghost,
+Wirkungsradien und Größen-Audit. Exakter Stand:
+`docs/OVERHAUL_3_PLAN.md`; Einstieg für die Weiterarbeit:
+`docs/agents/README.md`.
+
+**Verifikation.** `npx tsc -b --force` grün · `npx eslint src tests` grün ·
+`npx vitest run` grün (**26 Dateien / 185 Tests**) · `npm run build` grün.
+Screenshot-Smoke 1280×720: keine Konsolenfehler, Level-/Ressourcenleiste,
+linke Navigation, Stadtstatus, Bürger-Kompakt-/Detailansicht, Live-Inselkarte
+und Kameraaktionen sichtbar und kollisionsfrei. 1920×1080 ist ebenfalls
+kollisionsfrei; der Ein-Sheet-Smoke bestätigt, dass der Gebäudekatalog das
+Bürgerdetail schließt. Der Build meldet weiterhin nur die bereits bekannte
+Rollup-Warnung zum großen Haupt-Chunk.
+
+**Dateien.** UI: `src/App.tsx`, `src/styles.css`, `src/state/store.ts`,
+`src/components/hud/{GameHud,QuickActionBar,CameraControls,WorldMiniMap}.tsx`,
+`src/components/panels/{ActivityRoutePlanner,ActivityPanel,CityWorkPanel,
+CitizenRequestsPanel,RegionDialog}.tsx`, `src/i18n/de.json`. Commands/Welt:
+`src/game/commands/controller.ts`, `src/components/MapView.tsx`,
+`src/renderer/IMapRenderer.ts`,
+`src/renderer/three/{ThreeMapRenderer,SkyEnvironment,environment,CameraConfig,
+CameraController3D}.ts`, `tests/{camera,missions}.test.ts`. Assets:
+`src/assets/registry.ts`, `src/assets/modelManifest.ts`,
+`src/assets/ui/{brand,events}/`, `src/assets/environment/`,
+`src/assets/models/props/nature/` plus generierte Props-README/PROMPTS.
+Dokumentation: `README.md`, `CLAUDE.md`, `docs/{PATCHNOTES,ARCHITECTURE,
+3D_CAMERA_CONTROLS,3D_WORLD_ASSETS,ASSETS,UI_ASSETS,OVERHAUL_3_PLAN,
+UI_DESIGN_SYSTEM,UI_AUDIT,HANDOFF_CLAUDE}.md` sowie `docs/agents/*.md`.
+
 ## v0.59 — Ausbaustufe 2.0, Phase A10: Balancing, Bereinigung & Abschluss
 
 **Was.** Der Abschluss des Programms **Ausbaustufe 2.0** (Gebäudesystem 2.0 +

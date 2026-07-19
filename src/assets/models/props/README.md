@@ -13,6 +13,9 @@ Vegetation wird gegen die Stadt gecullt (nie auf Gebäude/Straße). Baustellen-M
 |---|---|---|
 | Baum | `pine_tree.glb` → `tree_pine.glb` → `tree.glb` → `tree_deciduous.glb` | gecullt, instanziert |
 | Busch | `bush_small.glb` → `bush.glb` → `bush_medium.glb` | gecullt, instanziert |
+| Szenisches Boot | `boat_small.glb` → `ship_sailing.glb` | handplatziert auf Küstenwasser |
+| Szenische Windmühle | `windmill_small.glb` | handplatziert im fruchtbaren Land |
+| Küsten-Leuchtturm | `lighthouse.glb` | handplatziert auf einer Landzunge |
 | Baustelle (Bau & Upgrade) | `construction_site.glb` → `construction_crane.glb` → `scaffold.glb` → `crane.glb` | generisch; pro Gebäude: <id>_construction.glb |
 
 Fehlt ein Modell, greift der prozedurale Fallback — das Spiel bricht nie. Die volle Spezifikation (Footprint, Höhe, Pivot, Platzierung, Biom, Budget) für diese UND alle geplanten Modelle dieses Ordners steht in `PROMPTS.md` daneben.

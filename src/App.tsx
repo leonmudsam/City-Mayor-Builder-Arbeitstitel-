@@ -13,19 +13,20 @@ import { GameHud } from './components/hud/GameHud.tsx';
 import { DriveHud } from './components/hud/DriveHud.tsx';
 import { QuickActionBar } from './components/hud/QuickActionBar.tsx';
 import { CameraControls } from './components/hud/CameraControls.tsx';
+import { WorldMiniMap } from './components/hud/WorldMiniMap.tsx';
 import { BuildMenu } from './components/panels/BuildMenu.tsx';
 import { FloatingBuildingSheet } from './components/panels/FloatingBuildingSheet.tsx';
 import { CitizenRequestsPanel } from './components/panels/CitizenRequestsPanel.tsx';
 import { MayorPanel } from './components/panels/MayorPanel.tsx';
 import { CityStatusPanel } from './components/panels/CityStatusPanel.tsx';
 import { CityStatusDetail } from './components/panels/CityStatusDetail.tsx';
-import { CityWorkPanel } from './components/panels/CityWorkPanel.tsx';
 import { EconomyPanel } from './components/panels/EconomyPanel.tsx';
 import { RegionDialog } from './components/panels/RegionDialog.tsx';
 import { SettingsPanel } from './components/panels/SettingsPanel.tsx';
 import { TradePanel } from './components/panels/TradePanel.tsx';
 import { DebugPanel } from './components/panels/DebugPanel.tsx';
 import { ActivityPanel } from './components/panels/ActivityPanel.tsx';
+import { ActivityRoutePlanner } from './components/panels/ActivityRoutePlanner.tsx';
 import { MenuPanel } from './components/panels/MenuPanel.tsx';
 import { formatMoney } from './i18n/index.ts';
 import { Toasts } from './components/common/Toasts.tsx';
@@ -204,10 +205,11 @@ export function App() {
 
 // Panels that dock as large sheets on the RIGHT side (§5). While one is open the
 // compact citizen-requests widget steps aside so the sheet has the full column.
-const RIGHT_SHEET_PANELS = new Set(['status', 'economy', 'trade', 'mayor', 'activities']);
+const RIGHT_SHEET_PANELS = new Set(['status', 'economy', 'trade', 'mayor', 'activities', 'settings', 'debug']);
 
 function GameScreen({ onImport, onReset }: { onImport(json: string): boolean; onReset(variant?: ResetVariant): void }) {
   const openPanel = useUiStore((s) => s.openPanel);
+  const activityPlannerDefId = useUiStore((s) => s.activityPlannerDefId);
   const uiHidden = useUiStore((s) => s.uiHidden);
   const toggleUiHidden = useUiStore((s) => s.toggleUiHidden);
   const events = useUiStore((s) => s.events);
@@ -239,28 +241,38 @@ function GameScreen({ onImport, onReset }: { onImport(json: string): boolean; on
       <main className="main">
         <MapView />
 
-        {/* Persistent HUD frame (mockup): status left-top, city work left-bottom,
-            citizen requests right, quick actions right-bottom. */}
-        <CityStatusPanel />
-        <CityWorkPanel />
-        {!rightSheetOpen && <CitizenRequestsPanel />}
-        <CameraControls />
-        <QuickActionBar />
+        {activityPlannerDefId ? (
+          <ActivityRoutePlanner key={activityPlannerDefId} defId={activityPlannerDefId} />
+        ) : (
+          <>
+            {/* Persistent HUD frame: civic status/minimap on the left, inbox on
+                the right and the mockup-faithful vertical main navigation. */}
+            <CityStatusPanel />
+            <WorldMiniMap />
+            {!rightSheetOpen && (
+              <div className="right-hud-stack">
+                <CitizenRequestsPanel />
+              </div>
+            )}
+            <CameraControls />
+            <QuickActionBar />
 
-        {/* Large right-docked detail sheets (§5) — one at a time. */}
-        {openPanel === 'mayor' && <MayorPanel />}
-        {openPanel === 'status' && <CityStatusDetail />}
-        {openPanel === 'economy' && <EconomyPanel />}
-        {openPanel === 'settings' && <SettingsPanel onImport={onImport} onReset={onReset} />}
-        {openPanel === 'trade' && <TradePanel />}
-        {openPanel === 'debug' && <DebugPanel />}
-        {openPanel === 'activities' && <ActivityPanel />}
-        {openPanel === 'menu' && <MenuPanel />}
+            {/* Large right-docked detail sheets (§5) — one at a time. */}
+            {openPanel === 'mayor' && <MayorPanel />}
+            {openPanel === 'status' && <CityStatusDetail />}
+            {openPanel === 'economy' && <EconomyPanel />}
+            {openPanel === 'settings' && <SettingsPanel onImport={onImport} onReset={onReset} />}
+            {openPanel === 'trade' && <TradePanel />}
+            {openPanel === 'debug' && <DebugPanel />}
+            {openPanel === 'activities' && <ActivityPanel />}
+            {openPanel === 'menu' && <MenuPanel />}
 
-        <FloatingBuildingSheet />
-        <RegionDialog />
-        {openPanel === 'build' && <BuildMenu />}
-        <DriveHud />
+            <FloatingBuildingSheet />
+            <RegionDialog />
+            {openPanel === 'build' && <BuildMenu />}
+            <DriveHud />
+          </>
+        )}
       </main>
       <Toasts />
       {currentEvent && <EventModal event={currentEvent} onClose={() => dismissEvent(currentEvent.id)} />}

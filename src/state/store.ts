@@ -3,6 +3,7 @@ import { useSyncExternalStore } from 'react';
 import type { GameController } from '../game/commands/controller.ts';
 import type { RegionId } from '../game/types.ts';
 import type { CameraPreset } from '../renderer/three/CameraConfig.ts';
+import type { MapCameraView } from '../renderer/IMapRenderer.ts';
 
 // The React side never mutates game state directly: it reads snapshots off
 // the controller (re-rendering via the version counter) and sends commands.
@@ -32,6 +33,10 @@ export interface MapApi {
   zoomStep(dir: number): void;
   /** Current camera yaw in radians (for the compass). */
   getYaw(): number;
+  /** Lightweight live view for the minimap camera frame. */
+  getCameraView(): MapCameraView;
+  /** Focus a position chosen on the minimap. */
+  focusGround(x: number, z: number, dist?: number): void;
   /** § A6: Läuft eine selbst-fahrbare Fahrmission (Button zeigen)? */
   canDrive(): boolean;
   /** § A6: In das Missionsfahrzeug einsteigen (false, wenn nicht möglich). */
@@ -109,6 +114,10 @@ interface UiState {
    *  Fahr-HUD (Timer, verbleibende Ziele, „Fahrt beenden") statt der Panels. */
   driveActive: boolean;
   setDriveActive(active: boolean): void;
+  /** UI-only draft route. Targets are committed only through startActivity(). */
+  activityPlannerDefId: string | undefined;
+  openActivityPlanner(defId: string): void;
+  closeActivityPlanner(): void;
   placingDefId: string | undefined;
   /** Cosmetic facing (degrees) chosen for the building about to be placed
    *  (§ Gebäude-Rotation). Resets to 0 whenever placement starts/stops. */
@@ -149,6 +158,16 @@ export const useUiStore = create<UiState>((set) => ({
   },
   driveActive: false,
   setDriveActive: (active) => set({ driveActive: active }),
+  activityPlannerDefId: undefined,
+  openActivityPlanner: (defId) =>
+    set({
+      activityPlannerDefId: defId,
+      openPanel: undefined,
+      selectedBuildingId: undefined,
+      regionDialog: undefined,
+      placingDefId: undefined,
+    }),
+  closeActivityPlanner: () => set({ activityPlannerDefId: undefined }),
   placingDefId: undefined,
   placingRotation: 0,
   rotatePlacing: () => set((s) => ({ placingRotation: (((s.placingRotation + 90) % 360) as 0 | 90 | 180 | 270) })),
@@ -157,7 +176,13 @@ export const useUiStore = create<UiState>((set) => ({
   regionDialog: undefined,
   toasts: [],
   events: [],
-  setPanel: (panel) => set((s) => ({ openPanel: s.openPanel === panel ? undefined : panel })),
+  setPanel: (panel) =>
+    set((s) => {
+      const openPanel = s.openPanel === panel ? undefined : panel;
+      return openPanel
+        ? { openPanel, selectedBuildingId: undefined, regionDialog: undefined, activityPlannerDefId: undefined }
+        : { openPanel: undefined };
+    }),
   startPlacing: (defId) =>
     set({
       placingDefId: defId,
@@ -166,15 +191,31 @@ export const useUiStore = create<UiState>((set) => ({
       selectedBuildingId: undefined,
       regionDialog: undefined,
       openPanel: undefined,
+      activityPlannerDefId: undefined,
     }),
   stopPlacing: () => set({ placingDefId: undefined, placingRotation: 0 }),
   startMoving: (id) =>
-    set({ movingBuildingId: id, placingDefId: undefined, selectedBuildingId: undefined, regionDialog: undefined, openPanel: undefined }),
+    set({
+      movingBuildingId: id,
+      placingDefId: undefined,
+      selectedBuildingId: undefined,
+      regionDialog: undefined,
+      openPanel: undefined,
+      activityPlannerDefId: undefined,
+    }),
   stopMoving: () => set({ movingBuildingId: undefined }),
   selectBuilding: (id) =>
-    set(id ? { selectedBuildingId: id, placingDefId: undefined, regionDialog: undefined } : { selectedBuildingId: undefined }),
+    set(
+      id
+        ? { selectedBuildingId: id, placingDefId: undefined, regionDialog: undefined, openPanel: undefined, activityPlannerDefId: undefined }
+        : { selectedBuildingId: undefined },
+    ),
   openRegionDialog: (id) =>
-    set(id ? { regionDialog: id, selectedBuildingId: undefined, placingDefId: undefined } : { regionDialog: undefined }),
+    set(
+      id
+        ? { regionDialog: id, selectedBuildingId: undefined, placingDefId: undefined, openPanel: undefined, activityPlannerDefId: undefined }
+        : { regionDialog: undefined },
+    ),
   pushToast: (text, kind = 'info') =>
     set((s) => {
       toastId += 1;

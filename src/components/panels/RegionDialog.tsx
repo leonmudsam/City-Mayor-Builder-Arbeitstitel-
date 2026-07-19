@@ -1,6 +1,7 @@
 import { ArrowDownRight, ArrowUpRight, Lock, Ruler, Waves, X } from 'lucide-react';
 import { useGame, useUiStore } from '../../state/store.ts';
 import { formatMoney, t } from '../../i18n/index.ts';
+import { eventImage } from '../../assets/registry.ts';
 
 /** Vor-/Nachteil-Zeile aus einem Faktor (>1 Vorteil, <1 Nachteil). `invert`
  *  dreht die Wertung um (Straßenkosten: hoher Faktor = Nachteil). */
@@ -45,10 +46,11 @@ export function RegionDialog() {
   // River district: only offered on a locked river landscape at the right level.
   const district = game.canFoundDistrict(regionDialog);
   const districtAffordable = game.canAffordCost(district.cost);
+  const hero = eventImage('region_unlock_hero');
 
   return (
     <div className="dialog-backdrop" onClick={() => openRegionDialog(undefined)}>
-      <div className="dialog" onClick={(e) => e.stopPropagation()}>
+      <div className="dialog region-dialog" onClick={(e) => e.stopPropagation()}>
         <div className="panel-head">
           <h3>
             <Lock size={16} /> {t(def.nameKey)}
@@ -56,6 +58,15 @@ export function RegionDialog() {
           <button className="btn-icon" onClick={() => openRegionDialog(undefined)}>
             <X size={16} />
           </button>
+        </div>
+        <div className="region-unlock-hero">
+          {hero && <img src={hero} alt="" aria-hidden="true" />}
+          <div className="region-unlock-hero-shade" />
+          <div className="region-unlock-hero-copy">
+            <span>{t('ui.region.discovered')}</span>
+            <strong>{t(def.nameKey)}</strong>
+            <small>{t(`biome.${def.biome}`)}</small>
+          </div>
         </div>
         <p className="muted">
           {t(`biome.${def.biome}`)}

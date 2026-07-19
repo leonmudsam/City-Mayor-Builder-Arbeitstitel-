@@ -24,11 +24,14 @@ import {
   SphereGeometry,
   Sprite,
   SpriteMaterial,
+  TextureLoader,
   Vector3,
   type BufferGeometry,
+  type Texture,
 } from 'three';
 import { grade, sunDirection, sunElevation, wrap01, type EnvGrade } from './environment.ts';
 import { getEnvironmentSettings, subscribeEnvironmentSettings } from './environmentSettings.ts';
+import { environmentImage } from '../../assets/registry.ts';
 
 const DOME_RADIUS = 3000;
 const BODY_DIST = 2600; // sun/moon distance from the camera
@@ -37,7 +40,7 @@ const STAR_RADIUS = 2800;
 export class SkyEnvironment {
   private dome: Mesh;
   private domeColors: Float32Array; // per-vertex colour buffer we repaint each grade
-  private domeVFactor: Float32Array; // per-vertex horizon→top factor (baked once)
+  private domeVFactor: Float32Array; // signed: ocean nadir (-1) → horizon (0) → sky top (+1)
   private sun: DirectionalLight;
   private hemi: HemisphereLight;
   private ambient: AmbientLight;
@@ -45,6 +48,9 @@ export class SkyEnvironment {
   private moonSprite: Sprite;
   private stars: Points;
   private starMat: PointsMaterial;
+  private clouds: { sprite: Sprite; mat: SpriteMaterial; speed: number; phase: number }[] = [];
+  private cloudMap: Texture;
+  private cloudTime = 0;
   private fog: Fog;
   private group = new Group();
 
@@ -67,7 +73,7 @@ export class SkyEnvironment {
     this.domeVFactor = new Float32Array(n);
     for (let i = 0; i < n; i++) {
       const y = pos.getY(i) / DOME_RADIUS; // -1 (nadir) .. 1 (zenith)
-      this.domeVFactor[i] = Math.pow(Math.max(0, y), 0.5); // horizon=0, top=1
+      this.domeVFactor[i] = Math.sign(y) * Math.sqrt(Math.abs(y));
     }
     geo.setAttribute('color', new BufferAttribute(this.domeColors, 3));
     const domeMat = new MeshBasicMaterial({ vertexColors: true, side: BackSide, fog: false, depthWrite: false });
@@ -90,6 +96,46 @@ export class SkyEnvironment {
     this.moonSprite = new Sprite(new SpriteMaterial({ map: makeDiscTexture('#eef2ff', '#aab6d8'), transparent: true, depthWrite: false, fog: false }));
     this.moonSprite.scale.setScalar(150);
     this.group.add(this.sunSprite, this.moonSprite);
+
+    // AI-generated cloud-bank texture with a procedural alpha-mask fallback.
+    // A handful of huge billboards gives the island overview atmospheric depth
+    // at a fixed draw-call budget and never touches the simulation.
+    this.cloudMap = makeCloudMaskTexture();
+    for (let i = 0; i < 10; i++) {
+      const phase = (i / 10) * Math.PI * 2 + Math.sin(i * 7.3) * 0.22;
+      const mat = new SpriteMaterial({
+        color: 0xe7eef2,
+        alphaMap: this.cloudMap,
+        transparent: true,
+        opacity: 0.22,
+        depthWrite: false,
+        fog: false,
+      });
+      const sprite = new Sprite(mat);
+      const dist = 330 + ((i * 137) % 410);
+      sprite.position.set(Math.cos(phase) * dist, 115 + ((i * 53) % 125), Math.sin(phase) * dist);
+      const scale = 190 + ((i * 71) % 180);
+      sprite.scale.set(scale, scale * (0.32 + (i % 3) * 0.05), 1);
+      this.clouds.push({ sprite, mat, speed: 1.2 + (i % 4) * 0.35, phase });
+      this.group.add(sprite);
+    }
+    const cloudUrl = environmentImage('cloud_bank');
+    if (cloudUrl) {
+      new TextureLoader().load(
+        cloudUrl,
+        (texture) => {
+          const previous = this.cloudMap;
+          this.cloudMap = texture;
+          for (const cloud of this.clouds) {
+            cloud.mat.alphaMap = texture;
+            cloud.mat.needsUpdate = true;
+          }
+          previous.dispose();
+        },
+        undefined,
+        () => undefined,
+      );
+    }
 
     this.scene.add(this.group);
 
@@ -146,6 +192,12 @@ export class SkyEnvironment {
     const s = getEnvironmentSettings();
     if (s.cycle) this.tod = wrap01(this.tod + dt / (s.dayLengthMin * 60));
     this.apply(grade(this.tod));
+    this.cloudTime += dt;
+    for (const cloud of this.clouds) {
+      cloud.sprite.position.x += cloud.speed * dt;
+      cloud.sprite.position.z += Math.sin(this.cloudTime * 0.035 + cloud.phase) * dt * 0.3;
+      if (cloud.sprite.position.x > 820) cloud.sprite.position.x = -820;
+    }
 
     // Keep the dome/stars/bodies centred on the camera so the sky is infinite.
     const cp = this.camera.position;
@@ -156,7 +208,9 @@ export class SkyEnvironment {
   }
 
   private apply(g: EnvGrade): void {
-    // Sky dome vertex colours (horizon → top).
+    // The lower dome blends toward the water grade. A steep island overview
+    // therefore still sees an infinite blue ocean beyond the finite heightfield
+    // instead of the flat fog/background colour.
     const c = this.domeColors;
     const hr = g.skyHorizon.r;
     const hg = g.skyHorizon.g;
@@ -166,15 +220,24 @@ export class SkyEnvironment {
     const db = g.skyTop.b - hb;
     for (let i = 0; i < this.domeVFactor.length; i++) {
       const f = this.domeVFactor[i]!;
-      c[i * 3] = hr + dr * f;
-      c[i * 3 + 1] = hg + dg * f;
-      c[i * 3 + 2] = hb + db * f;
+      if (f >= 0) {
+        c[i * 3] = hr + dr * f;
+        c[i * 3 + 1] = hg + dg * f;
+        c[i * 3 + 2] = hb + db * f;
+      } else {
+        const ocean = -f;
+        c[i * 3] = hr + (g.water.r - hr) * ocean;
+        c[i * 3 + 1] = hg + (g.water.g - hg) * ocean;
+        c[i * 3 + 2] = hb + (g.water.b - hb) * ocean;
+      }
     }
     ((this.dome.geometry as BufferGeometry).getAttribute('color') as BufferAttribute).needsUpdate = true;
 
     // Fog + background fallback follow the horizon.
     this.fog.color.copy(g.fog);
-    (this.scene.background as Color).copy(g.fog);
+    // If the dome is clipped on a very steep/far view, its fallback reads as
+    // ocean rather than a finite grey board around the island.
+    (this.scene.background as Color).copy(g.water);
 
     // Dominant directional light: the sun while it is up, else a cool dim moon
     // from the opposite side (grade already carries the moonlit intensity/colour).
@@ -202,6 +265,11 @@ export class SkyEnvironment {
     (this.sunSprite.material as SpriteMaterial).color.copy(g.sunColor);
     (this.moonSprite.material as SpriteMaterial).opacity = g.moon;
     this.starMat.opacity = g.stars;
+    const daylight = Math.max(0.15, Math.min(1, g.sunIntensity / 1.2));
+    for (const cloud of this.clouds) {
+      cloud.mat.opacity = 0.11 + daylight * 0.17;
+      cloud.mat.color.copy(g.skyHorizon).lerp(new Color(0xffffff), 0.72);
+    }
 
     this._water.copy(g.water);
   }
@@ -213,6 +281,8 @@ export class SkyEnvironment {
     (this.dome.material as MeshBasicMaterial).dispose();
     this.stars.geometry.dispose();
     this.starMat.dispose();
+    for (const cloud of this.clouds) cloud.mat.dispose();
+    this.cloudMap.dispose();
     for (const s of [this.sunSprite, this.moonSprite]) {
       const m = s.material as SpriteMaterial;
       m.map?.dispose();
@@ -249,6 +319,34 @@ function makeDiscTexture(inner: string, outer: string): CanvasTexture {
     grd.addColorStop(1, 'rgba(0,0,0,0)');
     ctx.fillStyle = grd;
     ctx.fillRect(0, 0, size, size);
+  }
+  return new CanvasTexture(cv);
+}
+
+/** Small fallback cloud alpha mask used until/if the drop-in image resolves. */
+function makeCloudMaskTexture(): CanvasTexture {
+  const size = 256;
+  const cv = document.createElement('canvas');
+  cv.width = cv.height = size;
+  const ctx = cv.getContext('2d');
+  if (ctx) {
+    ctx.fillStyle = '#000';
+    ctx.fillRect(0, 0, size, size);
+    const puffs = [
+      [62, 132, 62],
+      [105, 102, 74],
+      [154, 124, 68],
+      [196, 142, 48],
+      [128, 158, 76],
+    ] as const;
+    for (const [x, y, r] of puffs) {
+      const gradient = ctx.createRadialGradient(x, y, 0, x, y, r);
+      gradient.addColorStop(0, 'rgba(255,255,255,.95)');
+      gradient.addColorStop(0.48, 'rgba(225,225,225,.7)');
+      gradient.addColorStop(1, 'rgba(0,0,0,0)');
+      ctx.fillStyle = gradient;
+      ctx.fillRect(x - r, y - r, r * 2, r * 2);
+    }
   }
   return new CanvasTexture(cv);
 }

@@ -67,6 +67,13 @@ export interface ActivityBoardEntry {
   reward: { money: number; xp: number };
 }
 
+/** Read-only route-planning snapshot for the UI. No RNG or save mutation. */
+export interface ActivityRoutePlan {
+  defId: string;
+  sourceBuildingId?: string;
+  targetBuildingIds: string[];
+}
+
 /**
  * The command API between UI and simulation. The UI never touches simulation
  * internals: it calls named commands and subscribes to change notifications.
@@ -580,8 +587,57 @@ export class GameController {
     return this.state.activities.active?.targets ?? [];
   }
 
-  /** Start a delivery/inspection run: picks targets and puts them on the map. */
-  startActivity(defId: string): CommandResult {
+  /**
+   * Preview the exact target set a route planner may reorder. A shallow state
+   * clone gives `pickTargets` its own RNG seed, so opening/optimising the planner
+   * can never reroll simulation state or affect a save.
+   */
+  getActivityRoutePlan(defId: string): ActivityRoutePlan | undefined {
+    const def = this.config.activities.activities.find((activity) => activity.id === defId);
+    if (!def || def.type === 'decision' || def.unlockLevel > this.state.level.current) return undefined;
+    if (def.requiresAnyBuilding && !this.hasAnyBuilding(def.requiresAnyBuilding)) return undefined;
+    const candidates = this.activityCandidates(def);
+    if (candidates.length < 2) return undefined;
+    const { min, max } = def.targetCount ?? { min: 3, max: 4 };
+    const previewState = { ...this.state };
+    const targetBuildingIds = pickTargets(previewState, candidates, min, max);
+    const sourceBuildingId = def.requiresAnyBuilding
+      ? Object.values(this.state.buildings)
+          .filter((building) => building.status === 'active' && def.requiresAnyBuilding!.includes(building.defId))
+          .sort((a, b) => a.id.localeCompare(b.id))[0]?.id
+      : undefined;
+    return {
+      defId,
+      ...(sourceBuildingId ? { sourceBuildingId } : {}),
+      targetBuildingIds,
+    };
+  }
+
+  /** Reorder the stops of an already running drive mission through a command. */
+  setActiveActivityRoute(plannedTargetIds: string[]): CommandResult {
+    const active = this.state.activities.active;
+    if (!active) return fail('invalid');
+    const def = this.config.activities.activities.find((activity) => activity.id === active.defId);
+    if (!def?.drive) return fail('invalid');
+    const current = new Map(active.targets.map((target) => [target.buildingId, target]));
+    if (
+      plannedTargetIds.length !== active.targets.length ||
+      new Set(plannedTargetIds).size !== plannedTargetIds.length ||
+      plannedTargetIds.some((id) => !current.has(id))
+    ) {
+      return fail('invalid');
+    }
+    active.targets = plannedTargetIds.map((id) => current.get(id)!);
+    this.notify({ type: 'change' });
+    return ok;
+  }
+
+  /**
+   * Start a delivery/inspection run. The optional planned order is validated
+   * against the same live candidates and lets the route-planning UI feed its
+   * optimised stop order back through the normal command boundary.
+   */
+  startActivity(defId: string, plannedTargetIds?: string[]): CommandResult {
     const def = this.config.activities.activities.find((a) => a.id === defId);
     if (!def || def.type === 'decision') return fail('not_found');
     if (def.unlockLevel > this.state.level.current) return fail('locked');
@@ -594,7 +650,26 @@ export class GameController {
     const candidates = this.activityCandidates(def);
     if (candidates.length < 2) return fail('invalid'); // not enough of a city yet
     const { min, max } = def.targetCount ?? { min: 3, max: 4 };
-    const targets = pickTargets(this.state, candidates, min, max).map((buildingId) => ({ buildingId, done: false }));
+    let selected: string[];
+    if (plannedTargetIds) {
+      const allowed = new Set(candidates);
+      const unique = new Set(plannedTargetIds);
+      if (
+        plannedTargetIds.length < min ||
+        plannedTargetIds.length > Math.min(max, candidates.length) ||
+        unique.size !== plannedTargetIds.length ||
+        plannedTargetIds.some((id) => !allowed.has(id))
+      ) {
+        return fail('invalid');
+      }
+      // Keep RNG progression compatible with an ordinary start even though the
+      // player-defined ordering is used for the actual targets.
+      pickTargets(this.state, candidates, min, max);
+      selected = [...plannedTargetIds];
+    } else {
+      selected = pickTargets(this.state, candidates, min, max);
+    }
+    const targets = selected.map((buildingId) => ({ buildingId, done: false }));
     this.state.activities.active = {
       defId,
       startedAt: now,
@@ -615,8 +690,12 @@ export class GameController {
     if (!active) return fail('invalid');
     const def = this.config.activities.activities.find((a) => a.id === active.defId);
     if (!def) return fail('not_found');
-    const target = active.targets.find((t) => t.buildingId === buildingId && !t.done);
-    if (!target) return fail('invalid');
+    // Drive missions follow their planned, numbered stop order. Inspections
+    // remain free-form so the established click-any-marker interaction stays.
+    const target = def.drive
+      ? active.targets.find((candidate) => !candidate.done)
+      : active.targets.find((candidate) => candidate.buildingId === buildingId && !candidate.done);
+    if (target?.buildingId !== buildingId) return fail('invalid');
     if (def.costPerTarget) {
       const spent = spendCost(this.state, def.costPerTarget, `activity_${def.id}`);
       if (!spent.ok) return fail('insufficient');

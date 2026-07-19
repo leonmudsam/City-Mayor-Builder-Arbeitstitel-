@@ -138,8 +138,9 @@ export function grade(t: number): EnvGrade {
     skyTop: mixColor(a.skyTop, b.skyTop, k),
     skyHorizon,
     fog: mixColor(a.fog, b.fog, k),
-    // Water leans the horizon colour toward a deeper blue so lakes read as water.
-    water: skyHorizon.clone().lerp(new Color(0x1c4a6e), 0.55),
+    // Keep the island silhouette readable at every time of day. The previous
+    // mostly-horizon tint became almost identical to fog in the steep overview.
+    water: new Color(0x0b6f9f).lerp(skyHorizon, 0.18),
     sunColor: mixColor(a.sunColor, b.sunColor, k),
     sunIntensity: lerp(a.sunIntensity, b.sunIntensity, k),
     ambient: lerp(a.ambient, b.ambient, k),

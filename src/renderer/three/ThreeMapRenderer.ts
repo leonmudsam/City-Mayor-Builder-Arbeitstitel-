@@ -25,7 +25,6 @@ import {
   CylinderGeometry,
   DoubleSide,
   EdgesGeometry,
-  ExtrudeGeometry,
   Float32BufferAttribute,
   Group,
   InstancedMesh,
@@ -33,6 +32,7 @@ import {
   LineSegments,
   MathUtils,
   Mesh,
+  MeshBasicMaterial,
   MeshLambertMaterial,
   MeshStandardMaterial,
   Object3D,
@@ -43,6 +43,7 @@ import {
   RepeatWrapping,
   Scene,
   Shape,
+  ShapeGeometry,
   SphereGeometry,
   SRGBColorSpace,
   Sprite,
@@ -80,12 +81,14 @@ import {
   uiModel,
   terrainTextureUrl,
   roadTextureUrl,
+  environmentImage,
 } from '../../assets/registry.ts';
 import {
   TERRAIN_TILE_MODELS,
   MOUNTAIN_FEATURE_MODELS,
   TREE_MODELS,
   BUSH_MODELS,
+  SCENIC_PROP_MODELS,
   VEHICLE_CAR_MODELS,
   VAN_MODELS,
   SMOKE_EFFECT_MODELS,
@@ -234,6 +237,12 @@ function loadRoadTexture(name: string): Promise<Texture> | undefined {
   return url ? loadTextureByUrl(url) : undefined;
 }
 
+/** Optional generated atmosphere texture shared by region fog layers. */
+function loadEnvironmentTexture(name: string): Promise<Texture> | undefined {
+  const url = environmentImage(name);
+  return url ? loadTextureByUrl(url) : undefined;
+}
+
 /** Small deterministic hash → 0..1, so per-building colour jitter is stable. */
 function hash01(s: string): number {
   let h = 2166136261;
@@ -306,6 +315,7 @@ export class ThreeMapRenderer implements IMapRenderer {
   private groundChunkGroup = new Group();
   private groundChunks = new Map<string, { mesh: Mesh; sig: string }>();
   private oceanBuilt = false;
+  private oceanGroup = new Group();
   // Organischer Regions-Nebel (§ Welt 2.0 / A3): ein Volumen je gesperrter
   // Region (Randkontur + Silhouetten); Unlock startet die Aufdeck-Animation.
   private fogGroup = new Group();
@@ -434,6 +444,7 @@ export class ThreeMapRenderer implements IMapRenderer {
     this.ground = ground;
 
     this.scene.add(
+      this.oceanGroup,
       this.terrainGroup,
       this.vegetationGroup,
       this.buildingGroup,
@@ -465,6 +476,7 @@ export class ThreeMapRenderer implements IMapRenderer {
     this.disposeGroup(this.buildingGroup);
     this.disposeGroup(this.terrainGroup);
     this.disposeGroup(this.groundChunkGroup);
+    this.disposeGroup(this.oceanGroup);
     this.groundChunks.clear();
     this.disposeGroup(this.vegetationGroup);
     this.disposeGroup(this.liveGroup);
@@ -528,6 +540,21 @@ export class ThreeMapRenderer implements IMapRenderer {
   /** Current yaw in radians — the compass reads this each frame. */
   getYaw(): number {
     return this.cam.getYaw();
+  }
+
+  getCameraView() {
+    const pose = this.cam.pose();
+    return {
+      targetX: pose.targetX,
+      targetZ: pose.targetZ,
+      dist: this.cam.getDist(),
+      yaw: this.cam.getYaw(),
+      pitch: this.cam.getPitch(),
+    };
+  }
+
+  focusGround(x: number, z: number, dist?: number): void {
+    this.cam.focusGround(x, z, dist);
   }
 
   // ---- § A6 Fahrmodus (Stadtarbeit selbst fahren) ---------------------------
@@ -679,9 +706,8 @@ export class ThreeMapRenderer implements IMapRenderer {
     // Ziel erreicht? Nächstes offenes Ziel abschließen, wenn nah genug.
     const active = this.controller.state.activities.active;
     let nearestTarget: { cx: number; cz: number } | undefined;
-    let nearestDist = Infinity;
-    for (const t of active?.targets ?? []) {
-      if (t.done) continue;
+    const nextStop = active?.targets.find((target) => !target.done);
+    for (const t of nextStop ? [nextStop] : []) {
       const b = this.controller.state.buildings[t.buildingId];
       const bdef = b && this.controller.config.buildings.get(b.defId);
       if (!b || !bdef) continue;
@@ -693,10 +719,7 @@ export class ThreeMapRenderer implements IMapRenderer {
         this.callbacks.onDriveProgress?.(t.buildingId);
         return; // Version-Bump führt zu erneutem updateMission/rebuild
       }
-      if (dist < nearestDist) {
-        nearestDist = dist;
-        nearestTarget = { cx, cz };
-      }
+      nearestTarget = { cx, cz };
     }
     // Zielpfeil über dem Fahrzeug in Richtung des nächsten offenen Ziels drehen.
     d.arrow.position.set(d.x, y + 1.5, d.z);
@@ -965,6 +988,7 @@ export class ThreeMapRenderer implements IMapRenderer {
       }
     }
     void this.decorateTerrain(key, tiles);
+    this.buildScenicLandmarks();
   }
 
   /**
@@ -1073,7 +1097,10 @@ export class ThreeMapRenderer implements IMapRenderer {
         out.setRGB(r / cnt, g / cnt, b / cnt);
         // A faint per-corner lightness jitter so large fields aren't a flat sheet.
         out.offsetHSL(0, 0, (hash01(`${vx},${vy}`) - 0.5) * 0.03);
-        if (lock / cnt > 0.5) out.multiplyScalar(0.42);
+        // Locked regions remain geographically readable in the island view.
+        // The cloud layer communicates the lock state; crushing the terrain to
+        // near-black made the overview look unfinished and hid future goals.
+        if (lock / cnt > 0.5) out.multiplyScalar(0.64);
         cornerColors[o] = out.r;
         cornerColors[o + 1] = out.g;
         cornerColors[o + 2] = out.b;
@@ -1290,11 +1317,13 @@ export class ThreeMapRenderer implements IMapRenderer {
     const geo = new PlaneGeometry(SIZE, SIZE, 96, 96);
     geo.rotateX(-Math.PI / 2); // lay the plane flat (Y up)
     const mat = new MeshStandardMaterial({
-      color: 0x2a6a94,
-      roughness: 0.22,
-      metalness: 0.4,
-      transparent: true,
-      opacity: 0.86,
+      color: 0x247aa8,
+      roughness: 0.24,
+      metalness: 0.18,
+      emissive: 0x06283d,
+      emissiveIntensity: 0.32,
+      fog: false,
+      side: DoubleSide,
     });
     // A gentle two-wave ripple injected into the standard vertex shader; the
     // phase varies with the vertex' world position so the whole sea rolls.
@@ -1314,10 +1343,71 @@ export class ThreeMapRenderer implements IMapRenderer {
     const sea = new Mesh(geo, mat);
     sea.position.set(WORLD_TILES / 2, WATER_LEVEL, WORLD_TILES / 2);
     sea.receiveShadow = true;
-    this.scene.add(sea);
+    sea.frustumCulled = false;
+    // Opaque water also hides the finite heightfield below it. With a
+    // translucent surface, the 384×384 lakebed appeared as a hard square in
+    // the far overview even though the ocean plane itself is much larger.
+    sea.renderOrder = -1;
+    this.oceanGroup.add(sea);
     this.waterMat = mat;
 
+    this.buildCoastFoam();
     this.buildDistantIslands();
+  }
+
+  /**
+   * One batched shoreline ribbon over every land↔water edge. This adds the
+   * bright coastal read from the mockups without spawning per-tile meshes.
+   */
+  private buildCoastFoam(): void {
+    const positions: number[] = [];
+    const water = (x: number, y: number): boolean => {
+      const terrain = worldTerrainAt(this.controller.state, x, y);
+      return terrain === 'water' || terrain === 'river';
+    };
+    const addQuad = (
+      ax: number,
+      az: number,
+      bx: number,
+      bz: number,
+      ix: number,
+      iz: number,
+    ): void => {
+      const y = WATER_LEVEL + 0.055;
+      const w = 0.34;
+      positions.push(
+        ax, y, az,
+        bx, y, bz,
+        bx + ix * w, y, bz + iz * w,
+        ax, y, az,
+        bx + ix * w, y, bz + iz * w,
+        ax + ix * w, y, az + iz * w,
+      );
+    };
+
+    for (let y = 1; y < WORLD_TILES - 1; y++) {
+      for (let x = 1; x < WORLD_TILES - 1; x++) {
+        if (!water(x, y)) continue;
+        if (!water(x, y - 1)) addQuad(x, y, x + 1, y, 0, 1);
+        if (!water(x + 1, y)) addQuad(x + 1, y, x + 1, y + 1, -1, 0);
+        if (!water(x, y + 1)) addQuad(x + 1, y + 1, x, y + 1, 0, -1);
+        if (!water(x - 1, y)) addQuad(x, y + 1, x, y, 1, 0);
+      }
+    }
+    if (positions.length === 0) return;
+    const geo = new BufferGeometry();
+    geo.setAttribute('position', new Float32BufferAttribute(positions, 3));
+    const mat = new MeshBasicMaterial({
+      color: 0xdaf5f2,
+      transparent: true,
+      opacity: 0.52,
+      depthWrite: false,
+      side: DoubleSide,
+    });
+    const foam = new Mesh(geo, mat);
+    foam.renderOrder = 2;
+    foam.frustumCulled = false;
+    this.oceanGroup.add(foam);
   }
 
   /**
@@ -1357,7 +1447,95 @@ export class ThreeMapRenderer implements IMapRenderer {
       isle.rotation.y = h * Math.PI;
       group.add(isle);
     }
-    this.scene.add(group);
+    this.oceanGroup.add(group);
+  }
+
+  /**
+   * Sparse scenic landmarks for the overview silhouette. Positions are selected
+   * deterministically from the real biome/coast data; dropped GLBs replace small
+   * procedural stand-ins in place.
+   */
+  private buildScenicLandmarks(): void {
+    type Kind = keyof typeof SCENIC_PROP_MODELS;
+    const isWater = (x: number, y: number): boolean => {
+      const terrain = worldTerrainAt(this.controller.state, x, y);
+      return terrain === 'water' || terrain === 'river';
+    };
+    const nearWater = (x: number, y: number): boolean =>
+      isWater(x + 1, y) || isWater(x - 1, y) || isWater(x, y + 1) || isWater(x, y - 1);
+    const nearLand = (x: number, y: number): boolean =>
+      !isWater(x + 1, y) || !isWater(x - 1, y) || !isWater(x, y + 1) || !isWater(x, y - 1);
+
+    const pick = (
+      kind: Kind,
+      count: number,
+      predicate: (x: number, y: number, terrain: TerrainType) => boolean,
+      minSpacing: number,
+    ): { x: number; y: number }[] => {
+      const candidates: { x: number; y: number; score: number }[] = [];
+      for (let y = 3; y < WORLD_TILES - 3; y += 2) {
+        for (let x = 3; x < WORLD_TILES - 3; x += 2) {
+          const terrain = worldTerrainAt(this.controller.state, x, y);
+          if (!predicate(x, y, terrain)) continue;
+          candidates.push({ x, y, score: hash01(`${kind}:${x},${y}`) });
+        }
+      }
+      candidates.sort((a, b) => b.score - a.score);
+      const result: { x: number; y: number }[] = [];
+      for (const candidate of candidates) {
+        if (result.every((other) => Math.hypot(other.x - candidate.x, other.y - candidate.y) >= minSpacing)) {
+          result.push(candidate);
+          if (result.length >= count) break;
+        }
+      }
+      return result;
+    };
+
+    const placements: {
+      kind: Kind;
+      tile: { x: number; y: number };
+      targetHeight?: number;
+      footprint?: number;
+      water?: boolean;
+    }[] = [
+      ...pick('boat', 5, (x, y, terrain) => terrain === 'water' && nearLand(x, y), 34).map((tile) => ({
+        kind: 'boat' as const,
+        tile,
+        footprint: 2.2,
+        water: true,
+      })),
+      ...pick('windmill', 3, (_x, _y, terrain) => terrain === 'fertile', 52).map((tile) => ({
+        kind: 'windmill' as const,
+        tile,
+        targetHeight: 3.2,
+      })),
+      ...pick(
+        'lighthouse',
+        2,
+        (x, y, terrain) => (terrain === 'sand' || terrain === 'grass') && nearWater(x, y),
+        88,
+      ).map((tile) => ({ kind: 'lighthouse' as const, tile, targetHeight: 6.4 })),
+    ];
+
+    for (const placement of placements) {
+      const holder = makeScenicFallback(placement.kind);
+      const { x, y } = placement.tile;
+      holder.position.set(
+        x + 0.5,
+        placement.water ? WATER_LEVEL + 0.06 : terrainHeightAt(x + 0.5, y + 0.5),
+        y + 0.5,
+      );
+      holder.rotation.y = hash01(`rot:${placement.kind}:${x},${y}`) * Math.PI * 2;
+      this.terrainGroup.add(holder);
+      const url = firstModel(propModel, SCENIC_PROP_MODELS[placement.kind]);
+      if (url) {
+        void this.swapInModel(url, holder, {
+          ...(placement.footprint !== undefined ? { footprint: placement.footprint } : {}),
+          ...(placement.targetHeight !== undefined ? { targetHeight: placement.targetHeight } : {}),
+          castShadow: true,
+        });
+      }
+    }
   }
 
   // ---- Organischer Regions-Nebel (§ Welt 2.0 / A3) ---------------------------
@@ -1480,51 +1658,54 @@ export class ThreeMapRenderer implements IMapRenderer {
       }
     }
     if (!Number.isFinite(minH)) return undefined;
-    const bottom = Math.max(WATER_LEVEL - 0.4, minH - 0.8);
-    // Bodennahe Nebeldecke statt turmhoher Wand: max. ~7 Einheiten hoch, damit
-    // Gebirgsgipfel und Silhouetten aus dem Dunst ragen (§6: man ahnt das Land).
-    const top = Math.min(maxH + 2.2, bottom + 7);
-    const depth = Math.max(2.5, top - bottom);
+    // Eine flache, geschichtete Wolkendecke statt einer extrudierten Glaswand:
+    // Niederungen verschwinden, Gipfel und Landmarken bleiben als Teaser sichtbar.
+    const fogY = Math.min(maxH - 0.25, Math.max(WATER_LEVEL + 1.05, minH + 1.45));
 
     const group = new Group();
     const mats: { mat: MeshStandardMaterial; base: number }[] = [];
 
-    // Volumen: geglättete Kontur → Shape (Y gespiegelt, s. rotateX unten) → Extrusion.
+    // Geglättete Kontur → horizontale Shape-Ebenen. Keine Seitenflächen bedeutet
+    // auch aus der Stadtperspektive keine senkrechte Nebelwand mehr.
     const smooth = ThreeMapRenderer.chaikin(contour, 2);
     const shape = new Shape();
     shape.moveTo(smooth[0]!.x, -smooth[0]!.y);
     for (let i = 1; i < smooth.length; i++) shape.lineTo(smooth[i]!.x, -smooth[i]!.y);
     shape.closePath();
-    const geo = new ExtrudeGeometry(shape, { depth, bevelEnabled: false });
-    geo.rotateX(-Math.PI / 2); // Shape-XY → Welt-XZ, Extrusionsachse → +Y
-    const fogMat = new MeshStandardMaterial({
-      color: 0xaebccd,
-      transparent: true,
-      opacity: 0.58,
-      roughness: 1,
-      metalness: 0,
-      depthWrite: false,
-      side: DoubleSide,
-    });
-    // Weicher Verlauf: unten dicht, zum Nebeldeckel hin ausdünnend.
-    fogMat.customProgramCacheKey = () => 'cmb-region-fog';
-    fogMat.onBeforeCompile = (shader) => {
-      shader.uniforms['uFogDepth'] = { value: depth };
-      shader.vertexShader =
-        'varying float vFogY;\n' +
-        shader.vertexShader.replace('#include <begin_vertex>', '#include <begin_vertex>\n vFogY = position.y;');
-      shader.fragmentShader =
-        'varying float vFogY;\nuniform float uFogDepth;\n' +
-        shader.fragmentShader.replace(
-          '#include <dithering_fragment>',
-          '#include <dithering_fragment>\n gl_FragColor.a *= mix(1.0, 0.45, smoothstep(uFogDepth * 0.25, uFogDepth, vFogY));',
-        );
-    };
-    const fog = new Mesh(geo, fogMat);
-    fog.position.y = bottom;
-    fog.renderOrder = 3;
-    group.add(fog);
-    mats.push({ mat: fogMat, base: fogMat.opacity });
+    const cloudTexture = loadEnvironmentTexture('cloud_bank');
+    const layers = [
+      { y: 0, opacity: 0.4, color: 0xc5d2dc },
+      { y: 0.46, opacity: 0.25, color: 0xb7c7d4 },
+      { y: 0.88, opacity: 0.15, color: 0xd9e2e8 },
+    ];
+    for (let i = 0; i < layers.length; i++) {
+      const layer = layers[i]!;
+      const geo = new ShapeGeometry(shape, 6);
+      geo.rotateX(-Math.PI / 2);
+      const fogMat = new MeshStandardMaterial({
+        color: layer.color,
+        transparent: true,
+        opacity: layer.opacity,
+        roughness: 1,
+        metalness: 0,
+        depthWrite: false,
+        side: DoubleSide,
+      });
+      const fog = new Mesh(geo, fogMat);
+      fog.position.set((i - 1) * 0.65, fogY + layer.y, (1 - i) * 0.5);
+      fog.renderOrder = 3 + i;
+      group.add(fog);
+      mats.push({ mat: fogMat, base: fogMat.opacity });
+      if (cloudTexture) {
+        void cloudTexture
+          .then((texture) => {
+            if (this.destroyed || !fog.parent) return;
+            fogMat.alphaMap = texture;
+            fogMat.needsUpdate = true;
+          })
+          .catch(() => undefined);
+      }
+    }
 
     // Silhouetten-Teaser des dominanten Bioms — dunkle Formen im Dunst.
     const silMat = new MeshStandardMaterial({
@@ -1658,8 +1839,9 @@ export class ThreeMapRenderer implements IMapRenderer {
           if (this.occupied.has(`${x},${y}`)) continue; // never on the city
           const terrain = worldTerrainAt(this.controller.state, x, y); // § v10: aus dem Insel-Grid
           const h = hash01(`${x},${y}`);
-          if (terrain === 'forest' && (x + y) % 2 === 0) trees.push({ x, y });
-          else if (terrain === 'grass' && h > 0.86) bushes.push({ x, y });
+          const cluster = hash01(`cluster:${Math.floor(x / 5)},${Math.floor(y / 5)}`);
+          if (terrain === 'forest' && h > 0.2 && cluster > 0.12) trees.push({ x, y });
+          else if (terrain === 'grass' && h > 0.88) bushes.push({ x, y });
           else if (terrain === 'mountain' && h > 0.62) rocks.push({ x, y });
           else if (
             (terrain === 'grass' || terrain === 'sand' || terrain === 'fertile') &&
@@ -1686,7 +1868,7 @@ export class ThreeMapRenderer implements IMapRenderer {
         treeUrl,
         this.vegetationGroup,
         trees,
-        { footprint: 0.9, jitterRot: true, jitterScale: 0.5, cap: 500, yBase: 0 },
+        { footprint: 1.15, jitterRot: true, jitterScale: 0.65, jitterPosition: 0.52, cap: 700, yBase: 0 },
         stale,
       );
     }
@@ -1695,7 +1877,7 @@ export class ThreeMapRenderer implements IMapRenderer {
         bushUrl,
         this.vegetationGroup,
         bushes,
-        { footprint: 0.55, jitterRot: true, jitterScale: 0.4, cap: 300, yBase: 0 },
+        { footprint: 0.62, jitterRot: true, jitterScale: 0.45, jitterPosition: 0.38, cap: 340, yBase: 0 },
         stale,
       );
     }
@@ -2153,7 +2335,7 @@ export class ThreeMapRenderer implements IMapRenderer {
     url: string,
     group: Group,
     tiles: { x: number; y: number }[],
-    opts: FitOpts & { cap?: number; jitterScale?: number; jitterRot?: boolean; yBase?: number },
+    opts: FitOpts & { cap?: number; jitterScale?: number; jitterRot?: boolean; jitterPosition?: number; yBase?: number },
     stale: () => boolean,
   ): Promise<void> {
     if (tiles.length === 0) return;
@@ -2193,8 +2375,14 @@ export class ThreeMapRenderer implements IMapRenderer {
       for (let i = 0; i < list.length; i++) {
         const t = list[i]!;
         const j = hash01(`${t.x}.${t.y}`);
+        const jx = (hash01(`jx:${t.x}.${t.y}`) - 0.5) * (opts.jitterPosition ?? 0);
+        const jz = (hash01(`jz:${t.x}.${t.y}`) - 0.5) * (opts.jitterPosition ?? 0);
         const sc = opts.jitterScale ? 1 - opts.jitterScale / 2 + j * opts.jitterScale : 1;
-        dummy.position.set(t.x + 0.5, terrainHeightAt(t.x + 0.5, t.y + 0.5) + yBase, t.y + 0.5);
+        dummy.position.set(
+          t.x + 0.5 + jx,
+          terrainHeightAt(t.x + 0.5 + jx, t.y + 0.5 + jz) + yBase,
+          t.y + 0.5 + jz,
+        );
         dummy.rotation.set(0, opts.jitterRot ? j * Math.PI * 2 : (opts.rotationY ?? 0), 0);
         dummy.scale.setScalar(sc);
         dummy.updateMatrix();
@@ -2213,9 +2401,15 @@ export class ThreeMapRenderer implements IMapRenderer {
     for (let i = 0; i < list.length; i++) {
       const t = list[i]!;
       const j = hash01(`${t.x}.${t.y}`);
+      const jx = (hash01(`jx:${t.x}.${t.y}`) - 0.5) * (opts.jitterPosition ?? 0);
+      const jz = (hash01(`jz:${t.x}.${t.y}`) - 0.5) * (opts.jitterPosition ?? 0);
       const clone = probe.clone(true);
       const sc = opts.jitterScale ? 1 - opts.jitterScale / 2 + j * opts.jitterScale : 1;
-      clone.position.set(t.x + 0.5, terrainHeightAt(t.x + 0.5, t.y + 0.5) + yBase, t.y + 0.5);
+      clone.position.set(
+        t.x + 0.5 + jx,
+        terrainHeightAt(t.x + 0.5 + jx, t.y + 0.5 + jz) + yBase,
+        t.y + 0.5 + jz,
+      );
       clone.rotation.y = opts.jitterRot ? j * Math.PI * 2 : (opts.rotationY ?? 0);
       clone.scale.multiplyScalar(sc);
       clone.traverse((o) => {
@@ -2909,24 +3103,18 @@ export class ThreeMapRenderer implements IMapRenderer {
   }
 
   private retargetVan(targets: { buildingId: string; done: boolean }[]): void {
-    const undone = targets.filter((t) => !t.done);
-    if (undone.length === 0) {
+    const nextStop = targets.find((target) => !target.done);
+    if (!nextStop) {
       this.clearMissionVan();
       return;
     }
     const start = this.missionVan ? this.vanTile() : this.deliverySourceTile() ?? this.roadTiles[0];
     if (!start) return;
-    let bestPath: { x: number; y: number }[] | undefined;
-    for (const t of undone) {
-      const b = this.controller.state.buildings[t.buildingId];
-      const def = b && this.controller.config.buildings.get(b.defId);
-      if (!b || !def) continue;
-      const goal = this.roadTileAdjacent(b.x, b.y, def.size.w, def.size.h);
-      if (!goal) continue;
-      const path = this.roadPath(start, goal);
-      if (path.length > 0 && (!bestPath || path.length < bestPath.length)) bestPath = path;
-    }
-    if (!bestPath) {
+    const b = this.controller.state.buildings[nextStop.buildingId];
+    const def = b && this.controller.config.buildings.get(b.defId);
+    const goal = b && def ? this.roadTileAdjacent(b.x, b.y, def.size.w, def.size.h) : undefined;
+    const path = goal ? this.roadPath(start, goal) : [];
+    if (path.length === 0) {
       this.clearMissionVan();
       return;
     }
@@ -2938,7 +3126,7 @@ export class ThreeMapRenderer implements IMapRenderer {
       const vanUrl = firstModel(vehicleModel, VAN_MODELS);
       if (vanUrl) void this.swapInModel(vanUrl, mesh, { targetHeight: 0.42 });
     }
-    this.missionVan.path = bestPath;
+    this.missionVan.path = path;
     this.missionVan.idx = 0;
     this.missionVan.t = 0;
   }
@@ -3227,6 +3415,83 @@ function firstModel(loader: (name: string) => string | undefined, names: readonl
     if (url) return url;
   }
   return undefined;
+}
+
+/** Lightweight procedural safety net for the three hand-placed scenic props. */
+function makeScenicFallback(kind: keyof typeof SCENIC_PROP_MODELS): Group {
+  const group = new Group();
+  if (kind === 'boat') {
+    const hull = new Mesh(
+      new CylinderGeometry(0.28, 0.44, 1.35, 7),
+      new MeshStandardMaterial({ color: 0x7d4b2c, roughness: 0.86 }),
+    );
+    hull.rotation.x = Math.PI / 2;
+    hull.position.y = 0.22;
+    const mast = new Mesh(
+      new CylinderGeometry(0.025, 0.03, 1.05, 6),
+      new MeshStandardMaterial({ color: 0x4d321e, roughness: 1 }),
+    );
+    mast.position.y = 0.77;
+    const sail = new Mesh(
+      new PlaneGeometry(0.55, 0.7),
+      new MeshBasicMaterial({ color: 0xf0dfb3, side: DoubleSide }),
+    );
+    sail.position.set(0.28, 0.86, 0);
+    group.add(hull, mast, sail);
+  } else if (kind === 'windmill') {
+    const tower = new Mesh(
+      new CylinderGeometry(0.38, 0.58, 1.65, 9),
+      new MeshStandardMaterial({ color: 0xb9aa8d, roughness: 1 }),
+    );
+    tower.position.y = 0.825;
+    const roof = new Mesh(
+      new ConeGeometry(0.56, 0.5, 9),
+      new MeshStandardMaterial({ color: 0xa84832, roughness: 0.9 }),
+    );
+    roof.position.y = 1.9;
+    const rotor = new Group();
+    rotor.name = 'rotor';
+    rotor.position.set(0, 1.52, 0.45);
+    const bladeMat = new MeshStandardMaterial({ color: 0xe7d3a8, roughness: 0.9 });
+    for (let i = 0; i < 4; i++) {
+      const blade = new Mesh(new BoxGeometry(0.12, 1.12, 0.04), bladeMat);
+      blade.position.y = 0.55;
+      const arm = new Group();
+      arm.rotation.z = (i * Math.PI) / 2;
+      arm.add(blade);
+      rotor.add(arm);
+    }
+    group.add(tower, roof, rotor);
+  } else {
+    const tower = new Mesh(
+      new CylinderGeometry(0.34, 0.58, 3.2, 12),
+      new MeshStandardMaterial({ color: 0xe6ddcb, roughness: 0.88 }),
+    );
+    tower.position.y = 1.6;
+    const stripe = new Mesh(
+      new CylinderGeometry(0.46, 0.49, 0.42, 12),
+      new MeshStandardMaterial({ color: 0xb63e34, roughness: 0.82 }),
+    );
+    stripe.position.y = 2.05;
+    const lantern = new Mesh(
+      new CylinderGeometry(0.34, 0.34, 0.42, 10),
+      new MeshStandardMaterial({ color: 0x9eddf0, emissive: 0xffce66, emissiveIntensity: 0.45 }),
+    );
+    lantern.position.y = 3.46;
+    const roof = new Mesh(
+      new ConeGeometry(0.46, 0.42, 10),
+      new MeshStandardMaterial({ color: 0x9e382f, roughness: 0.8 }),
+    );
+    roof.position.y = 3.88;
+    group.add(tower, stripe, lantern, roof);
+  }
+  group.traverse((object) => {
+    if ((object as Mesh).isMesh) {
+      object.castShadow = true;
+      object.receiveShadow = true;
+    }
+  });
+  return group;
 }
 
 /** Real-world target heights (world units; 1 tile ≈ 4 m) for small decoration
