@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Clock, Hammer, Lock, Sparkles, X } from 'lucide-react';
 import { useGame, useUiStore } from '../../state/store.ts';
 import type { BuildingCategory, NeedId, ResourceId } from '../../game/types.ts';
@@ -6,6 +6,8 @@ import type { BuildingDef } from '../../game/config/types.ts';
 import { formatMoney, t } from '../../i18n/index.ts';
 import { ResourceIcon } from '../common/icons.tsx';
 import { BuildingArt, CategoryArt } from '../art/index.ts';
+
+type BuildCategorySelection = 'recommended' | BuildingCategory;
 
 // Full tab order (§19). Previously `infrastructure` and the new `energy`
 // category were missing, so the coal plant / wind farm never appeared anywhere
@@ -40,11 +42,8 @@ const NEED_CATEGORY: Partial<Record<NeedId, BuildingCategory>> = {
 export function BuildMenu() {
   const game = useGame();
   const { startPlacing, setPanel } = useUiStore();
-  const [category, setCategory] = useState<BuildingCategory>('roads');
-
-  const buildings = game.config.buildingList
-    .filter((b) => b.category === category && b.buildable !== false)
-    .sort((a, b) => a.unlockLevel - b.unlockLevel);
+  const [category, setCategory] = useState<BuildCategorySelection>('recommended');
+  const [inspectedId, setInspectedId] = useState<string>();
   const level = game.state.level.current;
 
   // Only show tabs that actually hold at least one buildable building, so the
@@ -65,10 +64,50 @@ export function BuildMenu() {
     }
   }
 
+  const candidates = game.config.buildingList.filter((building) => building.buildable !== false);
+  const recommended = candidates
+    .sort(
+      (a, b) =>
+        Number(a.unlockLevel > level) - Number(b.unlockLevel > level) ||
+        recommendationScore(b) - recommendationScore(a) ||
+        a.unlockLevel - b.unlockLevel,
+    )
+    .slice(0, 8);
+  const buildings =
+    category === 'recommended'
+      ? recommended
+      : candidates.filter((building) => building.category === category).sort((a, b) => a.unlockLevel - b.unlockLevel);
+  const inspected = game.config.buildings.get(
+    buildings.some((building) => building.id === inspectedId) ? inspectedId! : buildings[0]?.id ?? '',
+  );
+  const [previewStage, setPreviewStage] = useState(0);
+  useEffect(() => setPreviewStage(0), [inspected?.id]);
+
+  function recommendationScore(def: BuildingDef): number {
+    const built = Object.values(game.state.buildings).some((building) => building.defId === def.id);
+    return (
+      (newCategories.has(def.category) && game.isNewBuilding(def.id) ? 100 : 0) +
+      (problemCategories.has(def.category) ? 70 : 0) +
+      (!built ? 25 : 0) +
+      Math.max(0, 20 - def.unlockLevel)
+    );
+  }
+
   return (
     <div className="panel build-menu">
       <div className="build-menu-head">
+        <div className="build-menu-title">
+          <span>{t('ui.build.catalog')}</span>
+          <small>{buildings.length} Gebäude</small>
+        </div>
         <div className="build-tabs">
+          <button
+            className={`btn-tab${category === 'recommended' ? ' active' : ''}`}
+            onClick={() => setCategory('recommended')}
+          >
+            <Sparkles size={19} />
+            <span>{t('ui.build.recommended')}</span>
+          </button>
           {tabs.map((cat) => (
             <button
               key={cat}
@@ -88,26 +127,78 @@ export function BuildMenu() {
           <X size={18} />
         </button>
       </div>
-      <div className="build-cards">
-        {buildings.map((def) => (
-          <BuildCard key={def.id} def={def} locked={def.unlockLevel > level} onPick={() => startPlacing(def.id)} />
-        ))}
-        {/* Fill a sparse category so the wide sheet never reads as a half-empty
-            black hole (§3): soft "more coming" tiles pad the row out. */}
-        {Array.from({ length: Math.max(0, 4 - buildings.length) }).map((_, i) => (
-          <div key={`filler-${i}`} className="build-card build-card-filler" aria-hidden="true">
-            <div className="build-card-filler-art">
-              <CategoryArt id={category} px={44} />
+      <div className="build-menu-body">
+        <div className="build-cards">
+          {buildings.map((def) => (
+            <BuildCard
+              key={def.id}
+              def={def}
+              locked={def.unlockLevel > level}
+              onInspect={() => setInspectedId(def.id)}
+              onPick={() => startPlacing(def.id)}
+            />
+          ))}
+          {category !== 'recommended' &&
+            Array.from({ length: Math.max(0, 4 - buildings.length) }).map((_, i) => (
+              <div key={`filler-${i}`} className="build-card build-card-filler" aria-hidden="true">
+                <div className="build-card-filler-art">
+                  <CategoryArt id={category} px={44} />
+                </div>
+                <span className="build-card-filler-text">{t('ui.build.more_coming')}</span>
+              </div>
+            ))}
+        </div>
+        {inspected && (
+          <aside className="build-menu-preview">
+            <span>{t('ui.build.preview')}</span>
+            <div className="build-preview-art">
+              <BuildingArt id={inspected.id} category={inspected.category} px={224} stage={previewStage} />
             </div>
-            <span className="build-card-filler-text">{t('ui.build.more_coming')}</span>
-          </div>
-        ))}
+            <h3>{t(inspected.nameKey)}</h3>
+            <div className="build-preview-meta">
+              <span>{t(`category.${inspected.category}`)}</span>
+              <b>{inspected.size.w}×{inspected.size.h}</b>
+            </div>
+            <p>{effectSummary(inspected) || t('ui.build.site_hint')}</p>
+            {(inspected.upgrades?.length ?? 0) > 0 && (
+              <div className="build-preview-stages" aria-label="Gebäudestufen">
+                {Array.from({ length: (inspected.upgrades?.length ?? 0) + 1 }, (_, stage) => (
+                  <button
+                    key={stage}
+                    className={previewStage === stage ? 'active' : ''}
+                    onClick={() => setPreviewStage(stage)}
+                    title={`Stufe ${stage + 1}`}
+                  >
+                    <BuildingArt id={inspected.id} category={inspected.category} px={48} stage={stage} />
+                    <span>{stage + 1}</span>
+                  </button>
+                ))}
+              </div>
+            )}
+            {inspected.locationBonus && (
+              <div className="build-preview-bonus">
+                <Sparkles size={14} />
+                {t('ui.location_bonus_hint', { terrain: t(`terrain.${inspected.locationBonus.terrain}`) })}
+              </div>
+            )}
+          </aside>
+        )}
       </div>
     </div>
   );
 }
 
-function BuildCard({ def, locked, onPick }: { def: BuildingDef; locked: boolean; onPick: () => void }) {
+function BuildCard({
+  def,
+  locked,
+  onInspect,
+  onPick,
+}: {
+  def: BuildingDef;
+  locked: boolean;
+  onInspect(): void;
+  onPick(): void;
+}) {
   const game = useGame();
   // The price actually charged for the next copy (escalating costs, §7).
   const cost = game.getBuildCost(def.id);
@@ -134,6 +225,8 @@ function BuildCard({ def, locked, onPick }: { def: BuildingDef; locked: boolean;
     <button
       className={`build-card${disabled ? ' disabled' : ''}${locked ? ' locked' : ''}${major ? ' major' : ''}`}
       onClick={onPick}
+      onMouseEnter={onInspect}
+      onFocus={onInspect}
       disabled={disabled}
     >
       {/* Zone 1 — media: big thumbnail, footprint + new badge in the corners,

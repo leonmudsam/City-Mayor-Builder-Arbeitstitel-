@@ -48,14 +48,42 @@ der Cloud-Umgebung** (kein Rust/Windows) — dort nur den Browser-Pfad verifizie
 (gitignored). GitHub Pages ist abgeschaltet — kein Deploy-Workflow wieder einführen.
 `archive/legacy-2d/` = archivierte 2D-/Iso-Reste (nicht reaktivieren).
 
-## Status: Ausbaustufe 2.0 abgeschlossen (v0.50–v0.59)
+## Status: Ausbaustufe 2.0 abgeschlossen, Overhaul 3.0 aktiv (v0.50–v0.70)
 Gebäudesystem 2.0 + Welt 2.0 sind vollständig (A1–A10). **Nur noch der
 3D-Renderer** existiert (`src/renderer/three/`); der 2D-/Iso-Pixi-Renderer,
 `house_row`/`apartment` und `pixi.js` sind endgültig entfernt (kein Modus-Wähler
 wieder einführen). Gebäude-/Regions-/Prompt-Doku ist **generiert & testgeprüft**
 (`docs/BUILDINGS.md`, `docs/REGIONS.md`, `models/**/PROMPTS.md` — Regel §5 gilt
-weiter). Save-Schema steht bei **v11** (Regionen). Balancing/Progression sind über
+weiter). Save-Schema steht bei **v13** (manuelle Routen + reservierte Ladung). Balancing/Progression sind über
 20 Level × 32 Regionen ausbalanciert und durch `config.test.ts`/`balancing.test.ts`
 gegen Regressionen gesichert. Bewusst offen (drop-in-fähig, Prompts existieren):
 der erweiterte Biom-Prop-Katalog (Wasserfälle/Windmühlen/Boote/Landmarken) —
 prozedurale Fallbacks decken den Kern, echte `.glb` einfach einlegen.
+
+v0.60–v0.62 übertragen die verbindlichen Haupt-HUD-Mockups auf die bestehende Architektur:
+maritimes HUD, linke Hauptnavigation, Live-Minimap, große Bau-/Gebäude-/
+Anliegen-/Regionsfenster, Stadtarbeit-Routenplaner, visueller Info-Layer,
+Rollenporträts, rechten Premium-PC-Baushop, Gebäude-Stufenvorschau, rein
+visuelle Sonne-/Regen-/Nebel-Presets sowie Berg-/Küsten-/Nebel-/Biompolish.
+
+v0.63–v0.69 ergänzen echte Straßenanalyse, Logistik und die verbindliche
+Stadtarbeit: manuell gezeichnete und validierte 2D-Routen, aus dem Weg
+abgeleitete Reihenfolge, Cargo/Kapazität/Nachfüllen/Leerfahrt,
+datengetriebene Fahrzeugwahl, automatische 3D-Fahrt, Verfolger-/freie Kamera
+und Ergebniswertung. Persistierte Route und Ladungsreserve liegen im bestehenden
+`ActiveActivity`; deshalb gilt Save-Schema **v13** mit Migrationen
+`v11→v12→v13`. Keine zweite
+Verkehrssimulation oder Mission-State-Machine einführen. Offene, nicht
+vorgetäuschte Daten sind in `docs/agents/OPEN_TASKS.md` dokumentiert
+(insbesondere echte Steigung, Straßenzustand und dynamische Ereignisse).
+Redesign 4.0 entfernt gespeicherte Standardrouten, Drag-&-Drop-Ziellisten und
+getrennte Kartenwerkzeuge. Vor Weiterarbeit zuerst `docs/HANDOFF_CLAUDE.md` und
+`docs/agents/PROJECT_STATE.md` lesen; der v0.62-Visual-Audit bleibt historische
+Grundlage.
+
+v0.70 erweitert ausschließlich den bestehenden Three-Renderer um zwölf visuelle
+Regionsprofile, zwölf Terrain-Splat-Layer, triplanares Gebirge, differenzierte
+Vegetation, animierte Flüsse und neutrale Landmark-Fallbacks. Inselbake,
+Gameplayregionen und Save v13 bleiben unverändert. Vor Weltarbeit zuerst
+`docs/agents/MAP_REDESIGN_AUDIT.md` lesen; Wüste/Sumpf sind visuell und jede
+Gameplaywirkung bleibt `TODO(CLAUDE_LOGIC)`.

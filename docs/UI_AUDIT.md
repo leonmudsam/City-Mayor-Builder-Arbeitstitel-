@@ -1,10 +1,16 @@
-# UI-Audit v0.60 — Mockups, Hauptwelt und Detailfenster
+# UI-Audit v0.69 — Mockups, Hauptwelt, Detailfenster und Stadtarbeit 4.0
 
 Stand: 19. Juli 2026. Referenzen sind die drei Projektdateien
 `chatgpt mockup stadtarbeit.png`, `chatgpt mockup ui 1.png`,
 `chatgpt mockup ui 2.png` sowie das zuletzt übermittelte Master-Mockup mit
 Hauptansicht, Regionsfreischaltung, Bürgerdetail, Gebäudekatalog,
-Gebäudedetail, Routenplanung, Straßenplanung und Wetter/Zeit.
+Gebäudedetail, Routenplanung, Straßenplanung und Wetter/Zeit sowie die beiden
+Premium-Fidelity-Referenzen vom 19. Juli 2026.
+
+Am 21. Juli 2026 kam das verbindliche Stadtarbeit-Redesign-4.0-Mockup hinzu.
+Die frühere v0.62/v0.65-Zeile „Reihenfolge/Optimierung“ ist dadurch ersetzt:
+keine separate Zielsortierung, kein „Letzte Route“, kein Werkzeugmodus;
+Reihenfolge, Tour, Cargo und Nachfüllen entstehen aus dem exakten Straßenweg.
 
 ## Ergebnis
 
@@ -21,12 +27,12 @@ Controller-Snapshots und Commands; es wurde keine zweite Simulation gebaut.
 | Bürgeranliegen | nur Kartenstapel | kompakte Inbox plus eigenes großes Detailfenster mit Zielen und Belohnungen | erledigt |
 | Minimap | statisches Terrainbild | Terrain, Regionen, Gebäude, Straßen, Probleme, Missionsziele und Live-Kamerarahmen; Klick fokussiert Weltposition | erledigt |
 | Region | textlastiger Dialog | großes KI-Landschaftsbild, Region/Biom, Boni, Kosten und Bestätigung | erledigt |
-| Gebäudekatalog | funktional | bildstarke Karten, Tabs, Status, Kosten, Level und klare Bauaktion | erledigt |
-| Gebäudedetail | kleines Dialogmuster | breites Kontext-Sheet mit Hero, Kennzahlen, Diagnosen und Aktionen | erledigt |
-| Stadtarbeit | unmittelbarer Start/Fahrmodus | vorgeschalteter 2D-Routenplaner mit Reihenfolge, Optimierung und Prognose | erledigt, Verkehrsdaten offen |
+| Gebäudekatalog | funktional | bildstarke Karten, Tabs, Status, Kosten, Level; ab 1680×860 rechtes 4-Spalten-Dock | erledigt |
+| Gebäudedetail | kleines Dialogmuster | breites Kontext-Sheet mit Hero, Kennzahlen, Diagnosen, Stufenvorschau und Aktionen | erledigt |
+| Stadtarbeit | technischer Planer mit Zielliste, Tools und Routenvorlage | bildstarkes Redesign 4.0 mit dominanter Karte, direkter Bedienung, Weg-Reihenfolge, Live-Tour/Cargo, Fahrzeugkarten und Berater | erledigt; mehrteilige Logistik-Legs offen |
 | UI ausblenden | vorhanden | Welt bleibt mit kleinem Wiederherstellen-Knopf bedienbar | erledigt |
 | Straßenplanung | Sofortbau | Mockup-Ziel: Planen → Vorschau → Bestätigen | offen, Gameplay-Phase O6 |
-| Wetter | nur visueller Tageslauf | Mockup-Ziel: Wettereffekte und spielerische Zeitsteuerung | offen, Gameplay-Phase O11 |
+| Wetter | nur visueller Tageslauf | Sonne/Regen/Nebel wirken live auf Renderer; spielerische Effekte bleiben O11 | visuell erledigt, Gameplay offen |
 
 ## Visuelle Regeln
 
@@ -47,6 +53,9 @@ Controller-Snapshots und Commands; es wurde keine zweite Simulation gebaut.
   Belohnungen; keine Konsolenwarnung.
 - 1600×1000: Stadtarbeit-Routenplanung mit vollständiger Karte und Detailspalte.
 - 1920×1080: Haupt-HUD, Welt, Navigation und Live-Minimap kollisionsfrei.
+- 1920×1080: rechter Bau-Shop 820×990 mit 4-Spalten-Katalog und 796×270-Vorschau.
+- 1920×1080: Wetter-Sheet 650×990; Sommerregen aktualisiert Sheet, HUD und
+  Renderer-Atmosphäre ohne Boot-Fehler.
 - Ein-Sheet-Wechsel: Gebäudekatalog schließt das lokale Bürgerdetail.
 
 Der finale Teststand steht in `docs/agents/PROJECT_STATE.md` und

@@ -24,9 +24,12 @@ function makeMapApi(r: IMapRenderer): MapApi {
     getYaw: () => r.getYaw(),
     getCameraView: () => r.getCameraView(),
     focusGround: (x, z, dist) => r.focusGround(x, z, dist),
+    setInfoLayer: (mode) => r.setInfoLayer(mode),
     canDrive: () => r.canDrive(),
     enterDrive: () => r.enterDrive(),
     exitDrive: () => r.exitDrive(),
+    setMissionFollow: (active) => r.setMissionFollow(active),
+    isMissionFollowing: () => r.isMissionFollowing(),
   };
 }
 
@@ -48,7 +51,10 @@ export function MapView() {
         // delivers/inspects it instead of opening the building sheet (§ aktive
         // Karte). Any other building still selects normally.
         const active = controller.state.activities.active;
-        if (id && active?.targets.some((tg) => tg.buildingId === id && !tg.done)) {
+        const activeDef = active
+          ? controller.config.activities.activities.find((activity) => activity.id === active.defId)
+          : undefined;
+        if (id && !activeDef?.drive && active?.targets.some((tg) => tg.buildingId === id && !tg.done)) {
           const result = controller.progressActivity(id);
           if (result.ok) {
             useUiStore.getState().pushToast(t('ui.activity.delivered'), 'success');
@@ -78,7 +84,10 @@ export function MapView() {
       onDriveChange: (isActive) => useUiStore.getState().setDriveActive(isActive),
       onDriveProgress: (id) => {
         const result = controller.progressActivity(id);
-        if (result.ok) useUiStore.getState().pushToast(t('ui.activity.delivered'), 'success');
+        if (result.ok) {
+          useUiStore.getState().pushToast(t('ui.activity.delivered'), 'success');
+          if (!controller.state.activities.active) useUiStore.getState().setMissionFollow(false);
+        }
       },
       onRegionUnlocked: () => {
         useUiStore.getState().pushEvent({
@@ -117,6 +126,7 @@ export function MapView() {
     void renderer.init(host);
     setMapApi(makeMapApi(renderer));
     renderer.applyPreset(ui.cameraPreset);
+    renderer.setInfoLayer(ui.infoLayerMode);
 
     // Mirror UI state into the renderer.
     const unsubscribe = useUiStore.subscribe((s) => {
@@ -124,6 +134,7 @@ export function MapView() {
       renderer.setPlacingRotation(s.placingRotation);
       renderer.setMoving(s.movingBuildingId);
       renderer.setSelected(s.selectedBuildingId);
+      renderer.setInfoLayer(s.infoLayerMode);
     });
 
     const onKey = (e: KeyboardEvent) => {

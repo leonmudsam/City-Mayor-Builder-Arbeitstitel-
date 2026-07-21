@@ -41,18 +41,52 @@ export const MOUNTAIN_FEATURE_MODELS = [
 ] as const;
 
 /** Vegetation props (models/props/nature/), culled off the city footprint. */
-export const TREE_MODELS = ['pine_tree', 'tree_pine', 'tree', 'tree_deciduous'] as const;
+export const PINE_TREE_MODELS = ['pine_tree', 'tree_pine', 'tree'] as const;
+export const BROADLEAF_TREE_MODELS = ['tree_deciduous', 'broadleaf_tree_medium', 'broadleaf_tree_large'] as const;
+export const LARGE_PINE_TREE_MODELS = ['tree_pine_large', 'pine_tree_large', ...PINE_TREE_MODELS] as const;
+export const TREE_MODELS = [...PINE_TREE_MODELS, ...BROADLEAF_TREE_MODELS] as const;
 export const BUSH_MODELS = ['bush_small', 'bush', 'bush_medium'] as const;
+export const ROCK_CLUSTER_MODELS = ['rock_cluster_small', 'mountain_boulder', 'rock_medium', 'rock_small'] as const;
+export const REED_MODELS = ['swamp_reed_cluster', 'reeds_water', 'reed_cluster'] as const;
+export const DEADWOOD_MODELS = ['fallen_log', 'dead_branch', 'swamp_log'] as const;
 /** Hand-placed scenic landmarks used by the island-overview pass. */
 export const SCENIC_PROP_MODELS = {
   boat: ['boat_small', 'ship_sailing'],
   windmill: ['windmill_small'],
   lighthouse: ['lighthouse'],
+  waterfall: ['waterfall_cliff', 'waterfall_small'],
+  rockArch: ['landmark_rock_arch', 'rock_arch'],
+  oldTree: ['landmark_old_tree', 'old_tree_large'],
+  ruin: ['landmark_ruin_small', 'ruin_small'],
+  desertSpire: ['landmark_desert_spire', 'desert_rock_spire'],
+  swampTree: ['landmark_swamp_tree', 'swamp_dead_tree'],
+  lakeIslet: ['landmark_lake_islet', 'small_coastal_islet'],
 } as const;
 
 /** Traffic car + delivery van (models/vehicles/). Author facing +z. */
 export const VEHICLE_CAR_MODELS = ['car', 'car_small', 'car_sedan', 'car_van'] as const;
 export const VAN_MODELS = ['service_van', 'car_van', 'van', 'delivery_van', 'truck_food'] as const;
+export const MEDIUM_TRUCK_MODELS = ['medium_truck', 'truck_delivery', 'truck_food', 'service_van'] as const;
+export const LARGE_TRUCK_MODELS = ['large_truck', 'truck_heavy', 'truck_delivery', 'truck_food'] as const;
+export const REFRIGERATED_TRUCK_MODELS = ['refrigerated_truck', 'truck_refrigerated', 'truck_food'] as const;
+export const HEAVY_TRANSPORTER_MODELS = ['heavy_transporter', 'truck_heavy', 'flatbed', 'truck_material'] as const;
+export const FIRE_TRUCK_MODELS = ['firetruck', 'fire_truck', 'truck_fire', ...VEHICLE_CAR_MODELS] as const;
+export const LOGGING_TRUCK_MODELS = ['logging_truck', 'truck_logging', 'truck_material', ...VEHICLE_CAR_MODELS] as const;
+export const POLICE_CAR_MODELS = ['police_car', 'car_police', ...VEHICLE_CAR_MODELS] as const;
+export const FLATBED_MODELS = ['flatbed', 'truck_material', 'truck_flatbed', ...VEHICLE_CAR_MODELS] as const;
+
+/** Einziger Modellnamen-Vertrag für auswählbare Stadtarbeit-Fahrzeuge. */
+export const ACTIVITY_VEHICLE_MODELS: Record<string, readonly string[]> = {
+  van: VAN_MODELS,
+  medium_truck: MEDIUM_TRUCK_MODELS,
+  large_truck: LARGE_TRUCK_MODELS,
+  refrigerated_truck: REFRIGERATED_TRUCK_MODELS,
+  heavy_transporter: HEAVY_TRANSPORTER_MODELS,
+  fire_truck: FIRE_TRUCK_MODELS,
+  logging_truck: LOGGING_TRUCK_MODELS,
+  police_car: POLICE_CAR_MODELS,
+  flatbed: FLATBED_MODELS,
+};
 
 /** Chimney smoke effect (models/effects/). */
 export const SMOKE_EFFECT_MODELS = ['smoke_chimney', 'smoke', 'steam', 'smoke_puff'] as const;
@@ -63,6 +97,8 @@ export const MARKER_MODELS = {
   construction: ['marker_construction', 'marker_build'],
   problem: ['marker_problem', 'marker_alert'],
   upgrade: ['marker_upgrade', 'marker_bonus', 'marker_arrow'],
+  need: ['marker_need', 'marker_service'],
+  production: ['marker_production', 'marker_output'],
 } as const;
 
 /** World-space 3D UI models (models/ui/) — selection ring, floating action
@@ -234,11 +270,23 @@ export const MODEL_FOLDER_DOCS: ModelFolderDoc[] = [
       'Modelle (construction/) werden während Bau & Upgrade genutzt. Unterordner ' +
       '(nature/city/harbor/farm/construction/infrastructure) sind reine Organisation.',
     rows: [
-      { purpose: 'Baum', names: TREE_MODELS, note: 'gecullt, instanziert' },
+      { purpose: 'Nadelbaum', names: PINE_TREE_MODELS, note: 'gecullt, instanziert' },
+      { purpose: 'Laubbaum', names: BROADLEAF_TREE_MODELS, note: 'gecullt, instanziert' },
+      { purpose: 'Grosser Bergbaum', names: LARGE_PINE_TREE_MODELS, note: 'gecullt, instanziert' },
       { purpose: 'Busch', names: BUSH_MODELS, note: 'gecullt, instanziert' },
+      { purpose: 'Felscluster', names: ROCK_CLUSTER_MODELS, note: 'Gebirge/Kueste/Wueste, instanziert' },
+      { purpose: 'Schilfcluster', names: REED_MODELS, note: 'Sumpf und Ufer, instanziert' },
+      { purpose: 'Totholz', names: DEADWOOD_MODELS, note: 'Wald/Sumpf/Kueste, instanziert' },
       { purpose: 'Szenisches Boot', names: SCENIC_PROP_MODELS.boat, note: 'handplatziert auf Küstenwasser' },
       { purpose: 'Szenische Windmühle', names: SCENIC_PROP_MODELS.windmill, note: 'handplatziert im fruchtbaren Land' },
       { purpose: 'Küsten-Leuchtturm', names: SCENIC_PROP_MODELS.lighthouse, note: 'handplatziert auf einer Landzunge' },
+      { purpose: 'Szenischer Wasserfall', names: SCENIC_PROP_MODELS.waterfall, note: 'handplatziert an wassernahem Gebirge' },
+      { purpose: 'Landmarke Felsbogen', names: SCENIC_PROP_MODELS.rockArch, note: 'Klippen und trockene Felszone' },
+      { purpose: 'Landmarke alter Baum', names: SCENIC_PROP_MODELS.oldTree, note: 'Grasland/Waldlichtung' },
+      { purpose: 'Landmarke kleine Ruine', names: SCENIC_PROP_MODELS.ruin, note: 'neutral, ohne Gameplayfunktion' },
+      { purpose: 'Landmarke Wuesten-Felsnadel', names: SCENIC_PROP_MODELS.desertSpire, note: 'visuelle Suedost-Wueste' },
+      { purpose: 'Landmarke Sumpfbaum', names: SCENIC_PROP_MODELS.swampTree, note: 'visuelle Westbucht' },
+      { purpose: 'Landmarke Seeinsel', names: SCENIC_PROP_MODELS.lakeIslet, note: 'Seenland und Buchten' },
       { purpose: 'Baustelle (Bau & Upgrade)', names: CONSTRUCTION_MODELS, note: 'generisch; pro Gebäude: <id>_construction.glb' },
     ],
   },
@@ -246,10 +294,18 @@ export const MODEL_FOLDER_DOCS: ModelFolderDoc[] = [
     key: 'vehicles',
     title: 'Fahrzeuge',
     loader: 'vehicleModel',
-    intro: 'Front zeigt +z (Fahrtrichtung). Verkehr und Stadtarbeit-Van.',
+    intro: 'Front zeigt +z (Fahrtrichtung). Verkehr und komplette Stadtarbeit-Flotte.',
     rows: [
       { purpose: 'Verkehrsauto', names: VEHICLE_CAR_MODELS },
       { purpose: 'Liefer-Van (Stadtarbeit)', names: VAN_MODELS },
+      { purpose: 'Mittlerer LKW (Stadtarbeit)', names: MEDIUM_TRUCK_MODELS },
+      { purpose: 'Großer LKW (Stadtarbeit)', names: LARGE_TRUCK_MODELS },
+      { purpose: 'Kühltransporter (Stadtarbeit)', names: REFRIGERATED_TRUCK_MODELS },
+      { purpose: 'Spezialtransporter (Stadtarbeit)', names: HEAVY_TRANSPORTER_MODELS },
+      { purpose: 'Löschfahrzeug (Stadtarbeit)', names: FIRE_TRUCK_MODELS },
+      { purpose: 'Holztransporter (Stadtarbeit)', names: LOGGING_TRUCK_MODELS },
+      { purpose: 'Streifenwagen (Stadtarbeit)', names: POLICE_CAR_MODELS },
+      { purpose: 'Pritschenwagen (Stadtarbeit)', names: FLATBED_MODELS },
     ],
   },
   {
@@ -262,6 +318,8 @@ export const MODEL_FOLDER_DOCS: ModelFolderDoc[] = [
       { purpose: 'Im Bau', names: MARKER_MODELS.construction },
       { purpose: 'Problem', names: MARKER_MODELS.problem },
       { purpose: 'Upgrade verfügbar', names: MARKER_MODELS.upgrade },
+      { purpose: 'Bedürfnis / Versorgung', names: MARKER_MODELS.need },
+      { purpose: 'Produktion', names: MARKER_MODELS.production },
     ],
   },
   {
@@ -769,10 +827,13 @@ export const FOLDER_PROMPTS: FolderPrompts[] = [
         title: 'Aktiv genutzt',
         entries: [
           { name: 'pine_tree', footprint: '1×1', sizeClass: 'prop', heightRange: '≈1.4–1.8 Kacheln', biome: 'Wald, Grasland, fruchtbares Land', placeOn: 'grass, forest, fertile', neverOn: 'Straße, Gebäude-Footprint, Bauplatz, Wasser, Gebirge', minSpacing: '0.3–0.5 Kacheln', randomize: 'Zufallsrotation + Zufallsskalierung (±15%)', instancing: true, status: 'live', motif: 'a single stylized low-poly pine tree, slightly irregular' },
+          { name: 'tree_deciduous', footprint: '1×1', sizeClass: 'prop', heightRange: '≈1.5 Kacheln', biome: 'Mischwald, Grasland', placeOn: 'grass, forest, fertile', neverOn: 'Straße, Gebäude, Wasser, Gebirge', minSpacing: '0.3–0.5 Kacheln', randomize: 'Zufallsrotation + Zufallsskalierung', instancing: true, status: 'live', motif: 'a single stylized low-poly broadleaf/deciduous tree with a round crown, about 1.5 tiles tall' },
+          { name: 'tree_pine_large', footprint: '1×1', sizeClass: 'prop', heightRange: '≈1.8 Kacheln', biome: 'Wald, Gebirgsrand', placeOn: 'forest, mountain-nahe grass', instancing: true, status: 'live', motif: 'a tall stylized pine tree, about 1.8 tiles tall, slim conical crown' },
           { name: 'bush_small', footprint: '1×1', sizeClass: 'prop', heightRange: '≈0.5 Kacheln', biome: 'Wald, Grasland', placeOn: 'grass, forest, fertile', neverOn: 'Straße, Gebäude-Footprint, Wasser', instancing: true, status: 'live', motif: 'a small round low-poly bush' },
           { name: 'boat_small', footprint: '1×2', sizeClass: 'prop_large', frontFacing: '+Z', biome: 'Küste, See', placeOn: 'an Pier/Ufer, im Wasser', instancing: false, status: 'live', motif: 'a small rowing/fishing boat, front facing +Z, low-poly' },
           { name: 'windmill_small', footprint: '2×2', sizeClass: 'prop_large', heightRange: '≈2.5 Kacheln', biome: 'Fruchtbares Land', animationNodes: 'rotor (drehende Flügel, für spätere Animation reserviert)', instancing: false, status: 'live', motif: "a small rustic windmill with four turning sails on a node named 'rotor', stone or wooden base, low-poly" },
           { name: 'lighthouse', footprint: '2×2', sizeClass: 'landmark', heightRange: '≈4–6 Kacheln', biome: 'Küste', placeOn: 'Küstenklippe/Landzunge, Wasserzugang', instancing: false, status: 'live', motif: 'a red-and-white striped lighthouse on a rocky base with a lantern room' },
+          { name: 'waterfall_cliff', footprint: '2×2', sizeClass: 'terrain_feature', heightRange: '≈4–6 Kacheln', biome: 'Gebirge, Flusstal', placeOn: 'wassernahe Bergflanke', effectNodes: 'mist (optionaler Gischt-Ursprung)', instancing: false, status: 'live', motif: 'a narrow turquoise waterfall cascading down a rugged alpine rock face into a foamy pool, stylized low-poly' },
           { name: 'construction_site', footprint: '1–3 Kacheln', sizeClass: 'prop_large', biome: 'überall (temporär)', placeOn: 'Gebäude im Bau/Upgrade', instancing: false, status: 'live', motif: 'a construction site prop: scaffolding, a small crane and barriers with warning stripes, to sit over a building under construction' },
         ],
       },
@@ -780,8 +841,6 @@ export const FOLDER_PROMPTS: FolderPrompts[] = [
         title: 'Geplant — Natur, Stadt, Hafen, Farm',
         note: 'Siehe docs/3D_WORLD_ASSETS.md §11/§14.',
         entries: [
-          { name: 'tree_deciduous', footprint: '1×1', sizeClass: 'prop', heightRange: '≈1.5 Kacheln', biome: 'Mischwald, Grasland', placeOn: 'grass, forest, fertile', neverOn: 'Straße, Gebäude, Wasser, Gebirge', minSpacing: '0.3–0.5 Kacheln', randomize: 'Zufallsrotation + Zufallsskalierung', instancing: true, status: 'planned', motif: 'a single stylized low-poly broadleaf/deciduous tree with a round crown, about 1.5 tiles tall' },
-          { name: 'tree_pine_large', footprint: '1×1', sizeClass: 'prop', heightRange: '≈1.8 Kacheln', biome: 'Wald, Gebirgsrand', placeOn: 'forest, mountain-nahe grass', instancing: true, status: 'planned', motif: 'a tall stylized pine tree, about 1.8 tiles tall, slim conical crown' },
           { name: 'forest_cluster_small', footprint: '2×2', sizeClass: 'prop_large', biome: 'Waldrand', placeOn: 'forest-Kante', spawnRule: 'am Waldrand für organische Übergänge statt harter Kante', instancing: false, status: 'planned', motif: 'a small cluster of 3–4 mixed trees and undergrowth, forming a natural forest-edge patch' },
           { name: 'forest_cluster_medium', footprint: '3×3', sizeClass: 'prop_large', biome: 'Waldrand', placeOn: 'forest-Kante', spawnRule: 'am Waldrand für organische Übergänge statt harter Kante', instancing: false, status: 'planned', motif: 'a medium cluster of 6–8 mixed trees, bushes and fallen logs, forming a natural forest-edge patch' },
           { name: 'fallen_log', footprint: '1×1', sizeClass: 'prop', biome: 'Wald', placeOn: 'forest', instancing: true, status: 'planned', motif: 'a fallen mossy tree log lying on the forest floor, low-poly' },
@@ -789,7 +848,12 @@ export const FOLDER_PROMPTS: FolderPrompts[] = [
           { name: 'flower_patch', footprint: '1×1', sizeClass: 'prop', heightRange: '≈0.2 Kacheln', biome: 'Grasland, fruchtbares Land', placeOn: 'grass, fertile', instancing: true, randomize: 'Zufallsrotation + Zufallsfarbe (falls Vertex-Color)', status: 'planned', motif: 'a small patch of colorful wildflowers among short grass, low-poly' },
           { name: 'hedge', footprint: '1×1', sizeClass: 'prop', heightRange: '≈0.5 Kacheln', biome: 'Stadtrand, Park', instancing: true, status: 'planned', motif: 'a low trimmed green hedge segment, about 0.5 tiles tall, tileable side to side' },
           { name: 'reeds_water', footprint: '1×1', sizeClass: 'prop', biome: 'See-/Flussufer', placeOn: 'shore_tile, lake_edge', instancing: true, status: 'planned', motif: 'a cluster of tall water reeds/cattails for lake and river shores, low-poly' },
+          { name: 'swamp_reed_cluster', footprint: '1×1', sizeClass: 'prop', biome: 'Sumpf, Moorufer', placeOn: 'swamp-Profil, shore_tile', instancing: true, status: 'planned', motif: 'a loose irregular cluster of swamp reeds and cattails, thin readable silhouettes, low-poly' },
+          { name: 'dead_branch', footprint: '1×1', sizeClass: 'prop', biome: 'Sumpf, trockene Ebene', placeOn: 'swamp- oder dry-Profil', instancing: true, status: 'planned', motif: 'a weathered crooked dead branch lying on the ground, asymmetrical, low-poly' },
+          { name: 'swamp_log', footprint: '1×1', sizeClass: 'prop', biome: 'Sumpf', placeOn: 'swamp-Profil', instancing: true, status: 'planned', motif: 'a dark mossy fallen swamp log with broken roots, low-poly' },
           { name: 'rock_small', footprint: '1×1', sizeClass: 'prop', heightRange: '≈0.4 Kacheln', biome: 'Gebirge, Grasland', instancing: true, status: 'planned', motif: 'a small stylized grey rock / few stones on the ground, about 0.4 tiles tall, low-poly' },
+          { name: 'rock_cluster_small', footprint: '1×1', sizeClass: 'prop', heightRange: '≈0.5 Kacheln', biome: 'Gebirge, Küste, trockene Ebene', instancing: true, status: 'planned', motif: 'an irregular cluster of three to five light layered rocks, compact footprint, rotation-safe, low-poly' },
+          { name: 'mountain_boulder', footprint: '1×1', sizeClass: 'prop_large', heightRange: '≈0.8 Kacheln', biome: 'Gebirge, Hochland', instancing: true, status: 'planned', motif: 'an angular alpine boulder with light grey strata and subtle moss traces, asymmetrical, low-poly' },
           { name: 'rock_medium', footprint: '1×1', sizeClass: 'prop', biome: 'Gebirge, Küste', instancing: true, status: 'planned', motif: 'a medium stylized grey boulder / rock cluster, low-poly' },
           { name: 'rock_large', footprint: '1×1', sizeClass: 'prop_large', heightRange: '≈1.0 Kacheln', biome: 'Gebirge', instancing: true, status: 'planned', motif: 'a large stylized grey boulder, about 1 tile tall, layered stone, low-poly' },
           { name: 'street_lamp', footprint: '1×1', sizeClass: 'prop', heightRange: '≈0.9 Kacheln', biome: 'Stadt', placeOn: 'entlang Gehweg/Straße', animationNodes: 'reserved: light_window/glow bei Nacht', instancing: true, status: 'planned', motif: 'a stylized street lamp post with a glowing lamp head' },
@@ -818,6 +882,12 @@ export const FOLDER_PROMPTS: FolderPrompts[] = [
           { name: 'wayside_cross', footprint: '1×1', sizeClass: 'prop', heightRange: '≈1.0 Kacheln', biome: 'Grasland, Feldweg', instancing: false, status: 'planned', motif: 'a small stone or wooden wayside cross/shrine beside a country path, weathered and rustic' },
           { name: 'hiking_trail_marker', footprint: '1×1', sizeClass: 'prop', heightRange: '≈0.6 Kacheln', biome: 'Gebirge, Wald, Hügelland', placeOn: 'entlang eines Wanderwegs', instancing: true, status: 'planned', motif: 'a small wooden hiking trail signpost with a directional arrow, rustic style' },
           { name: 'natural_monument_stone', footprint: '1×1', sizeClass: 'prop_large', heightRange: '≈1.2 Kacheln', biome: 'Gebirge, Grasland', instancing: false, status: 'planned', motif: 'a striking single natural monument boulder, distinct shape, marked as a scenic point of interest' },
+          { name: 'landmark_rock_arch', footprint: '3×2', sizeClass: 'landmark', heightRange: '≈2.5 Kacheln', biome: 'Küste, Gebirge', placeOn: 'freie Felszone abseits der Stadt', instancing: false, status: 'planned', motif: 'a natural asymmetrical rock arch made of light layered coastal stone, broad opening, optimized silhouette, low-poly' },
+          { name: 'landmark_old_tree', footprint: '2×2', sizeClass: 'landmark', heightRange: '≈3 Kacheln', biome: 'Grasland, Wald', placeOn: 'freie Lichtung', instancing: false, status: 'planned', motif: 'a large ancient gnarled broadleaf tree with a wide irregular crown and visible roots, low-poly' },
+          { name: 'landmark_ruin_small', footprint: '2×2', sizeClass: 'landmark', heightRange: '≈1.8 Kacheln', biome: 'Grasland, Hochland', placeOn: 'freie landschaftliche Fläche', instancing: false, status: 'planned', motif: 'a small weathered stone ruin with one broken arch, sparse ivy and no modern props, low-poly' },
+          { name: 'landmark_desert_spire', footprint: '2×2', sizeClass: 'landmark', heightRange: '≈3.5 Kacheln', biome: 'Rote Wüste', placeOn: 'desert-Profil', instancing: false, status: 'planned', motif: 'a tall asymmetrical terracotta sandstone spire with horizontal erosion layers, dramatic readable silhouette, low-poly' },
+          { name: 'landmark_swamp_tree', footprint: '2×2', sizeClass: 'landmark', heightRange: '≈3 Kacheln', biome: 'Sumpf', placeOn: 'swamp-Profil', instancing: false, status: 'planned', motif: 'an ancient leafless swamp tree with wide crooked branches and exposed root knees, dark weathered wood, low-poly' },
+          { name: 'landmark_lake_islet', footprint: '3×3', sizeClass: 'landmark', biome: 'Seenland', placeOn: 'See- oder Uferzone', instancing: false, status: 'planned', motif: 'a tiny rocky lake islet with three mixed trees and an irregular reed edge, compact low-poly diorama' },
           { name: 'viewpoint_bench', footprint: '1×1', sizeClass: 'prop', biome: 'Hochplateau, Klippe', placeOn: 'an Aussichtspunkten', instancing: false, status: 'planned', motif: 'a scenic viewpoint bench with a small wooden railing, facing outward over a vista' },
           { name: 'cave_entrance_small', footprint: '1×1', sizeClass: 'prop_large', biome: 'Gebirge', placeOn: 'mountain-Wandfuß', instancing: false, status: 'planned', motif: 'a small dark cave entrance opening in a rocky mountainside, low-poly' },
           { name: 'mine_entrance_small', footprint: '1×1', sizeClass: 'prop_large', biome: 'Gebirge', placeOn: 'mountain-Wandfuß, außerhalb der Stadt', instancing: false, status: 'planned', motif: 'a small abandoned mine entrance with wooden support beams set into a rocky slope' },
@@ -845,6 +915,14 @@ export const FOLDER_PROMPTS: FolderPrompts[] = [
         entries: [
           { name: 'car', footprint: '≈0.3×0.5', sizeClass: 'vehicle', status: 'live', motif: 'a small stylized car, readable from an isometric camera, front facing +Z, low-poly' },
           { name: 'service_van', footprint: '≈0.4×0.7', sizeClass: 'vehicle', status: 'live', motif: 'a small white delivery / service van, front facing +Z, low-poly' },
+          { name: 'medium_truck', footprint: '≈0.5×0.9', sizeClass: 'vehicle', status: 'live', motif: 'a medium blue cab-over delivery truck with a closed cargo box, front facing +Z, low-poly' },
+          { name: 'large_truck', footprint: '≈0.6×1.1', sizeClass: 'vehicle', status: 'live', motif: 'a large red three-axle cargo truck with a tall box body, front facing +Z, low-poly' },
+          { name: 'refrigerated_truck', footprint: '≈0.5×0.9', sizeClass: 'vehicle', status: 'live', motif: 'a white refrigerated delivery truck with a visible roof cooling unit, front facing +Z, low-poly' },
+          { name: 'heavy_transporter', footprint: '≈0.7×1.4', sizeClass: 'vehicle', status: 'live', motif: 'an orange heavy-haul tractor and low-loader with a secured industrial crate, front facing +Z, low-poly' },
+          { name: 'firetruck', footprint: '≈0.5×0.9', sizeClass: 'vehicle', status: 'live', motif: 'a red fire truck with a ladder, front facing +Z, low-poly' },
+          { name: 'police_car', footprint: '≈0.3×0.5', sizeClass: 'vehicle', status: 'live', motif: 'a police car with blue livery and a light bar, front facing +Z, low-poly' },
+          { name: 'logging_truck', footprint: '≈0.5×1.1', sizeClass: 'vehicle', status: 'live', motif: 'a logging truck carrying stacked tree logs on a long flatbed trailer, front facing +Z, low-poly' },
+          { name: 'flatbed', footprint: '≈0.5×1.0', sizeClass: 'vehicle', status: 'live', motif: 'a flatbed construction-material truck loaded with pallets of bricks and planks, front facing +Z, low-poly' },
         ],
       },
       {
@@ -852,18 +930,8 @@ export const FOLDER_PROMPTS: FolderPrompts[] = [
         note: 'Verkehr fährt künftig Haus → Straße → Ziel statt Zufallslauf (World-Graphics-V2 §11) — betrifft nur die Pathing-Logik, nicht die Modelle hier.',
         entries: [
           { name: 'truck_food', footprint: '≈0.5×0.9', sizeClass: 'vehicle', status: 'planned', motif: 'a small food delivery truck with a box body, front facing +Z, low-poly' },
-          { name: 'firetruck', footprint: '≈0.5×0.9', sizeClass: 'vehicle', status: 'planned', motif: 'a red fire truck with a ladder, front facing +Z, low-poly' },
-          { name: 'police_car', footprint: '≈0.3×0.5', sizeClass: 'vehicle', status: 'planned', motif: 'a police car with blue livery and a light bar, front facing +Z, low-poly' },
           { name: 'ambulance', footprint: '≈0.4×0.7', sizeClass: 'vehicle', status: 'planned', motif: 'a white ambulance with a red cross and a light bar, front facing +Z, low-poly' },
           { name: 'bus_small', footprint: '≈0.4×1.0', sizeClass: 'vehicle', status: 'planned', motif: 'a small city bus, front facing +Z, low-poly' },
-        ],
-      },
-      {
-        title: 'Geplant — Stadtarbeit-Fahrzeuge (A6, „Selbst fahren")',
-        note: 'Die fünf steuerbaren Missionsfahrzeuge (A6). Der Fahrmodus nutzt bis zum Drop-in prozedurale Platzhalter je Typ — diese Modelle ersetzen sie. Front +Z, klare Silhouette auch aus der Verfolgerkamera.',
-        entries: [
-          { name: 'logging_truck', footprint: '≈0.5×1.1', sizeClass: 'vehicle', status: 'planned', motif: 'a logging truck carrying stacked tree logs on a long flatbed trailer, front facing +Z, low-poly' },
-          { name: 'flatbed', footprint: '≈0.5×1.0', sizeClass: 'vehicle', status: 'planned', motif: 'a flatbed construction-material truck loaded with pallets of bricks and planks, front facing +Z, low-poly' },
         ],
       },
     ],

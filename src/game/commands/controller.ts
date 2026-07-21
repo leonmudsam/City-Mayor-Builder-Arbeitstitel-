@@ -1,5 +1,12 @@
 import type { GameConfig } from '../config/index.ts';
-import type { ActivityDef, ActivityQuality, ActivityRewardTier, BuildingUpgradeDef } from '../config/types.ts';
+import type {
+  ActivityDef,
+  ActivityQuality,
+  ActivityRewardTier,
+  ActivityVehicleDef,
+  BuildingUpgradeDef,
+  DriveVehicle,
+} from '../config/types.ts';
 import {
   currentTradeContracts,
   pickTargets,
@@ -8,11 +15,12 @@ import {
   rewardTierFor,
   type TradeContractOffer,
 } from '../simulation/activities.ts';
-import type { GameState, RegionId, ResourceId } from '../types.ts';
+import type { GameState, RegionId, ResourceId, TerrainType } from '../types.ts';
 import { recomputeDerived, type Derived } from '../simulation/derived.ts';
 import { advance, moveInPerMin } from '../simulation/tick.ts';
-import { updateQuests, objectiveTarget } from '../simulation/quests.ts';
-import { validatePlacement, type PlacementError } from '../buildings/placement.ts';
+import { updateQuests, objectiveTarget, questFocus, type QuestFocus } from '../simulation/quests.ts';
+import { validatePlacement, isConnectedToRoad, type PlacementError } from '../buildings/placement.ts';
+import { locationBonusPct } from '../buildings/location.ts';
 import { demolishRefund, effectiveBuildCost, isFirstBuildDiscounted } from '../buildings/effects.ts';
 import { buildLimitAt, countOf, nextLimitLevel } from '../buildings/limits.ts';
 import { coverageOverlay, type CoverageOverlay } from '../buildings/coverage.ts';
@@ -29,8 +37,31 @@ import {
   regionHasTerrain,
   regionRoadCostFactorAt,
   regionUnlockCost,
+  worldTerrainAt,
 } from '../map/world.ts';
-import { BAKED_REGIONS } from '../config/startRegion.config.ts';
+import { BAKED_REGIONS, regionIdAt, startRegionConfig } from '../config/startRegion.config.ts';
+import {
+  analyseActivityRouteFrom,
+  analyseManualActivityRouteFrom,
+  activityRouteRoadAnchorsFrom,
+  buildingCenter,
+  targetOrderOnPath,
+  type RouteAnalysis,
+  type RoutePointInput,
+  type RouteRoadAnchors,
+} from '../activities/routeAnalysis.ts';
+import { regionPreview, type RegionPreview } from '../regions/regionPreview.ts';
+import { analyseRoadPath, type RoadPlanPreview } from '../roads/roadPlanning.ts';
+import {
+  cargoPlanFor,
+  evaluateCargoRoute,
+  resolveCargoModel,
+  evaluateInfrastructure,
+  type CargoPlan,
+  type CargoRouteEvaluation,
+  type InfrastructureEvaluation,
+  type InfrastructureWarning,
+} from '../activities/logistics.ts';
 import { newId } from '../engine/rng.ts';
 
 export type CommandError =
@@ -50,7 +81,20 @@ const fail = (error: CommandError): CommandResult => ({ ok: false, error });
 export type GameEvent =
   | { type: 'levelUp'; level: number }
   | { type: 'questClaimable' }
-  | { type: 'activityCompleted'; defId: string; money: number; xp: number; quality?: ActivityQuality }
+  | {
+      type: 'activityCompleted';
+      defId: string;
+      money: number;
+      xp: number;
+      quality?: ActivityQuality;
+      result?: {
+        elapsedMs: number;
+        distanceTiles?: number;
+        efficiencyScore?: number;
+        roadCoverage?: number;
+        vehicle?: DriveVehicle;
+      };
+    }
   | { type: 'change' };
 
 /** Why a mission can't be started right now (§16.1 board state). */
@@ -67,11 +111,67 @@ export interface ActivityBoardEntry {
   reward: { money: number; xp: number };
 }
 
+/** Platzierungs-/Verschiebe-Diagnose für die UI-Vorschau (§ Overhaul 3.0 / C4). */
+export interface PlacementDiagnostics {
+  /** Gesamturteil: darf hier gebaut/verschoben werden? */
+  valid: boolean;
+  /** Grund, falls ungültig (gleiche Codes wie `validatePlacement`). */
+  reason?: PlacementError;
+  terrain: TerrainType;
+  regionId: number;
+  /** Orthogonaler Anschluss an das verbundene Straßennetz. */
+  roadAccess: boolean;
+  /** Standort-/Regionsbonus in Prozentpunkten auf die Produktion (kann negativ sein). */
+  locationBonusPct: number;
+  buildCost: Partial<Record<ResourceId, number>>;
+}
+
 /** Read-only route-planning snapshot for the UI. No RNG or save mutation. */
 export interface ActivityRoutePlan {
   defId: string;
   sourceBuildingId?: string;
   targetBuildingIds: string[];
+}
+
+/** Optionaler, vollständig validierter Plan für eine Fahrmission. */
+export interface ActivityStartPlan {
+  vehicle?: DriveVehicle;
+  roadPath?: { x: number; y: number }[];
+}
+
+/** Gebündeltes, RNG-neutrales Read-Model für die Planungsoberfläche. */
+export interface ActivityPlanningContext {
+  def: ActivityDef;
+  sourceBuildingIds: string[];
+  targetBuildingIds: string[];
+  vehicles: ActivityVehicleDef[];
+  reward: { money: number; xp: number };
+}
+
+/** Live-Projektion der gezeichneten Route; keine automatisch ergänzten Wege. */
+export interface ActivityRoutePreview {
+  anchors: RouteRoadAnchors;
+  reachedTargetIds: string[];
+  orderedTargetIds: string[];
+  analysis?: RouteAnalysis;
+  cargoPlan?: CargoPlan;
+  cargoRoute?: CargoRouteEvaluation;
+  infrastructure?: InfrastructureEvaluation;
+  complete: boolean;
+}
+
+/**
+ * Ausführungs-Momentaufnahme der laufenden Fahrmission (§ Stadtarbeit-Logik 2.0,
+ * L3). Reine Read-Projektion für die 3D-/HUD-Ansicht: Zielfortschritt, noch an
+ * der Quelle gehaltene Reserve und die rekonstruierte Kapazitäts-/Beladungsplanung.
+ */
+export interface ActivityExecutionSnapshot {
+  defId: string;
+  vehicle?: DriveVehicle;
+  targetsTotal: number;
+  targetsDone: number;
+  reserved?: Partial<Record<ResourceId, number>>;
+  cargo?: CargoPlan;
 }
 
 /**
@@ -296,6 +396,14 @@ export class GameController {
     return ok;
   }
 
+  /**
+   * Regions-Vorschau (§ C5): welche Gebäude der Regionscharakter begünstigt.
+   * Reine Config-Projektion (kein State/RNG/Save) für den Regionsdialog.
+   */
+  regionPreview(id: RegionId): RegionPreview | undefined {
+    return regionPreview(id);
+  }
+
   unlockRegion(id: RegionId): CommandResult {
     const region = this.state.world.regions[String(id)];
     if (!region || region.status === 'unlocked') return fail('invalid');
@@ -398,6 +506,14 @@ export class GameController {
     });
     this.afterStructuralChange();
     return ok;
+  }
+
+  /**
+   * Kartenfokus eines Bürgeranliegens (§ C3). Reine Read-Projektion — kein RNG,
+   * keine Mutation, kein Save. Ermöglicht „Auf Karte zeigen" ohne erfundene Daten.
+   */
+  questFocus(questId: string): QuestFocus | undefined {
+    return questFocus(this.state, this.config, questId);
   }
 
   claimQuest(questId: string): CommandResult {
@@ -613,8 +729,335 @@ export class GameController {
     };
   }
 
+  private activityRouteSource(defId: string): RoutePointInput | undefined {
+    const def = this.config.activities.activities.find((activity) => activity.id === defId);
+    if (!def) return undefined;
+    const sourceId = def.requiresAnyBuilding
+      ? Object.values(this.state.buildings)
+          .filter((building) => building.status === 'active' && def.requiresAnyBuilding!.includes(building.defId))
+          .sort((a, b) => a.id.localeCompare(b.id))[0]?.id
+      : undefined;
+    const sourceCenter = sourceId ? buildingCenter(this.state, this.config, sourceId) : undefined;
+    if (sourceCenter) return { id: 'source', ...sourceCenter };
+    const townHall = Object.values(this.state.buildings).find((building) => building.defId === 'town_hall');
+    const townHallCenter = townHall ? buildingCenter(this.state, this.config, townHall.id) : undefined;
+    return townHallCenter
+      ? { id: 'source', ...townHallCenter }
+      : { id: 'source', x: startRegionConfig.townHall.x + 2.5, y: startRegionConfig.townHall.y + 2.5 };
+  }
+
+  /**
+   * Kanonische Routenbewertung für den Stadtarbeit-Planer (§ Overhaul 3.0 / C2).
+   * Reine Read-Projektion auf dem ECHTEN Straßengraphen (`derived.roadNetwork`)
+   * — kein RNG, keine Mutation, kein Save. Ersetzt die frühere UI-Schätzung
+   * (`TODO(CLAUDE_LOGIC)`). `orderedTargetIds` ist die vom Spieler gewählte
+   * Zielreihenfolge; die Quelle ist das Quellgebäude der Aktivität, sonst das
+   * Rathaus. Ergebnis ist eine Prognose (Belohnung entscheidet weiter die
+   * Ausführungsqualität), damit die Balance nicht aus der UI verschoben wird.
+   */
+  analyseActivityRoute(defId: string, orderedTargetIds: string[]): RouteAnalysis | undefined {
+    const def = this.config.activities.activities.find((a) => a.id === defId);
+    if (!def) return undefined;
+    const source = this.activityRouteSource(defId);
+    if (!source) return undefined;
+    return analyseActivityRouteFrom(this.state, this.config, this.derived, source, orderedTargetIds);
+  }
+
+  /**
+   * Quell-Ankergebäude einer Aktivität (Farm/Markt/Lager …) — dieselbe Wahl wie
+   * `activityRouteSource`, aber als Gebäude-Id. `'town_hall'` als Fallback-Label.
+   */
+  private activitySourceBuildingId(def: ActivityDef): string {
+    if (def.requiresAnyBuilding) {
+      const source = Object.values(this.state.buildings)
+        .filter((building) => building.status === 'active' && def.requiresAnyBuilding!.includes(building.defId))
+        .sort((a, b) => a.id.localeCompare(b.id))[0];
+      if (source) return source.id;
+    }
+    const townHall = Object.values(this.state.buildings).find((building) => building.defId === 'town_hall');
+    return townHall?.id ?? 'town_hall';
+  }
+
+  /**
+   * Ladungsplanung (§ Stadtarbeit-Logik 2.0, L2): Transportbedarf je Ziel und die
+   * daraus nötigen Beladungen für die gewählte Fahrzeugklasse. Reine
+   * Read-Projektion — zeigt, wann die Fahrzeugkapazität greift (Nachladen). Ändert
+   * weder State noch die Auszahlung. `undefined` bei Aktivitäten ohne Ladung.
+   */
+  getActivityCargoPlan(defId: string, orderedTargetIds: string[], vehicle?: DriveVehicle): CargoPlan | undefined {
+    const def = this.config.activities.activities.find((a) => a.id === defId);
+    if (!def) return undefined;
+    const selected = vehicle ?? this.state.activities.active?.vehicle ?? def.vehicle;
+    const sourceId = this.activitySourceBuildingId(def);
+    return cargoPlanFor(this.state, this.config, def, selected, sourceId, orderedTargetIds);
+  }
+
+  /** Alle realen Quellgebäude des Auftrags; die erste Id ist der Startanker. */
+  getActivitySupplySources(defId: string): string[] {
+    const def = this.config.activities.activities.find((activity) => activity.id === defId);
+    if (!def) return [];
+    const allowed = new Set(def.requiresAnyBuilding ?? ['town_hall']);
+    return Object.values(this.state.buildings)
+      .filter((building) => building.status === 'active' && allowed.has(building.defId))
+      .sort((a, b) => a.id.localeCompare(b.id))
+      .map((building) => building.id);
+  }
+
+  /** Pflichtziele der laufenden Mission oder der RNG-neutralen Vorschau. */
+  getActivityDeliveryTargets(defId: string): string[] {
+    const active = this.state.activities.active;
+    if (active?.defId === defId) return active.targets.map((target) => target.buildingId);
+    return this.getActivityRoutePlan(defId)?.targetBuildingIds ?? [];
+  }
+
+  /** Für diesen Auftrag aktuell freigeschaltete, wählbare Config-Fahrzeuge. */
+  getAvailableActivityVehicles(defId: string): ActivityVehicleDef[] {
+    const def = this.config.activities.activities.find((activity) => activity.id === defId);
+    if (!def) return [];
+    const allowed = new Set(def.vehicleOptions ?? (def.vehicle ? [def.vehicle] : []));
+    return this.config.activities.vehicles.filter(
+      (vehicle) =>
+        allowed.has(vehicle.id) &&
+        !vehicle.future &&
+        vehicle.unlockLevel <= this.state.level.current,
+    );
+  }
+
+  /**
+   * Zentraler Planungskontext für Codex/UI (§ Redesign 4.0). Er bündelt nur
+   * vorhandene Controller-/Config-Daten und mutiert weder RNG noch Save.
+   */
+  getActivityPlanningContext(defId: string): ActivityPlanningContext | undefined {
+    const board = this.getActivityBoard().find((entry) => entry.def.id === defId);
+    if (!board || board.def.type === 'decision') return undefined;
+    const targetBuildingIds = this.getActivityDeliveryTargets(defId);
+    if (targetBuildingIds.length === 0) return undefined;
+    return {
+      def: board.def,
+      sourceBuildingIds: this.getActivitySupplySources(defId),
+      targetBuildingIds,
+      vehicles: this.getAvailableActivityVehicles(defId),
+      reward: board.reward,
+    };
+  }
+
+  /**
+   * Route/Cargo-Vorschau des Redesigns 4.0. Die Stoppreihenfolge entsteht aus
+   * den tatsächlich berührten Straßenankern. Nachfüllungen zählen nur, wenn der
+   * Weg den echten Quellanker erneut erreicht. Es wird keine Lücke ergänzt.
+   */
+  getActivityRoutePreview(
+    defId: string,
+    candidateTargetIds: string[],
+    roadPath: readonly { x: number; y: number }[],
+    vehicle?: DriveVehicle,
+  ): ActivityRoutePreview | undefined {
+    const anchors = this.getActivityRouteAnchors(defId, candidateTargetIds);
+    if (!anchors) return undefined;
+    const reachedTargetIds = targetOrderOnPath(anchors, candidateTargetIds, roadPath);
+    const planningOrder = [
+      ...reachedTargetIds,
+      ...candidateTargetIds.filter((id) => !reachedTargetIds.includes(id)),
+    ];
+    const cargoPlan = this.getActivityCargoPlan(defId, planningOrder, vehicle);
+    const def = this.config.activities.activities.find((activity) => activity.id === defId);
+    const sourceBuildingId = def ? this.activitySourceBuildingId(def) : 'town_hall';
+    const cargoRoute = cargoPlan
+      ? evaluateCargoRoute(
+          cargoPlan,
+          { buildingId: sourceBuildingId, ...anchors.source },
+          anchors.targets.map((anchor, index) => ({
+            buildingId: candidateTargetIds[index]!,
+            ...anchor,
+          })),
+          roadPath,
+        )
+      : undefined;
+    const orderedTargetIds = cargoRoute?.orderedTargetIds ?? reachedTargetIds;
+    const analysis =
+      orderedTargetIds.length === candidateTargetIds.length
+        ? this.analyseManualActivityRoute(defId, orderedTargetIds, roadPath, vehicle)
+        : undefined;
+    const infrastructure = analysis
+      ? this.getActivityInfrastructure(defId, orderedTargetIds, vehicle, {
+          ...(vehicle ? { vehicle } : {}),
+          roadPath: roadPath.map((point) => ({ ...point })),
+        })
+      : undefined;
+    return {
+      anchors,
+      reachedTargetIds,
+      orderedTargetIds,
+      ...(analysis ? { analysis } : {}),
+      ...(cargoPlan ? { cargoPlan } : {}),
+      ...(cargoRoute ? { cargoRoute } : {}),
+      ...(infrastructure ? { infrastructure } : {}),
+      complete: analysis !== undefined && (cargoRoute?.cargoValid ?? true),
+    };
+  }
+
+  /**
+   * Momentaufnahme der laufenden Fahrmission (§ Stadtarbeit-Logik 2.0, L3): reine
+   * Read-Projektion für 3D-Ausführung/HUD. `undefined`, wenn keine Mission läuft.
+   */
+  getActivityExecutionSnapshot(): ActivityExecutionSnapshot | undefined {
+    const active = this.state.activities.active;
+    if (!active) return undefined;
+    const cargo = this.getActivityCargoPlan(
+      active.defId,
+      active.targets.map((t) => t.buildingId),
+      active.vehicle,
+    );
+    return {
+      defId: active.defId,
+      ...(active.vehicle ? { vehicle: active.vehicle } : {}),
+      targetsTotal: active.targets.length,
+      targetsDone: active.targets.filter((t) => t.done).length,
+      ...(active.reserved ? { reserved: { ...active.reserved } } : {}),
+      ...(cargo ? { cargo } : {}),
+    };
+  }
+
+  /**
+   * Infrastruktur-Bewertung einer geplanten Route (§ Stadtarbeit-Logik 2.0, L4 /
+   * §19). Reine Read-Projektion: Leerfahrtanteil, Fahrzeugeignung, Quellenlage,
+   * Lade-/Entladezeiten und textfreie Hinweiscodes — kein State, keine Auszahlung
+   * (bleibt Anzeige, DECISIONS D-013). Optionaler `plan.roadPath` bewertet die
+   * konkret gezeichnete Kette, sonst die automatische Reihenfolge-Analyse.
+   * `undefined`, wenn Quelle/Ziele nicht auflösbar sind.
+   */
+  getActivityInfrastructure(
+    defId: string,
+    orderedTargetIds: string[],
+    vehicle?: DriveVehicle,
+    plan?: ActivityStartPlan,
+  ): InfrastructureEvaluation | undefined {
+    const def = this.config.activities.activities.find((a) => a.id === defId);
+    if (!def) return undefined;
+    const source = this.activityRouteSource(defId);
+    if (!source) return undefined;
+    const route =
+      (plan?.roadPath
+        ? analyseManualActivityRouteFrom(this.state, this.config, this.derived, source, orderedTargetIds, plan.roadPath)
+        : undefined) ?? analyseActivityRouteFrom(this.state, this.config, this.derived, source, orderedTargetIds);
+    if (!route) return undefined;
+    const targets: { id: string; x: number; y: number }[] = [];
+    for (const id of orderedTargetIds) {
+      const center = buildingCenter(this.state, this.config, id);
+      if (!center) return undefined;
+      targets.push({ id, ...center });
+    }
+    const selected = vehicle ?? plan?.vehicle ?? this.state.activities.active?.vehicle ?? def.vehicle;
+    const vehicleDef = selected ? this.config.activities.vehicles.find((v) => v.id === selected) : undefined;
+    const cargo = cargoPlanFor(this.state, this.config, def, selected, this.activitySourceBuildingId(def), orderedTargetIds);
+    const perishable = resolveCargoModel(def)?.perishable ?? false;
+    return evaluateInfrastructure({
+      source: { x: source.x, y: source.y },
+      targets,
+      route,
+      ...(cargo ? { cargo } : {}),
+      ...(vehicleDef ? { vehicle: vehicleDef } : {}),
+      perishable,
+    });
+  }
+
+  /**
+   * Nur die textfreien Infrastruktur-Hinweise (§21 `getActivityInfrastructureWarnings`).
+   * Dünne Projektion über `getActivityInfrastructure`; leeres Array, wenn nichts
+   * auflösbar ist.
+   */
+  getActivityInfrastructureWarnings(
+    defId: string,
+    orderedTargetIds: string[],
+    vehicle?: DriveVehicle,
+    plan?: ActivityStartPlan,
+  ): InfrastructureWarning[] {
+    return this.getActivityInfrastructure(defId, orderedTargetIds, vehicle, plan)?.warnings ?? [];
+  }
+
+  /**
+   * Konkrete Cargo-Simulation auf einer bereits gezeichneten Straßenkette (§
+   * Stadtarbeit-Logik 2.0). Erkennt echte Quell-/Nachladekontakte und
+   * Auslieferungen entlang des Pfades und misst die Leerfahrt aus den tatsächlich
+   * leer gefahrenen Kacheln — die exakte Ergänzung zur planungsseitigen
+   * `getActivityInfrastructure`. Reine Read-Projektion; `undefined`, wenn Anker/
+   * Ladung nicht auflösbar sind.
+   */
+  getActivityCargoRoute(
+    defId: string,
+    orderedTargetIds: string[],
+    roadPath: readonly { x: number; y: number }[],
+    vehicle?: DriveVehicle,
+  ): CargoRouteEvaluation | undefined {
+    const def = this.config.activities.activities.find((a) => a.id === defId);
+    if (!def) return undefined;
+    const source = this.activityRouteSource(defId);
+    if (!source) return undefined;
+    const anchors = activityRouteRoadAnchorsFrom(this.state, this.config, this.derived, source, orderedTargetIds);
+    if (!anchors) return undefined;
+    // Reale Reihenfolge, in der der Pfad die Ziele berührt (statt der Klickreihenfolge).
+    const pathOrder = targetOrderOnPath(anchors, orderedTargetIds, roadPath);
+    const selected = vehicle ?? this.state.activities.active?.vehicle ?? def.vehicle;
+    const plan = cargoPlanFor(this.state, this.config, def, selected, this.activitySourceBuildingId(def), pathOrder);
+    if (!plan) return undefined;
+    const anchorById = new Map(anchors.targets.map((a) => [a.id, a] as const));
+    const targetAnchors = pathOrder
+      .map((id) => {
+        const anchor = anchorById.get(id);
+        return anchor ? { buildingId: id, x: anchor.x, y: anchor.y } : undefined;
+      })
+      .filter((a): a is { buildingId: string; x: number; y: number } => a !== undefined);
+    return evaluateCargoRoute(
+      plan,
+      { buildingId: this.activitySourceBuildingId(def), x: anchors.source.x, y: anchors.source.y },
+      targetAnchors,
+      roadPath,
+    );
+  }
+
+  /** Straßenanker für die manuelle 2D-Planung; reine Read-Projektion. */
+  getActivityRouteAnchors(defId: string, orderedTargetIds: string[]): RouteRoadAnchors | undefined {
+    const source = this.activityRouteSource(defId);
+    return source
+      ? activityRouteRoadAnchorsFrom(this.state, this.config, this.derived, source, orderedTargetIds)
+      : undefined;
+  }
+
+  /** Kanonische Analyse einer lückenlos vom Spieler gezeichneten Straßenkette. */
+  analyseManualActivityRoute(
+    defId: string,
+    orderedTargetIds: string[],
+    roadPath: readonly { x: number; y: number }[],
+    vehicle?: DriveVehicle,
+  ): RouteAnalysis | undefined {
+    const source = this.activityRouteSource(defId);
+    const analysis = source
+      ? analyseManualActivityRouteFrom(this.state, this.config, this.derived, source, orderedTargetIds, roadPath)
+      : undefined;
+    if (!analysis || !vehicle) return analysis;
+    const vehicleDef = this.config.activities.vehicles.find((candidate) => candidate.id === vehicle);
+    if (!vehicleDef) return analysis;
+    const speedFactor = 60 / vehicleDef.speedKph;
+    const handlingFactor = 1 + Math.max(0, 4 - vehicleDef.handling) * 0.04;
+    return {
+      ...analysis,
+      estimatedDurationMs: Math.round(analysis.estimatedDurationMs * speedFactor * handlingFactor),
+    };
+  }
+
+  private validActivityVehicle(def: ActivityDef, vehicle: DriveVehicle): boolean {
+    const allowed = def.vehicleOptions ?? (def.vehicle ? [def.vehicle] : []);
+    const vehicleDef = this.config.activities.vehicles.find((candidate) => candidate.id === vehicle);
+    return (
+      allowed.includes(vehicle) &&
+      vehicleDef !== undefined &&
+      !vehicleDef.future &&
+      vehicleDef.unlockLevel <= this.state.level.current
+    );
+  }
+
   /** Reorder the stops of an already running drive mission through a command. */
-  setActiveActivityRoute(plannedTargetIds: string[]): CommandResult {
+  setActiveActivityRoute(plannedTargetIds: string[], plan?: ActivityStartPlan): CommandResult {
     const active = this.state.activities.active;
     if (!active) return fail('invalid');
     const def = this.config.activities.activities.find((activity) => activity.id === active.defId);
@@ -627,7 +1070,12 @@ export class GameController {
     ) {
       return fail('invalid');
     }
+    const selectedVehicle = plan?.vehicle ?? active.vehicle ?? def.vehicle;
+    if (selectedVehicle && !this.validActivityVehicle(def, selectedVehicle)) return fail('locked');
+    if (plan?.roadPath && !this.analyseManualActivityRoute(def.id, plannedTargetIds, plan.roadPath)) return fail('invalid');
     active.targets = plannedTargetIds.map((id) => current.get(id)!);
+    if (selectedVehicle) active.vehicle = selectedVehicle;
+    if (plan?.roadPath) active.plannedRoadPath = plan.roadPath.map((point) => ({ ...point }));
     this.notify({ type: 'change' });
     return ok;
   }
@@ -637,7 +1085,7 @@ export class GameController {
    * against the same live candidates and lets the route-planning UI feed its
    * optimised stop order back through the normal command boundary.
    */
-  startActivity(defId: string, plannedTargetIds?: string[]): CommandResult {
+  startActivity(defId: string, plannedTargetIds?: string[], plan?: ActivityStartPlan): CommandResult {
     const def = this.config.activities.activities.find((a) => a.id === defId);
     if (!def || def.type === 'decision') return fail('not_found');
     if (def.unlockLevel > this.state.level.current) return fail('locked');
@@ -647,6 +1095,8 @@ export class GameController {
     // still carry a cooldownSec (none by default) are time-gated here.
     if (def.cooldownSec && now < this.activityReadyAt(defId)) return fail('cooldown');
     if (def.requiresAnyBuilding && !this.hasAnyBuilding(def.requiresAnyBuilding)) return fail('locked');
+    const selectedVehicle = plan?.vehicle ?? def.vehicle;
+    if (def.drive && selectedVehicle && !this.validActivityVehicle(def, selectedVehicle)) return fail('locked');
     const candidates = this.activityCandidates(def);
     if (candidates.length < 2) return fail('invalid'); // not enough of a city yet
     const { min, max } = def.targetCount ?? { min: 3, max: 4 };
@@ -662,6 +1112,9 @@ export class GameController {
       ) {
         return fail('invalid');
       }
+      if (plan?.roadPath && !this.analyseManualActivityRoute(defId, plannedTargetIds, plan.roadPath)) {
+        return fail('invalid');
+      }
       // Keep RNG progression compatible with an ordinary start even though the
       // player-defined ordering is used for the actual targets.
       pickTargets(this.state, candidates, min, max);
@@ -669,15 +1122,45 @@ export class GameController {
     } else {
       selected = pickTargets(this.state, candidates, min, max);
     }
+    if (!plannedTargetIds && plan?.roadPath && !this.analyseManualActivityRoute(defId, selected, plan.roadPath)) {
+      return fail('invalid');
+    }
     const targets = selected.map((buildingId) => ({ buildingId, done: false }));
+    // §-Stadtarbeit-Logik 2.0 (L3): Ladungsaufträge reservieren ihre Ware upfront
+    // an der Quelle — die volle `costPerTarget × Ziele` wird sofort aus dem Pool
+    // entnommen und gehalten. Reicht der Vorrat nicht, startet die Mission gar
+    // nicht (fair statt Abbruch auf halber Strecke, §18). Jede Auslieferung zieht
+    // später aus dieser Reserve; ein Abbruch gibt den Rest zurück.
+    const reserved = this.activityReservation(def, targets.length);
+    if (reserved) {
+      const spent = spendCost(this.state, reserved, `activity_reserve_${def.id}`);
+      if (!spent.ok) return fail('insufficient');
+    }
     this.state.activities.active = {
       defId,
       startedAt: now,
       targets,
+      ...(reserved ? { reserved } : {}),
+      ...(selectedVehicle ? { vehicle: selectedVehicle } : {}),
+      ...(plan?.roadPath ? { plannedRoadPath: plan.roadPath.map((point) => ({ ...point })) } : {}),
       ...(def.timeLimitSec !== undefined ? { expiresAt: now + def.timeLimitSec * 1000 } : {}),
     };
     this.notify({ type: 'change' });
     return ok;
+  }
+
+  /**
+   * Upfront an der Quelle zu reservierende Ladung (§ Stadtarbeit-Logik 2.0, L3):
+   * `costPerTarget × Zielanzahl` je Ressource. `undefined`, wenn die Aktivität
+   * nichts verbraucht (Feuerwehr/Polizei/Inspektion).
+   */
+  private activityReservation(def: ActivityDef, targetCount: number): Partial<Record<ResourceId, number>> | undefined {
+    if (!def.costPerTarget) return undefined;
+    const reserved: Partial<Record<ResourceId, number>> = {};
+    for (const [res, amount] of Object.entries(def.costPerTarget)) {
+      if ((amount ?? 0) > 0) reserved[res as ResourceId] = (amount ?? 0) * targetCount;
+    }
+    return Object.keys(reserved).length > 0 ? reserved : undefined;
   }
 
   /**
@@ -697,8 +1180,19 @@ export class GameController {
       : active.targets.find((candidate) => candidate.buildingId === buildingId && !candidate.done);
     if (target?.buildingId !== buildingId) return fail('invalid');
     if (def.costPerTarget) {
-      const spent = spendCost(this.state, def.costPerTarget, `activity_${def.id}`);
-      if (!spent.ok) return fail('insufficient');
+      if (active.reserved) {
+        // §-Stadtarbeit-Logik 2.0 (L3): Ware wurde upfront an der Quelle
+        // reserviert — die Auslieferung zieht aus dieser Reserve, nicht aus dem
+        // Pool. Die Reserve deckt jede Auslieferung exakt (bei Start gesichert).
+        for (const [res, amount] of Object.entries(def.costPerTarget)) {
+          const id = res as ResourceId;
+          active.reserved[id] = Math.max(0, (active.reserved[id] ?? 0) - (amount ?? 0));
+        }
+      } else {
+        // Alt-Save/Legacy-Pfad ohne Reservierung: wie bisher direkt aus dem Pool.
+        const spent = spendCost(this.state, def.costPerTarget, `activity_${def.id}`);
+        if (!spent.ok) return fail('insufficient');
+      }
     }
     target.done = true;
     if (active.targets.every((t) => t.done)) {
@@ -709,17 +1203,53 @@ export class GameController {
       const tier = rewardTierFor(def, this.state.level.current);
       const quality = resolveQuality(def, active.startedAt, now);
       const scale = QUALITY_SCALE[quality];
+      const routeAnalysis = active.plannedRoadPath
+        ? this.analyseManualActivityRoute(
+            def.id,
+            active.targets.map((candidate) => candidate.buildingId),
+            active.plannedRoadPath,
+            active.vehicle,
+          )
+        : undefined;
+      const result = {
+        elapsedMs: Math.max(0, now - active.startedAt),
+        ...(routeAnalysis
+          ? {
+              distanceTiles: routeAnalysis.distanceTiles,
+              efficiencyScore: routeAnalysis.efficiencyScore,
+              roadCoverage: routeAnalysis.roadCoverage,
+            }
+          : {}),
+        ...(active.vehicle ? { vehicle: active.vehicle } : {}),
+      };
       delete this.state.activities.active;
-      this.payoutActivity(def, Math.round(tier.money * scale.money), Math.round(tier.xp * scale.xp), tier, true, quality);
+      this.payoutActivity(
+        def,
+        Math.round(tier.money * scale.money),
+        Math.round(tier.xp * scale.xp),
+        tier,
+        true,
+        quality,
+        result,
+      );
     } else {
       this.notify({ type: 'change' });
     }
     return ok;
   }
 
-  /** Cancel the running activity. No payout, no cooldown — just tidy up. */
+  /**
+   * Cancel the running activity. No payout, no cooldown — just tidy up. Noch nicht
+   * ausgelieferte, an der Quelle reservierte Ladung (§ Stadtarbeit-Logik 2.0, L3)
+   * wandert in den Pool zurück (§5: Abbruch gibt Reservierungen frei), gedeckelt
+   * durch die Lagerkapazität wie jede andere Gutschrift.
+   */
   abandonActivity(): CommandResult {
-    if (!this.state.activities.active) return fail('invalid');
+    const active = this.state.activities.active;
+    if (!active) return fail('invalid');
+    if (active.reserved) {
+      grantResources(this.state, active.reserved, this.derived.storageCaps, `activity_refund_${active.defId}`);
+    }
     delete this.state.activities.active;
     this.notify({ type: 'change' });
     return ok;
@@ -830,6 +1360,13 @@ export class GameController {
     tier?: ActivityRewardTier,
     setCooldown = true,
     quality?: ActivityQuality,
+    result?: {
+      elapsedMs: number;
+      distanceTiles?: number;
+      efficiencyScore?: number;
+      roadCoverage?: number;
+      vehicle?: DriveVehicle;
+    },
   ): void {
     const now = this.state.meta.lastSimTime;
     if (money > 0) grantResources(this.state, { money }, this.derived.storageCaps, `activity_${def.id}`);
@@ -841,7 +1378,14 @@ export class GameController {
     if (setCooldown && (def.cooldownSec ?? 0) > 0) this.state.activities.cooldowns[def.id] = now + (def.cooldownSec ?? 0) * 1000;
     updateQuests(this.state, this.config);
     if (levelUps > 0) this.notify({ type: 'levelUp', level: this.state.level.current });
-    this.notify({ type: 'activityCompleted', defId: def.id, money, xp, ...(quality ? { quality } : {}) });
+    this.notify({
+      type: 'activityCompleted',
+      defId: def.id,
+      money,
+      xp,
+      ...(quality ? { quality } : {}),
+      ...(result ? { result } : {}),
+    });
     this.notify({ type: 'change' });
   }
 
@@ -908,6 +1452,45 @@ export class GameController {
    * right now, accounting for escalating `costScaling` (§7). The build menu uses
    * this so the shown price matches the charged price.
    */
+  /**
+   * Platzierungs-/Verschiebe-Diagnose (§ C4). Reine Read-Projektion für die
+   * UI-Ghost-Vorschau: Gültigkeit + Grund, Terrain, Region, Straßenanschluss,
+   * Standortbonus und Baukosten an (x,y). Bündelt vorhandene Prüfungen, dupliziert
+   * keine Regeln. `ignoreBuildingId` blendet ein zu verschiebendes Gebäude aus.
+   */
+  placementDiagnostics(defId: string, x: number, y: number, ignoreBuildingId?: string): PlacementDiagnostics | undefined {
+    const def = this.config.buildings.get(defId);
+    if (!def) return undefined;
+    const reason = validatePlacement(
+      this.state,
+      this.config,
+      this.derived,
+      def,
+      x,
+      y,
+      ignoreBuildingId ? { ignoreBuildingId } : undefined,
+    );
+    return {
+      valid: reason === undefined,
+      ...(reason ? { reason } : {}),
+      terrain: worldTerrainAt(this.state, x, y),
+      regionId: regionIdAt(x, y),
+      roadAccess: isConnectedToRoad(this.derived, def, x, y),
+      locationBonusPct: Math.round(locationBonusPct(this.state, def, x, y)),
+      buildCost: this.getBuildCost(defId, x, y),
+    };
+  }
+
+  /**
+   * Straßenplan-Vorschau (§ C6/§18). Reine Read-Projektion eines gezeichneten
+   * Straßenpfads: pro Kachel Status/Grund/Kosten + Gesamtsumme, damit die UI vor
+   * dem Bau „Länge/Kosten/Konflikte" zeigen kann. Keine Mutation, keine
+   * Abbuchung — gebaut wird erst über die bestehenden Platzierungs-Commands.
+   */
+  roadPathPreview(path: { x: number; y: number }[]): RoadPlanPreview {
+    return analyseRoadPath(this.state, this.config, this.derived, path, (x, y) => this.getBuildCost('road', x, y));
+  }
+
   getBuildCost(defId: string, x?: number, y?: number): Partial<Record<ResourceId, number>> {
     const def = this.config.buildings.get(defId);
     if (!def) return {};

@@ -1,4 +1,4 @@
-# UI-Grafik-Assets — Anleitung & Prompt-Liste (v0.60)
+# UI-Grafik-Assets — Anleitung & Prompt-Liste (v0.69)
 
 Ergänzung zu `docs/ASSETS.md`. Dieses Dokument listet die **UI-/Chrome-Grafiken**
 (Buttons, Kategorien, Marker, Aktivitäten, Events, Belohnungen, Fahrzeuge,
@@ -13,7 +13,7 @@ Glyph in getönter Kachel oder vorhandene Vektorgrafik) — das Spiel crasht nie
 |---|---|---|
 | Ressourcen | `src/assets/resources/` | `resourceImage(id)` |
 | Gebäude | `src/assets/buildings/` | `buildingImage(id)` |
-| Porträts | `src/assets/portraits/` | `portraitImage(role, seed)` |
+| Porträts | `src/assets/portraits/**/` | `portraitImage(role, seed)` |
 | Buttons | `src/assets/ui/buttons/` | `buttonImage(id)` |
 | Kategorien | `src/assets/ui/categories/` | `categoryImage(id)` |
 | Marker | `src/assets/ui/markers/` | `markerImage(id)` |
@@ -24,6 +24,8 @@ Glyph in getönter Kachel oder vorhandene Vektorgrafik) — das Spiel crasht nie
 | Overlays | `src/assets/overlays/` | `overlayImage(id)` |
 | HUD-Marke/Wappen | `src/assets/ui/brand/` | `brandImage(id)` |
 | Umgebungs-Texturen | `src/assets/environment/` | `environmentImage(id)` |
+| Kontextbilder | `src/assets/ui/{requests,regions,buildings,missions,weather,status,navigation}/` | `uiImage(id)` |
+| Stadtarbeit | `src/assets/ui/citywork/**/` | `uiImage(id)` |
 
 Seit v0.60 sind drei Referenz-Assets bereits eingebunden:
 
@@ -33,6 +35,51 @@ Seit v0.60 sind drei Referenz-Assets bereits eingebunden:
   prozeduraler Canvas-Fallback aktiv.
 - `ui/events/region_unlock_hero.webp` — KI-generiertes 16:9-Inselpanorama für
   den großen Regionsdialog. Fehlt es, bleibt der CSS-Landschaftsfallback aktiv.
+
+Seit v0.61 ergänzen:
+
+- `portraits/merchants/merchant_1.png`, `merchant_2.png`
+- `portraits/workers/buildingDept_1.png`
+- `portraits/emergency/fire_1.png`
+- `ui/regions/region_unlock_highland.jpg` — Hero für Gebirge/Hügelland;
+  Fallback bleibt `ui/events/region_unlock_hero.webp`.
+
+Seit v0.62 ergänzen:
+
+- `ui/regions/region_unlock_fertile.jpg` — Hero für Ebene, Flusstal und
+  fruchtbares Land.
+- `ui/regions/region_unlock_coast.jpg` — Hero für Küste, See und Insel.
+- `ui/weather/weather_cycle_premium.jpg` — zusammenhängendes 3:1-Panorama für
+  Sonne, Regen und Nebel im Wetter-/Tageszeitfenster.
+
+Die drei v0.62-Bilder sind reine Präsentations-Assets. Sonne/Regen/Nebel werden
+vom Renderer aus `environmentSettings` umgesetzt; daraus entstehen weder
+Simulationswerte noch Save-Felder.
+
+Seit v0.65 ergänzen vier KI-generierte RGBA-Fahrzeugkarten:
+
+- `vehicles/medium_truck.png`
+- `vehicles/large_truck.png`
+- `vehicles/refrigerated_truck.png`
+- `vehicles/heavy_transporter.png`
+
+Die Originale wurden mit dem eingebauten Bildwerkzeug auf einem gleichmäßigen
+`#ff00ff`-Hintergrund erzeugt und anschließend mit
+`remove_chroma_key.py --auto-key border --soft-matte --despill` freigestellt.
+Die UI lädt sie über `vehicleImage(imageKey)`. Löschen einer Datei aktiviert den
+Lucide-Fallback; die 3D-Welt fällt unabhängig davon über
+`ACTIVITY_VEHICLE_MODELS` auf GLB bzw. prozedurale Geometrie zurück.
+
+Seit v0.69 ergänzen 20 transparente Stadtarbeit-Bilder unter
+`ui/citywork/{markers,cargo,advisors,missions}`: acht Funktionsmarker, fünf
+Ladungsgrafiken, zwei Beraterporträts und fünf Missionsdioramen. Sie laden
+rekursiv per Dateiname über `uiImage`. `map`, `vehicles` und `tutorial` sind
+dokumentierte Drop-in-Slots. Exakte Liste, Generierungsprompts,
+Chroma-Freistellung und gegenwärtige/zukünftige Nutzung stehen in den lokalen
+Ordner-READMEs und `docs/agents/UI_ASSET_MANIFEST.md`.
+
+Kontextordner werden rekursiv über `uiImage(id)` geladen. Dateinamen müssen
+projektweit unter `src/assets/ui/**` eindeutig bleiben.
 
 ## Technische Vorgaben (für ALLE UI-Assets)
 

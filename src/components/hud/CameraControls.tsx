@@ -1,7 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
-import { Eye, Grid3x3, Maximize2, Crosshair, Plus, Minus, Compass, Sun, Pause, Play } from 'lucide-react';
+import { CloudFog, CloudRain, CloudSun, Grid3x3, Plus, Minus, Compass, Pause, Play } from 'lucide-react';
 import { getMapApi, useUiStore } from '../../state/store.ts';
-import type { CameraPreset } from '../../renderer/three/CameraConfig.ts';
 import {
   getEnvironmentSettings,
   setEnvironmentSettings,
@@ -13,13 +12,6 @@ import { t } from '../../i18n/index.ts';
 // mode switch, plus a compass (reset-north) and zoom buttons. During build mode a
 // prominent "Bauansicht" shortcut drops the camera near top-down for precise
 // road/placement work. All of this only moves the camera — never the render mode.
-const PRESETS: { id: CameraPreset; icon: typeof Eye; key: string }[] = [
-  { id: 'city', icon: Eye, key: 'ui.camera.preset.city' },
-  { id: 'build', icon: Grid3x3, key: 'ui.camera.preset.build' },
-  { id: 'overview', icon: Maximize2, key: 'ui.camera.preset.overview' },
-  { id: 'center', icon: Crosshair, key: 'ui.camera.preset.center' },
-];
-
 export function CameraControls() {
   const cameraPreset = useUiStore((s) => s.cameraPreset);
   const setCameraPreset = useUiStore((s) => s.setCameraPreset);
@@ -51,19 +43,6 @@ export function CameraControls() {
           <Grid3x3 size={16} /> {t('ui.camera.buildview')}
         </button>
       )}
-      <div className="camera-presets">
-        {PRESETS.map(({ id, icon: Icon, key }) => (
-          <button
-            key={id}
-            className={`camera-preset${cameraPreset === id ? ' active' : ''}`}
-            onClick={() => setCameraPreset(id)}
-            title={t(key)}
-          >
-            <Icon size={16} />
-            <span>{t(key)}</span>
-          </button>
-        ))}
-      </div>
       <div className="camera-tools">
         <button
           className="camera-compass"
@@ -100,15 +79,27 @@ function clock(tod: number): string {
  *  also listens to, so changes apply live. Purely visual — no game effect. */
 export function DayNightControl() {
   const [env, setEnv] = useState(getEnvironmentSettings());
+  const openPanel = useUiStore((state) => state.openPanel);
+  const setPanel = useUiStore((state) => state.setPanel);
   useEffect(() => subscribeEnvironmentSettings(() => setEnv(getEnvironmentSettings())), []);
   const visualSpeed = env.dayLengthMin <= 4 ? 4 : env.dayLengthMin <= 8 ? 2 : 1;
+  const WeatherIcon = env.weather === 'rain' ? CloudRain : env.weather === 'fog' ? CloudFog : CloudSun;
+  const weatherLabel =
+    env.weather === 'rain' ? t('ui.weather.rain') : env.weather === 'fog' ? t('ui.weather.fog') : t('ui.weather.clear');
 
   return (
     <div className="hud-environment">
-      <Sun className="hud-environment-sun" size={22} />
+      <button
+        className={`hud-weather-open${openPanel === 'weather' ? ' active' : ''}`}
+        onClick={() => setPanel('weather')}
+        title={t('ui.weather.open')}
+        aria-label={t('ui.weather.open')}
+      >
+        <WeatherIcon className="hud-environment-sun" size={24} />
+      </button>
       <div className="hud-environment-copy">
-        <strong>{t('ui.env.season')} · {clock(env.timeOfDay)}</strong>
-        <span>{t('ui.env.day')} · {env.cycle ? t('ui.env.running') : t('ui.env.paused')}</span>
+        <strong>{t('ui.env.season')}</strong>
+        <span>{t('ui.env.day')} · {clock(env.timeOfDay)} · {weatherLabel}</span>
         <input
           type="range"
           className="env-time"
@@ -128,13 +119,18 @@ export function DayNightControl() {
       >
         {env.cycle ? <Pause size={16} /> : <Play size={16} />}
       </button>
-      <button
-        className="hud-env-speed"
-        onClick={() => setEnvironmentSettings({ dayLengthMin: visualSpeed === 1 ? 8 : visualSpeed === 2 ? 4 : 16 })}
-        title={t('ui.env.speed')}
-      >
-        {visualSpeed}x
-      </button>
+      <div className="hud-env-speeds" aria-label={t('ui.env.speed')}>
+        {[1, 2, 4].map((speed) => (
+          <button
+            key={speed}
+            className={visualSpeed === speed ? 'active' : ''}
+            onClick={() => setEnvironmentSettings({ dayLengthMin: speed === 1 ? 16 : speed === 2 ? 8 : 4 })}
+            title={`${speed}× · ${t('ui.env.speed')}`}
+          >
+            {speed}×
+          </button>
+        ))}
+      </div>
     </div>
   );
 }

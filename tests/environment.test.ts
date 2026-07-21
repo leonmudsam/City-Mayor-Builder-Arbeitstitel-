@@ -1,5 +1,11 @@
 import { describe, it, expect } from 'vitest';
 import { grade, sunDirection, sunElevation, moonDirection, wrap01 } from '../src/renderer/three/environment.ts';
+import {
+  getEnvironmentSettings,
+  resetEnvironmentSettings,
+  setEnvironmentSettings,
+  subscribeEnvironmentSettings,
+} from '../src/renderer/three/environmentSettings.ts';
 
 // The atmosphere grading is pure maths (three.js Color only, no WebGL), so it is
 // safe to exercise in node. These guard the day/night curve: physically sensible
@@ -75,5 +81,29 @@ describe('atmosphere grade', () => {
     const b = grade(0.9999);
     expect(Math.abs(a.sunIntensity - b.sunIntensity)).toBeLessThan(0.05);
     expect(Math.abs(a.stars - b.stars)).toBeLessThan(0.05);
+  });
+});
+
+describe('visual weather settings', () => {
+  it('switches clear, rain and fog without touching save state', () => {
+    resetEnvironmentSettings();
+    for (const weather of ['clear', 'rain', 'fog'] as const) {
+      setEnvironmentSettings({ weather });
+      expect(getEnvironmentSettings().weather).toBe(weather);
+    }
+    resetEnvironmentSettings();
+  });
+
+  it('sanitizes unknown presets and notifies renderer subscribers', () => {
+    resetEnvironmentSettings();
+    let calls = 0;
+    const unsubscribe = subscribeEnvironmentSettings(() => {
+      calls += 1;
+    });
+    setEnvironmentSettings({ weather: 'storm' as 'clear' });
+    expect(getEnvironmentSettings().weather).toBe('clear');
+    expect(calls).toBe(1);
+    unsubscribe();
+    resetEnvironmentSettings();
   });
 });

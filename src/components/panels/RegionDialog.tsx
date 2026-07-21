@@ -1,7 +1,7 @@
-import { ArrowDownRight, ArrowUpRight, Lock, Ruler, Waves, X } from 'lucide-react';
+import { ArrowDownRight, ArrowUpRight, Building2, Lock, Ruler, Waves, X } from 'lucide-react';
 import { useGame, useUiStore } from '../../state/store.ts';
 import { formatMoney, t } from '../../i18n/index.ts';
-import { eventImage } from '../../assets/registry.ts';
+import { eventImage, uiImage } from '../../assets/registry.ts';
 
 /** Vor-/Nachteil-Zeile aus einem Faktor (>1 Vorteil, <1 Nachteil). `invert`
  *  dreht die Wertung um (Straßenkosten: hoher Faktor = Nachteil). */
@@ -46,7 +46,15 @@ export function RegionDialog() {
   // River district: only offered on a locked river landscape at the right level.
   const district = game.canFoundDistrict(regionDialog);
   const districtAffordable = game.canAffordCost(district.cost);
-  const hero = eventImage('region_unlock_hero');
+  const heroKey =
+    def.biome === 'gebirge' || def.biome === 'huegel'
+      ? 'region_unlock_highland'
+      : def.biome === 'kueste' || def.biome === 'see' || def.biome === 'insel'
+        ? 'region_unlock_coast'
+        : def.biome === 'ebene' || def.biome === 'flusstal' || def.biome === 'fruchtbar'
+          ? 'region_unlock_fertile'
+          : undefined;
+  const hero = (heroKey ? uiImage(heroKey) : undefined) ?? eventImage('region_unlock_hero');
 
   return (
     <div className="dialog-backdrop" onClick={() => openRegionDialog(undefined)}>
@@ -85,9 +93,10 @@ export function RegionDialog() {
           </p>
         )}
 
-        {/* Charakter-Vorschau (§5 Auftrag B): Baufläche + Boni/Nachteile,
-            sichtbar BEVOR die Landschaft erschlossen ist. */}
-        <div className="region-character">
+        <div className="region-decision-grid">
+          {/* Charakter-Vorschau (§5 Auftrag B): Baufläche + Boni/Nachteile,
+              sichtbar BEVOR die Landschaft erschlossen ist. */}
+          <div className="region-character">
           <p className="region-character-head">{t('ui.region.character')}</p>
           <p className="region-buildable">
             <Ruler size={14} /> {t('ui.region.buildable_tiles', { count: def.buildableTiles })}
@@ -110,6 +119,33 @@ export function RegionDialog() {
               </ul>
             );
           })()}
+          </div>
+          <section className="region-future-buildings">
+            <h4>
+              <Building2 size={15} /> {t('ui.region.future_buildings')}
+            </h4>
+            {/* § C5: begünstigte Gebäude aus dem Regionscharakter (controller.regionPreview). */}
+            {(() => {
+              const favoured = game.regionPreview(regionDialog)?.favouredBuildings ?? [];
+              if (favoured.length === 0) return <p>{t('ui.region.future_buildings_pending')}</p>;
+              return (
+                <ul className="region-future-list">
+                  {favoured.map((fav) => {
+                    const bDef = game.config.buildings.get(fav.defId);
+                    return (
+                      <li key={fav.defId} className="region-future-item">
+                        <Building2 size={14} />
+                        <span>{bDef ? t(bDef.nameKey) : fav.defId}</span>
+                        <span className="region-mod-pct region-mod-good">
+                          +{fav.modifierPct}% {t(`resource.${fav.resource}`)}
+                        </span>
+                      </li>
+                    );
+                  })}
+                </ul>
+              );
+            })()}
+          </section>
         </div>
         {def.unlockable && (
           <>

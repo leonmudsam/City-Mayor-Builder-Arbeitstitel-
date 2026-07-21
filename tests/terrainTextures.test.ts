@@ -30,8 +30,10 @@ describe('terrain texture docs', () => {
     expect(new Set(names).size).toBe(names.length);
   });
 
-  it('every texture name follows the terrain_ naming convention', () => {
-    const bad = TERRAIN_TEXTURES.filter((t) => !/^terrain_[a-z0-9_]+$/.test(t.name)).map((t) => t.name);
+  it('every texture name follows a documented terrain/biome naming convention', () => {
+    const bad = TERRAIN_TEXTURES
+      .filter((t) => !/^(terrain|mountain|desert|swamp|coast|grass)_[a-z0-9_]+$/.test(t.name))
+      .map((t) => t.name);
     expect(bad, `Non-conforming names: ${bad.join(', ')}`).toEqual([]);
   });
 });

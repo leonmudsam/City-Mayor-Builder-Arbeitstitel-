@@ -1,14 +1,15 @@
-import { BarChart3, ClipboardList, Crown, EyeOff, Hammer, Home, Layers, Map, Store } from 'lucide-react';
+import { BarChart3, ClipboardList, Crown, Hammer, Home, Map, Store } from 'lucide-react';
 import { getMapApi, useGame, useUiStore } from '../../state/store.ts';
 import { buttonImage } from '../../assets/registry.ts';
 import { t } from '../../i18n/index.ts';
 
-// Mockup-faithful bottom navigation: the six main destinations stay centred and
-// readable, while view/overlay/menu utilities form a smaller group on the right.
-// Every entry still routes through the existing panel/camera state.
+// The six permanent destinations follow the visual master mockup. Regions stay
+// a small contextual utility because expansion is primarily reached through the
+// minimap/world. No camera, hide-UI or technical overlay action occupies a main
+// navigation slot.
 export function QuickActionBar() {
   const game = useGame();
-  const { openPanel, overlayMode, cameraPreset, setPanel, toggleOverlay, toggleUiHidden, setCameraPreset } = useUiStore();
+  const { openPanel, cameraPreset, setPanel, setCameraPreset } = useUiStore();
   const hasTrade = game.hasTradePost();
   const hasActivities = game.getActivityDefs().length > 0;
 
@@ -49,10 +50,12 @@ export function QuickActionBar() {
           />
         )}
         <PrimaryButton
-          icon={<Map size={21} />}
-          label={t('ui.nav.regions')}
-          active={openPanel === undefined && cameraPreset === 'overview'}
-          onClick={showRegions}
+          icon={<Store size={21} />}
+          img="btn_trade"
+          label={t('ui.trade.short')}
+          active={openPanel === 'trade'}
+          disabled={!hasTrade}
+          onClick={() => setPanel('trade')}
         />
         <PrimaryButton
           icon={<BarChart3 size={21} />}
@@ -71,23 +74,12 @@ export function QuickActionBar() {
       </nav>
 
       <div className="quick-actions">
-        {hasTrade && (
-          <QuickButton
-            icon={<Store size={18} />}
-            img="btn_trade"
-            label={t('ui.trade.short')}
-            active={openPanel === 'trade'}
-            onClick={() => setPanel('trade')}
-          />
-        )}
         <QuickButton
-          icon={<Layers size={18} />}
-          img="btn_overlay"
-          label={t('ui.quick.overlay')}
-          active={overlayMode}
-          onClick={toggleOverlay}
+          icon={<Map size={18} />}
+          label={t('ui.nav.regions')}
+          active={openPanel === undefined && cameraPreset === 'overview'}
+          onClick={showRegions}
         />
-        <QuickButton icon={<EyeOff size={18} />} label={t('ui.quick.hide')} onClick={toggleUiHidden} />
       </div>
     </div>
   );
@@ -99,6 +91,7 @@ function PrimaryButton({
   label,
   active = false,
   featured = false,
+  disabled = false,
   onClick,
 }: {
   icon: React.ReactNode;
@@ -106,6 +99,7 @@ function PrimaryButton({
   label: string;
   active?: boolean;
   featured?: boolean;
+  disabled?: boolean;
   onClick(): void;
 }) {
   const src = img ? buttonImage(img) : undefined;
@@ -114,6 +108,7 @@ function PrimaryButton({
       className={`primary-nav-btn${active ? ' active' : ''}${featured ? ' featured' : ''}`}
       onClick={onClick}
       title={label}
+      disabled={disabled}
     >
       <span className="primary-nav-icon">
         {src ? <img src={src} width={38} height={38} alt="" aria-hidden="true" /> : icon}

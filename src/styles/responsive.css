@@ -1,0 +1,448 @@
+@media (min-width: 2200px) {
+  :root {
+    --right-column: 330px;
+  }
+
+  .city-status {
+    width: 300px;
+  }
+
+  .world-minimap {
+    width: 280px;
+  }
+
+  .world-minimap-map,
+  .world-minimap-map canvas {
+    width: 260px;
+  }
+
+  .build-menu {
+    max-height: 700px;
+  }
+}
+
+@media (max-width: 1600px) {
+  :root {
+    --right-column: 290px;
+  }
+
+  .hud-level {
+    min-width: 198px;
+  }
+
+  .hud-brand-name {
+    display: none;
+  }
+
+  .hud-level-text {
+    min-width: 116px;
+  }
+
+  .hud-environment {
+    width: 270px;
+    min-width: 270px;
+  }
+
+  .res-card {
+    min-width: 75px;
+  }
+
+  .build-menu-body {
+    grid-template-columns: minmax(0, 1fr) 215px;
+  }
+
+  .build-preview-art {
+    height: 168px;
+  }
+}
+
+@media (max-width: 1420px) {
+  :root {
+    --right-column: 278px;
+  }
+
+  .game-hud {
+    gap: 4px;
+    padding-inline: 5px;
+  }
+
+  .hud-level {
+    min-width: 182px;
+  }
+
+  .hud-level-crest,
+  .hud-level-crest img {
+    width: 50px;
+    height: 50px;
+  }
+
+  .hud-level-crest {
+    flex-basis: 50px;
+  }
+
+  .res-card {
+    min-width: 68px;
+    padding-right: 4px;
+  }
+
+  .res-card-icon {
+    width: 30px;
+    height: 30px;
+    flex-basis: 30px;
+  }
+
+  .res-card-icon .res-art {
+    width: 27px;
+    height: 27px;
+  }
+
+  .res-card-sub {
+    font-size: 9px;
+  }
+
+  .hud-environment {
+    width: 250px;
+    min-width: 250px;
+  }
+
+  .hud-env-speeds button {
+    min-width: 24px;
+    padding-inline: 3px;
+  }
+
+  .city-status {
+    width: 258px;
+  }
+
+  .build-menu {
+    right: calc(var(--right-column) + 13px);
+  }
+
+  .info-layer-control {
+    min-width: 510px;
+  }
+
+  .info-layer-title {
+    display: none;
+  }
+}
+
+@media (max-width: 1180px) {
+  .hud-environment {
+    display: none;
+  }
+
+  .world-minimap {
+    width: 226px;
+  }
+
+  .world-minimap-map {
+    width: 206px;
+    height: 168px;
+  }
+
+  .world-minimap-map canvas {
+    width: 206px;
+    height: 206px;
+    transform: translateY(-19px);
+  }
+
+  .city-status {
+    width: 244px;
+  }
+
+  .build-menu {
+    right: var(--hud-gap);
+  }
+
+  .right-hud-stack {
+    display: none;
+  }
+
+  .info-layer-control {
+    min-width: 430px;
+  }
+
+  .info-layer-modes button {
+    min-width: 56px;
+  }
+
+  .info-layer-modes button span {
+    display: none;
+  }
+
+  .camera-controls {
+    right: 12px;
+  }
+}
+
+@media (max-height: 820px) {
+  .city-status {
+    max-height: calc(100% - 276px);
+    padding: 9px 10px;
+  }
+
+  .status-rows {
+    gap: 8px;
+  }
+
+  .status-line-note {
+    display: none;
+  }
+
+  .world-minimap {
+    width: 228px;
+    padding: 7px;
+  }
+
+  .world-minimap-map {
+    width: 212px;
+    height: 145px;
+  }
+
+  .world-minimap-map canvas {
+    width: 212px;
+    height: 212px;
+    transform: translateY(-34px);
+  }
+
+  .right-hud-stack .citizen-requests {
+    max-height: calc(100vh - var(--hud-height) - 20px);
+  }
+
+  .request-card {
+    padding: 6px;
+  }
+
+  .request-avatar .portrait {
+    width: 50px;
+    height: 50px;
+  }
+
+  .request-card:nth-child(n + 3) {
+    display: none;
+  }
+
+  .build-menu {
+    max-height: 72vh;
+  }
+
+  .build-card-media {
+    height: 108px;
+  }
+
+  .build-card-media .bld-art,
+  .build-card-media .bld-art-img {
+    width: 101px;
+    height: 101px;
+  }
+
+  .build-preview-art {
+    height: 145px;
+  }
+
+  .build-preview-art .bld-art {
+    width: 165px;
+    height: 165px;
+  }
+
+  .sheet-hero-art {
+    width: 160px;
+    height: 135px;
+  }
+
+  .sheet-hero-art .bld-art {
+    width: 128px;
+    height: 128px;
+  }
+}
+
+/* Verbindliche Lesbarkeitsgrenze (docs/agents/DECISIONS.md D-004).
+   Sekundäre Elemente werden an Breakpoints verborgen, nicht kleinskaliert. */
+.hud-brand-name,
+.res-card-sub,
+.hud-environment-copy strong,
+.hud-environment-copy span,
+.hud-env-speeds button,
+.primary-nav-btn,
+.quick-btn-label,
+.status-detail-hero span,
+.status-needs h4,
+.request-priority,
+.request-bubble,
+.request-reward .reward-chip,
+.citizen-inbox-head span,
+.citizen-inbox-filters button,
+.request-archive-card span,
+.build-menu-title small,
+.btn-tab,
+.build-card-invest,
+.chip,
+.build-card-action,
+.build-menu-preview > span,
+.build-preview-meta,
+.build-menu-preview p,
+.build-preview-bonus,
+.sheet-kicker,
+.sheet-stage,
+.sheet-stat-value,
+.building-site-copy h4,
+.building-site-row,
+.building-radius-preview,
+.world-minimap-region b,
+.world-minimap-region small,
+.info-layer-title,
+.info-layer-modes button,
+.region-future-buildings h4,
+.region-future-buildings p {
+  font-size: 12px;
+}
+
+.primary-nav-btn,
+.quick-btn-label {
+  line-height: 1.05;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+/* Große PC-Ansichten folgen dem zweiten Master-Mockup: Der Baushop wird zu
+   einem vollhohen rechten Arbeitsbereich mit 4×2-Katalog und Detailvorschau.
+   Unterhalb davon bleibt die bewährte kompakte Bodenleiste erhalten. */
+@media (min-width: 1680px) and (min-height: 860px) {
+  .build-menu {
+    inset: 10px 10px 10px auto;
+    width: min(820px, 47vw);
+    max-height: none;
+  }
+
+  .build-menu-head {
+    align-items: flex-start;
+    flex-wrap: wrap;
+  }
+
+  .build-menu-title {
+    min-width: 130px;
+  }
+
+  .build-tabs {
+    order: 3;
+    flex: 0 0 100%;
+    overflow-x: auto;
+    padding-bottom: 2px;
+  }
+
+  .btn-tab {
+    min-width: 88px;
+  }
+
+  .build-menu-body {
+    min-height: 0;
+    flex: 1;
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: minmax(0, 1fr) 270px;
+  }
+
+  .build-cards {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    grid-auto-rows: max-content;
+    overflow-y: auto;
+  }
+
+  .build-card-media {
+    height: 116px;
+  }
+
+  .build-card-media .bld-art,
+  .build-card-media .bld-art-img {
+    width: 108px;
+    height: 108px;
+  }
+
+  .build-card-body {
+    padding: 7px 8px 8px;
+  }
+
+  .build-card-effect,
+  .build-card-bonus,
+  .build-card-invest {
+    display: none;
+  }
+
+  .build-menu-preview {
+    display: grid;
+    grid-template-columns: 238px minmax(0, 1fr);
+    grid-template-rows: auto auto auto 1fr auto;
+    column-gap: 14px;
+    row-gap: 5px;
+    overflow: hidden;
+  }
+
+  .build-menu-preview > span,
+  .build-menu-preview > h3,
+  .build-menu-preview > .build-preview-meta,
+  .build-menu-preview > p,
+  .build-menu-preview > .build-preview-stages,
+  .build-menu-preview > .build-preview-bonus {
+    grid-column: 2;
+  }
+
+  .build-preview-art {
+    grid-column: 1;
+    grid-row: 1 / -1;
+    height: auto;
+    min-height: 236px;
+  }
+
+  .build-preview-art .bld-art {
+    width: 228px;
+    height: 228px;
+  }
+
+  .build-preview-stages {
+    align-self: end;
+  }
+
+  .region-dialog {
+    width: min(860px, calc(100vw - 60px));
+  }
+
+  .region-unlock-hero {
+    height: 320px;
+  }
+
+  .floating-sheet {
+    width: min(670px, calc(100vw - 110px));
+  }
+
+  .sheet-hero-art {
+    width: 238px;
+    height: 190px;
+  }
+
+  .sheet-hero-art .bld-art {
+    width: 186px;
+    height: 186px;
+  }
+
+  .right-hud-stack {
+    width: 326px;
+  }
+}
+
+@media (max-width: 720px), (max-height: 720px) {
+  .weather-current {
+    min-height: 185px;
+  }
+
+  .weather-presets {
+    grid-template-columns: 1fr;
+  }
+
+  .weather-preset-art {
+    height: 76px;
+  }
+
+  .region-decision-grid {
+    grid-template-columns: 1fr;
+  }
+}

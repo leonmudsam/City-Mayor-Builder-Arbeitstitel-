@@ -1,493 +1,412 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
-  ArrowDown,
-  ArrowUp,
-  Bot,
+  AlertTriangle,
   Check,
-  Clock3,
-  Gauge,
-  GitFork,
-  GripVertical,
-  Medal,
+  CircleDollarSign,
+  Filter,
+  HelpCircle,
+  PackageCheck,
   Play,
   RotateCcw,
   Route,
-  Save,
   Sparkles,
-  TrafficCone,
   Truck,
   X,
 } from 'lucide-react';
-import { WORLD_TILES, regionIdAt, startRegionConfig, terrainAt } from '../../game/config/startRegion.config.ts';
-import type { ActivityDef } from '../../game/config/types.ts';
-import type { GameController } from '../../game/commands/controller.ts';
-import type { BuildingInstance, TerrainType } from '../../game/types.ts';
+import { uiImage, vehicleImage } from '../../assets/registry.ts';
+import type { InfrastructureWarning } from '../../game/activities/logistics.ts';
+import type { ActivityBoardEntry, GameController } from '../../game/commands/controller.ts';
+import type { ActivityCategory, ActivityDef, DriveVehicle } from '../../game/config/types.ts';
+import { regionIdAt } from '../../game/config/startRegion.config.ts';
+import type { BuildingInstance } from '../../game/types.ts';
 import { formatDuration, formatMoney, t } from '../../i18n/index.ts';
-import { getMapApi, useGame, useUiStore } from '../../state/store.ts';
 import { playFeedback } from '../../services/feedback.ts';
-import { ActivityArt, CitizenPortrait } from '../art/index.ts';
+import { useGame, useUiStore } from '../../state/store.ts';
+import { CitizenPortrait } from '../art/index.ts';
+import { InfrastructureAdvisor } from '../citywork/InfrastructureAdvisor.tsx';
+import { ManualRouteMap, type CityworkMapPoint } from '../citywork/ManualRouteMap.tsx';
+import { RouteSummary } from '../citywork/RouteSummary.tsx';
+import { TourOverview, type TourDisplayPoint } from '../citywork/TourOverview.tsx';
+import { VehicleSelector } from '../citywork/VehicleSelector.tsx';
 
-const MAP_SIZE = 640;
-const TERRAIN: Record<TerrainType, [number, number, number]> = {
-  water: [21, 79, 109],
-  river: [34, 117, 151],
-  sand: [158, 139, 91],
-  fertile: [99, 122, 54],
-  grass: [52, 105, 59],
-  forest: [24, 70, 43],
-  mountain: [82, 86, 89],
-};
-const SEGMENT_COLORS = ['#53d173', '#f0c64f', '#f18a3b', '#e84d45'] as const;
-
-interface RoutePoint {
-  id: string;
-  x: number;
-  y: number;
+interface RoutePoint extends CityworkMapPoint, TourDisplayPoint {
   building: BuildingInstance;
 }
 
-interface RouteMetrics {
-  distanceKm: number;
-  seconds: number;
-  crossings: number;
-  risk: 'low' | 'medium' | 'high';
-  efficiency: number;
-  medal: 'gold' | 'silver' | 'bronze';
-}
+type BoardFilter = 'all' | ActivityCategory;
+
+const FILTER_LABELS: Partial<Record<BoardFilter, string>> = {
+  all: 'Alle',
+  supply: 'Versorgung',
+  logistics: 'Logistik',
+  safety: 'Notfall',
+  trade: 'Handel',
+  environment: 'Umwelt',
+  inspection: 'Verwaltung',
+};
 
 export function ActivityRoutePlanner({ defId }: { defId: string }) {
   const game = useGame();
   const closePlanner = useUiStore((state) => state.closeActivityPlanner);
+  const openPlanner = useUiStore((state) => state.openActivityPlanner);
   const pushToast = useUiStore((state) => state.pushToast);
+  const setMissionFollow = useUiStore((state) => state.setMissionFollow);
   const active = game.state.activities.active?.defId === defId ? game.state.activities.active : undefined;
-  const def = game.config.activities.activities.find((activity) => activity.id === defId);
-  const draft = game.getActivityRoutePlan(defId);
-  const initialTargets = active?.targets.map((target) => target.buildingId) ?? draft?.targetBuildingIds ?? [];
-  const [originalRoute] = useState(initialTargets);
-  const [route, setRoute] = useState(initialTargets);
-  const [routeName, setRouteName] = useState(() => `${def ? t(def.nameKey) : t('ui.route.title')} 1`);
-  const [tab, setTab] = useState<'overview' | 'targets' | 'vehicle'>('overview');
-  const source = buildingPoint(game, draft?.sourceBuildingId) ?? {
-    id: 'town-hall',
-    x: startRegionConfig.townHall.x + 1.5,
-    y: startRegionConfig.townHall.y + 1.5,
-  };
-  const points = useMemo(
-    () => route.map((id) => buildingPoint(game, id)).filter((point): point is RoutePoint => point !== undefined),
-    [game, route],
+  const context = useMemo(
+    () => game.getActivityPlanningContext(defId),
+    [game, game.version, defId],
   );
-  const metrics = useMemo(() => analyseRoute(source, points), [source.x, source.y, points]);
+  const def = context?.def;
+  const targetIds = context?.targetBuildingIds ?? [];
+  const anchors = useMemo(
+    () => game.getActivityRouteAnchors(defId, targetIds),
+    [game, game.version, defId, targetIds],
+  );
+  const defaultVehicle = context?.vehicles[0]?.id ?? def?.vehicle ?? 'van';
+  const [selectedVehicle, setSelectedVehicle] = useState<DriveVehicle>(
+    active?.vehicle ?? defaultVehicle,
+  );
+  const [roadPath, setRoadPath] = useState<{ x: number; y: number }[]>(() =>
+    active?.plannedRoadPath?.map((point) => ({ ...point })) ?? (anchors ? [{ ...anchors.source }] : []),
+  );
+  const [fitNonce, setFitNonce] = useState(0);
+  const [boardFilter, setBoardFilter] = useState<BoardFilter>('all');
 
-  if (!def || (!active && !draft) || route.length < 2) {
+  const source = useMemo(
+    () => sourcePoint(game, def, context?.sourceBuildingIds[0]),
+    [game, game.version, def, context?.sourceBuildingIds],
+  );
+  const targets = useMemo(
+    () => targetIds.map((id) => buildingPoint(game, id)).filter((point): point is RoutePoint => point !== undefined),
+    [game, game.version, targetIds],
+  );
+  const selectedVehicleDef = context?.vehicles.find((vehicle) => vehicle.id === selectedVehicle);
+  const preview = useMemo(
+    () => game.getActivityRoutePreview(defId, targetIds, roadPath, selectedVehicle),
+    [game, game.version, defId, targetIds, roadPath, selectedVehicle],
+  );
+  const referenceAnalysis = useMemo(
+    () => game.analyseActivityRoute(defId, targetIds),
+    [game, game.version, defId, targetIds],
+  );
+  const warnings = useMemo<InfrastructureWarning[]>(
+    () => preview?.analysis
+      ? game.getActivityInfrastructureWarnings(defId, preview.orderedTargetIds, selectedVehicle, {
+          vehicle: selectedVehicle,
+          roadPath,
+        })
+      : [],
+    [game, game.version, defId, preview?.analysis, preview?.orderedTargetIds, selectedVehicle, roadPath],
+  );
+  const routeComplete = preview?.complete === true && !warnings.some((warning) => warning.severity === 'critical');
+  const board = game.getActivityBoard().filter((entry) => entry.def.drive);
+  const filteredBoard = board.filter((entry) => boardFilter === 'all' || entry.def.category === boardFilter);
+  const filters = useMemo(
+    () => ['all', ...new Set(board.map((entry) => entry.def.category).filter(Boolean))] as BoardFilter[],
+    [board],
+  );
+  const futureVehicles = game.config.activities.vehicles.filter((vehicle) => vehicle.future);
+
+  useEffect(() => {
+    const vehicle = active?.vehicle ?? defaultVehicle;
+    setSelectedVehicle(vehicle);
+    setRoadPath(active?.plannedRoadPath?.map((point) => ({ ...point })) ?? (anchors ? [{ ...anchors.source }] : []));
+    setFitNonce((value) => value + 1);
+  }, [defId]); // Missionwechsel startet immer mit einem frischen, auftragsbezogenen Plan.
+
+  useEffect(() => {
+    if (roadPath.length === 0 && anchors) setRoadPath([{ ...anchors.source }]);
+  }, [anchors, roadPath.length]);
+
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      const target = event.target as HTMLElement | null;
+      if (target?.tagName === 'INPUT' || target?.tagName === 'TEXTAREA' || target?.isContentEditable) return;
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        if (roadPath.length > 1) setRoadPath((path) => path.slice(0, -1));
+        else closePlanner();
+      }
+      if (event.key === 'r' || event.key === 'R') {
+        setRoadPath(anchors ? [{ ...anchors.source }] : []);
+        pushToast('Route zurückgesetzt.', 'info');
+      }
+      if (event.key === 'f' || event.key === 'F') setFitNonce((value) => value + 1);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [anchors, closePlanner, pushToast, roadPath.length]);
+
+  if (!def || !context || !source || !anchors || targets.length < 2 || context.vehicles.length === 0) {
     return (
-      <section className="route-planner route-planner-empty">
-        <Route size={34} />
+      <section className="citywork-planner citywork-empty">
+        <Route size={42} />
         <h2>{t('ui.route.unavailable')}</h2>
+        <p>Baue zuerst eine passende Quelle, mindestens zwei Ziele und ein verbundenes Straßennetz.</p>
         <button className="btn-primary" onClick={closePlanner}>{t('ui.close')}</button>
       </section>
     );
   }
 
-  const optimise = () => setRoute(nearestNeighbour(source, points).map((point) => point.id));
-  const moveStop = (index: number, delta: number) => {
-    const next = [...route];
-    const target = index + delta;
-    if (target < 0 || target >= next.length) return;
-    const [item] = next.splice(index, 1);
-    if (item) next.splice(target, 0, item);
-    setRoute(next);
-  };
-  const saveRoute = () => {
-    localStorage.setItem(`cmb.activityRoute.${defId}`, JSON.stringify({ name: routeName, targets: route }));
-    pushToast(t('ui.route.saved'), 'success');
-  };
-  const loadLastRoute = () => {
-    try {
-      const raw = localStorage.getItem(`cmb.activityRoute.${defId}`);
-      if (!raw) return pushToast(t('ui.route.no_saved'), 'info');
-      const saved = JSON.parse(raw) as { name?: string; targets?: string[] };
-      const sameTargets =
-        Array.isArray(saved.targets) &&
-        saved.targets.length === originalRoute.length &&
-        saved.targets.every((id) => originalRoute.includes(id));
-      if (!sameTargets) return pushToast(t('ui.route.saved_outdated'), 'info');
-      setRoute(saved.targets!);
-      if (saved.name) setRouteName(saved.name);
-      pushToast(t('ui.route.loaded'), 'success');
-    } catch {
-      pushToast(t('ui.route.saved_outdated'), 'error');
-    }
-  };
+  const resetPath = () => setRoadPath([{ ...anchors.source }]);
   const startRoute = () => {
-    if (active) {
-      const result = game.setActiveActivityRoute(route);
-      if (!result.ok) {
-        pushToast(t(`error.${result.error}`), 'error');
-        return;
-      }
-    } else {
-      const result = game.startActivity(def.id, route);
-      if (!result.ok) {
-        pushToast(t(`error.${result.error}`), 'error');
-        return;
-      }
+    if (!routeComplete || !preview) {
+      pushToast('Verbinde Quelle, alle Pflichtziele und notwendige Nachfüllstopps.', 'error');
+      return;
+    }
+    const plan = { vehicle: selectedVehicle, roadPath };
+    const result = active
+      ? game.setActiveActivityRoute(preview.orderedTargetIds, plan)
+      : game.startActivity(def.id, preview.orderedTargetIds, plan);
+    if (!result.ok) {
+      pushToast(t(`error.${result.error}`), 'error');
+      return;
     }
     closePlanner();
     playFeedback('activity_start');
-    pushToast(t('ui.route.started'), 'success');
-    if (def.drive) {
-      requestAnimationFrame(() => {
-        const api = getMapApi();
-        if (!api?.canDrive() || !api.enterDrive()) pushToast(t('ui.drive.unavailable'), 'error');
-      });
-    }
+    pushToast('Mission gestartet – das Fahrzeug folgt deiner Route.', 'success');
+    requestAnimationFrame(() => setMissionFollow(true));
   };
 
   return (
-    <section className="route-planner">
-      <header className="route-planner-head">
-        <div className="route-title-icon"><Route size={25} /></div>
-        <div>
-          <span>{t('ui.route.eyebrow')}</span>
-          <h2>{t(def.nameKey)}</h2>
+    <section className="citywork-planner citywork-v4">
+      <header className="citywork-v4-header">
+        <div className="citywork-v4-brand">
+          <span><Route size={27} /></span>
+          <div><strong>Stadtarbeit</strong><small>Plane deine Route. Liefere clever.</small></div>
         </div>
-        <div className="route-brief">
-          <CitizenPortrait role={def.sender} seed={def.id} size={38} />
-          <p>{t(def.descriptionKey)}</p>
+        <div className="citywork-v4-steps" aria-label="Planungsfortschritt">
+          {[
+            ['1', 'Auftrag', true],
+            ['2', 'Fahrzeug', true],
+            ['3', 'Route planen', false],
+            ['4', 'Bestätigen', false],
+          ].map(([number, label, done], index) => (
+            <div key={String(number)} className={index === 2 ? 'active' : done ? 'done' : routeComplete ? 'ready' : ''}>
+              <span>{done ? <Check size={13} /> : number}</span>
+              <strong>{label}</strong>
+            </div>
+          ))}
         </div>
-        <button className="route-close" onClick={closePlanner} title={t('ui.close')}><X size={19} /></button>
+        <div className="citywork-v4-header-actions">
+          <button onClick={() => pushToast('Mausrad zoomt · freie Fläche zieht die Karte · F passt alles ein · R setzt zurück.', 'info')} title="Hilfe"><HelpCircle size={19} /></button>
+          <button onClick={closePlanner} title={t('ui.close')}><X size={22} /></button>
+        </div>
       </header>
 
-      <div className="route-planner-layout">
-        <div className="route-map-shell">
-          <ActivityRouteMap game={game} source={source} points={points} />
-          <div className="route-source-badge">
-            <span><Truck size={18} /></span>
-            <div><small>{t('ui.route.source')}</small><strong>{sourceName(game, draft?.sourceBuildingId)}</strong></div>
+      <div className="citywork-v4-layout">
+        <aside className="citywork-v4-jobs">
+          <div className="citywork-v4-section-head">
+            <div><small>Schritt 1</small><strong>Aufträge</strong></div>
+            <span>{board.filter((entry) => entry.available).length} bereit</span>
           </div>
-          <div className="route-traffic-legend">
-            <strong><TrafficCone size={14} /> {t('ui.route.traffic')}</strong>
-            {[
-              ['#53d173', t('ui.route.traffic.free')],
-              ['#f0c64f', t('ui.route.traffic.light')],
-              ['#f18a3b', t('ui.route.traffic.medium')],
-              ['#e84d45', t('ui.route.traffic.jam')],
-            ].map(([color, label]) => (
-              <span key={label}><i style={{ background: color }} />{label}</span>
+          <div className="citywork-v4-filters">
+            <Filter size={14} />
+            {filters.map((filter) => (
+              <button key={filter} className={boardFilter === filter ? 'active' : ''} onClick={() => setBoardFilter(filter)}>
+                {FILTER_LABELS[filter] ?? filter}
+              </button>
             ))}
-            <label><input type="checkbox" defaultChecked /> {t('ui.route.overlay.traffic')}</label>
-            <label><input type="checkbox" /> {t('ui.route.overlay.quality')}</label>
           </div>
-          <div className="route-map-actions">
-            <button onClick={() => setRoute(originalRoute)}><RotateCcw size={15} /> {t('ui.route.reset')}</button>
-            <button onClick={loadLastRoute}><Route size={15} /> {t('ui.route.last')}</button>
-            <button className="route-optimise" onClick={optimise}><Bot size={16} /> {t('ui.route.optimise')}</button>
-            <button onClick={saveRoute}><Save size={15} /> {t('ui.route.save')}</button>
+          <div className="citywork-v4-job-list">
+            {filteredBoard.map((entry) => (
+              <MissionCard
+                key={entry.def.id}
+                entry={entry}
+                selected={entry.def.id === defId}
+                current={entry.def.id === defId}
+                onSelect={() => openPlanner(entry.def.id)}
+              />
+            ))}
           </div>
-        </div>
-
-        <aside className="route-details">
-          <h3>{t('ui.route.details')}</h3>
-          <label className="route-name">
-            <span>{t('ui.route.name')}</span>
-            <input value={routeName} onChange={(event) => setRouteName(event.target.value)} />
-          </label>
-          <div className="route-tabs">
-            <button className={tab === 'overview' ? 'active' : ''} onClick={() => setTab('overview')}>{t('ui.route.tab.overview')}</button>
-            <button className={tab === 'targets' ? 'active' : ''} onClick={() => setTab('targets')}>{t('ui.route.tab.targets', { count: route.length })}</button>
-            <button className={tab === 'vehicle' ? 'active' : ''} onClick={() => setTab('vehicle')}>{t('ui.route.tab.vehicle')}</button>
+          <div className="citywork-v4-brief">
+            <Sparkles size={16} />
+            <div><strong>Warum ist diese Tour anspruchsvoll?</strong><span>{complexityTags(def, preview?.cargoRoute?.requiredResupplies ?? 0).join(' · ')}</span></div>
           </div>
-
-          {tab === 'overview' && (
-            <>
-              <div className="route-metrics">
-                <Metric icon={<Route />} label={t('ui.route.length')} value={`${metrics.distanceKm.toFixed(2).replace('.', ',')} km`} />
-                <Metric icon={<Clock3 />} label={t('ui.route.time')} value={formatDuration(metrics.seconds * 1000)} />
-                <Metric icon={<GitFork />} label={t('ui.route.crossings')} value={String(metrics.crossings)} />
-                <Metric
-                  icon={<Gauge />}
-                  label={t('ui.route.risk')}
-                  value={t(`ui.route.risk.${metrics.risk}`)}
-                  tone={metrics.risk === 'low' ? 'good' : metrics.risk === 'medium' ? 'warn' : 'bad'}
-                />
-              </div>
-              <div className="route-efficiency">
-                <div><span>{t('ui.route.efficiency')}</span><strong>{metrics.efficiency}%</strong></div>
-                <div className="route-efficiency-bar"><i style={{ width: `${metrics.efficiency}%` }} /></div>
-                <span className={`route-medal ${metrics.medal}`}><Medal size={24} /> {t(`ui.route.medal.${metrics.medal}`)}</span>
-              </div>
-              <div className="route-costs">
-                <strong>{t('ui.route.reward')}</strong>
-                <span>{formatMoney(game.getActivityBoard().find((entry) => entry.def.id === def.id)?.reward.money ?? 0)}</span>
-                <span>{game.getActivityBoard().find((entry) => entry.def.id === def.id)?.reward.xp ?? 0} XP</span>
-              </div>
-            </>
-          )}
-
-          {tab === 'vehicle' && (
-            <div className="route-vehicle">
-              <ActivityArt id={def.id} type={def.type} px={82} />
-              <div><small>{t('ui.route.vehicle')}</small><strong>{vehicleName(def)}</strong><span>{t('ui.route.vehicle_hint')}</span></div>
-            </div>
-          )}
-
-          {(tab === 'targets' || tab === 'overview') && (
-            <div className="route-targets">
-              <strong>{t('ui.route.targets_order')}</strong>
-              {points.map((point, index) => {
-                const buildingDef = game.config.buildings.get(point.building.defId);
-                const region = game.config.regions.get(regionIdAt(Math.floor(point.x), Math.floor(point.y)));
-                return (
-                  <div className="route-target-row" key={point.id}>
-                    <span className="route-target-index">{index + 1}</span>
-                    <div>
-                      <strong>{buildingDef ? t(buildingDef.nameKey) : point.building.defId}</strong>
-                      <small>{region ? t(region.nameKey) : t('ui.route.city_area')}</small>
-                    </div>
-                    <button onClick={() => moveStop(index, -1)} disabled={index === 0} title={t('ui.route.move_up')}><ArrowUp size={14} /></button>
-                    <button onClick={() => moveStop(index, 1)} disabled={index === points.length - 1} title={t('ui.route.move_down')}><ArrowDown size={14} /></button>
-                    <GripVertical size={15} />
-                  </div>
-                );
-              })}
-            </div>
-          )}
-
-          <footer className="route-details-actions">
-            <button className="btn-secondary" onClick={closePlanner}>{t('ui.cancel')}</button>
-            <button className="btn-primary" onClick={startRoute}><Play size={16} /> {t('ui.route.start')}</button>
-          </footer>
         </aside>
-      </div>
 
-      <div className="route-suggestions">
-        <h3>{t('ui.route.analysis')}</h3>
-        <button onClick={optimise}><span className="suggestion-icon good"><Check /></span><div><strong>{t('ui.route.tip.bridge')}</strong><small>{t('ui.route.tip.bridge.desc')}</small></div><b>{t('ui.route.recommended')}</b></button>
-        <button onClick={optimise}><span className="suggestion-icon warn"><Sparkles /></span><div><strong>{t('ui.route.tip.traffic')}</strong><small>{t('ui.route.tip.traffic.desc')}</small></div><b>{t('ui.route.hint')}</b></button>
-        <button onClick={() => setTab('vehicle')}><span className="suggestion-icon info"><Truck /></span><div><strong>{t('ui.route.tip.vehicle')}</strong><small>{t('ui.route.tip.vehicle.desc')}</small></div><b>{t('ui.route.tip')}</b></button>
+        <main className="citywork-v4-center">
+          <div className="citywork-v4-map-head">
+            <div>
+              <small>Schritt 3 · Routenplanung</small>
+              <h2>{t(def.nameKey)}</h2>
+              <p>Zeichne direkt auf den Straßen. Die Reihenfolge entsteht aus deinem Weg.</p>
+            </div>
+            <div className="citywork-v4-map-actions">
+              <span>2D</span>
+              <button onClick={resetPath}><RotateCcw size={15} /> Route löschen</button>
+            </div>
+          </div>
+          <div className="citywork-v4-map-stage">
+            <ManualRouteMap
+              game={game}
+              source={source}
+              targets={targets}
+              anchors={anchors}
+              roadPath={roadPath}
+              analysis={preview?.analysis}
+              referenceSegments={referenceAnalysis?.segments}
+              visitOrder={preview?.orderedTargetIds ?? []}
+              {...(preview?.cargoRoute ? { cargoStops: preview.cargoRoute.stops } : {})}
+              fitNonce={fitNonce}
+              onPathChange={setRoadPath}
+              onInvalid={() => pushToast('Wähle einen angrenzenden Straßenabschnitt.', 'info')}
+            />
+            <InfrastructureAdvisor
+              warnings={warnings}
+              routeComplete={routeComplete}
+              // TODO(CLAUDE_LOGIC): InfrastructureWarning braucht roadPoint/segmentId,
+              // damit ein einzelner Hinweis statt der gesamten Tour fokussiert werden kann.
+              onShowRoute={() => setFitNonce((value) => value + 1)}
+            />
+            <RouteSummary preview={preview} roadPath={roadPath} />
+          </div>
+        </main>
+
+        <aside className="citywork-v4-right">
+          <VehicleSelector
+            vehicles={context.vehicles}
+            futureVehicles={futureVehicles}
+            level={game.state.level.current}
+            selected={selectedVehicle}
+            {...(preview?.cargoPlan ? { cargoPlan: preview.cargoPlan } : {})}
+            {...(preview?.cargoRoute ? { cargoRoute: preview.cargoRoute } : {})}
+            cargoAssetKey={cargoAsset(def)}
+            onSelect={setSelectedVehicle}
+          />
+          <TourOverview
+            source={source}
+            targets={targets}
+            orderedTargetIds={preview?.orderedTargetIds ?? []}
+            {...(preview?.cargoRoute ? { cargoStops: preview.cargoRoute.stops } : {})}
+            {...(selectedVehicleDef ? { vehicle: selectedVehicleDef } : {})}
+          />
+          <section className={`citywork-v4-confirm${routeComplete ? ' ready' : ''}`}>
+            <div className="citywork-v4-section-head">
+              <div><small>Schritt 4</small><strong>Mission bestätigen</strong></div>
+              <span>{routeComplete ? 'Bereit' : 'Route offen'}</span>
+            </div>
+            <div className="citywork-v4-confirm-main">
+              <span className="citywork-v4-confirm-vehicle">
+                {selectedVehicleDef && vehicleImage(selectedVehicleDef.imageKey)
+                  ? <img src={vehicleImage(selectedVehicleDef.imageKey)} alt="" />
+                  : <Truck size={38} />}
+              </span>
+              <dl>
+                <div><dt>Ladung</dt><dd>{preview?.cargoPlan?.totalRequired.toLocaleString('de-DE') ?? '–'}</dd></div>
+                <div><dt>Stopps</dt><dd>{preview?.orderedTargetIds.length ?? 0}/{targetIds.length}</dd></div>
+                <div><dt>Nachfüllen</dt><dd>{preview?.cargoRoute?.plannedResupplies ?? 0}</dd></div>
+                <div><dt>Leerfahrt</dt><dd>{Math.round((preview?.cargoRoute?.emptyTravelRatio ?? 0) * 100)} %</dd></div>
+                <div><dt>Zeit</dt><dd>{preview?.infrastructure ? formatDuration(preview.infrastructure.estimatedDurationMs) : '–'}</dd></div>
+                <div><dt>Risiko</dt><dd>{preview?.analysis ? t(`ui.route.risk.${preview.analysis.congestionRisk}`) : '–'}</dd></div>
+              </dl>
+            </div>
+            <div className="citywork-v4-confirm-reward">
+              <span><CircleDollarSign size={16} /> {formatMoney(context.reward.money)}</span>
+              <span>{context.reward.xp} XP</span>
+              <strong>{preview?.analysis ? t(`ui.route.medal.${preview.analysis.expectedMedal}`) : 'Prognose offen'}</strong>
+            </div>
+            {!routeComplete && (
+              <p><AlertTriangle size={14} /> Quelle, alle Ziele und nötige Nachfüllstopps müssen lückenlos verbunden sein.</p>
+            )}
+            <button className="citywork-v4-start" disabled={!routeComplete} onClick={startRoute}>
+              <Truck size={20} /> Mission starten <Play size={16} />
+            </button>
+          </section>
+        </aside>
       </div>
     </section>
   );
 }
 
-function ActivityRouteMap({
-  game,
-  source,
-  points,
+function MissionCard({
+  entry,
+  selected,
+  current,
+  onSelect,
 }: {
-  game: GameController;
-  source: { x: number; y: number };
-  points: RoutePoint[];
+  entry: ActivityBoardEntry;
+  selected: boolean;
+  current: boolean;
+  onSelect(): void;
 }) {
-  const canvasRef = useRef<HTMLCanvasElement>(null);
-  const routeKey = points.map((point) => point.id).join(',');
-  const unlockedKey = Object.values(game.state.world.regions)
-    .filter((region) => region.status === 'unlocked')
-    .map((region) => region.id)
-    .sort((a, b) => a - b)
-    .join(',');
-
-  useEffect(() => {
-    const canvas = canvasRef.current;
-    const ctx = canvas?.getContext('2d');
-    if (!canvas || !ctx) return;
-    const unlocked = new Set(unlockedKey.split(',').filter(Boolean).map(Number));
-    const image = ctx.createImageData(MAP_SIZE, MAP_SIZE);
-    for (let py = 0; py < MAP_SIZE; py++) {
-      const wy = Math.min(WORLD_TILES - 1, Math.floor((py / MAP_SIZE) * WORLD_TILES));
-      for (let px = 0; px < MAP_SIZE; px++) {
-        const wx = Math.min(WORLD_TILES - 1, Math.floor((px / MAP_SIZE) * WORLD_TILES));
-        const terrain = terrainAt(wx, wy);
-        const base = TERRAIN[terrain];
-        const region = regionIdAt(wx, wy);
-        const visible = region === 0 || unlocked.has(region);
-        const light = visible ? 0.92 : 0.43;
-        const offset = (py * MAP_SIZE + px) * 4;
-        image.data[offset] = Math.round(base[0] * light);
-        image.data[offset + 1] = Math.round(base[1] * light);
-        image.data[offset + 2] = Math.round(base[2] * light + (visible ? 0 : 10));
-        image.data[offset + 3] = 255;
-      }
-    }
-    ctx.putImageData(image, 0, 0);
-    ctx.fillStyle = 'rgba(3, 13, 20, .18)';
-    ctx.fillRect(0, 0, MAP_SIZE, MAP_SIZE);
-
-    const scale = MAP_SIZE / WORLD_TILES;
-    ctx.fillStyle = 'rgba(214, 221, 214, .5)';
-    for (const building of Object.values(game.state.buildings)) {
-      if (building.defId !== 'road') continue;
-      ctx.fillRect(building.x * scale, building.y * scale, Math.max(1.2, scale), Math.max(1.2, scale));
-    }
-
-    const all = [{ x: source.x, y: source.y }, ...points];
-    ctx.lineCap = 'round';
-    ctx.lineJoin = 'round';
-    for (let index = 1; index < all.length; index++) {
-      const a = all[index - 1]!;
-      const b = all[index]!;
-      const segment = routePolyline(a, b, index).map((point) => ({ x: point.x * scale, y: point.y * scale }));
-      const trace = () => {
-        ctx.beginPath();
-        ctx.moveTo(segment[0]!.x, segment[0]!.y);
-        for (const point of segment.slice(1)) ctx.lineTo(point.x, point.y);
-      };
-      ctx.strokeStyle = 'rgba(1, 8, 12, .72)';
-      ctx.lineWidth = 11;
-      trace();
-      ctx.stroke();
-      ctx.strokeStyle = SEGMENT_COLORS[segmentLoad(a, b, index)];
-      ctx.lineWidth = 7;
-      trace();
-      ctx.stroke();
-      ctx.setLineDash([9, 8]);
-      ctx.strokeStyle = 'rgba(255,255,255,.72)';
-      ctx.lineWidth = 1.5;
-      trace();
-      ctx.stroke();
-      ctx.setLineDash([]);
-    }
-
-    marker(ctx, source.x * scale, source.y * scale, 'Q', '#54ca73');
-    points.forEach((point, index) => marker(ctx, point.x * scale, point.y * scale, String(index + 1), '#178ad0'));
-  }, [game, points, routeKey, source.x, source.y, unlockedKey]);
-
-  return <canvas ref={canvasRef} width={MAP_SIZE} height={MAP_SIZE} aria-label={t('ui.route.map')} />;
-}
-
-function marker(ctx: CanvasRenderingContext2D, x: number, y: number, label: string, color: string) {
-  ctx.beginPath();
-  ctx.arc(x, y, 15, 0, Math.PI * 2);
-  ctx.fillStyle = 'rgba(4, 16, 24, .92)';
-  ctx.fill();
-  ctx.lineWidth = 4;
-  ctx.strokeStyle = color;
-  ctx.stroke();
-  ctx.fillStyle = '#fff';
-  ctx.font = '800 14px system-ui';
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'middle';
-  ctx.fillText(label, x, y + 0.5);
+  const image = uiImage(missionImage(entry.def));
+  const tags = complexityTags(entry.def, entry.def.cargoModel ? 1 : 0).slice(0, 2);
+  return (
+    <button
+      className={`citywork-v4-job${selected ? ' selected' : ''}${entry.available || current ? '' : ' locked'}`}
+      disabled={!entry.available && !current}
+      onClick={onSelect}
+    >
+      <span className="citywork-v4-job-art">{image ? <img src={image} alt="" /> : <PackageCheck size={38} />}</span>
+      <span className="citywork-v4-job-copy">
+        <i>{categoryLabel(entry.def.category)} · {entry.def.difficulty ? t(`activity.difficulty.${entry.def.difficulty}`) : 'Planbar'}</i>
+        <strong>{t(entry.def.nameKey)}</strong>
+        <small>{t(entry.def.descriptionKey)}</small>
+        <em>{tags.map((tag) => <b key={tag}>{tag}</b>)}</em>
+        <span><CircleDollarSign size={12} /> {formatMoney(entry.reward.money)} <b>{entry.reward.xp} XP</b></span>
+      </span>
+      <span className="citywork-v4-job-person"><CitizenPortrait role={entry.def.sender} seed={entry.def.id} size={42} /></span>
+    </button>
+  );
 }
 
 function buildingPoint(game: GameController, id?: string): RoutePoint | undefined {
   if (!id) return undefined;
   const building = game.state.buildings[id];
-  const def = building && game.config.buildings.get(building.defId);
-  if (!building || !def) return undefined;
+  const definition = building && game.config.buildings.get(building.defId);
+  if (!building || !definition) return undefined;
+  const region = game.config.regions.get(regionIdAt(building.x, building.y));
   return {
     id,
-    x: building.x + def.size.w / 2,
-    y: building.y + def.size.h / 2,
+    x: building.x + definition.size.w / 2,
+    y: building.y + definition.size.h / 2,
+    label: t(definition.nameKey),
+    subtitle: region ? t(region.nameKey) : 'Stadtgebiet',
+    buildingDefId: building.defId,
+    category: definition.category,
+    upgradeLevel: building.upgradeLevel,
     building,
   };
 }
 
-function sourceName(game: GameController, id?: string): string {
-  const point = buildingPoint(game, id);
-  const def = point && game.config.buildings.get(point.building.defId);
-  return def ? t(def.nameKey) : t('ui.route.city_depot');
-}
-
-function nearestNeighbour(source: { x: number; y: number }, points: RoutePoint[]): RoutePoint[] {
-  const remaining = [...points];
-  const ordered: RoutePoint[] = [];
-  let current = source;
-  while (remaining.length > 0) {
-    remaining.sort(
-      (a, b) =>
-        Math.hypot(a.x - current.x, a.y - current.y) - Math.hypot(b.x - current.x, b.y - current.y) ||
-        a.id.localeCompare(b.id),
-    );
-    const next = remaining.shift();
-    if (!next) break;
-    ordered.push(next);
-    current = next;
+function sourcePoint(game: GameController, def: ActivityDef | undefined, sourceBuildingId?: string): RoutePoint | undefined {
+  const explicit = buildingPoint(game, sourceBuildingId);
+  if (explicit) return explicit;
+  if (def?.requiresAnyBuilding) {
+    const building = Object.values(game.state.buildings)
+      .filter((candidate) => candidate.status === 'active' && def.requiresAnyBuilding!.includes(candidate.defId))
+      .sort((a, b) => a.id.localeCompare(b.id))[0];
+    const point = buildingPoint(game, building?.id);
+    if (point) return point;
   }
-  return ordered;
+  return buildingPoint(game, Object.values(game.state.buildings).find((building) => building.defId === 'town_hall')?.id);
 }
 
-function analyseRoute(source: { x: number; y: number }, points: RoutePoint[]): RouteMetrics {
-  const route = [source, ...points];
-  let tiles = 0;
-  for (let index = 1; index < route.length; index++) {
-    const a = route[index - 1]!;
-    const b = route[index]!;
-    tiles += Math.hypot(b.x - a.x, b.y - a.y) * 1.28;
-  }
-  const optimal = nearestNeighbour(source, points);
-  const optimalRoute = [source, ...optimal];
-  let optimalTiles = 0;
-  for (let index = 1; index < optimalRoute.length; index++) {
-    const a = optimalRoute[index - 1]!;
-    const b = optimalRoute[index]!;
-    optimalTiles += Math.hypot(b.x - a.x, b.y - a.y) * 1.28;
-  }
-  const efficiency = Math.max(48, Math.min(98, Math.round((optimalTiles / Math.max(1, tiles)) * 96)));
-  const load = route.slice(1).reduce((sum, point, index) => sum + segmentLoad(route[index]!, point, index + 1), 0);
-  const averageLoad = load / Math.max(1, points.length);
-  const risk = averageLoad < 1.15 ? 'low' : averageLoad < 2.1 ? 'medium' : 'high';
-  const seconds = Math.max(45, Math.round(tiles / 1.7 + points.length * 12));
-  return {
-    distanceKm: Math.max(0.42, (tiles * 4) / 1000),
-    seconds,
-    crossings: Math.max(2, Math.round(tiles / 18)),
-    risk,
-    efficiency,
-    medal: efficiency >= 86 ? 'gold' : efficiency >= 68 ? 'silver' : 'bronze',
-  };
+function missionImage(def: ActivityDef) {
+  if (def.id.includes('food') || def.id.includes('water')) return 'mission_food_route';
+  if (def.category === 'safety') return 'mission_emergency_route';
+  if (def.category === 'trade' || def.id.includes('log')) return 'mission_trade_route';
+  if (def.category === 'environment') return 'mission_return_cargo';
+  return 'mission_construction_route';
 }
 
-function segmentLoad(a: { x: number; y: number }, b: { x: number; y: number }, index: number): 0 | 1 | 2 | 3 {
-  // TODO(CLAUDE_LOGIC): Durch echte Straßengraph-Segmente, Verkehrslast und
-  // Prognosedaten ersetzen. Diese deterministische Schätzung ist nur die
-  // visuelle Schnittstelle des Mockups und verändert keinerlei Simulationswert.
-  const hash = Math.abs(Math.floor(a.x * 13 + a.y * 17 + b.x * 19 + b.y * 23 + index * 29));
-  const roll = hash % 10;
-  return roll < 5 ? 0 : roll < 8 ? 1 : roll < 9 ? 2 : 3;
+function cargoAsset(def: ActivityDef) {
+  const resource = def.cargoModel?.resource;
+  if (!resource) return 'cargo_materials';
+  return `cargo_${resource === 'freshwater' ? 'water' : resource}`;
 }
 
-function routePolyline(
-  a: { x: number; y: number },
-  b: { x: number; y: number },
-  index: number,
-): { x: number; y: number }[] {
-  const horizontalFirst = index % 2 === 0;
-  const offset = ((index % 3) - 1) * 1.8;
-  if (horizontalFirst) {
-    const midX = (a.x + b.x) / 2 + offset;
-    return [a, { x: midX, y: a.y }, { x: midX, y: b.y }, b];
-  }
-  const midY = (a.y + b.y) / 2 + offset;
-  return [a, { x: a.x, y: midY }, { x: b.x, y: midY }, b];
+function categoryLabel(category: ActivityCategory | undefined) {
+  return category ? FILTER_LABELS[category] ?? 'Spezialtransport' : 'Stadtarbeit';
 }
 
-function vehicleName(def: ActivityDef): string {
-  const names: Record<string, string> = {
-    van: t('ui.route.vehicle.van'),
-    fire_truck: t('ui.route.vehicle.fire'),
-    logging_truck: t('ui.route.vehicle.logging'),
-    police_car: t('ui.route.vehicle.police'),
-    flatbed: t('ui.route.vehicle.flatbed'),
-  };
-  return names[def.vehicle ?? 'van'] ?? t('ui.route.vehicle.van');
-}
-
-function Metric({
-  icon,
-  label,
-  value,
-  tone,
-}: {
-  icon: React.ReactNode;
-  label: string;
-  value: string;
-  tone?: 'good' | 'warn' | 'bad';
-}) {
-  return (
-    <div className={`route-metric${tone ? ` ${tone}` : ''}`}>
-      <span>{icon}</span>
-      <div><small>{label}</small><strong>{value}</strong></div>
-    </div>
-  );
+function complexityTags(def: ActivityDef, resupplies: number) {
+  const tags = [`${def.targetCount?.max ?? 0} Lieferziele`];
+  if (resupplies > 0) tags.push(`${resupplies} Nachfüllung${resupplies === 1 ? '' : 'en'}`);
+  if (def.cargoModel?.perishable) tags.push('Verderbliche Ware');
+  if (def.difficulty === 'hard') tags.push('Hohes Verkehrsrisiko');
+  if (def.vehicle === 'heavy_transporter' || def.vehicle === 'large_truck') tags.push('Schweres Fahrzeug');
+  if (def.timeLimitSec && def.timeLimitSec <= 75) tags.push('Enges Zeitfenster');
+  return tags;
 }

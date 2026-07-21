@@ -3,7 +3,7 @@ import { useSyncExternalStore } from 'react';
 import type { GameController } from '../game/commands/controller.ts';
 import type { RegionId } from '../game/types.ts';
 import type { CameraPreset } from '../renderer/three/CameraConfig.ts';
-import type { MapCameraView } from '../renderer/IMapRenderer.ts';
+import type { InfoLayerMode, MapCameraView } from '../renderer/IMapRenderer.ts';
 
 // The React side never mutates game state directly: it reads snapshots off
 // the controller (re-rendering via the version counter) and sends commands.
@@ -37,12 +37,17 @@ export interface MapApi {
   getCameraView(): MapCameraView;
   /** Focus a position chosen on the minimap. */
   focusGround(x: number, z: number, dist?: number): void;
+  /** Renderer-only building information filter. */
+  setInfoLayer(mode: InfoLayerMode): void;
   /** § A6: Läuft eine selbst-fahrbare Fahrmission (Button zeigen)? */
   canDrive(): boolean;
   /** § A6: In das Missionsfahrzeug einsteigen (false, wenn nicht möglich). */
   enterDrive(): boolean;
   /** § A6: Fahrmodus verlassen. */
   exitDrive(): void;
+  /** Automatisches Missionsfahrzeug verfolgen oder Kamera wieder freigeben. */
+  setMissionFollow(active: boolean): void;
+  isMissionFollowing(): boolean;
 }
 
 let mapApi: MapApi | undefined;
@@ -90,6 +95,7 @@ export type PanelId =
   | 'trade'
   | 'debug'
   | 'activities'
+  | 'weather'
   | 'menu'
   | undefined;
 
@@ -103,6 +109,9 @@ interface UiState {
    *  this flag drives the persistent city-wide overlay chrome. */
   overlayMode: boolean;
   toggleOverlay(): void;
+  /** World-space marker filter; presentation state, never persisted in the save. */
+  infoLayerMode: InfoLayerMode;
+  setInfoLayerMode(mode: InfoLayerMode): void;
   /** Hide-the-whole-UI toggle (§8): blanks the HUD frame so the map is clean;
    *  a small restore button stays visible to bring the chrome back. */
   uiHidden: boolean;
@@ -114,6 +123,8 @@ interface UiState {
    *  Fahr-HUD (Timer, verbleibende Ziele, „Fahrt beenden") statt der Panels. */
   driveActive: boolean;
   setDriveActive(active: boolean): void;
+  missionFollow: boolean;
+  setMissionFollow(active: boolean): void;
   /** UI-only draft route. Targets are committed only through startActivity(). */
   activityPlannerDefId: string | undefined;
   openActivityPlanner(defId: string): void;
@@ -149,6 +160,11 @@ export const useUiStore = create<UiState>((set) => ({
   openPanel: undefined,
   overlayMode: false,
   toggleOverlay: () => set((s) => ({ overlayMode: !s.overlayMode })),
+  infoLayerMode: 'problems',
+  setInfoLayerMode: (mode) => {
+    getMapApi()?.setInfoLayer(mode);
+    set({ infoLayerMode: mode });
+  },
   uiHidden: false,
   toggleUiHidden: () => set((s) => ({ uiHidden: !s.uiHidden })),
   cameraPreset: 'city',
@@ -158,6 +174,11 @@ export const useUiStore = create<UiState>((set) => ({
   },
   driveActive: false,
   setDriveActive: (active) => set({ driveActive: active }),
+  missionFollow: false,
+  setMissionFollow: (active) => {
+    getMapApi()?.setMissionFollow(active);
+    set({ missionFollow: active });
+  },
   activityPlannerDefId: undefined,
   openActivityPlanner: (defId) =>
     set({

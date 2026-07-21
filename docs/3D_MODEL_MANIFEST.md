@@ -1,5 +1,13 @@
 # 3D-Modell-Manifest — Namens-Index (v0.40 — World Graphics V2)
 
+> **Statuskorrektur v0.70:** Es gibt ausschließlich die 3D-Karte und bereits
+> mehrere aktive GLBs, unter anderem Baum-, Boot-, Windmühlen- und
+> Leuchtturmassets. Die unten stehenden historischen Aussagen zu drei Kartenmodi
+> oder „keinen GLBs“ sind überholt. Aktive und geplante Namen werden aus
+> `src/assets/modelManifest.ts` in die Ordner-READMEs/PROMPTS generiert; neue
+> Map-5.0-Slots und Fallbackstatus stehen in
+> `docs/agents/WORLD_ASSET_MANIFEST.md`.
+
 **Die kurze, testgeprüfte Namens-Autorität.** Ein Gebäude hier eintragen → das
 korrekt benannte `.glb` in den Ordner legen → das Spiel nutzt es automatisch
 (rekursive Erkennung, Key = Dateiname). Fehlt es, greift ein **prozeduraler

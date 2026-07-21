@@ -1,0 +1,705 @@
+/* Stadtarbeit UI/UX Redesign 4.0
+   Rein präsentationale Schicht. Alle Planungs-, Cargo- und Infrastrukturdaten
+   stammen aus GameController-Read-Modellen; React erfindet keine Simulation. */
+
+.citywork-planner.citywork-v4 {
+  grid-template-rows: 64px minmax(0, 1fr);
+  min-width: 1040px;
+  background:
+    radial-gradient(circle at 49% 25%, rgba(45, 133, 158, .18), transparent 44%),
+    linear-gradient(145deg, #03121d 0%, #061c2a 46%, #04131e 100%);
+}
+
+.citywork-v4 button {
+  border: 0;
+  cursor: pointer;
+}
+
+.citywork-v4 button:disabled {
+  cursor: not-allowed;
+}
+
+.citywork-v4-header {
+  position: relative;
+  z-index: 5;
+  display: grid;
+  grid-template-columns: 290px minmax(440px, 1fr) 100px;
+  align-items: center;
+  gap: 18px;
+  padding: 7px 12px;
+  border-bottom: 1px solid rgba(238, 169, 46, .22);
+  background: linear-gradient(180deg, rgba(6, 26, 39, .99), rgba(3, 17, 27, .98));
+  box-shadow: 0 12px 34px rgba(0, 4, 9, .5);
+}
+
+.citywork-v4-brand,
+.citywork-v4-brand div,
+.citywork-v4-section-head div {
+  display: flex;
+  flex-direction: column;
+}
+
+.citywork-v4-brand {
+  flex-direction: row;
+  align-items: center;
+  gap: 11px;
+}
+
+.citywork-v4-brand > span {
+  width: 46px;
+  height: 46px;
+  display: grid;
+  place-items: center;
+  color: var(--gold-light);
+  border: 1px solid var(--border-gold);
+  border-radius: 50% 50% 44% 44%;
+  background: radial-gradient(circle at 50% 32%, rgba(238, 169, 46, .25), rgba(4, 24, 36, .92));
+  box-shadow: inset 0 0 16px rgba(255, 205, 92, .1), 0 0 22px rgba(238, 169, 46, .14);
+}
+
+.citywork-v4-brand strong {
+  color: var(--gold-light);
+  font-size: 18px;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+}
+
+.citywork-v4-brand small,
+.citywork-v4-section-head small,
+.citywork-v4-map-head small {
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.citywork-v4-steps {
+  justify-self: center;
+  width: min(690px, 100%);
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+}
+
+.citywork-v4-steps > div {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text-muted);
+}
+
+.citywork-v4-steps > div:not(:last-child)::after {
+  content: "";
+  position: absolute;
+  z-index: 0;
+  top: 15px;
+  left: 36px;
+  right: 8px;
+  height: 1px;
+  background: linear-gradient(90deg, rgba(91, 179, 211, .62), rgba(91, 179, 211, .08));
+}
+
+.citywork-v4-steps span,
+.citywork-v4-steps strong {
+  position: relative;
+  z-index: 1;
+}
+
+.citywork-v4-steps span {
+  width: 30px;
+  height: 30px;
+  display: grid;
+  flex: 0 0 auto;
+  place-items: center;
+  border: 1px solid rgba(155, 194, 211, .27);
+  border-radius: 50%;
+  background: #071b29;
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.citywork-v4-steps strong {
+  padding-right: 8px;
+  background: #061927;
+  font-size: 12px;
+  letter-spacing: .03em;
+  text-transform: uppercase;
+}
+
+.citywork-v4-steps .done { color: #8de5a8; }
+.citywork-v4-steps .done span { border-color: #55d98a; background: #176139; }
+.citywork-v4-steps .active { color: var(--gold-light); }
+.citywork-v4-steps .active span {
+  color: #251603;
+  border-color: var(--gold);
+  background: linear-gradient(180deg, #ffd36a, #e59417);
+  box-shadow: 0 0 20px rgba(238, 169, 46, .38);
+}
+.citywork-v4-steps .ready { color: #dbe9ef; }
+
+.citywork-v4-header-actions {
+  justify-self: end;
+  display: flex;
+  gap: 7px;
+}
+
+.citywork-v4-header-actions button,
+.citywork-v4-map-actions button {
+  height: 38px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  padding: 0 11px;
+  color: var(--text-secondary);
+  border: 1px solid var(--border-strong);
+  border-radius: 9px;
+  background: rgba(10, 35, 49, .82);
+}
+
+.citywork-v4-header-actions button:hover,
+.citywork-v4-map-actions button:hover { color: #fff; border-color: var(--border-gold); }
+
+.citywork-v4-layout {
+  position: relative;
+  z-index: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: 290px minmax(570px, 1fr) 370px;
+  gap: 8px;
+  padding: 8px;
+}
+
+.citywork-v4-jobs,
+.citywork-v4-right,
+.citywork-v4-center {
+  min-width: 0;
+  min-height: 0;
+}
+
+.citywork-v4-jobs,
+.citywork-v4-right {
+  border: 1px solid var(--border-strong);
+  border-radius: 12px;
+  background: linear-gradient(155deg, rgba(7, 29, 43, .97), rgba(4, 20, 31, .96));
+  box-shadow: var(--shadow-panel);
+}
+
+.citywork-v4-jobs {
+  display: grid;
+  grid-template-rows: auto auto minmax(0, 1fr) auto;
+  padding: 10px;
+}
+
+.citywork-v4-section-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 1px 2px 9px;
+}
+
+.citywork-v4-section-head strong {
+  color: #f8fbfd;
+  font-size: 15px;
+  letter-spacing: .025em;
+  text-transform: uppercase;
+}
+
+.citywork-v4-section-head > span {
+  padding: 4px 8px;
+  color: var(--gold-light);
+  border: 1px solid rgba(238, 169, 46, .25);
+  border-radius: 999px;
+  background: rgba(238, 169, 46, .08);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.citywork-v4-filters {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding-bottom: 8px;
+  overflow-x: auto;
+  color: var(--text-muted);
+  scrollbar-width: thin;
+}
+
+.citywork-v4-filters button {
+  flex: 0 0 auto;
+  padding: 6px 9px;
+  color: var(--text-secondary);
+  border: 1px solid transparent;
+  border-radius: 7px;
+  background: rgba(15, 47, 63, .74);
+  font-size: 12px;
+}
+
+.citywork-v4-filters button.active {
+  color: #241704;
+  border-color: #f4b642;
+  background: linear-gradient(180deg, #ffd161, #dfa025);
+}
+
+.citywork-v4-job-list {
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  padding-right: 3px;
+  overflow-y: auto;
+  scrollbar-color: rgba(238, 169, 46, .5) rgba(4, 17, 26, .5);
+}
+
+.citywork-v4-job {
+  position: relative;
+  min-height: 112px;
+  display: grid;
+  grid-template-columns: 72px minmax(0, 1fr);
+  gap: 8px;
+  padding: 7px;
+  text-align: left;
+  border: 1px solid rgba(154, 192, 211, .18) !important;
+  border-radius: 10px;
+  background: linear-gradient(145deg, rgba(18, 51, 68, .9), rgba(9, 31, 44, .96));
+  box-shadow: 0 5px 13px rgba(0, 5, 9, .22);
+  overflow: hidden;
+}
+
+.citywork-v4-job:hover { border-color: rgba(238, 169, 46, .5) !important; transform: translateY(-1px); }
+.citywork-v4-job.selected {
+  border-color: var(--gold) !important;
+  background: linear-gradient(145deg, rgba(75, 58, 26, .5), rgba(10, 35, 47, .96));
+  box-shadow: inset 0 0 24px rgba(238, 169, 46, .08), 0 0 16px rgba(238, 169, 46, .12);
+}
+.citywork-v4-job.locked { opacity: .48; filter: saturate(.5); }
+
+.citywork-v4-job-art {
+  height: 76px;
+  display: grid;
+  place-items: center;
+  align-self: start;
+  border-radius: 8px;
+  background: radial-gradient(circle at 50% 60%, rgba(77, 143, 123, .35), rgba(4, 22, 32, .7));
+  overflow: hidden;
+}
+
+.citywork-v4-job-art img { width: 100%; height: 100%; object-fit: contain; }
+.citywork-v4-job-copy { min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.citywork-v4-job-copy > i {
+  color: var(--gold-light);
+  font-size: 12px;
+  font-style: normal;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+.citywork-v4-job-copy > strong { color: #fff; font-size: 14px; }
+.citywork-v4-job-copy > small {
+  display: -webkit-box;
+  overflow: hidden;
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 1.25;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+.citywork-v4-job-copy > em { display: flex; gap: 4px; overflow: hidden; font-style: normal; }
+.citywork-v4-job-copy > em b {
+  flex: 0 0 auto;
+  padding: 2px 5px;
+  color: #a9d8bf;
+  border-radius: 4px;
+  background: rgba(51, 133, 91, .22);
+  font-size: 12px;
+  font-weight: 650;
+}
+.citywork-v4-job-copy > span { display: flex; align-items: center; gap: 5px; color: var(--gold-light); font-size: 12px; }
+.citywork-v4-job-copy > span b { margin-left: auto; color: #78cfff; }
+.citywork-v4-job-person {
+  position: absolute;
+  left: 43px;
+  top: 47px;
+  filter: drop-shadow(0 3px 5px rgba(0, 0, 0, .55));
+}
+
+.citywork-v4-brief {
+  display: flex;
+  gap: 8px;
+  margin-top: 8px;
+  padding: 9px;
+  color: var(--gold);
+  border: 1px solid rgba(238, 169, 46, .2);
+  border-radius: 8px;
+  background: rgba(238, 169, 46, .06);
+}
+.citywork-v4-brief div { min-width: 0; display: flex; flex-direction: column; }
+.citywork-v4-brief strong { color: #f5f8fa; font-size: 12px; }
+.citywork-v4-brief span { color: var(--text-secondary); font-size: 12px; line-height: 1.35; }
+
+.citywork-v4-center {
+  display: grid;
+  grid-template-rows: 67px minmax(0, 1fr);
+  border: 1px solid rgba(71, 178, 217, .34);
+  border-radius: 12px;
+  background: #071c28;
+  box-shadow: 0 16px 42px rgba(0, 5, 10, .52), inset 0 0 0 1px rgba(110, 198, 224, .04);
+  overflow: hidden;
+}
+
+.citywork-v4-map-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--border);
+  background: linear-gradient(180deg, rgba(8, 32, 45, .98), rgba(5, 24, 35, .94));
+}
+
+.citywork-v4-map-head h2 { margin: 1px 0 0; color: var(--gold-light); font-size: 17px; }
+.citywork-v4-map-head p { margin: 1px 0 0; color: var(--text-secondary); font-size: 12px; }
+.citywork-v4-map-actions { display: flex; align-items: center; gap: 6px; }
+.citywork-v4-map-actions > span {
+  padding: 8px 11px;
+  color: #231503;
+  border-radius: 7px;
+  background: var(--gold);
+  font-size: 13px;
+  font-weight: 900;
+}
+.citywork-v4-map-actions button { font-size: 12px; }
+
+.citywork-v4-map-stage { position: relative; min-height: 0; overflow: hidden; }
+.citywork-v4-map { position: absolute; inset: 0; background: #1b5e5b; overflow: hidden; }
+.citywork-v4-map::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  box-shadow: inset 0 0 90px rgba(1, 13, 20, .55);
+}
+.citywork-v4-map canvas { width: 100%; height: 100%; display: block; cursor: crosshair; touch-action: none; }
+.citywork-v4-map.is-panning canvas { cursor: grab; }
+.citywork-v4-map-hint {
+  position: absolute;
+  z-index: 3;
+  top: 9px;
+  left: 9px;
+  display: flex;
+  gap: 5px;
+  pointer-events: none;
+}
+.citywork-v4-map-hint span,
+.citywork-v4-map-layers span {
+  padding: 5px 8px;
+  color: #dae9ef;
+  border: 1px solid rgba(191, 224, 235, .18);
+  border-radius: 6px;
+  background: rgba(3, 18, 27, .8);
+  backdrop-filter: blur(10px);
+  font-size: 12px;
+}
+.citywork-v4-map-zoom,
+.citywork-v4-map-layers {
+  position: absolute;
+  z-index: 4;
+  display: flex;
+  gap: 5px;
+}
+.citywork-v4-map-zoom { top: 10px; right: 10px; flex-direction: column; }
+.citywork-v4-map-layers { top: 10px; right: 54px; }
+.citywork-v4-map-zoom button,
+.citywork-v4-map-layers button {
+  width: 36px;
+  height: 36px;
+  display: grid;
+  place-items: center;
+  color: #e4f0f4;
+  border: 1px solid rgba(188, 220, 232, .22);
+  border-radius: 7px;
+  background: rgba(3, 18, 28, .86);
+  backdrop-filter: blur(10px);
+}
+.citywork-v4-map-zoom button:hover,
+.citywork-v4-map-layers button:hover,
+.citywork-v4-map-layers button.active { color: var(--gold-light); border-color: var(--border-gold); }
+
+.citywork-v4-summary {
+  position: absolute;
+  z-index: 5;
+  right: 10px;
+  bottom: 10px;
+  left: 10px;
+  display: grid;
+  grid-template-columns: repeat(6, minmax(82px, 1fr)) minmax(150px, 1.2fr);
+  border: 1px solid rgba(170, 208, 223, .24);
+  border-radius: 10px;
+  background: rgba(3, 18, 28, .92);
+  box-shadow: 0 10px 30px rgba(0, 4, 8, .4);
+  backdrop-filter: blur(15px) saturate(130%);
+  overflow: hidden;
+}
+.citywork-v4-metric,
+.citywork-v4-quality { min-width: 0; padding: 8px 9px; border-right: 1px solid var(--border); }
+.citywork-v4-metric > span,
+.citywork-v4-quality > span { display: flex; align-items: center; gap: 5px; color: var(--text-secondary); font-size: 12px; }
+.citywork-v4-metric > span svg,
+.citywork-v4-quality > span svg { color: var(--gold); }
+.citywork-v4-metric strong,
+.citywork-v4-quality strong { display: block; margin-top: 2px; color: #fff; font-size: 16px; }
+.citywork-v4-metric small { color: #84b895; font-size: 12px; }
+.citywork-v4-metric.warn small { color: var(--yellow); }
+.citywork-v4-metric.bad small { color: var(--red); }
+.citywork-v4-quality { border-right: 0; }
+.citywork-v4-quality > div { height: 4px; margin-top: 5px; border-radius: 9px; background: rgba(136, 170, 184, .16); overflow: hidden; }
+.citywork-v4-quality > div i { height: 100%; display: block; border-radius: inherit; background: linear-gradient(90deg, var(--gold), #66df91); }
+
+.citywork-v4-advisor {
+  position: absolute;
+  z-index: 5;
+  bottom: 86px;
+  left: 10px;
+  width: min(420px, calc(100% - 20px));
+  min-height: 74px;
+  display: grid;
+  grid-template-columns: 68px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 9px;
+  padding: 7px 8px 7px 4px;
+  border: 1px solid rgba(86, 202, 138, .38);
+  border-radius: 10px;
+  background: linear-gradient(110deg, rgba(4, 26, 38, .95), rgba(10, 45, 48, .92));
+  box-shadow: 0 9px 28px rgba(0, 5, 8, .42);
+  backdrop-filter: blur(14px);
+}
+.citywork-v4-advisor.warn { border-color: rgba(232, 191, 69, .48); }
+.citywork-v4-advisor.critical { border-color: rgba(239, 96, 103, .62); }
+.citywork-v4-advisor-portrait { height: 64px; align-self: end; display: grid; place-items: end center; overflow: hidden; }
+.citywork-v4-advisor-portrait img { width: 76px; height: 76px; object-fit: contain; object-position: bottom; }
+.citywork-v4-advisor > div:nth-child(2) { min-width: 0; display: flex; flex-direction: column; }
+.citywork-v4-advisor small { color: var(--gold-light); font-size: 12px; }
+.citywork-v4-advisor strong { color: #fff; font-size: 13px; }
+.citywork-v4-advisor p { margin: 2px 0 0; color: var(--text-secondary); font-size: 12px; line-height: 1.28; }
+.citywork-v4-advisor button {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 7px;
+  color: #d9e9ee;
+  border: 1px solid var(--border-strong);
+  border-radius: 7px;
+  background: rgba(12, 47, 61, .8);
+  font-size: 12px;
+}
+
+.citywork-v4-right {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 9px;
+  overflow-y: auto;
+  scrollbar-color: rgba(238, 169, 46, .5) rgba(4, 17, 26, .5);
+}
+.citywork-v4-vehicle-zone { flex: 0 0 auto; }
+.citywork-v4-vehicle-strip { display: flex; gap: 7px; padding: 1px 1px 7px; overflow-x: auto; scroll-snap-type: x mandatory; }
+.citywork-v4-vehicle {
+  flex: 0 0 166px;
+  display: flex;
+  flex-direction: column;
+  padding: 6px;
+  text-align: left;
+  scroll-snap-align: start;
+  border: 1px solid rgba(154, 192, 211, .2) !important;
+  border-radius: 9px;
+  background: linear-gradient(145deg, rgba(17, 48, 64, .95), rgba(7, 28, 41, .98));
+}
+.citywork-v4-vehicle.selected { border-color: var(--gold) !important; box-shadow: inset 0 0 20px rgba(238, 169, 46, .08); }
+.citywork-v4-vehicle.locked { opacity: .45; }
+.citywork-v4-vehicle-art { position: relative; height: 70px; display: grid; place-items: center; border-radius: 7px; background: radial-gradient(ellipse at 50% 70%, rgba(93, 150, 167, .3), transparent 68%); }
+.citywork-v4-vehicle-art img { width: 100%; height: 100%; object-fit: contain; filter: drop-shadow(0 5px 5px rgba(0, 0, 0, .45)); }
+.citywork-v4-vehicle-art i { position: absolute; right: 2px; bottom: 2px; display: flex; gap: 3px; padding: 3px 5px; border-radius: 4px; background: #061725; font-size: 12px; font-style: normal; }
+.citywork-v4-vehicle-name { display: flex; align-items: center; justify-content: space-between; gap: 5px; }
+.citywork-v4-vehicle-name strong { overflow: hidden; color: #fff; font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
+.citywork-v4-vehicle-name i { width: 14px; height: 14px; flex: 0 0 auto; border: 1px solid #8099a5; border-radius: 50%; }
+.citywork-v4-vehicle.selected .citywork-v4-vehicle-name i { border: 4px solid #173346; background: var(--gold); box-shadow: 0 0 0 1px var(--gold); }
+.citywork-v4-vehicle-facts { display: grid; grid-template-columns: repeat(3, 1fr); gap: 3px; margin-top: 5px; }
+.citywork-v4-vehicle-facts b { display: flex; flex-direction: column; align-items: center; gap: 1px; color: #bdd0d8; font-size: 12px; font-weight: 600; }
+.citywork-v4-vehicle-facts svg { color: var(--gold); }
+.citywork-v4-vehicle-tags { display: grid; grid-template-columns: 1fr 1fr; gap: 3px; margin-top: 5px; }
+.citywork-v4-vehicle-tags em,
+.citywork-v4-vehicle-tags b { overflow: hidden; padding: 2px 4px; border-radius: 4px; font-size: 12px; font-style: normal; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
+.citywork-v4-vehicle-tags em { color: #90dcaa; background: rgba(59, 142, 90, .2); }
+.citywork-v4-vehicle-tags b { color: #e6a097; background: rgba(161, 59, 57, .17); }
+
+.citywork-v4-cargo {
+  display: grid;
+  grid-template-columns: 60px minmax(0, 1fr);
+  gap: 7px;
+  padding: 7px;
+  border: 1px solid rgba(87, 184, 222, .24);
+  border-radius: 9px;
+  background: linear-gradient(120deg, rgba(12, 49, 63, .85), rgba(5, 26, 38, .88));
+}
+.citywork-v4-cargo-art { height: 57px; display: grid; place-items: center; }
+.citywork-v4-cargo-art img { width: 58px; height: 58px; object-fit: contain; filter: drop-shadow(0 4px 6px rgba(0, 0, 0, .45)); }
+.citywork-v4-cargo-main { min-width: 0; display: flex; flex-direction: column; }
+.citywork-v4-cargo-main small { color: var(--text-muted); font-size: 12px; }
+.citywork-v4-cargo-main strong { color: #fff; font-size: 16px; }
+.citywork-v4-cargo-bar { height: 6px; margin: 3px 0; border-radius: 9px; background: rgba(155, 187, 200, .15); overflow: hidden; }
+.citywork-v4-cargo-bar i { height: 100%; display: block; border-radius: inherit; background: linear-gradient(90deg, #4fbce6, #55d98a, var(--gold)); }
+.citywork-v4-cargo-main > span { display: flex; justify-content: space-between; gap: 8px; font-size: 12px; }
+.citywork-v4-cargo-main b { color: #80d6ed; }
+.citywork-v4-cargo-main em { color: var(--text-secondary); font-style: normal; }
+.citywork-v4-cargo-stats { grid-column: 1 / -1; display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; }
+.citywork-v4-cargo-stats span { display: flex; align-items: center; gap: 4px; color: var(--text-secondary); font-size: 12px; }
+.citywork-v4-cargo-stats span.warn { color: var(--red); }
+.citywork-v4-future { display: flex; align-items: center; gap: 5px; margin-top: 5px; color: var(--text-muted); font-size: 12px; }
+.citywork-v4-future > span { margin-right: auto; }
+.citywork-v4-future > div { display: flex; align-items: center; gap: 3px; padding: 3px 5px; border: 1px solid var(--border); border-radius: 5px; }
+.citywork-v4-future strong { color: var(--text-secondary); font-size: 12px; }
+.citywork-v4-future small { font-size: 12px; }
+
+.citywork-v4-tour {
+  flex: 1 1 210px;
+  min-height: 180px;
+  display: flex;
+  flex-direction: column;
+  border-top: 1px solid var(--border);
+  padding-top: 8px;
+}
+.citywork-v4-tour-list { min-height: 0; display: flex; flex-direction: column; gap: 5px; overflow-y: auto; }
+.citywork-v4-tour-stop {
+  position: relative;
+  min-height: 64px;
+  display: grid;
+  grid-template-columns: 25px 48px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 6px 5px 2px;
+  border: 1px solid rgba(151, 190, 207, .16);
+  border-radius: 8px;
+  background: rgba(13, 43, 57, .7);
+}
+.citywork-v4-tour-stop.source,
+.citywork-v4-tour-stop.resupply { border-color: rgba(85, 217, 138, .35); }
+.citywork-v4-tour-line { align-self: stretch; display: grid; place-items: center; }
+.citywork-v4-tour-line::after { content: ""; position: absolute; top: 40px; bottom: -12px; left: 14px; width: 2px; background: rgba(81, 182, 212, .42); }
+.citywork-v4-tour-stop:last-of-type .citywork-v4-tour-line::after { display: none; }
+.citywork-v4-tour-line i { position: relative; z-index: 1; width: 22px; height: 22px; display: grid; place-items: center; color: #061824; border-radius: 50%; background: #55c5de; font-size: 12px; font-style: normal; font-weight: 900; }
+.citywork-v4-tour-stop.source .citywork-v4-tour-line i,
+.citywork-v4-tour-stop.resupply .citywork-v4-tour-line i { background: #62db8d; }
+.citywork-v4-tour-art { height: 48px; display: grid; place-items: center; border-radius: 6px; background: rgba(3, 20, 30, .6); overflow: hidden; }
+.citywork-v4-tour-stop > div { min-width: 0; display: flex; flex-direction: column; }
+.citywork-v4-tour-stop > div small { display: flex; align-items: center; gap: 4px; color: var(--gold-light); font-size: 12px; }
+.citywork-v4-tour-stop > div strong { overflow: hidden; color: #fff; font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
+.citywork-v4-tour-stop > div span { overflow: hidden; color: var(--text-secondary); font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
+.citywork-v4-tour-stop dl { display: grid; gap: 2px; margin: 0; }
+.citywork-v4-tour-stop dl div { display: flex; justify-content: space-between; gap: 8px; font-size: 12px; }
+.citywork-v4-tour-stop dt { color: var(--text-muted); }
+.citywork-v4-tour-stop dd { margin: 0; color: #dce9ee; }
+.citywork-v4-tour-open { display: flex; align-items: center; gap: 8px; padding: 8px; color: var(--gold); border: 1px dashed rgba(238, 169, 46, .28); border-radius: 8px; }
+.citywork-v4-tour-open span { display: flex; flex-direction: column; }
+.citywork-v4-tour-open strong { color: #eef5f7; font-size: 12px; }
+.citywork-v4-tour-open small { color: var(--text-secondary); font-size: 12px; }
+
+.citywork-v4-confirm {
+  flex: 0 0 auto;
+  padding-top: 8px;
+  border-top: 1px solid var(--border);
+}
+.citywork-v4-confirm.ready { border-top-color: rgba(85, 217, 138, .5); }
+.citywork-v4-confirm-main { display: grid; grid-template-columns: 78px 1fr; gap: 8px; }
+.citywork-v4-confirm-vehicle { height: 68px; display: grid; place-items: center; border-radius: 8px; background: radial-gradient(ellipse, rgba(67, 128, 149, .28), transparent 70%); }
+.citywork-v4-confirm-vehicle img { width: 100%; height: 100%; object-fit: contain; }
+.citywork-v4-confirm-main dl { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px 8px; margin: 0; }
+.citywork-v4-confirm-main dl div { display: flex; flex-direction: column; }
+.citywork-v4-confirm-main dt { color: var(--text-muted); font-size: 12px; }
+.citywork-v4-confirm-main dd { margin: 0; color: #fff; font-size: 13px; font-weight: 800; }
+.citywork-v4-confirm-reward { display: grid; grid-template-columns: 1fr auto 1fr; gap: 5px; margin-top: 6px; padding: 7px; border: 1px solid rgba(238, 169, 46, .22); border-radius: 7px; background: rgba(238, 169, 46, .06); }
+.citywork-v4-confirm-reward span { display: flex; align-items: center; gap: 4px; color: var(--gold-light); font-size: 12px; }
+.citywork-v4-confirm-reward strong { color: #8fdda9; font-size: 12px; text-align: right; }
+.citywork-v4-confirm > p { display: flex; align-items: center; gap: 5px; margin: 6px 0; color: #efb17a; font-size: 12px; line-height: 1.25; }
+.citywork-v4-start {
+  width: 100%;
+  height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  color: #fff !important;
+  border: 1px solid #60d47d !important;
+  border-radius: 8px;
+  background: linear-gradient(180deg, #4aad4c, #24772e);
+  box-shadow: 0 7px 18px rgba(38, 131, 52, .3);
+  font-size: 14px;
+  font-weight: 900;
+  letter-spacing: .03em;
+  text-transform: uppercase;
+}
+.citywork-v4-start:disabled { color: #84949b !important; border-color: #304954 !important; background: #162f3b; box-shadow: none; }
+
+@media (max-width: 1599px) {
+  .citywork-v4-layout { grid-template-columns: 240px minmax(500px, 1fr) 305px; gap: 6px; padding: 6px; }
+  .citywork-v4-header { grid-template-columns: 230px 1fr 94px; }
+  .citywork-v4-brand small { display: none; }
+  .citywork-v4-job { min-height: 102px; grid-template-columns: 60px minmax(0, 1fr); }
+  .citywork-v4-job-art { height: 64px; }
+  .citywork-v4-job-person { left: 34px; top: 42px; transform: scale(.88); }
+  .citywork-v4-job-copy > small { -webkit-line-clamp: 1; }
+  .citywork-v4-job-copy > em b:nth-child(2) { display: none; }
+  .citywork-v4-brief { display: none; }
+  .citywork-v4-summary { grid-template-columns: repeat(4, minmax(74px, 1fr)) minmax(132px, 1.25fr); }
+  .citywork-v4-summary > :nth-child(5),
+  .citywork-v4-summary > :nth-child(6) { display: none; }
+  .citywork-v4-advisor { width: min(365px, calc(100% - 20px)); grid-template-columns: 58px minmax(0, 1fr); }
+  .citywork-v4-advisor button { display: none; }
+  .citywork-v4-tour-stop { grid-template-columns: 23px 42px minmax(0, 1fr); }
+  .citywork-v4-tour-stop dl { display: none; }
+  .citywork-v4-future > span { display: none; }
+  .citywork-v4-map-hint span:nth-child(2) { display: none; }
+}
+
+@media (max-width: 1279px), (max-height: 760px) {
+  .citywork-planner.citywork-v4 { grid-template-rows: 56px minmax(0, 1fr); }
+  .citywork-v4-header { grid-template-columns: 190px 1fr 88px; gap: 8px; padding: 5px 8px; }
+  .citywork-v4-brand > span { width: 40px; height: 40px; }
+  .citywork-v4-brand strong { font-size: 15px; }
+  .citywork-v4-steps strong { display: none; }
+  .citywork-v4-steps > div:not(:last-child)::after { left: 32px; }
+  .citywork-v4-layout { grid-template-columns: 220px minmax(480px, 1fr) 285px; gap: 5px; padding: 5px; }
+  .citywork-v4-center { grid-template-rows: 57px minmax(0, 1fr); }
+  .citywork-v4-map-head p { display: none; }
+  .citywork-v4-map-head h2 { font-size: 15px; }
+  .citywork-v4-job { min-height: 88px; grid-template-columns: 52px minmax(0, 1fr); padding: 5px; }
+  .citywork-v4-job-art { height: 54px; }
+  .citywork-v4-job-person { left: 27px; top: 37px; transform: scale(.75); }
+  .citywork-v4-job-copy > small,
+  .citywork-v4-job-copy > em { display: none; }
+  .citywork-v4-vehicle-art { height: 54px; }
+  .citywork-v4-vehicle { flex-basis: 148px; }
+  .citywork-v4-vehicle-tags { display: none; }
+  .citywork-v4-cargo { grid-template-columns: 48px minmax(0, 1fr); padding: 5px; }
+  .citywork-v4-cargo-art,
+  .citywork-v4-cargo-art img { width: 46px; height: 46px; }
+  .citywork-v4-cargo-stats span:first-child { display: none; }
+  .citywork-v4-cargo-stats { grid-template-columns: 1fr 1fr; }
+  .citywork-v4-future { display: none; }
+  .citywork-v4-tour { min-height: 130px; }
+  .citywork-v4-tour-stop { min-height: 54px; grid-template-columns: 22px 38px minmax(0, 1fr); padding: 3px; }
+  .citywork-v4-tour-art { height: 38px; }
+  .citywork-v4-confirm-main { grid-template-columns: 54px 1fr; }
+  .citywork-v4-confirm-vehicle { height: 52px; }
+  .citywork-v4-confirm-main dl div:nth-child(4),
+  .citywork-v4-confirm-main dl div:nth-child(6) { display: none; }
+  .citywork-v4-confirm-main dl { grid-template-columns: repeat(2, 1fr); }
+  .citywork-v4-confirm > p { display: none; }
+  .citywork-v4-start { height: 38px; }
+  .citywork-v4-advisor { bottom: 81px; min-height: 64px; }
+  .citywork-v4-advisor p { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+}
+
+@media (min-width: 1900px) {
+  .citywork-v4-layout { grid-template-columns: 300px minmax(900px, 1fr) 390px; gap: 10px; padding: 10px; }
+  .citywork-v4-job { min-height: 122px; grid-template-columns: 80px minmax(0, 1fr); }
+  .citywork-v4-job-art { height: 86px; }
+  .citywork-v4-vehicle { flex-basis: 180px; }
+}

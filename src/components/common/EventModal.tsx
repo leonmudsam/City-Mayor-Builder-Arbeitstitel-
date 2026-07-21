@@ -1,4 +1,16 @@
-import { Award, CheckCircle2, Flame, MapPin, PartyPopper, type LucideIcon } from 'lucide-react';
+import {
+  Award,
+  CheckCircle2,
+  Clock3,
+  Flame,
+  Gauge,
+  MapPin,
+  PartyPopper,
+  Route,
+  Star,
+  Truck,
+  type LucideIcon,
+} from 'lucide-react';
 import { Modal } from './Modal.tsx';
 import { useGame, useUiStore, type GameEvent } from '../../state/store.ts';
 import { BuildingArt, ResourceArt } from '../art/index.ts';
@@ -23,6 +35,7 @@ export function EventModal({ event, onClose }: { event: GameEvent; onClose: () =
   const meta = EVENT_META[event.kind];
   const Icon = meta.icon;
   const isLevelUp = event.kind === 'levelUp';
+  const isActivityResult = event.kind === 'activityDone' && event.params?.elapsed !== undefined;
   const buildingIds = String(event.params?.buildingIds ?? '')
     .split(',')
     .filter(Boolean);
@@ -53,6 +66,8 @@ export function EventModal({ event, onClose }: { event: GameEvent; onClose: () =
     >
       {isLevelUp && buildingIds.length > 0 ? (
         <LevelUpBody level={Number(event.params?.level ?? 0)} buildingIds={buildingIds} />
+      ) : isActivityResult ? (
+        <ActivityResultBody event={event} />
       ) : (
         <div className="event-modal-body">
           <div className={`event-modal-glyph event-glyph-${meta.tone}`}>
@@ -62,6 +77,31 @@ export function EventModal({ event, onClose }: { event: GameEvent; onClose: () =
         </div>
       )}
     </Modal>
+  );
+}
+
+function ActivityResultBody({ event }: { event: GameEvent }) {
+  const stars = event.titleKey.endsWith('_gold') ? 3 : event.titleKey.endsWith('_silver') ? 2 : 1;
+  return (
+    <div className="activity-result-body">
+      <div className="activity-result-medal">
+        <span><Truck size={38} /></span>
+        <div>{[0, 1, 2].map((index) => <Star key={index} size={24} fill={index < stars ? 'currentColor' : 'none'} className={index < stars ? 'earned' : ''} />)}</div>
+        <strong>{String(event.params?.quality ?? 'Abgeschlossen')}</strong>
+        <small>{String(event.params?.name ?? '')}</small>
+      </div>
+      <div className="activity-result-grid">
+        <span><Clock3 size={16} /><small>Gesamtzeit</small><strong>{String(event.params?.elapsed ?? '–')}</strong></span>
+        <span><Route size={16} /><small>Strecke</small><strong>{String(event.params?.distance ?? '–')}</strong></span>
+        <span><Gauge size={16} /><small>Effizienz</small><strong>{String(event.params?.efficiency ?? '–')} %</strong></span>
+        <span><CheckCircle2 size={16} /><small>Straßenanteil</small><strong>{String(event.params?.roadCoverage ?? '–')}</strong></span>
+      </div>
+      <div className="activity-result-reward">
+        <span><strong>{String(event.params?.money ?? '0')}</strong><small>Geld</small></span>
+        <span><strong>{String(event.params?.xp ?? '0')} XP</strong><small>Erfahrung</small></span>
+        <span><strong>{String(event.params?.vehicle ?? '–')}</strong><small>Fahrzeug</small></span>
+      </div>
+    </div>
   );
 }
 

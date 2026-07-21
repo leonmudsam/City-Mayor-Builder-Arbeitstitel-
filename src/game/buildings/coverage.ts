@@ -2,7 +2,7 @@ import type { GameConfig } from '../config/index.ts';
 import type { BuildingDef } from '../config/types.ts';
 import type { GameState, NeedId } from '../types.ts';
 import type { Derived } from '../simulation/derived.ts';
-import { centerOf, chebyshev, effectiveEffects } from './effects.ts';
+import { centerOf, chebyshev, effectiveEffects, isContributing } from './effects.ts';
 
 // A single, generic coverage-overlay system (§1). Any building that serves a
 // radius — wells/pumps (water), parks (leisure), markets (food distribution),
@@ -109,7 +109,9 @@ export function coverageOverlay(state: GameState, config: GameConfig, derived: D
   const sourceCenters: { cx: number; cy: number; radius: number }[] = [];
 
   for (const b of Object.values(state.buildings)) {
-    if (b.status !== 'active') continue;
+    // § C4/§16: Ein Gebäude im Upgrade versorgt weiter (Sim nutzt isContributing);
+    // das Overlay muss dieselbe Quelle zeigen, sonst „Radius auf null" im Bild.
+    if (!isContributing(b)) continue;
     const def = config.buildings.get(b.defId);
     if (!def) continue;
     for (const s of sourcesOf(def, b.upgradeLevel)) {
@@ -142,7 +144,7 @@ export function coverageOverlay(state: GameState, config: GameConfig, derived: D
   }
 
   for (const b of Object.values(state.buildings)) {
-    if (b.status !== 'active') continue;
+    if (!isContributing(b)) continue;
     const def = config.buildings.get(b.defId);
     if (!def || !isConsumer(def, group)) continue;
     const { cx, cy } = centerOf(def, b);

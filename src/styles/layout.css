@@ -1,0 +1,116 @@
+.app {
+  height: 100dvh;
+  min-width: 960px;
+}
+
+.game-hud {
+  position: relative;
+  z-index: 30;
+  min-height: var(--hud-height);
+  height: var(--hud-height);
+  padding: 6px 8px;
+  gap: 7px;
+  flex-wrap: nowrap;
+}
+
+.main {
+  isolation: isolate;
+}
+
+.hud-panel,
+.world-minimap,
+.side-panel,
+.floating-sheet,
+.citizen-inbox-sheet,
+.citizen-request-sheet,
+.build-menu {
+  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur);
+}
+
+.quick-bar {
+  top: var(--hud-gap);
+  left: var(--hud-gap);
+  width: var(--nav-width);
+}
+
+.primary-nav,
+.quick-actions {
+  width: var(--nav-width);
+}
+
+.city-status {
+  top: var(--hud-gap);
+  left: var(--left-panel-x);
+  width: 276px;
+  max-height: calc(100% - 342px);
+}
+
+.right-hud-stack {
+  top: var(--hud-gap);
+  right: var(--hud-gap);
+  bottom: var(--hud-gap);
+  width: var(--right-column);
+}
+
+.right-hud-stack .citizen-requests {
+  max-height: min(70vh, 660px);
+}
+
+.world-minimap {
+  left: var(--hud-gap);
+  bottom: var(--hud-gap);
+  width: 260px;
+}
+
+.camera-controls {
+  left: auto;
+  right: calc(var(--right-column) + 24px);
+  bottom: 12px;
+  transform: none;
+}
+
+.info-layer-control {
+  position: absolute;
+  left: 50%;
+  bottom: 10px;
+  z-index: 9;
+  transform: translateX(-50%);
+}
+
+.build-menu {
+  left: calc(var(--nav-width) + 20px);
+  right: calc(var(--right-column) + 16px);
+  bottom: var(--hud-gap);
+  max-height: min(66vh, 650px);
+}
+
+.side-panel,
+.citizen-inbox-sheet,
+.citizen-request-sheet,
+.floating-sheet {
+  top: var(--hud-gap);
+  right: var(--hud-gap);
+  bottom: var(--hud-gap);
+  width: min(560px, calc(100vw - 110px));
+  max-height: none;
+}
+
+.floating-sheet {
+  left: auto;
+  transform: none;
+  overflow-y: auto;
+}
+
+.dialog-backdrop {
+  z-index: 40;
+}
+
+.region-dialog {
+  width: min(680px, calc(100vw - 32px));
+}
+
+.coverage-legend,
+.toasts {
+  bottom: 92px;
+}

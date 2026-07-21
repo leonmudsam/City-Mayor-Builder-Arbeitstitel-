@@ -1,8 +1,48 @@
-# SAVE_MIGRATION — Save-Strategie (Schema v10 → v11)
+# SAVE_MIGRATION — Save-Strategie (Schema v10 → v13)
 
 > Verbindliche Dokumentation der Savegame-Entscheidungen: v10 = Insel-Basis
 > (MVP4, harter Neustart mit Backup für Vor-Insel-Saves), v11 = Ausbaustufe 2.0
-> (echte Migration mit 100 %-Erstattung — CLAUDE.md §3 voll gewahrt).
+> (echte Migration mit 100 %-Erstattung), v12 = manuelle
+> Stadtarbeit-Routen/Fahrzeugwahl, v13 = reservierte Missionsladung. Insel-Saves
+> brechen nie.
+
+## Migration v12 → v13 (Ladungsreservierung)
+
+Schema **v13** ergänzt eine laufende Aktivität um das optionale Feld
+`reserved?: Partial<Record<ResourceId, number>>`. Neue Liefermissionen reservieren
+ihren gesamten kanonischen `costPerTarget × Zielanzahl`-Bedarf beim Start aus dem
+globalen Ressourcenpool. Auslieferungen verbrauchen diese Reserve; ein Abbruch
+gibt den unverbrauchten Rest zurück. So kann dieselbe Ware nicht parallel für
+Bau, Handel und Mission verwendet werden.
+
+Die lineare Migration normalisiert nur auf Version 13. Eine laufende v12-Mission
+ohne `reserved` bleibt im kompatiblen bisherigen Verbrauchspfad; es wird keine
+Ladung erfunden und nichts doppelt abgezogen. `tests/storage.test.ts` und
+`tests/activityReservation.test.ts` prüfen Migration, Roundtrip, Reservierung,
+Verbrauch und Rückgabe.
+
+Stadtarbeit Redesign 4.0 (v0.69) fügt keine persistierten Felder hinzu; das
+Schema bleibt v13.
+
+## Migration v11 → v12 (Stadtarbeit 2D)
+
+Schema **v12** ergänzt eine laufende Fahraktivität um zwei optionale Felder:
+
+- `vehicle`: die in der Planung validierte `DriveVehicle`-ID.
+- `plannedRoadPath`: die lückenlose Liste orthogonal zusammenhängender
+  Straßenkacheln `{x,y}`.
+
+Die Migration setzt ausschließlich `schemaVersion = 12`. Alte laufende
+Missionen besitzen die Felder nicht und bleiben dadurch semantisch unverändert:
+Der Renderer nutzt das Standardfahrzeug aus der Activity-Config und seine
+bisherige Wegfindung. Es wird weder eine Route erfunden noch eine Mission
+abgebrochen. Neue Pläne werden vor dem Speichern am Controller-Rand gegen
+Fahrzeugfreigabe, Zielmenge, Zielreihenfolge und `derived.roadNetwork`
+validiert.
+
+**Tests:** `tests/storage.test.ts` prüft `11→12` ohne erfundene Aktivität;
+`tests/missions.test.ts` prüft persistierte Fahrzeugwahl/Route;
+`tests/routeAnalysis.test.ts` prüft Lücken, Reihenfolge und unerlaubtes Nachspiel.
 
 ## Migration v10 → v11 (Ausbaustufe 2.0, `migrations.ts`)
 

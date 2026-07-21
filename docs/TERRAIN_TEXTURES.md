@@ -51,6 +51,14 @@ Seamless tileable stylized terrain texture for a premium low-poly city-builder g
 
 **Spec:** Ordner `textures/terrain/grass/` · 1024×1024 · nahtlos kachelbar · Stil: painterly, feucht · Palette: dunkles Moosgrün · Einsatz: feuchte Waldstellen, Felsfüße, Schatten · Material: organisch, weich, leicht glänzend · Mischverhalten: blendet zwischen terrain_grass_dark und terrain_forest_floor/terrain_rock · Maps: Normal ✓ · Roughness ✓ · AO – · Height ✓ · Detailstufe: nah · Priorität: **Optional** · Biome: Mischwald
 
+### `grass_meadow.png`
+
+```text
+Seamless tileable stylized terrain texture for a premium low-poly city-builder game. Soft painterly look, natural color variation, subtle height variation, no baked lighting, no shadows, top-down orthographic view, perfect seamless edges, PBR-ready — natural medium-green meadow grass with broad painterly variation, sparse tiny wildflower flecks and open breathing areas
+```
+
+**Spec:** Ordner `textures/terrain/grass/` · 1024×1024 · nahtlos kachelbar · Stil: painterly stylized realism, weich und natuerlich · Palette: Mittelgruen, Oliv und Moos mit sehr kleinen cremefarbenen und blauen Bluetentupfern · Einsatz: hochwertige Graslandbasis und offene Lichtungen · Material: kurzes Wiesengras, organische Cluster, geringe Mikrounruhe · Mischverhalten: Basis-Layer der Ebene; trockenes Gras, Waldboden und fruchtbare Erde ueberblenden regional · Maps: Normal ✓ · Roughness ✓ · AO – · Height ✓ · Detailstufe: nah · Priorität: **Pflicht** · Biome: Grasland, Hügelland
+
 ## Erde
 
 ### `terrain_earth_light.png`
@@ -311,11 +319,13 @@ Welche Texturen pro Biom im Splatmap-Mix zur Auswahl stehen; die Höhen-/Neigung
 
 | Biom | Texturen |
 |---|---|
-| Grasland | `terrain_grass_01`, `terrain_grass_dry`, `terrain_meadow`, `terrain_earth_light` |
+| Grasland | `grass_meadow`, `terrain_grass_01`, `terrain_grass_dry`, `terrain_meadow`, `terrain_earth_light` |
 | Mischwald | `terrain_grass_dark`, `terrain_moss`, `terrain_forest_floor`, `terrain_rock` |
 | Fruchtbares Land | `terrain_earth_dark`, `terrain_farmland`, `terrain_field_plowed`, `terrain_field_wheat`, `terrain_field_harvest` |
-| Gebirge | `terrain_rock`, `terrain_mountain`, `terrain_cliff`, `terrain_rock_granite`, `terrain_gravel`, `terrain_snow`, `terrain_snow_rock`, `terrain_snow_drift` |
-| Küste | `terrain_sand_coast`, `terrain_coast`, `terrain_rock`, `terrain_shallow_water` |
+| Gebirge | `mountain_rock_base`, `mountain_snow`, `terrain_rock`, `terrain_mountain`, `terrain_cliff`, `terrain_rock_granite`, `terrain_gravel`, `terrain_snow`, `terrain_snow_rock`, `terrain_snow_drift` |
+| Wüste | `desert_sand_red`, `terrain_sand_dune`, `terrain_earth_light`, `terrain_rock_granite` |
+| Sumpf | `swamp_mud`, `terrain_earth_wet`, `terrain_moss`, `terrain_swamp` |
+| Küste | `coast_pebbles`, `terrain_sand_coast`, `terrain_coast`, `terrain_rock`, `terrain_shallow_water` |
 | Fluss/See/Meer | `terrain_deep_water`, `terrain_shallow_water`, `terrain_riverbed`, `terrain_river_delta`, `terrain_swamp`, `terrain_ice` |
 | Straßen/Wege | `terrain_path`, `terrain_road_edge`, `terrain_gravel`, `terrain_stone` |
 

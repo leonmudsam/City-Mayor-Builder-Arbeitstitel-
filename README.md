@@ -11,11 +11,28 @@ Codebasis. Der Browser bleibt Entwicklungs- und Test-Umgebung.
 > **[docs/CONCEPT.md](docs/CONCEPT.md)** · UI:
 > **[docs/UI_DESIGN_SYSTEM.md](docs/UI_DESIGN_SYSTEM.md)** · Übergabe:
 > **[docs/HANDOFF_CLAUDE.md](docs/HANDOFF_CLAUDE.md)** · Agenten-Einstieg:
-> **[docs/agents/README.md](docs/agents/README.md)**
+> **[docs/agents/README.md](docs/agents/README.md)** · Aktueller Projektstand:
+> **[docs/agents/PROJECT_STATE.md](docs/agents/PROJECT_STATE.md)**
 
 ## Tech-Stack
 React 18 · TypeScript (strict) · Vite 6 · three.js (3D-Karte) ·
 Zustand · Zod · Vitest · **Tauri 2** (Desktop-Wrapper).
+
+## Aktueller visueller Stand — v0.69
+
+Die verbindlichen Mockups sind als maritimes Premium-PC-HUD umgesetzt:
+Live-Inselkarte, linker Stadtstatus, Bürgeranliegen, manuelle 2D-Stadtarbeit,
+rechter 4-Spalten-Baushop auf großen Ansichten, Gebäude-Stufenvorschau sowie
+biomabhängige Regions-Heros. Sonne, Regen und Nebel lassen sich als rein
+visuelle 3D-Atmosphäre steuern; sie verändern keine Simulation oder Saves.
+Stadtarbeit besitzt das Redesign-4.0-Layout mit dominanter stilisierter Karte,
+direktem Zeichnen/Pan/Zoom ohne Werkzeugmodus, aus dem Weg abgeleiteter
+Stoppreihenfolge, Live-Cargo/Nachfüllungen, kompakter Fahrzeugwahl,
+Tourübersicht, Infrastrukturberater und validierter Startfreigabe. Spontane
+Aufträge speichern bewusst keine ideale Standardroute; die automatische
+3D-Ausführung mit Verfolgerkamera und Ergebniswertung bleibt erhalten.
+Details und offene Datenquellen:
+[docs/agents/PROJECT_STATE.md](docs/agents/PROJECT_STATE.md).
 
 ## Zwei Laufmodi
 

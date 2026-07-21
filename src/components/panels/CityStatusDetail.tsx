@@ -1,8 +1,9 @@
-import { AlertTriangle, ChevronRight, Gift, Info, PackageX, Sparkles, TrendingUp, Users, X } from 'lucide-react';
-import { useGame, useUiStore } from '../../state/store.ts';
+import { AlertTriangle, ChevronRight, Gift, Info, MapPinned, PackageX, Sparkles, TrendingUp, Users, X } from 'lucide-react';
+import { getMapApi, useGame, useUiStore } from '../../state/store.ts';
 import type { NeedId, ResourceId } from '../../game/types.ts';
 import { NeedIcon } from '../common/icons.tsx';
 import { t } from '../../i18n/index.ts';
+import { brandImage } from '../../assets/registry.ts';
 
 // The city's control room (§10): actionable alerts first (each one clicks
 // through to the fix), then the full needs breakdown. This is the game's main
@@ -34,6 +35,9 @@ export function CityStatusDetail() {
   const { state } = game;
   const level = state.level.current;
   const activeNeeds = game.config.needs.filter((n) => n.unlockLevel <= level);
+  const crest = brandImage('mayor_crest');
+  // Canonical value only; a weighted city-score would require a controller field.
+  const overall = Math.round(state.citizens.happiness);
 
   const alerts: Alert[] = [];
 
@@ -92,14 +96,27 @@ export function CityStatusDetail() {
         </button>
       </div>
 
-      <div className="status-happiness">
-        <span>{t('ui.happiness')}</span>
-        <strong>{Math.round(state.citizens.happiness)}/100</strong>
+      <div className="status-detail-hero">
+        <span className="status-detail-crest">
+          {crest ? <img src={crest} alt="" aria-hidden="true" /> : <Sparkles size={34} />}
+        </span>
+        <div>
+          <span>Gesamtzufriedenheit</span>
+          <strong>{overall}%</strong>
+          <small className={overall >= 80 ? 'text-good' : overall >= 60 ? 'text-warn' : 'text-bad'}>
+            {t(overall >= 80 ? 'ui.happy.great' : overall >= 55 ? 'ui.happy.ok' : 'ui.happy.meh')}
+          </small>
+        </div>
+        <div className="status-detail-trend">
+          <TrendingUp size={17} />
+          <span>Live aus Stadtwerten</span>
+        </div>
       </div>
 
       <GrowthRow />
 
       <div className="status-alerts">
+        <h4>Größte Probleme</h4>
         {alerts.length === 0 ? (
           <div className="status-ok">
             <Sparkles size={15} /> {t('ui.status.all_good')}
@@ -130,6 +147,17 @@ export function CityStatusDetail() {
           );
         })}
       </div>
+
+      <button
+        className="btn-secondary status-map-action"
+        onClick={() => {
+          getMapApi()?.centerOnCity();
+          setPanel(undefined);
+        }}
+      >
+        <MapPinned size={15} />
+        Auf Karte zeigen
+      </button>
     </aside>
   );
 }

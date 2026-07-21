@@ -19,6 +19,22 @@ Low-poly stylized 3D city-builder game asset, colorful cartoon look, clean shape
 
 **Spec:** Größenklasse `prop` — kleines Prop (< 500 Tris, ≤ 256², 1 Material) · Höhe ≈1.4–1.8 Kacheln · Pivot unten-mittig (X/Z zentriert, Unterkante Y = 0) · Front +Z · Biom: Wald, Grasland, fruchtbares Land · platzierbar auf: grass, forest, fertile · nie auf: Straße, Gebäude-Footprint, Bauplatz, Wasser, Gebirge · Mindestabstand 0.3–0.5 Kacheln · Zufallsrotation + Zufallsskalierung (±15%) · Instancing: ja · **live** (bereits verdrahtet)
 
+### `tree_deciduous.glb` — 1×1
+
+```text
+Low-poly stylized 3D city-builder game asset, colorful cartoon look, clean shapes, soft bevels, hand-painted feel, optimized for realtime rendering, embedded textures, no lights, no cameras, centered object, pivot at bottom center, +Y up, front facing +Z — a single stylized low-poly broadleaf/deciduous tree with a round crown, about 1.5 tiles tall
+```
+
+**Spec:** Größenklasse `prop` — kleines Prop (< 500 Tris, ≤ 256², 1 Material) · Höhe ≈1.5 Kacheln · Pivot unten-mittig (X/Z zentriert, Unterkante Y = 0) · Front +Z · Biom: Mischwald, Grasland · platzierbar auf: grass, forest, fertile · nie auf: Straße, Gebäude, Wasser, Gebirge · Mindestabstand 0.3–0.5 Kacheln · Zufallsrotation + Zufallsskalierung · Instancing: ja · **live** (bereits verdrahtet)
+
+### `tree_pine_large.glb` — 1×1
+
+```text
+Low-poly stylized 3D city-builder game asset, colorful cartoon look, clean shapes, soft bevels, hand-painted feel, optimized for realtime rendering, embedded textures, no lights, no cameras, centered object, pivot at bottom center, +Y up, front facing +Z — a tall stylized pine tree, about 1.8 tiles tall, slim conical crown
+```
+
+**Spec:** Größenklasse `prop` — kleines Prop (< 500 Tris, ≤ 256², 1 Material) · Höhe ≈1.8 Kacheln · Pivot unten-mittig (X/Z zentriert, Unterkante Y = 0) · Front +Z · Biom: Wald, Gebirgsrand · platzierbar auf: forest, mountain-nahe grass · Instancing: ja · **live** (bereits verdrahtet)
+
 ### `bush_small.glb` — 1×1
 
 ```text
@@ -51,6 +67,14 @@ Low-poly stylized 3D city-builder game asset, colorful cartoon look, clean shape
 
 **Spec:** Größenklasse `landmark` — Landmarke (6 000–12 000 Tris, ≤ 1024², 2–4 Materialien) · Höhe ≈4–6 Kacheln · Pivot unten-mittig (X/Z zentriert, Unterkante Y = 0) · Front +Z · Biom: Küste · platzierbar auf: Küstenklippe/Landzunge, Wasserzugang · Instancing: nein · **live** (bereits verdrahtet)
 
+### `waterfall_cliff.glb` — 2×2
+
+```text
+Low-poly stylized 3D city-builder game asset, colorful cartoon look, clean shapes, soft bevels, hand-painted feel, optimized for realtime rendering, embedded textures, no lights, no cameras, centered object, pivot at bottom center, +Y up, front facing +Z — a narrow turquoise waterfall cascading down a rugged alpine rock face into a foamy pool, stylized low-poly
+```
+
+**Spec:** Größenklasse `terrain_feature` — Terrain-Feature (800–3 000 Tris, ≤ 512², 1–2 Materialien) · Höhe ≈4–6 Kacheln · Pivot unten-mittig (X/Z zentriert, Unterkante Y = 0) · Front +Z · Biom: Gebirge, Flusstal · platzierbar auf: wassernahe Bergflanke · Instancing: nein · Effekt-Node/-Anschluss: `mist (optionaler Gischt-Ursprung)` · **live** (bereits verdrahtet)
+
 ### `construction_site.glb` — 1–3 Kacheln
 
 ```text
@@ -62,22 +86,6 @@ Low-poly stylized 3D city-builder game asset, colorful cartoon look, clean shape
 ## Geplant — Natur, Stadt, Hafen, Farm
 
 Siehe docs/3D_WORLD_ASSETS.md §11/§14.
-
-### `tree_deciduous.glb` — 1×1
-
-```text
-Low-poly stylized 3D city-builder game asset, colorful cartoon look, clean shapes, soft bevels, hand-painted feel, optimized for realtime rendering, embedded textures, no lights, no cameras, centered object, pivot at bottom center, +Y up, front facing +Z — a single stylized low-poly broadleaf/deciduous tree with a round crown, about 1.5 tiles tall
-```
-
-**Spec:** Größenklasse `prop` — kleines Prop (< 500 Tris, ≤ 256², 1 Material) · Höhe ≈1.5 Kacheln · Pivot unten-mittig (X/Z zentriert, Unterkante Y = 0) · Front +Z · Biom: Mischwald, Grasland · platzierbar auf: grass, forest, fertile · nie auf: Straße, Gebäude, Wasser, Gebirge · Mindestabstand 0.3–0.5 Kacheln · Zufallsrotation + Zufallsskalierung · Instancing: ja · *geplant* (noch nicht verdrahtet)
-
-### `tree_pine_large.glb` — 1×1
-
-```text
-Low-poly stylized 3D city-builder game asset, colorful cartoon look, clean shapes, soft bevels, hand-painted feel, optimized for realtime rendering, embedded textures, no lights, no cameras, centered object, pivot at bottom center, +Y up, front facing +Z — a tall stylized pine tree, about 1.8 tiles tall, slim conical crown
-```
-
-**Spec:** Größenklasse `prop` — kleines Prop (< 500 Tris, ≤ 256², 1 Material) · Höhe ≈1.8 Kacheln · Pivot unten-mittig (X/Z zentriert, Unterkante Y = 0) · Front +Z · Biom: Wald, Gebirgsrand · platzierbar auf: forest, mountain-nahe grass · Instancing: ja · *geplant* (noch nicht verdrahtet)
 
 ### `forest_cluster_small.glb` — 2×2
 
@@ -135,6 +143,30 @@ Low-poly stylized 3D city-builder game asset, colorful cartoon look, clean shape
 
 **Spec:** Größenklasse `prop` — kleines Prop (< 500 Tris, ≤ 256², 1 Material) · Pivot unten-mittig (X/Z zentriert, Unterkante Y = 0) · Front +Z · Biom: See-/Flussufer · platzierbar auf: shore_tile, lake_edge · Instancing: ja · *geplant* (noch nicht verdrahtet)
 
+### `swamp_reed_cluster.glb` — 1×1
+
+```text
+Low-poly stylized 3D city-builder game asset, colorful cartoon look, clean shapes, soft bevels, hand-painted feel, optimized for realtime rendering, embedded textures, no lights, no cameras, centered object, pivot at bottom center, +Y up, front facing +Z — a loose irregular cluster of swamp reeds and cattails, thin readable silhouettes, low-poly
+```
+
+**Spec:** Größenklasse `prop` — kleines Prop (< 500 Tris, ≤ 256², 1 Material) · Pivot unten-mittig (X/Z zentriert, Unterkante Y = 0) · Front +Z · Biom: Sumpf, Moorufer · platzierbar auf: swamp-Profil, shore_tile · Instancing: ja · *geplant* (noch nicht verdrahtet)
+
+### `dead_branch.glb` — 1×1
+
+```text
+Low-poly stylized 3D city-builder game asset, colorful cartoon look, clean shapes, soft bevels, hand-painted feel, optimized for realtime rendering, embedded textures, no lights, no cameras, centered object, pivot at bottom center, +Y up, front facing +Z — a weathered crooked dead branch lying on the ground, asymmetrical, low-poly
+```
+
+**Spec:** Größenklasse `prop` — kleines Prop (< 500 Tris, ≤ 256², 1 Material) · Pivot unten-mittig (X/Z zentriert, Unterkante Y = 0) · Front +Z · Biom: Sumpf, trockene Ebene · platzierbar auf: swamp- oder dry-Profil · Instancing: ja · *geplant* (noch nicht verdrahtet)
+
+### `swamp_log.glb` — 1×1
+
+```text
+Low-poly stylized 3D city-builder game asset, colorful cartoon look, clean shapes, soft bevels, hand-painted feel, optimized for realtime rendering, embedded textures, no lights, no cameras, centered object, pivot at bottom center, +Y up, front facing +Z — a dark mossy fallen swamp log with broken roots, low-poly
+```
+
+**Spec:** Größenklasse `prop` — kleines Prop (< 500 Tris, ≤ 256², 1 Material) · Pivot unten-mittig (X/Z zentriert, Unterkante Y = 0) · Front +Z · Biom: Sumpf · platzierbar auf: swamp-Profil · Instancing: ja · *geplant* (noch nicht verdrahtet)
+
 ### `rock_small.glb` — 1×1
 
 ```text
@@ -142,6 +174,22 @@ Low-poly stylized 3D city-builder game asset, colorful cartoon look, clean shape
 ```
 
 **Spec:** Größenklasse `prop` — kleines Prop (< 500 Tris, ≤ 256², 1 Material) · Höhe ≈0.4 Kacheln · Pivot unten-mittig (X/Z zentriert, Unterkante Y = 0) · Front +Z · Biom: Gebirge, Grasland · Instancing: ja · *geplant* (noch nicht verdrahtet)
+
+### `rock_cluster_small.glb` — 1×1
+
+```text
+Low-poly stylized 3D city-builder game asset, colorful cartoon look, clean shapes, soft bevels, hand-painted feel, optimized for realtime rendering, embedded textures, no lights, no cameras, centered object, pivot at bottom center, +Y up, front facing +Z — an irregular cluster of three to five light layered rocks, compact footprint, rotation-safe, low-poly
+```
+
+**Spec:** Größenklasse `prop` — kleines Prop (< 500 Tris, ≤ 256², 1 Material) · Höhe ≈0.5 Kacheln · Pivot unten-mittig (X/Z zentriert, Unterkante Y = 0) · Front +Z · Biom: Gebirge, Küste, trockene Ebene · Instancing: ja · *geplant* (noch nicht verdrahtet)
+
+### `mountain_boulder.glb` — 1×1
+
+```text
+Low-poly stylized 3D city-builder game asset, colorful cartoon look, clean shapes, soft bevels, hand-painted feel, optimized for realtime rendering, embedded textures, no lights, no cameras, centered object, pivot at bottom center, +Y up, front facing +Z — an angular alpine boulder with light grey strata and subtle moss traces, asymmetrical, low-poly
+```
+
+**Spec:** Größenklasse `prop_large` — großes Prop / Setpiece (500–1 500 Tris, ≤ 512², 1–2 Materialien) · Höhe ≈0.8 Kacheln · Pivot unten-mittig (X/Z zentriert, Unterkante Y = 0) · Front +Z · Biom: Gebirge, Hochland · Instancing: ja · *geplant* (noch nicht verdrahtet)
 
 ### `rock_medium.glb` — 1×1
 
@@ -278,6 +326,54 @@ Low-poly stylized 3D city-builder game asset, colorful cartoon look, clean shape
 ```
 
 **Spec:** Größenklasse `prop_large` — großes Prop / Setpiece (500–1 500 Tris, ≤ 512², 1–2 Materialien) · Höhe ≈1.2 Kacheln · Pivot unten-mittig (X/Z zentriert, Unterkante Y = 0) · Front +Z · Biom: Gebirge, Grasland · Instancing: nein · *geplant* (noch nicht verdrahtet)
+
+### `landmark_rock_arch.glb` — 3×2
+
+```text
+Low-poly stylized 3D city-builder game asset, colorful cartoon look, clean shapes, soft bevels, hand-painted feel, optimized for realtime rendering, embedded textures, no lights, no cameras, centered object, pivot at bottom center, +Y up, front facing +Z — a natural asymmetrical rock arch made of light layered coastal stone, broad opening, optimized silhouette, low-poly
+```
+
+**Spec:** Größenklasse `landmark` — Landmarke (6 000–12 000 Tris, ≤ 1024², 2–4 Materialien) · Höhe ≈2.5 Kacheln · Pivot unten-mittig (X/Z zentriert, Unterkante Y = 0) · Front +Z · Biom: Küste, Gebirge · platzierbar auf: freie Felszone abseits der Stadt · Instancing: nein · *geplant* (noch nicht verdrahtet)
+
+### `landmark_old_tree.glb` — 2×2
+
+```text
+Low-poly stylized 3D city-builder game asset, colorful cartoon look, clean shapes, soft bevels, hand-painted feel, optimized for realtime rendering, embedded textures, no lights, no cameras, centered object, pivot at bottom center, +Y up, front facing +Z — a large ancient gnarled broadleaf tree with a wide irregular crown and visible roots, low-poly
+```
+
+**Spec:** Größenklasse `landmark` — Landmarke (6 000–12 000 Tris, ≤ 1024², 2–4 Materialien) · Höhe ≈3 Kacheln · Pivot unten-mittig (X/Z zentriert, Unterkante Y = 0) · Front +Z · Biom: Grasland, Wald · platzierbar auf: freie Lichtung · Instancing: nein · *geplant* (noch nicht verdrahtet)
+
+### `landmark_ruin_small.glb` — 2×2
+
+```text
+Low-poly stylized 3D city-builder game asset, colorful cartoon look, clean shapes, soft bevels, hand-painted feel, optimized for realtime rendering, embedded textures, no lights, no cameras, centered object, pivot at bottom center, +Y up, front facing +Z — a small weathered stone ruin with one broken arch, sparse ivy and no modern props, low-poly
+```
+
+**Spec:** Größenklasse `landmark` — Landmarke (6 000–12 000 Tris, ≤ 1024², 2–4 Materialien) · Höhe ≈1.8 Kacheln · Pivot unten-mittig (X/Z zentriert, Unterkante Y = 0) · Front +Z · Biom: Grasland, Hochland · platzierbar auf: freie landschaftliche Fläche · Instancing: nein · *geplant* (noch nicht verdrahtet)
+
+### `landmark_desert_spire.glb` — 2×2
+
+```text
+Low-poly stylized 3D city-builder game asset, colorful cartoon look, clean shapes, soft bevels, hand-painted feel, optimized for realtime rendering, embedded textures, no lights, no cameras, centered object, pivot at bottom center, +Y up, front facing +Z — a tall asymmetrical terracotta sandstone spire with horizontal erosion layers, dramatic readable silhouette, low-poly
+```
+
+**Spec:** Größenklasse `landmark` — Landmarke (6 000–12 000 Tris, ≤ 1024², 2–4 Materialien) · Höhe ≈3.5 Kacheln · Pivot unten-mittig (X/Z zentriert, Unterkante Y = 0) · Front +Z · Biom: Rote Wüste · platzierbar auf: desert-Profil · Instancing: nein · *geplant* (noch nicht verdrahtet)
+
+### `landmark_swamp_tree.glb` — 2×2
+
+```text
+Low-poly stylized 3D city-builder game asset, colorful cartoon look, clean shapes, soft bevels, hand-painted feel, optimized for realtime rendering, embedded textures, no lights, no cameras, centered object, pivot at bottom center, +Y up, front facing +Z — an ancient leafless swamp tree with wide crooked branches and exposed root knees, dark weathered wood, low-poly
+```
+
+**Spec:** Größenklasse `landmark` — Landmarke (6 000–12 000 Tris, ≤ 1024², 2–4 Materialien) · Höhe ≈3 Kacheln · Pivot unten-mittig (X/Z zentriert, Unterkante Y = 0) · Front +Z · Biom: Sumpf · platzierbar auf: swamp-Profil · Instancing: nein · *geplant* (noch nicht verdrahtet)
+
+### `landmark_lake_islet.glb` — 3×3
+
+```text
+Low-poly stylized 3D city-builder game asset, colorful cartoon look, clean shapes, soft bevels, hand-painted feel, optimized for realtime rendering, embedded textures, no lights, no cameras, centered object, pivot at bottom center, +Y up, front facing +Z — a tiny rocky lake islet with three mixed trees and an irregular reed edge, compact low-poly diorama
+```
+
+**Spec:** Größenklasse `landmark` — Landmarke (6 000–12 000 Tris, ≤ 1024², 2–4 Materialien) · Pivot unten-mittig (X/Z zentriert, Unterkante Y = 0) · Front +Z · Biom: Seenland · platzierbar auf: See- oder Uferzone · Instancing: nein · *geplant* (noch nicht verdrahtet)
 
 ### `viewpoint_bench.glb` — 1×1
 

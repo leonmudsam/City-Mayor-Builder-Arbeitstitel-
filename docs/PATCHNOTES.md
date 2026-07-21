@@ -1,5 +1,860 @@
 # Patch Notes
 
+## v0.70 — Insel- und Biom-Overhaul 5.0
+
+### Was
+
+Die bestehende 3D-Insel wurde anhand der verbindlichen Map-Mockups visuell neu
+gelesen, ohne Kontur, Höhenbake, Straßen, Baufelder oder Regionslogik zu
+ersetzen. Zwölf visuelle Regionsprofile geben Gebirge, Grasland, Wald,
+Fruchttal, trockener Ebene, Küste, Seenland, Hochland, Flusstal sowie erstmals
+einer roten Wüste und einem Sumpf eine eigene Material-, Vegetations- und
+Landmarkensprache.
+
+- Der Terrainshader mischt jetzt zwölf statt acht Bodenschichten. Neue
+  KI-generierte Base-Color-Texturen liefern Wiese, hellen Bergfels, Schnee,
+  roten Wüstensand, Sumpfboden und Küstenkies.
+- Fels- und Bergmaterial werden an steilen Flächen triplanar in Weltkoordinaten
+  abgetastet. Dadurch entstehen keine langgezogenen Texturstreifen an Klippen.
+- Visuelle Regionsgewichte werden aus mehreren benachbarten Region-Samples
+  gemittelt. Die Übergänge wirken organisch, während Gameplay-Grenzen exakt
+  unverändert bleiben.
+- Wald und offene Landschaft unterscheiden nun Nadelbaum, großen Nadelbaum und
+  Laubbaum. Wüste, trockene Ebene und Sumpf steuern Felsen, Büsche, Schilf und
+  Totholz mit Instancing und prozeduralen Fallbacks.
+- Flüsse besitzen eine einzelne gebündelte, animierte Strömungsfläche; das
+  Ozeanmaterial kombiniert drei Wellenrichtungen und eine Makromodulation.
+- Felsbogen, Urbaum, kleine Ruine, Wüstenfelsnadel, Sumpfbaum und Seeinsel sind
+  als neutrale Landmark-Slots im zentralen Manifest verdrahtet. Fehlende GLBs
+  werden prozedural dargestellt.
+
+### Warum
+
+Die Welt hatte bereits eine gute, spielbare Geometrie und performante
+Chunk-/Instancing-Grundlage. Der sichtbare Abstand zu den Mockups entstand aus
+globalen Materialien und zu ähnlichen Vegetationssilhouetten. Der Pass investiert
+deshalb in Materialtiefe, regionale Lesbarkeit und Orientierung, ohne die stabile
+Simulation oder den Inselmaßstab neu aufzubauen.
+
+### Architektur
+
+`worldVisualProfiles.ts` ist eine reine Renderer-Matrix für alle 32 vorhandenen
+Regions-IDs. `ThreeMapRenderer` liest sie beim Erzeugen der Chunks und Instanzen;
+es entsteht kein zweites Regionssystem. Die Wüsten- und Sumpfzuordnung wirkt nur
+auf Splat-Gewichte, Tönung, Vegetation und neutrale Landmarken. Boni, Risiken,
+Kosten und Freischaltungen bleiben ausschließlich in der Game-Config.
+
+Texturen und Modelle folgen weiterhin Registry und Manifest. Die neuen
+Landmark-Namen stehen in `modelManifest.ts`, die Ordner-READMEs und Prompts sind
+testgeneriert. Die Flussströmung ist eine gebündelte Rendergeometrie statt eines
+Objekts pro Kachel. Vegetation bleibt instanziert; Landmarken sind begrenzt und
+deterministisch platziert.
+
+### Auswirkung
+
+- Gebirgsketten lesen sich durch hellen Fels, alpine Gewichtung und Schnee klarer
+  aus Nah- und Fernsicht.
+- Offene Wiesen, Kernwald, Agrartäler, Küsten, Seen, rote Trockenzone und Moor
+  besitzen deutlich getrennte Paletten und Silhouetten.
+- Küsten und Flüsse wirken bewegter, ohne neue Simulation oder Save-Daten.
+- Alte Spielstände bleiben gültig; Save-Schema bleibt **v13**.
+
+### Zukunft
+
+- Normal-, Roughness-, AO- und optionale Height-Maps für die neuen
+  Materialfamilien sind als sauberer PBR-Drop-in-Pass offen.
+- Die neuen Landmarken-, Schilf-, Totholz- und Felsnamen warten auf optimierte
+  GLBs; Fallbacks decken die Welt vollständig.
+- `TODO(CLAUDE_LOGIC)`: mögliche Wüsten-/Sumpfboni oder Risiken erst als
+  datengetriebene Designentscheidung in `src/game/config/` ergänzen.
+- Zielhardware-Smokes und GPU-Profiling sollen die bereits begrenzten
+  Draw-Calls, Instanzen und Landmark-Caps weiter absichern.
+
+### Dateien und Assets
+
+- Renderer: `ThreeMapRenderer.ts`, `worldVisualProfiles.ts`
+- Manifeste: `terrainTextureManifest.ts`, `modelManifest.ts`
+- Tests: `terrainTextures.test.ts`, `worldVisualProfiles.test.ts`, generierte
+  Modell- und Terrain-Dokumentation
+- Neue Texturen: `terrain/{grass,mountain,desert,swamp,coast}/`
+- Audit/Handoff: `MAP_REDESIGN_AUDIT.md`, `MAP_REDESIGN_PLAN.md`,
+  `REGION_VISUAL_REDESIGN.md`, `TERRAIN_MATERIAL_MATRIX.md`,
+  `WORLD_ASSET_MANIFEST.md`
+
+### Verifikation
+
+- `npx tsc -b --force`: grün.
+- `npx eslint src tests`: grün.
+- `npx vitest run`: grün, **35 Testdateien / 259 Tests**.
+- `WRITE_MODEL_DOCS=1 npx vitest run tests/modelReadmes.test.ts`: grün,
+  **22 Tests**; generierte Modell-READMEs/Prompts synchron.
+- `npm run build`: grün; die bekannte Warnung zum großen Hauptchunk bleibt.
+- Preview unter Basis-URL `/`: HTTP 200. Der Screenshot-Smoke konnte in dieser
+  Sitzung nicht ehrlich abgeschlossen werden, weil die integrierte
+  Browsererkennung auch nach Troubleshooting keine Browserinstanz lieferte
+  (`[]`). Kein externer Automationspfad wurde als Ersatz benutzt.
+- Die sechs KI-Texturen wurden einzeln visuell geprüft und technisch als
+  1254×1254-PNG validiert.
+- `npm run tauri:build`: lokal vor der Kompilierung blockiert, da `cargo` nicht
+  installiert ist (`cargo metadata: program not found`).
+
+
+## v0.69 — Stadtarbeit UI/UX Redesign 4.0
+
+### Was
+
+Der Stadtarbeit-Planer wurde anhand des verbindlichen Redesign-4.0-Mockups neu
+aufgebaut. Die stilisierte 2D-Stadt ist jetzt der dominante Arbeitsbereich;
+Aufträge stehen kompakt links, Fahrzeug/Ladung, die live entstehende Tour und
+die Bestätigung rechts. Die alte Drag-&-Drop-Zielreihenfolge, der Planname sowie
+„Letzte Route“/lokales Speichern und Laden sind vollständig entfernt.
+
+- Linksklick/-ziehen auf Straßen zeichnet, freie Fläche sowie Mittel-/Rechtszug
+  verschieben, Mausrad und +/− zoomen. Leertaste schaltet temporär auf Pan; F
+  passt den Auftrag ein; R setzt zurück; Esc entfernt zunächst den letzten
+  Schritt und schließt erst am Startpunkt.
+- Reihenfolge und Stoppnummern entstehen ausschließlich aus den tatsächlich
+  berührten Straßenankern. Es gibt kein stilles Auto-Routing.
+- Cargo, Ladestand, Fahrzeugkapazität, notwendige/echte Nachfüllungen,
+  Leerfahrt, Fahr-/Handlingzeit, Verkehrsrisiko und Qualität reagieren live.
+- Die Tourübersicht nutzt Gebäudethumbnails und unterscheidet Start, Lieferung
+  und echte Rückkehr zur Quelle zum Nachfüllen.
+- Ein Portrait-Berater übersetzt kanonische Infrastruktur-Hinweiscodes in kurze
+  Handlungsimpulse. Der Bestätigungsbutton bleibt bis zur lückenlosen,
+  cargo-gültigen Route gesperrt.
+- Die Canvas-Karte erhielt Geländevariation, Wasser, Regionsgrenzen,
+  Straßenklassen, Verkehr, erkennbare Gebäude, Schatten, animierten Routenglow,
+  Richtungspfeile und farbige Etappen statt Debug-Kacheln.
+- Drei zusätzliche Config-Missionen (`water_delivery`, `market_restock`,
+  `park_supply`) erhöhen die gleichzeitige Vielfalt ohne neues Missionssystem.
+
+### Warum
+
+Der bisherige Screen behandelte zu viele technische Tabellen und Werkzeuge als
+gleich wichtig. Redesign 4.0 macht die eigentliche Entscheidung — welchen Weg
+fahre ich mit welchem Fahrzeug und wann lade ich nach — sofort sichtbar und
+bedienbar. Bilder, Hierarchie und direkte Karteninteraktion ersetzen
+Konfigurationswerkbank-Charakter, ohne Spielregeln in React zu duplizieren.
+
+### Architektur
+
+`ActivityRoutePlanner` orchestriert nur neue Controller-Read-Modelle:
+`getActivityPlanningContext`, `getActivitySupplySources`,
+`getActivityDeliveryTargets`, `getAvailableActivityVehicles` und
+`getActivityRoutePreview`. `targetOrderOnPath` sowie `evaluateCargoRoute` sind
+reine deterministische Game-Helfer. React speichert keinen Standardweg mehr und
+mutiert keinen GameState. Gestartet wird weiterhin atomar über `startActivity`
+beziehungsweise `setActiveActivityRoute` mit `{vehicle, roadPath}`.
+
+Die neuen Missionen sind ausschließlich validierte Einträge in
+`activities.config.ts`. `material_delivery` nutzt für das physische Volumen Holz
+als repräsentative Mischladung, während die Wirtschaft weiterhin Holz und Stein
+verbraucht; es wurde absichtlich kein neuer Save-relevanter Ressourcen-Typ
+erfunden. Die neue CSS-Schicht `citywork-v4.css` liegt nach den bestehenden
+Designsystemdateien und verändert die 3D-Ausführung nicht.
+
+### Auswirkung
+
+Die Planung ist auf 1280×720 kompakt und auf 1920×1080 großzügig. Karte,
+Marker, Auftrag und Bestätigung bleiben in beiden Zielgrößen innerhalb der
+Vollbildfläche; Listen scrollen lokal. Fehlende Bilder fallen über Registry,
+BuildingArt oder Lucide-Symbole zurück. Die bestehende automatische 3D-Fahrt,
+Belohnung und Ergebniswertung bleiben unverändert.
+
+### Zukunft / bewusst nicht vorgetäuscht
+
+- Mehrere auswählbare Quellen, Zwischenlager, Rückwaren, Depot-Rückgabe,
+  Fahrzeugwechsel und mehrere Fahrzeuge benötigen noch kanonische Plan-Legs und
+  Commands (`TODO(CLAUDE_LOGIC)`). Redesign 4.0 zeigt nur die erste echte Quelle
+  und tatsächliche Wiederbesuche dieser Quelle.
+- `InfrastructureWarning` besitzt noch keine `roadPoint`/`segmentId`; „Route
+  zeigen“ passt deshalb ehrlich die ganze Tour ein statt einen Abschnitt zu
+  erraten.
+- Steigung, Straßenzustand, Wetterereignisse, Sperrungen und Fahrzeugschaden
+  bleiben offene Game-Daten. Die UI zeigt dafür keine erfundenen Werte.
+- `rewardMultiplier` bleibt Prognose und verändert die Auszahlung nicht.
+
+### Dateien
+
+`src/components/panels/ActivityRoutePlanner.tsx`,
+`src/components/citywork/{ManualRouteMap,VehicleSelector,RouteSummary,TourOverview,InfrastructureAdvisor}.tsx`,
+`src/styles/citywork-v4.css`, `src/main.tsx`,
+`src/game/activities/{routeAnalysis,logistics}.ts`,
+`src/game/commands/controller.ts`, `src/game/config/activities.config.ts`,
+`src/i18n/de.json`, `tests/{routeAnalysis,logistics,missions}.test.ts` sowie die
+zugehörigen Projekt-/Handoff-/Asset-Dokumente.
+
+### Assets
+
+20 neue KI-generierte, freigestellte PNGs unter
+`src/assets/ui/citywork/{markers,cargo,advisors,missions}/`: acht Marker, fünf
+Cargo-Bilder, zwei Beraterporträts und fünf Missionsdioramen. Alle wurden im
+`stylized-concept`-Modus mit flacher Magenta-Keyfläche erzeugt, per
+Border-Autokey/Soft-Matte/Despill freigestellt, auf 512 oder 768 px reduziert
+und auf echten Alpha-Kanal geprüft. Prompts, Benennung und Fallbacks stehen in
+den sieben Ordner-READMEs.
+
+### Save
+
+Keine neue persistierte Struktur. Save-Schema bleibt **v13**; die bestehenden
+Migrationen `11→12→13` bleiben unverändert.
+
+### Verifikation
+
+Die endgültigen Ergebnisse der vollständigen Matrix und des Browser-Smokes
+stehen im jüngsten Eintrag von `docs/agents/HANDOFF_LOG.md`.
+
+## v0.68 — Stadtarbeit-Logik 2.0 (L4): Logistik-Bewertung & Leerfahrtanteil
+
+### Was
+
+Der Stadtarbeit-Planer kann eine Route jetzt logistisch **bewerten**: Wie viel
+der Fahrt wird **leer** gefahren (Leerfahrtanteil §19)? Wie oft muss nachgeladen
+werden? Passt das Fahrzeug (Kapazität, Handling in engen/vollen Straßen)? Liegt
+die Quelle günstig zu den Zielen? Wie lange dauern Be- und Entladen? Verdirbt die
+Ware ohne Kühlung? Dazu kommen textfreie Hinweise (z. B. „überdimensioniertes
+Fahrzeug", „viele Nachladefahrten", „verderblich ohne Kühlung").
+
+### Warum
+
+§19 des Auftrags verlangt eine echte Infrastruktur-Bewertung mit dem
+Leerfahrtanteil als Kernmaß. Der Spieler soll erkennen, dass ein kleines Fahrzeug
+viele leere Nachlade-Rückfahrten erzeugt und ein zu großes unnötig lange lädt —
+also strategisch Quelle, Reihenfolge und Fahrzeugklasse wählen.
+
+### Architektur
+
+Zwei reine, deterministische Bewertungen im bestehenden Logistikmodul
+(`activities/logistics.ts`): `evaluateInfrastructure` als **Prognose** vor dem
+Zeichnen (Leerfahrt aus den Nachlade-Rückfahrten der Cargo-Etappen) und
+`evaluateCargoRoute` als **Ist-Auswertung** eines bereits gezeichneten Pfades
+(echte Quell-/Nachladekontakte, gemessene Leerfahrtkacheln). Fahrzeugeignung kommt
+als optionale Config an `ActivityVehicleDef` (`loadTimeSec`,
+`unloadTimeSecPerTarget`, `narrowStreetPenalty`, `cooling`). Read-Helper:
+`getActivityInfrastructure`, `getActivityInfrastructureWarnings`,
+`getActivityCargoRoute`. Reine Anzeige/Prognose — **kein Save-Bump, keine
+Auszahlungskopplung** (bleibt bei D-013).
+
+### Auswirkung
+
+Ausschließlich additive Read-/Config-Schicht: Simulation, Ökonomie, Save und
+Auszahlung bleiben unverändert. Die Codex-UI kann die Werte/Hinweise anzeigen; die
+Textbausteine liegen in der UI, die Logik liefert nur Zahlen und Codes.
+
+### Zukunft
+
+Kopplung von Leerfahrtanteil/Eignung an die Auszahlung erst nach dem L5-
+Balancingtest; sichtbare Quell-/Nachlade-/Rückfahrt-Etappen in der 3D-Fahrt
+(Codex); L5 adaptive Mengen aus dem Stadtzustand.
+
+### Dateien
+
+`src/game/config/types.ts`, `src/game/config/schemas.ts`,
+`src/game/config/activities.config.ts`, `src/game/activities/logistics.ts`,
+`src/game/commands/controller.ts`, `tests/logistics.test.ts`.
+
+### Assets
+
+Keine.
+
+## v0.67 — Stadtarbeit-Logik 2.0 (L3): Ladung wird an der Quelle reserviert
+
+### Was
+
+Eine Liefermission holt ihre Ware jetzt **echt** an der Quelle ab, statt sie
+unterwegs aus dem Nichts zu ziehen. Beim Start wird die volle benötigte Menge
+(`costPerTarget × Ziele`) sofort aus dem Lager entnommen und als Ladung gehalten;
+jede Auslieferung zieht aus dieser Reserve. Reicht der Vorrat nicht, startet der
+Auftrag gar nicht — kein Steckenbleiben auf halber Strecke. Ein Abbruch gibt die
+noch nicht ausgelieferte Ware zurück.
+
+### Warum
+
+§4/§5 des Auftrags: Ware muss aus realen Quellen kommen, reserviert und korrekt
+entnommen werden, Doppelnutzung ausgeschlossen. Weil die reservierte Ware sofort
+den Pool verlässt, kann sie nicht mehr parallel für Handel/Bau ausgegeben werden.
+
+### Architektur
+
+Neues optionales, persistiertes Feld `ActiveActivity.reserved`. Der Verbrauch
+bleibt **netto identisch** (`costPerTarget × Ziele`) — nur der Zeitpunkt
+verschiebt sich vom Ziel zum Start. Kein Balancing-Eingriff. Es gibt weiterhin
+keine gebäudeeigene Lagerhaltung; die Quelle ist ein Anker, der Bestand der
+globale Pool. Neuer Read-Helper `getActivityExecutionSnapshot` für die
+3D-/HUD-Ansicht.
+
+### Auswirkung
+
+Fahrmissionen mit Kosten (Essen/Material/Holz) reservieren upfront; Feuerwehr/
+Polizei (ohne Kosten) sind unverändert. Alte laufende Missionen ohne Reserve
+laufen im bisherigen Pfad weiter.
+
+### Zukunft
+
+Sichtbarer Halt an der Quelle und Nachlade-/Rückfahrt-Etappen während der 3D-Fahrt
+(Codex, Daten liegen in `getActivityCargoPlan.legs` bereit); L4 Leerfahrt-
+bewertung; L5 adaptive Mengen.
+
+### Dateien
+
+`src/game/types.ts`, `src/game/config/schemas.ts`, `src/game/newGame.ts`,
+`src/game/storage/migrations.ts`, `src/game/commands/controller.ts`,
+`tests/activityReservation.test.ts` (neu), `tests/storage.test.ts`.
+
+### Assets
+
+Keine.
+
+### Save
+
+**v13**, lineare Migration `12→13` (Normaliser). v12-Saves bleiben gültig.
+
+## v0.66 — Stadtarbeit-Logik 2.0 (L1+L2): echte Ladung & Fahrzeugkapazität
+
+### Was
+
+Die Stadtarbeit erhält die logistische Grundlage aus dem Auftrag „Stadtarbeit-
+Logik 2.0": Fahrzeugkapazität wirkt jetzt real. Ein Auftrag lädt nicht länger
+implizit „unendlich" — übersteigt der Transportbedarf die Ladefläche, sind
+mehrere Beladungen nötig.
+
+- **Ladungsmodell.** Neues Config-Feld `cargoModel` (transportiertes Volumen je
+  Ziel, optional mit der Zielgröße skalierend) — getrennt vom abstrakten
+  Ressourcenverbrauch `costPerTarget`. `food_delivery` liefert die Referenz.
+- **Kapazitätsplanung.** Der neue Read-Helper `getActivityCargoPlan` berechnet
+  Bedarf je Ziel, nötige Beladungen und die Pickup-/Delivery-Etappen. Van (250)
+  braucht für fünf mittlere Wohnziele zwei Beladungen, der große LKW (1000) nur
+  eine — die Fahrzeugwahl wird zur echten Entscheidung.
+
+### Warum
+
+Bisher zog jeder Ziel-Klick Ware aus dem Nichts; Kapazität war Anzeige ohne
+Wirkung. Damit war Stadtarbeit langfristig zu durchschaubar (§2 des Auftrags).
+
+### Architektur
+
+Reines, deterministisches Modul `src/game/activities/logistics.ts` neben dem
+bestehenden Routen-Analyser — keine zweite Simulation. Es gibt weiterhin keine
+gebäudeeigene Lagerhaltung; eine „Quelle" ist ein räumlicher Anker, der Bestand
+bleibt der globale Pool. L2 ist eine Planungs-/Prognoseschicht: der
+Ausführungspfad (`progressActivity`) und die Ökonomie sind unverändert.
+
+### Auswirkung
+
+Der Planer (Codex) kann jetzt „X Beladungen nötig" anzeigen. Keine Save-Änderung
+(Schema bleibt v12), keine Auszahlungsänderung.
+
+### Zukunft
+
+L3 bringt Etappen-Ausführung mit Reservierung/Entnahme an Quellen und Rückfahrt
+(Save v13 + Migration `12→13`); L4 die Leerfahrtbewertung; L5 adaptive Mengen.
+
+### Dateien
+
+`src/game/activities/logistics.ts` (neu), `src/game/config/types.ts`,
+`src/game/config/schemas.ts`, `src/game/config/activities.config.ts`,
+`src/game/commands/controller.ts`, `tests/logistics.test.ts` (neu),
+`docs/agents/CITYWORK_LOGIC_2_PLAN.md` (neu).
+
+### Assets
+
+Keine.
+
+## v0.65 — Stadtarbeit 2D: manuelle Routen, Fahrzeugflotte und automatische 3D-Ausführung
+
+### Was
+
+Der Stadtarbeit-Bildschirm wurde anhand der drei verbindlichen Routen-Mockups
+vollständig von einem Zielsortier-Dialog zu einer strategischen
+Planungswerkbank ausgebaut.
+
+- **Manuelle Straßenroute statt Auto-Optimierung.** Die Route beginnt am
+  kanonischen Straßenanker der Quelle. Linksklick/Ziehen wählt zusammenhängende
+  Straßenkacheln, Rechtsklick entfernt die letzte Kachel. Zwischen zwei Klicks
+  wird kein Weg ergänzt. Quelle und alle Ziele müssen in der selbst festgelegten
+  Reihenfolge berührt werden.
+- **Kartenfokus und Navigation.** Die 2D-Karte passt Quelle und Zielgruppe per
+  Bounding Box ein, unterstützt Mausrad sowie Plus/Minus, freies Verschieben,
+  Doppelklick-Fokus und die Kürzel Esc/R/F. Terrain, Gebäude, echtes Straßennetz,
+  Verkehrslast, Route und Zielstatus werden aus Controller-Snapshots projiziert.
+- **Zielreihenfolge.** Stopps lassen sich per Drag & Drop sowie Pfeiltasten
+  umordnen. Eine geänderte Reihenfolge löscht bewusst die alte Straßenkette,
+  damit kein optisch gültiger, logisch veralteter Plan bestehen bleibt.
+- **Fahrzeugauswahl.** Kleiner Lieferwagen, mittlerer/großer LKW,
+  Kühltransporter, Spezialtransporter und missionsspezifische Fahrzeuge besitzen
+  Config-basierte Kapazität, Geschwindigkeit, Handling, Kosten, Verbrauch sowie
+  Stärken/Schwächen. Güterzug und Frachtflugzeug sind als nicht auswählbare
+  Zukunftsstufen sichtbar vorbereitet.
+- **Live-Auswertung.** Strecke, Fahrzeit, Kreuzungen, Fahrzeugwerte,
+  Verkehrsrisiko, verbundene Ziele, Effizienz, Medaille und
+  Belohnungsprognose stammen aus der reinen Routenanalyse. Steigung und
+  Straßenzustand bleiben ausdrücklich ohne erfundene Werte, bis dafür kanonische
+  Netzdaten existieren.
+- **3D-Ausführung.** Nach Bestätigung kehrt das Spiel in die Welt zurück. Das
+  gewählte Fahrzeug folgt der gespeicherten Straßenkette automatisch, erledigt
+  Ziele ausschließlich in der geplanten Reihenfolge und kann über ein kompaktes
+  Widget verfolgt oder mit freier Kamera beobachtet werden.
+- **Ergebnisansicht.** Der vorhandene Activity-Abschluss zeigt nun Bewertung,
+  Sterne, Zeit, Strecke, Effizienz, Straßenanteil, Fahrzeug und Belohnung.
+
+### Warum
+
+Die vorige Fassung bot einen Button zur Nächster-Nachbar-Optimierung und startete
+danach im Wesentlichen dieselbe Zielkette. Das widersprach dem neuen Auftrag:
+Routenplanung soll eine aktive strategische Entscheidung sein und die Qualität
+des eigenen Straßennetzes sichtbar machen. Die Ausführung in der 3D-Welt
+verbindet Planungsansicht und bestehendes Stadtspiel, ohne ein zweites
+Missionssystem einzuführen.
+
+### Architektur
+
+- `game/activities/routeAnalysis.ts` validiert die exakte orthogonale
+  Straßenkette deterministisch auf `derived.roadNetwork`; kein React, Three,
+  Zustand oder RNG.
+- `GameController` bleibt einzige Command-Grenze. Neue Read-Helper:
+  `getActivityRouteAnchors` und `analyseManualActivityRoute`. Die bestehenden
+  Commands `startActivity`/`setActiveActivityRoute` nehmen optional
+  `{ vehicle, roadPath }` entgegen und validieren beides vor der Mutation.
+- Die laufende Aktivität speichert nur die gewählte Fahrzeug-ID und
+  Straßenkacheln. Simulation, Questfortschritt und Auszahlung bleiben die
+  vorhandene Aktivität; es existiert kein paralleler Route-/Quest-State.
+- Der Three-Renderer liest diese Felder, nutzt die zentrale
+  `ACTIVITY_VEHICLE_MODELS`-Fallbackkette und meldet erreichte Ziele über den
+  bestehenden Callback zurück.
+- UI-Aufteilung:
+  `panels/ActivityRoutePlanner.tsx` orchestriert,
+  `citywork/ManualRouteMap.tsx`, `VehicleSelector.tsx`, `RouteSummary.tsx` und
+  `ActivityExecutionWidget.tsx` kapseln die Ansichten. Styling liegt separat in
+  `styles/citywork.css`.
+
+### Auswirkung
+
+- Save-Schema steigt von **v11 auf v12**. Migration `11→12` ist verlustfrei:
+  beide neuen Felder sind optional; eine alte laufende Mission verwendet weiter
+  das Config-Standardfahrzeug und die bestehende Renderer-Wegfindung.
+- Browser und Tauri lesen dieselben relativen Drop-in-Assets; fehlende Bilder
+  oder GLBs fallen weiterhin auf vorhandene/prozedurale Fahrzeuge zurück.
+- `rewardMultiplier` bleibt Prognose und verändert die Auszahlung nicht. Diese
+  folgt weiterhin der kanonischen Ausführungsqualität.
+
+### Zukunft
+
+- Straßenzustand, Steigungen, Parkplätze, Fahrzeugzustand, Kraftstoff und
+  dynamische Ereignisse brauchen eigene Simulationsdaten und dürfen nicht in
+  der UI erfunden werden.
+- Güterzug/Frachtflugzeug bleiben visuelle Vorbereitung, bis Schiene/Flughafen,
+  Commands, Balancing und Save-Migration als vollständige Phase existieren.
+- Für sehr große Missionen kann später eine segmentweise Auswahl über
+  Straßen-IDs ergänzt werden; die heutige Kachelroute ist bereits der
+  deterministische Persistenzvertrag.
+
+### Dateien
+
+`src/game/activities/routeAnalysis.ts`, `src/game/config/{types,schemas,
+activities.config,index}.ts`, `src/game/commands/controller.ts`,
+`src/game/{types,newGame}.ts`, `src/game/storage/migrations.ts`,
+`src/components/panels/ActivityRoutePlanner.tsx`,
+`src/components/citywork/*.tsx`, `src/renderer/{IMapRenderer,
+three/ThreeMapRenderer}.ts`, `src/state/store.ts`, `src/App.tsx`,
+`src/styles/citywork.css`, `src/i18n/de.json`,
+`tests/{routeAnalysis,missions,storage}.test.ts` sowie die Asset-/Agenten-Doku.
+
+### Assets
+
+Vier neue KI-generierte, per Chromakey freigestellte PNGs:
+`vehicles/medium_truck.png`, `large_truck.png`,
+`refrigerated_truck.png`, `heavy_transporter.png`. Generiert mit dem eingebauten
+Bildwerkzeug als polierte 3D-Fahrzeug-Cutouts auf `#ff00ff`, anschließend mit
+`remove_chroma_key.py` (Soft Matte + Despill) transparent gerechnet.
+Die Originale bleiben im lokalen Codex-Generierungsordner; die Projektdateien
+besitzen validierte RGBA-Kanäle und prozedurale/GLB-Fallbacks.
+
+### Verifikation
+
+- TypeScript (`npx tsc -b --force`) und ESLint (`npx eslint src tests`) sind grün.
+- Vitest ist mit **32 Testdateien / 222 Tests** vollständig grün; die
+  Modell-Dokumentation ist mit **22 Tests** synchron.
+- Der Browser-Produktionsbuild ist grün; die bekannte Rollup-Warnung zum großen
+  Haupt-Chunk bleibt bestehen.
+- Der Browser-Screenshot-Smoke konnte nicht ausgeführt werden, weil die
+  eingebettete Browser-Laufzeit keine Instanz bereitstellte
+  (`agent.browsers.list() = []`). Es wird keine visuelle Freigabe behauptet.
+- `npm run tauri:build` stoppte vor dem Kompilieren mit
+  `cargo metadata: program not found`; auf diesem Rechner fehlt die
+  Rust-/Cargo-Toolchain. Der Lauf meldete keinen TypeScript-/Tauri-Codefehler.
+
+## v0.64 — Logik-Pass C3–C7: Anliegen-Fokus, Platzierung, Regionsvorschau, Straßenplan, Balancing
+
+### Was
+
+Zweite Logikphase des Multi-Agent-Handoffs (Claude). Schließt die verbliebenen
+kanonischen Datenlücken und härtet Kernregeln — alles als reine
+Simulations-/Read-Projektionen hinter dem Controller, ohne Codex-UI umzubauen.
+
+- **Anliegen auf der Karte (C3).** „Auf Karte zeigen" wirkt jetzt: `questFocus`
+  liefert deterministisch den sinnvollsten Fokuspunkt eines Anliegens (echtes
+  Zielgebäude → sonst nächste gesperrte, freischaltbare Region → sonst
+  Stadtzentrum).
+- **Platzierungs-Diagnose & Verschieben (C4).** Neuer Read-Helper
+  `placementDiagnostics` (Gültigkeit/Grund, Terrain, Region, Straßenanschluss,
+  Standortbonus, Kosten) für die Ghost-Vorschau. Verschieben erhält Upgrade-
+  stufe, Status und Belegung.
+- **Upgrade lässt Versorgung nicht auf null fallen (C4/§16).** Das
+  Versorgungs-Overlay zeigte den Radius eines Gebäudes **während seines Upgrades**
+  fälschlich als 0; es folgt jetzt derselben Regel wie die Simulation
+  (`isContributing`) — ein Gebäude im Ausbau versorgt weiter.
+- **Regionsvorschau mit echten Empfehlungen (C5).** Der Regionsdialog zeigt statt
+  leerer Platzhalter die vom Regionscharakter begünstigten Gebäude
+  (`regionPreview`, aus den Produktions-Modifikatoren abgeleitet).
+- **Straßenplanung als Vorschau (C6).** `roadPathPreview` bewertet einen
+  gezeichneten Straßenpfad vor dem Bau: pro Kachel Status/Grund/Kosten und
+  Gesamtlänge/-kosten, mit pfad-bewusster Anschlussprüfung. Reine Vorschau — kein
+  Sofortbau, keine Teilabbuchung (§18).
+- **Balancing abgesichert (C7).** Regressionstests: eine zufriedene Großstadt
+  erreicht praktisch ihre Wohnkapazität (§25); die Wirtschaft produziert nur im
+  aktiven Live-Tick, nie offline (§26).
+
+### Architektur
+
+- Neue reine Module: `game/activities/routeAnalysis.ts` (v0.63),
+  `game/regions/regionPreview.ts`, `game/roads/roadPlanning.ts`; neue Projektion
+  `questFocus` in `simulation/quests.ts`. Alle nur mit Typ-Importen (§1).
+- Neue Controller-Read-Helper: `questFocus`, `placementDiagnostics`,
+  `regionPreview`, `roadPathPreview`. Keine neuen mutierenden Commands.
+
+### Auswirkung
+
+- Kein Config-/Save-Eingriff — **Schema bleibt v11**, nichts wird persistiert.
+- Alle drei UI-`TODO(CLAUDE_LOGIC)` sind geschlossen.
+
+### Zukunft
+
+- Codex kann `roadPathPreview` für ein Zeichnen-→Bestätigen-Straßen-UI nutzen;
+  ein atomarer `placeRoadPath`-Command folgt, sobald die UI dafür existiert.
+- Highway/Parkplätze/Farmzäune/spielerisches Wetter bleiben eigene spätere
+  Phasen mit Datenmodell + Migration.
+
+### Dateien
+
+`src/game/simulation/quests.ts`, `src/game/regions/regionPreview.ts` (neu),
+`src/game/roads/roadPlanning.ts` (neu), `src/game/buildings/coverage.ts`,
+`src/game/commands/controller.ts`, `src/components/panels/CitizenRequestsPanel.tsx`,
+`src/components/panels/RegionDialog.tsx`, `src/i18n/de.json`, sowie Tests
+`questFocus`/`placementUpgrade`/`regionPreview`/`roadPlanning`/`populationBalance`
+und die Handoff-Dokumente.
+
+### Assets
+
+Keine.
+
+## v0.63 — Stadtarbeit-Logik: kanonische Routenanalyse (Claude, Phase C2)
+
+### Was
+
+Erste Logikphase des Multi-Agent-Handoffs (Claude = Simulation, Codex = UI/
+Renderer). Die Verkehrs-/Prognosewerte des Stadtarbeit-Routenplaners waren bisher
+eine reine UI-Schätzung (Luftlinie + Hash, mit `TODO(CLAUDE_LOGIC)` markiert).
+Sie werden jetzt aus dem **echten Straßennetz** berechnet.
+
+- **Echter Straßengraph.** Neue reine Domain-Funktion analysiert die geplante
+  Route auf `derived.roadNetwork`: BFS-Wegfindung Kachel für Kachel, Andocken der
+  Gebäude an die nächste Fahrbahn, Verkehrslast aus der Anrainerdichte der
+  befahrenen Straßenkacheln.
+- **Kanonische Kennzahlen.** Streckenlänge, Fahrzeit, Kreuzungen, Staurisiko,
+  Effizienz, Medaillen-Prognose und ein gedeckelter Belohnungs-Prognosefaktor
+  stammen jetzt aus dieser Analyse; die Segment-Verkehrsfarben der 2D-Karte
+  ebenfalls.
+- **Frühe Stadt bleibt bedienbar.** Ohne Straßenverbindung fällt ein Segment
+  sauber auf eine bestrafte Luftlinie zurück — nie ein Crash, nie ein leeres Panel.
+
+### Warum
+
+Der Planer soll strategische Tiefe haben: eine bessere Stoppreihenfolge und ein
+gutes Straßennetz müssen sichtbar zu besseren Werten führen. Bisher waren die
+Zahlen kosmetisch und von der Stadt entkoppelt.
+
+### Architektur
+
+- Neues Modul `src/game/activities/routeAnalysis.ts` — reine Simulation, nur
+  Typ-Importe (CLAUDE.md §1). Deterministisch, kein RNG, kein Zeitwert.
+- Neuer Read-Helper `GameController.analyseActivityRoute(defId, orderedTargetIds)`.
+  Command-Grenze `startActivity`/`setActiveActivityRoute` unverändert.
+- `ActivityRoutePlanner.tsx` (Codex-UI) nur minimal angebunden — Rendering/Layout
+  unverändert; alte Schätzung bleibt Fallback ohne Straße.
+
+### Auswirkung
+
+- Reine Prognose/Anzeige: Die tatsächliche Belohnung entscheidet weiterhin die
+  **Ausführungsqualität** (Fahrzeit gegen Zeitlimit), damit die Balance nicht aus
+  der Planung heraus verschoben wird (siehe Entscheidung D-013).
+- Save-Schema bleibt **v11**; nichts wird persistiert.
+
+### Zukunft
+
+- Kopplung von `rewardMultiplier` an die Auszahlung ist eine bewusste spätere
+  Balancing-Entscheidung (Phase C7), erst mit Gesamt-Simulation.
+- Codex kann die geplante Route auf der 2D-Karte am echten `RouteSegment.path`
+  statt der synthetischen L-Polyline zeichnen (Daten liegen bereit).
+
+### Dateien
+
+`src/game/activities/routeAnalysis.ts` (neu), `src/game/commands/controller.ts`,
+`src/components/panels/ActivityRoutePlanner.tsx`, `tests/routeAnalysis.test.ts`
+(neu), `docs/agents/CLAUDE_AUDIT.md` (neu), `docs/agents/HANDOFF_LOG.md`,
+`docs/agents/DECISIONS.md`, `docs/agents/PROJECT_STATE.md`,
+`docs/agents/OPEN_TASKS.md`.
+
+### Assets
+
+Keine.
+
+## v0.62 — Premium-Fidelity-Pass: PC-Baushop, Wetter, Stufen & Regionswelten
+
+### Was
+
+Die zwei zuletzt gelieferten Premium-Mockups wurden nochmals direkt gegen die
+laufende v0.61-Oberfläche verglichen. v0.62 schließt die sichtbarsten
+Fidelity-Lücken:
+
+- **Großer PC-Baushop.** Ab 1680×860 wird der Katalog zu einem vollhohen rechten
+  Arbeitsbereich: vier Karten pro Reihe, acht Empfehlungen, eigene Scrollfläche
+  und eine große Gebäudevorschau darunter. Auf kleineren Ansichten bleibt die
+  kompakte Bodenleiste. Kommende Gebäude dürfen als gesperrte Vorschau erscheinen;
+  Kosten, Unlock-Level und Aktionen bleiben echte Config-Daten.
+- **Gebäude-Entwicklung sichtbar.** `BuildingArt` versteht jetzt dieselbe
+  visuelle Stufe wie der Renderer. Bau-Shop und Gebäude-Sheet zeigen alle
+  Ausbauphasen als Vorschauleiste. Vorhandene `<id>_stageN.glb` werden
+  automatisch genutzt, sonst bleibt Basisbild/SVG stabil. Eine Vorschau löst
+  niemals ein Upgrade aus.
+- **Wetter & Tageszeit.** Ein neues rechtes Atmosphärenfenster zeigt ein
+  zusammenhängendes KI-Panorama für Sonne, Sommerregen und Morgennebel,
+  Tageszeit-Presets, Slider, Tageslauf und 1×/2×/4×. Die Auswahl wirkt live in
+  der 3D-Welt: Himmel, Licht, Wolken, Fernsicht und Wasserfarbe ändern sich;
+  Regen erhält einen einzigen gebatchten Vorhang aus 420 Liniensegmenten.
+- **Biomtreue Regions-Heros.** Gebirge/Hügel, Ebene/Flusstal/Fruchtland und
+  Küste/See/Insel erhalten jeweils ein passendes Landschaftsmotiv.
+- **Stadtstatus mit stabiler Hierarchie.** Zufriedenheit, Wasser, Essen, Arbeit
+  und Umwelt bleiben immer an derselben Stelle. Noch gesperrte Bedarfe zeigen
+  das echte Freischaltlevel statt zu verschwinden oder Prozentwerte
+  vorzutäuschen.
+- **Wasserfall-Landmarken.** Bis zu vier deterministisch platzierte Wasserfälle
+  beleben wassernahe Bergflanken. `waterfall_cliff.glb` oder
+  `waterfall_small.glb` kann per Drop-in übernehmen; bis dahin rendert ein
+  prozeduraler Fels-/Wasser-/Becken-/Gischt-Fallback.
+- **Regionsentscheidung lesbarer.** Vorteile und vorbereitete
+  Regionsgebäude-Vorschau stehen in einer gemeinsamen Zweispaltenzone; die
+  noch fehlende kanonische Gebäudeliste bleibt ehrlich als Skeleton markiert.
+
+### Warum
+
+v0.61 hatte die richtige Informationsarchitektur, wirkte auf großen
+Desktop-Auflösungen aber noch zu sehr wie eine skalierte Kompaktoberfläche.
+Insbesondere Baushop, Upgrade-Entwicklung, Wetter und wiederholte Regionsbilder
+lagen hinter den neuen Referenzen. v0.62 nutzt den zusätzlichen Raum eines
+PC-Spiels gezielt, ohne ein zweites UI-System oder neue simulierte Werte
+einzuführen.
+
+### Architektur
+
+- `src/game/**` bleibt unverändert. React liest weiter Controller-Snapshots und
+  schickt Commands; keine direkte State-Mutation.
+- Wetter und Tageszeit liegen ausschließlich im lokalen
+  `environmentSettings`-Store. `SkyEnvironment` konsumiert sie als
+  Renderer-Präsentation.
+- **Save-Schema bleibt v11.** Wetter, Docklayout und Vorschauphasen sind keine
+  Save-Felder; keine Migration ist nötig.
+- Der Regenvorhang ist ein `LineSegments`-Objekt und damit ein Draw-Call.
+  Wasserfälle sind auf vier Exemplare gedeckelt.
+- Modellnamen bleiben zentral in `src/assets/modelManifest.ts`; die generierten
+  Modell-READMEs wurden mit dem Synchronisationstest erneuert.
+- Bildpfade laufen weiter über die rekursive Drop-in-Registry. Fehlt ein
+  v0.62-Bild, übernimmt der allgemeine Hero beziehungsweise die CSS-/
+  prozedurale Darstellung.
+
+### Auswirkung
+
+Bei 1920×1080 belegt der rechte Bau-Shop 820×990 px und zeigt einen
+4-Spalten-Katalog mit 796×270-px-Vorschau, während die Karte links sichtbar und
+bedienbar bleibt. Das Wetter-Sheet misst 650×990 px; die rechte Anliegenleiste
+tritt während großer Arbeitsfenster zurück. Kleinere Auflösungen verwenden
+weiterhin die bisherige Bodenvariante. UI-Texte bleiben bei mindestens 12 px.
+
+Regen und Nebel ändern bewusst nur die Bildstimmung. Es gibt keine
+Wetterbelohnung, Ernteeinbuße, Verkehrslast oder Zeitbeschleunigung der
+Simulation.
+
+### Zukunft / bewusst offen
+
+- Spielerisches Wetter benötigt später eine ausdrücklich entworfene,
+  getestete Simulationsregel; die v0.62-Atmosphäre darf nicht stillschweigend
+  dafür verwendet werden.
+- `RegionPreview.futureBuildings / unlockProject` und
+  `CitizenRequest.focusPosition / regionId` bleiben die zwei kanonischen
+  Datenlücken aus v0.61.
+- Ein drehbares Live-Modell im Gebäude-Sheet kann die neue Stufenleiste später
+  ergänzen; GLB-Thumbnail, Bild und SVG bleiben die verbindliche Fallbackkette.
+- Der Screenshot-Endpunkt des eingebauten Browsers lief weiterhin in ein
+  Zeitlimit. Die DOM-/Interaktionsabnahme bei echter 1920×1080-Innenfläche ist
+  dokumentiert; keine nicht entstandenen Screenshots werden behauptet.
+
+### Dateien
+
+- UI/Komposition: `src/App.tsx`, `src/state/store.ts`,
+  `src/components/hud/CameraControls.tsx`
+- Neue Ansicht: `src/components/panels/WeatherPanel.tsx`
+- Bau/Region/Status: `BuildMenu.tsx`, `FloatingBuildingSheet.tsx`,
+  `RegionDialog.tsx`, `CityStatusPanel.tsx`
+- Art-/Modellstufen: `src/components/art/BuildingArtwork.tsx`
+- Renderer: `src/renderer/three/environmentSettings.ts`,
+  `SkyEnvironment.ts`, `ThreeMapRenderer.ts`
+- Gestaltung: `src/styles/components.css`, `src/styles/responsive.css`,
+  `src/i18n/de.json`
+- Assets: `src/assets/ui/weather/**`, `src/assets/ui/regions/**`,
+  `src/assets/modelManifest.ts`, generierte Modell-READMEs
+- Übergabe: `docs/agents/**`, `docs/UI_ASSETS.md`, `docs/PATCHNOTES.md`
+
+### Neue KI-Assets
+
+- `src/assets/ui/weather/weather_cycle_premium.jpg`
+- `src/assets/ui/regions/region_unlock_fertile.jpg`
+- `src/assets/ui/regions/region_unlock_coast.jpg`
+
+Finale Prompts, Maße, Dateigrößen, Nutzung und Fallbacks stehen in
+`docs/agents/UI_ASSET_MANIFEST.md`.
+
+## v0.61 — Verbindlicher Mockup-Pass: Bau-Shop, Info-Layer, Rollen & Weltlesbarkeit
+
+### Was
+
+Der neueste Gesamt-Mockup und die beiden vorherigen UI-/Welt-Mockups wurden als
+verbindliche visuelle Spezifikation auf die bestehende v0.60-Architektur
+übertragen. Der Pass schärft besonders die zuvor noch zu generischen oder
+unvollständigen Bereiche:
+
+- **Bau-Shop statt einfacher Liste.** Der Gebäudekatalog startet mit
+  „Empfohlen“, trennt Kategorien klarer, zeigt Kosten, Bauzeit, Freischaltung,
+  Baugrenze und echte Building-Config-Effekte. Rechts erscheint eine große
+  Hover-/Fokusvorschau mit Gebäude-Art, Kategorie, Grundfläche und Standorttext.
+- **Gebäude-Detail als echtes Arbeitsfenster.** Hero-Art, Stufe, Produktion,
+  Unterhalt, Arbeiter, Standortanalyse, Straßenanschluss, Region, Gelände,
+  Grundfläche und ein proportionaler Radiusindikator stammen aus vorhandenen
+  Config-/Snapshot-/Diagnosedaten. Es werden keine Wirkungswerte erfunden.
+- **Bürgeranliegen als Inbox.** Rechts bleiben höchstens drei kompakte Karten.
+  „Alle Anliegen“ öffnet ein großes, filterbares Sheet für aktiv, abholbereit
+  und abgeschlossen. Ein eigenes Detail zeigt vollständige Ziele und
+  Belohnungen. „Bereit“ bedeutet ausschließlich `quest.claimable`; eine
+  erfundene Prioritätslogik existiert nicht.
+- **Stadtstatus mit kanonischem Leitwert.** Der große Status verwendet die
+  bestehende Zufriedenheit als Gesamtwert, listet Controller-Diagnosen und
+  Bedarfe und markiert die Darstellung ausdrücklich als Live-Projektion
+  vorhandener Stadtwerte.
+- **Info-Layer.** Eine neue, rein visuelle Leiste schaltet `Aus`, `Probleme`,
+  `Bedürfnisse`, `Upgrades`, `Produktion` und `Alle`. Der Renderer leitet Marker
+  nur aus Aktivitätszielen, Baustatus, `getBuildingMarker`, Building-Config und
+  `effectiveEffects` ab. Marker werden priorisiert, bei großer Entfernung
+  ausgeblendet und in der Übersicht grob geclustert.
+- **Navigation und Zeit.** Die linke Hauptleiste enthält nur die stabilen
+  Hauptziele Überblick, Bauen, Stadtarbeit, Handel, Statistiken und
+  Bürgermeister; Regionen bleiben als kleine Weltaktion. Pause/1×/2×/4× sind
+  weiterhin ausdrücklich nur visuelle Tageslichtsteuerung.
+- **Interaktive Inselkarte.** Die Minimap ist größer, erhält Relief-/Makrofarbe,
+  Fokusstatus und Regionsmodifikatoren und kann die Kamera jetzt per Klick oder
+  Ziehen verschieben. Sie bleibt eine leichte Canvas-Projektion, kein zweiter
+  Renderer.
+- **Regionsfenster.** Gebirge und Hügelland nutzen einen eigenen
+  KI-generierten Hochland-Hero. Ein Bereich „Zukünftige Gebäude“ ist bewusst als
+  ausstehende Datenquelle markiert; die drei Skeleton-Slots sind keine
+  freigeschalteten Gebäude.
+- **Rollen statt Wiederholung.** Die Portrait-Registry lädt rekursiv
+  `role_N`-Varianten und wählt sie deterministisch nach Quest-Schlüssel. Zwei
+  Händler, Bauamtsleitung und Feuerwehrleitung ergänzen die vorhandenen
+  Portraits, sodass wiederholte Rollen nicht zwangsläufig dasselbe Gesicht
+  zeigen.
+- **Weltlesbarkeit.** Hohe Gebiete staffeln sich nun aus Moos, warmem Fels,
+  sonnenbeschienenem Stein und Gipfelschnee. Flache türkise Küstenzonen liegen
+  unter der Schaumlinie. Gesperrte Regionen besitzen vier langsam driftende
+  Nebelschichten. Instanzierte Blumen, Feldspuren und Totholz brechen große
+  Biome mit nur drei zusätzlichen Draw-Calls auf.
+- **Performance bei großen Auflösungen.** Der Three-Renderer begrenzt die
+  Pixeldichte adaptiv auf 1,5 beziehungsweise 1,25 oberhalb von zwei Millionen
+  Viewport-Pixeln. DOM-Text und UI bleiben in Geräteauflösung scharf.
+- **CSS aufgeteilt.** Neue Regeln liegen in `tokens.css`, `layout.css`,
+  `components.css`, `animations.css` und `responsive.css`. `styles.css` bleibt
+  als Legacy-Basis importiert; die neuen Dateien überschreiben sie geordnet.
+  D-004 bleibt bindend: berechnete UI-Schriftgrößen liegen nicht unter 12 px.
+
+### Warum
+
+v0.60 hatte die richtige Grundarchitektur, wich im Alltag aber noch an
+entscheidenden Stellen von den Mockups ab: Der Baukatalog war zu listenartig,
+Gebäudedetails zu schmal, Marker nicht filterbar, Anliegen nicht als vollständige
+Inbox organisiert, Berge zu dunkel und Nebel zu flach. v0.61 schließt genau diese
+Lücken, ohne aus einer visuellen Referenz neue Simulation, Priorität, Reichweite,
+Verkehrslast oder Regionsbelohnung abzuleiten.
+
+### Architektur
+
+- `src/game/**` wurde nicht verändert und importiert weiterhin keine UI- oder
+  Renderer-Abhängigkeit.
+- Der UI-Store hält `infoLayerMode` nur als Präsentationszustand. `MapApi` reicht
+  ihn an `IMapRenderer.setInfoLayer()` durch.
+- Three.js liest Controller-Snapshots, Diagnosen und validierte Configs; es
+  mutiert keinen GameState.
+- Minimap-Panning ruft ausschließlich `MapApi.focusGround()` auf.
+- Bild- und Portraitordner werden rekursiv über `registry.ts` geladen.
+- Marker-Modellnamen bleiben zentral in `modelManifest.ts`; fehlende GLBs/Bilder
+  verwenden die vorhandenen Canvas-/SVG-/prozeduralen Fallbacks.
+- **Save-Schema bleibt v11.** Es gibt keine neue persistierte Spielregel und
+  keine Migration.
+
+### Auswirkung
+
+Die Hauptansicht bleibt bei 1280×720 ohne Dokument-Scroll und ohne außerhalb des
+Viewports liegende Hauptpanels. Bau-Shop, Stadtstatus und Anliegen-Inbox bleiben
+im sicheren Bereich und besitzen lokale Scrollflächen, falls mehr Inhalt
+hinzukommt. Die adaptive Renderer-Auflösung reduziert GPU-Füllrate bei
+QHD/4K. Marker-Clustering und feste Vegetationsbudgets verhindern, dass der
+visuelle Zugewinn linear mit der Stadtgröße wächst.
+
+### Zukunft / bewusst offen
+
+- `TODO(CLAUDE_LOGIC): CitizenRequest.focusPosition / regionId` muss eine
+  kanonische Kartenposition liefern, bevor „Auf Karte zeigen“ aktiviert wird.
+- `TODO(CLAUDE_LOGIC): RegionPreview.futureBuildings / unlockProject` muss
+  echte, getestete Regionsvorschauen liefern; bis dahin bleiben Skeletons.
+- Der Radius im Gebäudedetail ist eine vorhandene Config-Angabe. Eine echte
+  Geländeprojektion bleibt O2/O6.
+- Straßenplanung, Verkehrssegmentlast, spielerisches Wetter und
+  Simulationsgeschwindigkeit bleiben die in `OPEN_TASKS.md` beschriebenen
+  Gameplay-Phasen.
+
+### Dateien
+
+- UI-Komposition/Store: `src/App.tsx`, `src/state/store.ts`,
+  `src/components/MapView.tsx`, `src/renderer/IMapRenderer.ts`
+- HUD/Navigation/Karte: `src/components/hud/GameHud.tsx`,
+  `CameraControls.tsx`, `QuickActionBar.tsx`, `WorldMiniMap.tsx`,
+  `InfoLayerControl.tsx`
+- Fenster: `BuildMenu.tsx`, `FloatingBuildingSheet.tsx`,
+  `CitizenRequestsPanel.tsx`, `CityStatusPanel.tsx`,
+  `CityStatusDetail.tsx`, `RegionDialog.tsx`
+- Renderer: `src/renderer/three/ThreeMapRenderer.ts`
+- Gestaltung: `src/styles/*.css`, `src/main.tsx`, `src/i18n/de.json`
+- Assets: `src/assets/registry.ts`, `src/assets/modelManifest.ts`,
+  `src/assets/portraits/**`, `src/assets/ui/regions/**`
+- Übergabe: `docs/agents/**`, `docs/ASSETS.md`, `docs/UI_ASSETS.md`
+
+### Neue KI-Assets
+
+- `src/assets/portraits/merchants/merchant_1.png`
+- `src/assets/portraits/merchants/merchant_2.png`
+- `src/assets/portraits/workers/buildingDept_1.png`
+- `src/assets/portraits/emergency/fire_1.png`
+- `src/assets/ui/regions/region_unlock_highland.jpg`
+
+Prompts, Herkunft, Nutzung und Fallbacks stehen vollständig in
+`docs/agents/UI_ASSET_MANIFEST.md` und `docs/agents/CODEX_VISUAL_AUDIT.md`.
+
 ## v0.60 — Overhaul 3.0: Mockup-HUD, Inselkarte, Weltatmosphäre & KI-Assets
 
 **Was.** Die drei beigefügten ChatGPT-Mockups wurden als visuelle Leitlinie in

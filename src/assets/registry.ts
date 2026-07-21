@@ -7,7 +7,7 @@
 //
 //   src/assets/resources/<resourceId>.png       e.g. money.png, wood.png
 //   src/assets/buildings/<buildingId>.png        e.g. house_small.png, farm.png
-//   src/assets/portraits/<role|citizen_N>.png    e.g. mayor.png, citizen_1.png
+//   src/assets/portraits/**/<role|role_N>.png    e.g. merchants/merchant_1.png
 //   src/assets/ui/buttons/<name>.png             e.g. btn_build.png
 //   src/assets/ui/categories/<cat>.png           e.g. cat_housing.png
 //   src/assets/ui/markers/<name>.png             e.g. marker_problem.png
@@ -15,6 +15,7 @@
 //   src/assets/ui/events/<name>.png              e.g. event_city_festival.png
 //   src/assets/ui/rewards/<name>.png             e.g. reward_money.png
 //   src/assets/ui/brand/<name>.png               e.g. mayor_crest.png
+//   src/assets/ui/<context>/<name>.png            e.g. requests/quest_trade.png
 //   src/assets/environment/<name>.webp           e.g. cloud_bank.webp
 //   src/assets/vehicles/<name>.png               e.g. truck_food.png
 //   src/assets/overlays/<name>.png               e.g. overlay_water.png
@@ -42,7 +43,7 @@ const BUILDING_IMAGES = keyed(
   import.meta.glob('./buildings/*.{png,webp,jpg,jpeg}', { eager: true, query: '?url', import: 'default' }) as UrlMap,
 );
 const PORTRAIT_IMAGES = keyed(
-  import.meta.glob('./portraits/*.{png,webp,jpg,jpeg}', { eager: true, query: '?url', import: 'default' }) as UrlMap,
+  import.meta.glob('./portraits/**/*.{png,webp,jpg,jpeg}', { eager: true, query: '?url', import: 'default' }) as UrlMap,
 );
 // New UI-artwork folders (v0.26): buttons, category tiles, map markers, activity
 // illustrations, event/decision art, reward icons, vehicles and overlay symbols.
@@ -66,6 +67,9 @@ const REWARD_IMAGES = keyed(
 );
 const BRAND_IMAGES = keyed(
   import.meta.glob('./ui/brand/*.{png,webp,jpg,jpeg}', { eager: true, query: '?url', import: 'default' }) as UrlMap,
+);
+const CONTEXT_UI_IMAGES = keyed(
+  import.meta.glob('./ui/**/*.{png,webp,jpg,jpeg}', { eager: true, query: '?url', import: 'default' }) as UrlMap,
 );
 const ENVIRONMENT_IMAGES = keyed(
   import.meta.glob('./environment/*.{png,webp,jpg,jpeg}', { eager: true, query: '?url', import: 'default' }) as UrlMap,
@@ -113,6 +117,10 @@ export function rewardImage(id: string): string | undefined {
 }
 export function brandImage(id: string): string | undefined {
   return BRAND_IMAGES[id];
+}
+/** Kontextbild aus einem beliebigen Unterordner unter `ui/`, per Dateiname. */
+export function uiImage(id: string): string | undefined {
+  return CONTEXT_UI_IMAGES[id];
 }
 export function environmentImage(id: string): string | undefined {
   return ENVIRONMENT_IMAGES[id];
@@ -266,9 +274,14 @@ export function roadTextureUrl(name: string): string | undefined {
 }
 
 /** How many generic `citizen_N.png` portraits were supplied (for seed spread). */
-const CITIZEN_KEYS = Object.keys(PORTRAIT_IMAGES)
-  .filter((k) => /^citizen_\d+$/.test(k))
-  .sort();
+const PORTRAIT_KEYS = Object.keys(PORTRAIT_IMAGES).sort();
+
+function portraitVariants(role: string): string[] {
+  if (role === 'citizen') {
+    return PORTRAIT_KEYS.filter((key) => key === 'citizen' || /^citizen_\d+$/.test(key));
+  }
+  return PORTRAIT_KEYS.filter((key) => key === role || key.startsWith(`${role}_`));
+}
 
 /**
  * A portrait image for a role. Officials (mayor, merchant, fire, buildingDept)
@@ -276,7 +289,7 @@ const CITIZEN_KEYS = Object.keys(PORTRAIT_IMAGES)
  * different requests show different faces. Returns undefined → SVG fallback.
  */
 export function portraitImage(role: string, seedHash: number): string | undefined {
-  if (role !== 'citizen') return PORTRAIT_IMAGES[role] ?? undefined;
-  if (CITIZEN_KEYS.length === 0) return PORTRAIT_IMAGES['citizen'];
-  return PORTRAIT_IMAGES[CITIZEN_KEYS[seedHash % CITIZEN_KEYS.length]!];
+  const variants = portraitVariants(role);
+  if (variants.length === 0) return undefined;
+  return PORTRAIT_IMAGES[variants[seedHash % variants.length]!];
 }

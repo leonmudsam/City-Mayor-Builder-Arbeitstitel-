@@ -54,19 +54,59 @@ Gebäudesystem 2.0 + Welt 2.0 sind vollständig (A1–A10). **Nur noch der
 `house_row`/`apartment` und `pixi.js` sind endgültig entfernt (kein Modus-Wähler
 wieder einführen). Gebäude-/Regions-/Prompt-Doku ist **generiert & testgeprüft**
 (`docs/BUILDINGS.md`, `docs/REGIONS.md`, `models/**/PROMPTS.md` — Regel §5 gilt
-weiter). Save-Schema steht bei **v11** (Regionen). Balancing/Progression sind über
+weiter). Save-Schema steht bei **v13** (manuelle Routen + reservierte Ladung). Balancing/Progression sind über
 20 Level × 32 Regionen ausbalanciert und durch `config.test.ts`/`balancing.test.ts`
 gegen Regressionen gesichert. Bewusst offen (drop-in-fähig, Prompts existieren):
 der erweiterte Biom-Prop-Katalog (Wasserfälle/Windmühlen/Boote/Landmarken) —
 prozedurale Fallbacks decken den Kern, echte `.glb` einfach einlegen.
 
-## Status: Overhaul 3.0 begonnen (v0.60)
+## Status: Overhaul 3.0 — verbindlicher Mockup-Pass (v0.60–v0.70)
 Die visuelle Mockup-Grundlage ist umgesetzt: maritimes Glas-HUD, vertikale linke
 Hauptnavigation, Live-Inselkarte, Bürger-Kompakt-/Detailansicht,
 KI-Regions-Hero, Ein-Sheet-Regel, organischere Vegetation, Küstenschaum,
 Wolken-/Regionsnebel sowie Drop-in-Boote, -Windmühlen und -Leuchttürme. Einstieg:
 `docs/agents/README.md`; Designregeln: `docs/agents/UI_SYSTEM.md`; Restphasen:
-`docs/OVERHAUL_3_PLAN.md`. Save-Schema bleibt **v11**. Der
-Stadtarbeit-Routenplaner erweitert das bestehende Aktivitätssystem; seine
-Belastungsfarben sind bis O9 Schätzwerte und dürfen nicht als parallele
-Verkehrssimulation weitergebaut werden.
+`docs/OVERHAUL_3_PLAN.md`.
+
+v0.61 ergänzt den großen Bau-Shop, Standort-/Radius-Gebäudedetails, eine
+filterbare Anliegen-Inbox, den rein visuellen Info-Layer, Minimap-Panning,
+Rollenporträts und hellere Berg-/Küsten-/Nebel-/Biomdarstellung. CSS ist unter
+`src/styles/` nach Tokens/Layout/Komponenten/Animation/Responsive getrennt.
+Der damalige `CODEX_VISUAL_AUDIT.md` bleibt als historische Grundlage erhalten.
+
+v0.62 ergänzt den vollhohen rechten PC-Baushop ab 1680×860,
+Gebäude-Stufenvorschauen, biomabhängige Regions-Heros, ein visuelles
+Sonne-/Regen-/Nebel-Fenster samt Live-Renderer-Grading und gedeckelte
+Wasserfall-Landmarken. Wetter bleibt reine Darstellung in
+`environmentSettings`/`SkyEnvironment` und hat keinerlei Simulations- oder
+Save-Wirkung.
+
+v0.63–v0.65 ersetzen den alten Stadtarbeit-Prototyp durch eine echte, manuelle
+Straßengraph-Planung innerhalb des bestehenden Aktivitätssystems. Der Spieler
+zeichnet die Route selbst, ordnet Ziele, wählt ein datengetriebenes Fahrzeug und
+verfolgt anschließend dessen automatische 3D-Fahrt. Die Abschlussansicht bewertet
+Zeit, Distanz, Effizienz und Straßenabdeckung. `ActiveActivity.vehicle` und
+`plannedRoadPath` sind optional persistiert; Save-Schema ist deshalb **v12** mit
+Migration `v11→v12`. Alte v11-Spielstände bleiben gültig und erhalten keine
+erfundene Route.
+
+v0.66–v0.68 ergänzen Cargo/Kapazität, reservierte Ladung und reine
+Infrastruktur-/Leerfahrtbewertung. Save-Schema ist **v13** mit linearer
+Migration `v12→v13`. v0.69 überträgt Redesign 4.0: keine gespeicherte
+Standardroute, keine Drag-&-Drop-Zielreihenfolge und kein Werkzeugmodus;
+Reihenfolge, Tour, Cargo und Nachfüllen entstehen live aus dem exakten Weg.
+
+v0.70 überträgt die Insel-/Biom-Mockups auf den bestehenden Three-Renderer:
+zwölf visuelle Regionsprofile, zwölf Terrain-Splat-Layer, triplanares Gebirge,
+differenzierte Vegetation, animierte Flüsse und neutrale Landmark-Fallbacks.
+Inselbake, Gameplayregionen und Save v13 bleiben unverändert. Vor Weltarbeit
+zuerst `docs/agents/MAP_REDESIGN_AUDIT.md`, danach
+`MAP_REDESIGN_PLAN.md` und `WORLD_ASSET_MANIFEST.md` lesen. Region 9/29 sind nur
+visuell Wüste/Sumpf; jede Gameplaywirkung ist `TODO(CLAUDE_LOGIC)`.
+
+Verbindlicher Einstieg für die Weiterarbeit:
+`docs/HANDOFF_CLAUDE.md` → `docs/agents/PROJECT_STATE.md` →
+`docs/agents/OPEN_TASKS.md`. Keine zweite Verkehrs- oder Missionssimulation
+anlegen. Noch fehlende echte Daten für Steigung, Straßenzustand und dynamische
+Ereignisse sind dort ausdrücklich dokumentiert und dürfen in der UI nicht
+vorgetäuscht werden.

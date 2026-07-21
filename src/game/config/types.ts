@@ -6,7 +6,9 @@ import type {
   QuestId,
   ResourceId,
   TerrainType,
+  DriveVehicle,
 } from '../types.ts';
+export type { DriveVehicle } from '../types.ts';
 
 // ---- Building definitions -------------------------------------------------
 
@@ -391,12 +393,43 @@ export type ActivityDifficulty = 'easy' | 'medium' | 'hard';
 /** Completion grade (§6): scales the payout — poor run < full run < perfect run. */
 export type ActivityQuality = 'bronze' | 'silver' | 'gold';
 
+export type VehicleConsumption = 'low' | 'medium' | 'high';
+
 /**
- * Fahrzeugtyp eines Fahr-Minispiels (§ Stadtarbeit / A6). Rein kosmetisch für
- * den Renderer (Modellwahl + Farbe); die Simulation kennt nur `drive`. Drop-in-
- * GLBs je Typ liegen unter `models/vehicles/`, sonst prozedurales Fallback.
+ * Datengetriebene Fahrzeugkarte für Planung und Renderer. Die Werte sind echte
+ * Config-Daten; UI und Renderer dürfen keine Kapazität oder Geschwindigkeit
+ * erfinden. `future` bereitet Bahn/Flug sichtbar vor, macht sie aber nicht
+ * auswählbar.
  */
-export type DriveVehicle = 'van' | 'fire_truck' | 'logging_truck' | 'police_car' | 'flatbed';
+export interface ActivityVehicleDef {
+  id: DriveVehicle;
+  nameKey: string;
+  descriptionKey: string;
+  unlockLevel: number;
+  capacity: number;
+  speedKph: number;
+  handling: number;
+  operatingCost: number;
+  consumption: VehicleConsumption;
+  imageKey: string;
+  strengthsKeys: string[];
+  weaknessesKeys: string[];
+  future?: boolean;
+  /**
+   * Fahrzeugeignung (§ Stadtarbeit-Logik 2.0, L4 / A6). Alle optional und
+   * rückwärtskompatibel; nur die Bewertung/Prognose (`evaluateInfrastructure`)
+   * liest sie — kein Save, keine Auszahlung. Fehlt ein Feld, greift ein
+   * benannter Standardwert in `activities/logistics.ts`.
+   */
+  /** Zeit für eine Beladung an der Quelle (Sekunden). */
+  loadTimeSec?: number;
+  /** Entladezeit je beliefertem Ziel (Sekunden). */
+  unloadTimeSecPerTarget?: number;
+  /** Malus in engen/vollen Straßen 0..1 (großes Fahrzeug = höher). */
+  narrowStreetPenalty?: number;
+  /** §12: gekühlt — verderbliche Ladung verliert kaum Qualität. */
+  cooling?: boolean;
+}
 
 /**
  * A Stadtarbeit activity: a short, repeatable, hands-on mayor task that only
@@ -434,8 +467,10 @@ export interface ActivityDef {
    * wie eine Klick-Lieferung, `progressActivity` schließt ein erreichtes Ziel ab.
    */
   drive?: boolean;
-  /** Fahr-Minispiel: welches Fahrzeug der Renderer spawnt (rein visuell). */
+  /** Standardfahrzeug, wenn keine Auswahl übergeben wird. */
   vehicle?: DriveVehicle;
+  /** Für diesen Auftrag wählbare Fahrzeuge; Reihenfolge = Empfehlung. */
+  vehicleOptions?: DriveVehicle[];
   /** Zielauswahl: nur Gebäude dieser Kategorien (statt der delivery-Standardhäuser). */
   targetCategories?: BuildingCategory[];
   /** Zielauswahl: nur Gebäude mit diesen Def-Ids (hat Vorrang vor targetCategories). */
@@ -446,6 +481,18 @@ export interface ActivityDef {
   speedBonusFactor?: number;
   /** delivery: resources consumed per delivered target (e.g. food per stop). */
   costPerTarget?: Partial<Record<ResourceId, number>>;
+  /**
+   * Ladungsmodell (§ Stadtarbeit-Logik 2.0): die TRANSPORTIERTE Menge, die das
+   * Fahrzeug füllt und Nachladen erzwingt — getrennt vom Ökonomie-Verbrauch
+   * (`costPerTarget`). Ohne dieses Feld leitet der Logistikplaner das Modell aus
+   * einer Ein-Ressourcen-`costPerTarget` ab. Auswertung: `game/activities/logistics.ts`.
+   */
+  cargoModel?: {
+    resource: ResourceId;
+    perTarget: number;
+    scaleByResidents?: boolean;
+    perishable?: boolean;
+  };
   /** decision: 2–4 options with trade-offs. */
   options?: ActivityDecisionOption[];
   rewardTiers: ActivityRewardTier[];
@@ -470,6 +517,7 @@ export interface TradeContractTemplate {
 
 export interface ActivitiesConfig {
   activities: ActivityDef[];
+  vehicles: ActivityVehicleDef[];
   tradeContracts: TradeContractTemplate[];
   /** Seconds per contract rotation window. */
   tradeRotationSec: number;

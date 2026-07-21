@@ -4,13 +4,13 @@ import type { GameState } from './types.ts';
 import { allRegionIds, createRegionStub, occupyTiles } from './map/world.ts';
 
 /**
- * v11 (§ Gebäudesystem 2.0 + Welt 2.0): organische Regionen ersetzen die 36
- * Quadrat-Sektoren, Gebäude haben neue Footprints/Größenklassen. v10-Saves
- * werden migriert (Regionen übertragen, nicht mehr passende Gebäude zu 100 %
- * erstattet — docs/SAVE_MIGRATION.md). Saves ≤ v9: Backup + Neustart (alte
- * Geografie, sanktionierte Ausnahme von CLAUDE.md §3).
+ * v13 (§ Stadtarbeit-Logik 2.0): eine laufende Fahrmission kann die an der
+ * Quelle reservierte Ladung (`ActiveActivity.reserved`) speichern. v12-Saves
+ * bleiben gültig; ihre Missionen ziehen die Lieferkosten wie bisher pro Ziel.
+ * v12 (§ Stadtarbeit 2D): laufende Fahrmissionen speichern Fahrzeugklasse und
+ * manuell gezeichnete Straßenkette.
  */
-export const SCHEMA_VERSION = 11;
+export const SCHEMA_VERSION = 13;
 
 export function createNewGame(config: GameConfig, cityName: string, now: number): GameState {
   const state: GameState = {

@@ -84,6 +84,20 @@ export function loadConfig(): GameConfig {
       if (o.type === 'build' && !buildingIds.has(o.defId)) throw new Error(`quests.config: unknown building '${o.defId}' in ${q.id}`);
     }
   }
+  const activityVehicleIds = new Set(activitiesConfig.vehicles.map((vehicle) => vehicle.id));
+  if (activityVehicleIds.size !== activitiesConfig.vehicles.length) {
+    throw new Error('activities.config: doppelte Fahrzeug-Ids');
+  }
+  for (const activity of activitiesConfig.activities) {
+    if (activity.vehicle && !activityVehicleIds.has(activity.vehicle)) {
+      throw new Error(`activities.config: unbekanntes Standardfahrzeug '${activity.vehicle}' in ${activity.id}`);
+    }
+    for (const vehicle of activity.vehicleOptions ?? []) {
+      if (!activityVehicleIds.has(vehicle)) {
+        throw new Error(`activities.config: unbekanntes Fahrzeug '${vehicle}' in ${activity.id}`);
+      }
+    }
+  }
 
   return {
     buildings: new Map(buildingsConfig.map((b) => [b.id, b])),

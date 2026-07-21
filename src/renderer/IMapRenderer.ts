@@ -24,6 +24,9 @@ export interface MapCameraView {
   pitch: number;
 }
 
+/** Presentation-only filter for the world-space building marker layer. */
+export type InfoLayerMode = 'off' | 'problems' | 'needs' | 'upgrades' | 'production' | 'all';
+
 export interface RendererCallbacks {
   onSelectBuilding(id: string | undefined): void;
   /** Klick auf eine gesperrte Landschaft → Erschließen-Dialog (§ Welt 2.0). */
@@ -66,6 +69,8 @@ export interface IMapRenderer {
   setPlacingRotation(rotation: 0 | 90 | 180 | 270): void;
   setMoving(id: string | undefined): void;
   setSelected(id: string | undefined): void;
+  /** Changes only which renderer-owned marker billboards are visible. */
+  setInfoLayer(mode: InfoLayerMode): void;
   centerOnCity(): void;
   applyPreset(preset: CameraPreset): void;
   focusSelected(): void;
@@ -83,6 +88,9 @@ export interface IMapRenderer {
   enterDrive(): boolean;
   /** § A6: Fahrmodus verlassen. */
   exitDrive(): void;
+  /** Automatisches Missionsfahrzeug mit der 3D-Kamera verfolgen. */
+  setMissionFollow(active: boolean): void;
+  isMissionFollowing(): boolean;
 }
 
 export type { CameraPreset };

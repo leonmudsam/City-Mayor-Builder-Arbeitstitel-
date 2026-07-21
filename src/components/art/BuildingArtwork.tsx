@@ -441,16 +441,19 @@ export function BuildingArt({
   id,
   category,
   px = 52,
+  stage = 0,
 }: {
   id?: string;
   category: BuildingCategory;
   px?: number;
+  /** Visual upgrade stage; falls back to the base asset when no staged GLB exists. */
+  stage?: number;
 }) {
   // Preview priority (v0.38): a dropped-in `.glb` is rendered to a thumbnail so no
   // `.png` is needed → then a supplied `src/assets/buildings/<id>.png` → then the
   // built-in cel-shaded SVG scene. While the model preview is still rendering, the
   // PNG/SVG shows so cards never flash empty.
-  const modelUrl = buildingModel(id);
+  const modelUrl = buildingModel(id, stage);
   const modelThumb = useModelThumbnail(modelUrl);
   if (modelThumb) {
     return (

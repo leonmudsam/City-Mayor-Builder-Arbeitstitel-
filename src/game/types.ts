@@ -27,6 +27,18 @@ export type DistrictId = string;
 export type QuestId = string;
 export type MayorActionId = string;
 export type TerrainType = 'grass' | 'forest' | 'water' | 'river' | 'mountain' | 'sand' | 'fertile';
+export type DriveVehicle =
+  | 'van'
+  | 'medium_truck'
+  | 'large_truck'
+  | 'refrigerated_truck'
+  | 'heavy_transporter'
+  | 'fire_truck'
+  | 'logging_truck'
+  | 'police_car'
+  | 'flatbed'
+  | 'freight_train'
+  | 'cargo_plane';
 
 export type BuildingStatus = 'constructing' | 'active' | 'paused';
 
@@ -176,6 +188,18 @@ export interface ActiveActivity {
   startedAt: number;
   /** Optional deadline; delivery pays a speed bonus when beaten. */
   expiresAt?: number;
+  /** In der Planung gewählte, für diesen Auftrag validierte Fahrzeugklasse. */
+  vehicle?: DriveVehicle;
+  /** Exakte, orthogonal zusammenhängende Straßenkette der manuellen Planung. */
+  plannedRoadPath?: { x: number; y: number }[];
+  /**
+   * §-Stadtarbeit-Logik 2.0 (L3): an der Quelle reservierte, physisch bereits aus
+   * dem globalen Pool entnommene Ladung. Jede Auslieferung zieht ihre
+   * `costPerTarget` aus dieser Reserve statt aus dem Pool; ein Abbruch gibt den
+   * Rest zurück. Fehlt das Feld (Alt-Save/Nicht-Ladungsmission), gilt der frühere
+   * Pfad: `costPerTarget` wird pro Ziel direkt aus dem Pool entnommen.
+   */
+  reserved?: Partial<Record<ResourceId, number>>;
   targets: { buildingId: BuildingInstanceId; done: boolean }[];
 }
 

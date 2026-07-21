@@ -7,6 +7,7 @@ import {
   terrainAt,
 } from '../src/game/config/startRegion.config.ts';
 import { exportSave, importSave } from '../src/game/storage/exportImport.ts';
+import { SCHEMA_VERSION } from '../src/game/newGame.ts';
 import {
   consumeMigrationNotice,
   LegacyWorldSaveError,
@@ -20,7 +21,7 @@ import {
 // Adapter, docs/SAVE_MIGRATION.md); v10 wird per echter Migration übernommen
 // (Sektoren→Regionen, Rathaus-Umzug, 100 %-Erstattung zu ALTEN Preisen).
 
-describe('save/load (v11 Insel-Welt, Regionen)', () => {
+describe('save/load (v12 Insel-Welt + Stadtarbeit-Plan)', () => {
   it('round-trips a live game through export/import', () => {
     const { controller } = newController();
     const r = nearTownHall(5, 5);
@@ -73,6 +74,17 @@ describe('save/load (v11 Insel-Welt, Regionen)', () => {
       expect(caught).toBeInstanceOf(LegacyWorldSaveError);
       expect((caught as LegacyWorldSaveError).version).toBe(version);
     }
+  });
+
+  it('migriert v11 verlustfrei bis zur aktuellen Version, ohne eine Route zu erfinden', () => {
+    const { controller } = newController(undefined, { flatten: false });
+    const raw = JSON.parse(exportSave(controller.state));
+    raw.schemaVersion = 11;
+    const migrated = migrateAndValidate(raw);
+    // Migrationskette läuft bis zur neuesten Version (v11→v12→v13); die neuen
+    // optionalen Aktivitätsfelder werden nie erfunden.
+    expect(migrated.schemaVersion).toBe(SCHEMA_VERSION);
+    expect(migrated.activities.active).toBeUndefined();
   });
 });
 

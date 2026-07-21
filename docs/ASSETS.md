@@ -17,15 +17,30 @@ Solange ein Bild fehlt, rendert die eingebaute SVG-Grafik als Platzhalter weiter
 - Ablageorte (im Projekt):
   - `src/assets/resources/<id>.png` — Ressourcen
   - `src/assets/buildings/<id>.png` — Gebäude (**optional** ab v0.38, siehe Hinweis oben)
-  - `src/assets/portraits/<name>.png` — Bürger/Berater
+  - `src/assets/portraits/**/<rolle|rolle_N>.png` — Bürger/Berater; rekursiv
   - `src/assets/ui/brand/<id>.png` — HUD-Marke/Wappen
   - `src/assets/ui/events/<id>.webp` — breite Ereignis-/Regions-Heros
+  - `src/assets/ui/regions/<id>.jpg` — biomabhängige Regions-Heros
+  - `src/assets/ui/weather/<id>.jpg` — breite Wetter-/Tageszeitpanoramen
+  - `src/assets/ui/citywork/**/<id>.png` — Marker, Cargo, Berater und Missionen
   - `src/assets/environment/<id>.webp` — Umgebungs-/Alpha-Texturen
+  - `src/assets/vehicles/<id>.png` — freigestellte Fahrzeugkarten der Stadtarbeit
 - Der Dateiname **muss exakt** der ID unten entsprechen (klein, mit Unterstrich),
   z. B. `house_small.png`, `power_plant.png`, `freshwater.png`.
 - Beim nächsten Build (`npm run build` / `npm run dev`) werden neue Dateien via
   `import.meta.glob` automatisch erkannt und eingebunden.
+- Bei Rollenporträts wird zuerst `<rolle>_N`, dann `<rolle>`, dann
+  `citizen_N`/SVG gesucht. Die Variantenwahl ist je Quest-Schlüssel
+  deterministisch; Unterordner wie `merchants/`, `workers/` und `emergency/`
+  benötigen keine zusätzliche Verdrahtung.
 - Erlaubte Formate: `.png` (empfohlen, mit Transparenz), `.webp`, `.jpg`.
+- v0.62-Beispiele und finale Prompts für Fruchtland, Küste und das
+  Sonne-/Regen-/Nebel-Panorama stehen in
+  `docs/agents/UI_ASSET_MANIFEST.md`.
+- v0.65-Fahrzeugprompts und Freistellungsworkflow stehen in
+  `docs/UI_ASSETS.md` und `docs/agents/UI_ASSET_MANIFEST.md`.
+- v0.69-Stadtarbeit-Assets und ihre exakten Prompts stehen in den sieben
+  `src/assets/ui/citywork/**/README.md` sowie im UI-Asset-Manifest.
 
 ## Technische Vorgaben (für ALLE Assets)
 

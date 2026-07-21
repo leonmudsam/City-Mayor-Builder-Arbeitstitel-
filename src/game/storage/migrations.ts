@@ -281,12 +281,33 @@ const migrateV10ToV11: Migration = (raw) => {
   return raw;
 };
 
+// ---- v11 → v12 (§ Stadtarbeit 2D: Fahrzeug + manuelle Straßenkette) ---------
+// Beide neuen Felder einer laufenden Aktivität sind optional. Alte Missionen
+// laufen deshalb mit ihrem Config-Standardfahrzeug und der bisherigen
+// Renderer-Wegfindung weiter; es muss nichts erfunden oder verworfen werden.
+const migrateV11ToV12: Migration = (raw) => {
+  raw.schemaVersion = 12;
+  return raw;
+};
+
+// ---- v12 → v13 (§ Stadtarbeit-Logik 2.0: reservierte Ladung) ----------------
+// Neu ist das optionale Feld `ActiveActivity.reserved` (upfront an der Quelle
+// reservierte Ware). Alte laufende Missionen besitzen es nicht — sie ziehen die
+// Lieferkosten wie bisher pro Ziel aus dem Pool (Fallback-Pfad im Controller).
+// Es wird nichts erfunden und keine Ware nachträglich reserviert.
+const migrateV12ToV13: Migration = (raw) => {
+  raw.schemaVersion = 13;
+  return raw;
+};
+
 /**
  * Migration chain: migrations[n] upgrades a save from schemaVersion n to n+1.
  * Beginnt bei v10 (Insel-Basis).
  */
 const migrations: Record<number, Migration> = {
   10: migrateV10ToV11,
+  11: migrateV11ToV12,
+  12: migrateV12ToV13,
 };
 
 export class SaveValidationError extends Error {}

@@ -14,6 +14,7 @@ import { DriveHud } from './components/hud/DriveHud.tsx';
 import { QuickActionBar } from './components/hud/QuickActionBar.tsx';
 import { CameraControls } from './components/hud/CameraControls.tsx';
 import { WorldMiniMap } from './components/hud/WorldMiniMap.tsx';
+import { InfoLayerControl } from './components/hud/InfoLayerControl.tsx';
 import { BuildMenu } from './components/panels/BuildMenu.tsx';
 import { FloatingBuildingSheet } from './components/panels/FloatingBuildingSheet.tsx';
 import { CitizenRequestsPanel } from './components/panels/CitizenRequestsPanel.tsx';
@@ -28,7 +29,9 @@ import { DebugPanel } from './components/panels/DebugPanel.tsx';
 import { ActivityPanel } from './components/panels/ActivityPanel.tsx';
 import { ActivityRoutePlanner } from './components/panels/ActivityRoutePlanner.tsx';
 import { MenuPanel } from './components/panels/MenuPanel.tsx';
-import { formatMoney } from './i18n/index.ts';
+import { WeatherPanel } from './components/panels/WeatherPanel.tsx';
+import { ActivityExecutionWidget } from './components/citywork/ActivityExecutionWidget.tsx';
+import { formatDuration, formatMoney } from './i18n/index.ts';
 import { Toasts } from './components/common/Toasts.tsx';
 import { EventModal } from './components/common/EventModal.tsx';
 import { t } from './i18n/index.ts';
@@ -121,6 +124,23 @@ export function App() {
                 money: formatMoney(event.money),
                 xp: event.xp,
                 ...(quality ? { quality: t(`activity.quality.${quality}`) } : {}),
+                ...(event.result
+                  ? {
+                      elapsed: formatDuration(event.result.elapsedMs),
+                      distance:
+                        event.result.distanceTiles !== undefined
+                          ? `${((event.result.distanceTiles * 4) / 1000).toFixed(2).replace('.', ',')} km`
+                          : '–',
+                      efficiency: event.result.efficiencyScore ?? '–',
+                      roadCoverage:
+                        event.result.roadCoverage !== undefined
+                          ? `${Math.round(event.result.roadCoverage * 100)} %`
+                          : '–',
+                      vehicle: event.result.vehicle
+                        ? t(`vehicle.${event.result.vehicle}`)
+                        : t('ui.route.vehicle.van'),
+                    }
+                  : {}),
               },
             });
             save();
@@ -205,17 +225,22 @@ export function App() {
 
 // Panels that dock as large sheets on the RIGHT side (§5). While one is open the
 // compact citizen-requests widget steps aside so the sheet has the full column.
-const RIGHT_SHEET_PANELS = new Set(['status', 'economy', 'trade', 'mayor', 'activities', 'settings', 'debug']);
+const RIGHT_SHEET_PANELS = new Set(['build', 'status', 'economy', 'trade', 'mayor', 'activities', 'settings', 'debug', 'weather']);
 
 function GameScreen({ onImport, onReset }: { onImport(json: string): boolean; onReset(variant?: ResetVariant): void }) {
   const openPanel = useUiStore((s) => s.openPanel);
   const activityPlannerDefId = useUiStore((s) => s.activityPlannerDefId);
+  const selectedBuildingId = useUiStore((s) => s.selectedBuildingId);
+  const regionDialog = useUiStore((s) => s.regionDialog);
   const uiHidden = useUiStore((s) => s.uiHidden);
   const toggleUiHidden = useUiStore((s) => s.toggleUiHidden);
   const events = useUiStore((s) => s.events);
   const dismissEvent = useUiStore((s) => s.dismissEvent);
   const currentEvent = events[0];
-  const rightSheetOpen = openPanel !== undefined && RIGHT_SHEET_PANELS.has(openPanel);
+  const rightSheetOpen =
+    selectedBuildingId !== undefined ||
+    regionDialog !== undefined ||
+    (openPanel !== undefined && RIGHT_SHEET_PANELS.has(openPanel));
 
   // Hidden-UI mode (§8): only the map and a small restore button remain, so the
   // 2D city stays fully playable with a clean, chrome-free view.
@@ -249,6 +274,7 @@ function GameScreen({ onImport, onReset }: { onImport(json: string): boolean; on
                 the right and the mockup-faithful vertical main navigation. */}
             <CityStatusPanel />
             <WorldMiniMap />
+            <InfoLayerControl />
             {!rightSheetOpen && (
               <div className="right-hud-stack">
                 <CitizenRequestsPanel />
@@ -265,11 +291,13 @@ function GameScreen({ onImport, onReset }: { onImport(json: string): boolean; on
             {openPanel === 'trade' && <TradePanel />}
             {openPanel === 'debug' && <DebugPanel />}
             {openPanel === 'activities' && <ActivityPanel />}
+            {openPanel === 'weather' && <WeatherPanel />}
             {openPanel === 'menu' && <MenuPanel />}
 
             <FloatingBuildingSheet />
             <RegionDialog />
             {openPanel === 'build' && <BuildMenu />}
+            <ActivityExecutionWidget />
             <DriveHud />
           </>
         )}

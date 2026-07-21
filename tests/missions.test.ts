@@ -34,7 +34,7 @@ function defOf(controller: GameController, id: string): string {
 }
 
 describe('A6 Fahr-Minispiele — Konfiguration', () => {
-  it('markiert genau die fünf Fahr-Missionen mit drive+vehicle in Reihenfolge', () => {
+  it('markiert alle acht datengetriebenen Fahr-Missionen mit ihrem Standardfahrzeug', () => {
     const byId = new Map(activitiesConfig.activities.map((a) => [a.id, a]));
     const expected: Record<string, string> = {
       food_delivery: 'van',
@@ -42,6 +42,9 @@ describe('A6 Fahr-Minispiele — Konfiguration', () => {
       log_transport: 'logging_truck',
       police_patrol: 'police_car',
       material_delivery: 'flatbed',
+      water_delivery: 'van',
+      market_restock: 'refrigerated_truck',
+      park_supply: 'flatbed',
     };
     for (const [id, vehicle] of Object.entries(expected)) {
       const def = byId.get(id);
@@ -52,6 +55,17 @@ describe('A6 Fahr-Minispiele — Konfiguration', () => {
     // Und: keine andere Aktivität behauptet fälschlich, eine Fahrmission zu sein.
     const driveIds = activitiesConfig.activities.filter((a) => a.drive).map((a) => a.id).sort();
     expect(driveIds).toEqual(Object.keys(expected).sort());
+  });
+
+  it('stellt mehrere echte Straßenfahrzeuge sowie sichtbare Zukunftsträger bereit', () => {
+    const food = activitiesConfig.activities.find((activity) => activity.id === 'food_delivery')!;
+    expect(food.vehicleOptions).toEqual(['van', 'refrigerated_truck', 'medium_truck', 'large_truck']);
+    const ids = activitiesConfig.vehicles.map((vehicle) => vehicle.id);
+    expect(ids).toEqual(expect.arrayContaining(['van', 'medium_truck', 'large_truck', 'refrigerated_truck', 'heavy_transporter']));
+    expect(activitiesConfig.vehicles.filter((vehicle) => vehicle.future).map((vehicle) => vehicle.id)).toEqual([
+      'freight_train',
+      'cargo_plane',
+    ]);
   });
 });
 
@@ -97,6 +111,35 @@ describe('A6 Holztransport — Ziele nur Lager', () => {
     controller.placeBuilding('sawmill', at(0, 6).x, at(0, 6).y);
     controller.update(T0 + 3_600_000, false);
     expect(controller.startActivity('log_transport')).toEqual({ ok: false, error: 'invalid' });
+  });
+});
+
+describe('Stadtarbeit 2D — manueller Startplan', () => {
+  it('validiert und persistiert Fahrzeug sowie exakte Straßenkette am Command-Rand', () => {
+    const controller = richCity();
+    roadRow(controller, 0, 20);
+    expect(controller.placeBuilding('farm', at(0, 6).x, at(0, 6).y)).toEqual({ ok: true });
+    for (const dx of [7, 12, 17]) {
+      expect(controller.placeBuilding('house_small', at(dx, 6).x, at(dx, 6).y)).toEqual({ ok: true });
+    }
+    controller.update(T0 + 3_600_000, false);
+
+    const preview = controller.getActivityRoutePlan('food_delivery');
+    expect(preview).toBeDefined();
+    const targets = preview!.targetBuildingIds;
+    const reference = controller.analyseActivityRoute('food_delivery', targets);
+    expect(reference?.roadCoverage).toBe(1);
+    const roadPath = reference!.segments.flatMap((segment, index) =>
+      index === 0 ? segment.path : segment.path.slice(1),
+    );
+    expect(
+      controller.startActivity('food_delivery', targets, {
+        vehicle: 'refrigerated_truck',
+        roadPath,
+      }),
+    ).toEqual({ ok: true });
+    expect(controller.state.activities.active?.vehicle).toBe('refrigerated_truck');
+    expect(controller.state.activities.active?.plannedRoadPath).toEqual(roadPath);
   });
 });
 

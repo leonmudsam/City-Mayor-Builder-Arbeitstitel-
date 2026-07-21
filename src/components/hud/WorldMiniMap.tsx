@@ -1,11 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Crosshair, Map } from 'lucide-react';
+import { Crosshair, LockKeyhole, Map, Settings } from 'lucide-react';
 import { WORLD_TILES, regionIdAt, startRegionConfig, terrainAt } from '../../game/config/startRegion.config.ts';
 import type { BuildingCategory, TerrainType } from '../../game/types.ts';
 import { getMapApi, useGame, useUiStore } from '../../state/store.ts';
 import { t } from '../../i18n/index.ts';
 
-const SIZE = 220;
+const SIZE = 256;
 const TERRAIN: Record<TerrainType, [number, number, number]> = {
   water: [31, 91, 128],
   river: [47, 137, 174],
@@ -50,7 +50,9 @@ export function WorldMiniMap() {
   const game = useGame();
   const baseCanvasRef = useRef<HTMLCanvasElement>(null);
   const overlayCanvasRef = useRef<HTMLCanvasElement>(null);
+  const draggingRef = useRef(false);
   const setCameraPreset = useUiStore((s) => s.setCameraPreset);
+  const setPanel = useUiStore((s) => s.setPanel);
   const [focusRegionId, setFocusRegionId] = useState(startRegionConfig.startRegionId);
 
   const unlockedKey = Object.values(game.state.world.regions)
@@ -96,9 +98,11 @@ export function WorldMiniMap() {
         const light = isUnlocked ? 1 : 0.34;
         const blue = isUnlocked ? 0 : 18;
         const offset = (py * SIZE + px) * 4;
-        image.data[offset] = Math.round(base[0] * light);
-        image.data[offset + 1] = Math.round(base[1] * light);
-        image.data[offset + 2] = Math.min(255, Math.round(base[2] * light) + blue);
+        const macro = ((px * 13 + py * 7 + wx * 3 + wy * 5) % 19) / 190 - 0.05;
+        const relief = terrainAt(wx, wy) === 'mountain' ? 0.9 + ((wx + wy) % 9) / 32 : 1 + macro;
+        image.data[offset] = Math.round(base[0] * light * relief);
+        image.data[offset + 1] = Math.round(base[1] * light * relief);
+        image.data[offset + 2] = Math.min(255, Math.round(base[2] * light * relief) + blue);
         image.data[offset + 3] = 255;
       }
     }
@@ -190,41 +194,80 @@ export function WorldMiniMap() {
   }, [markers]);
 
   const focusRegion = game.config.regions.get(focusRegionId);
+  const focusRegionState = game.state.world.regions[String(focusRegionId)];
+  const modifier = focusRegion
+    ? Object.entries(focusRegion.productionModifiers ?? {}).find(([, factor]) => factor !== undefined && factor > 1)
+    : undefined;
+
+  const focusFromPointer = (clientX: number, clientY: number) => {
+    const canvas = baseCanvasRef.current;
+    const api = getMapApi();
+    if (!canvas || !api) return;
+    const rect = canvas.getBoundingClientRect();
+    const x = clamp(((clientX - rect.left) / rect.width) * WORLD_TILES, 0, WORLD_TILES - 1);
+    const z = clamp(((clientY - rect.top) / rect.height) * WORLD_TILES, 0, WORLD_TILES - 1);
+    setCameraPreset('city');
+    api.focusGround(x, z, Math.min(api.getCameraView().dist, 92));
+  };
 
   return (
     <aside className="world-minimap">
       <div className="world-minimap-head">
         <span><Map size={15} /> {t('ui.minimap.title')}</span>
-        <button
-          onClick={() => {
-            getMapApi()?.centerOnCity();
-            setCameraPreset('city');
-          }}
-          title={t('ui.camera.preset.center')}
-        >
-          <Crosshair size={16} />
-        </button>
+        <span className="world-minimap-actions">
+          <button onClick={() => setPanel('settings')} title={t('ui.settings')}>
+            <Settings size={15} />
+          </button>
+          <button
+            onClick={() => {
+              getMapApi()?.centerOnCity();
+              setCameraPreset('city');
+            }}
+            title={t('ui.camera.preset.center')}
+          >
+            <Crosshair size={16} />
+          </button>
+        </span>
       </div>
       <button
         className="world-minimap-map"
-        onClick={(event) => {
-          const canvas = baseCanvasRef.current;
-          const api = getMapApi();
-          if (!canvas || !api) return;
-          const rect = canvas.getBoundingClientRect();
-          const x = clamp(((event.clientX - rect.left) / rect.width) * WORLD_TILES, 0, WORLD_TILES - 1);
-          const z = clamp(((event.clientY - rect.top) / rect.height) * WORLD_TILES, 0, WORLD_TILES - 1);
-          setCameraPreset('city');
-          api.focusGround(x, z, Math.min(api.getCameraView().dist, 92));
+        onPointerDown={(event) => {
+          draggingRef.current = true;
+          event.currentTarget.setPointerCapture(event.pointerId);
+          focusFromPointer(event.clientX, event.clientY);
         }}
-        title={t('ui.minimap.move_hint')}
+        onPointerMove={(event) => {
+          if (draggingRef.current) focusFromPointer(event.clientX, event.clientY);
+        }}
+        onPointerUp={(event) => {
+          draggingRef.current = false;
+          event.currentTarget.releasePointerCapture(event.pointerId);
+        }}
+        onPointerCancel={() => {
+          draggingRef.current = false;
+        }}
+        title={t('ui.minimap.drag_hint')}
       >
         <canvas ref={baseCanvasRef} width={SIZE} height={SIZE} />
         <canvas className="world-minimap-overlay" ref={overlayCanvasRef} width={SIZE} height={SIZE} />
       </button>
       <div className="world-minimap-region">
         <span>{t('ui.minimap.focus')}</span>
-        <strong>{focusRegion ? t(focusRegion.nameKey) : t('ui.nav.city')}</strong>
+        <div>
+          <strong>{focusRegion ? t(focusRegion.nameKey) : t('ui.nav.city')}</strong>
+          <b className={focusRegionState?.status === 'unlocked' ? 'text-good' : 'text-warn'}>
+            {focusRegionState?.status === 'unlocked' ? t('ui.minimap.unlocked') : (
+              <>
+                <LockKeyhole size={11} /> {t('ui.minimap.locked')}
+              </>
+            )}
+          </b>
+        </div>
+        <small>
+          {modifier
+            ? `${t(`ui.region.mod.${modifier[0]}`)} +${Math.round(((modifier[1] ?? 1) - 1) * 100)}%`
+            : t(`biome.${focusRegion?.biome ?? 'ebene'}`)}
+        </small>
       </div>
     </aside>
   );

@@ -3,6 +3,7 @@ dist/
 *.local
 .DS_Store
 scratchpad/
+tmp/
 
 # Tauri (native desktop build) — generated artifacts, never committed.
 src-tauri/target/

@@ -15,5 +15,7 @@ Ein Marker pro Gebäude (Priorität: Aufgabe > Bau > Problem > Upgrade). Schwebt
 | Im Bau | `marker_construction.glb` → `marker_build.glb` |  |
 | Problem | `marker_problem.glb` → `marker_alert.glb` |  |
 | Upgrade verfügbar | `marker_upgrade.glb` → `marker_bonus.glb` → `marker_arrow.glb` |  |
+| Bedürfnis / Versorgung | `marker_need.glb` → `marker_service.glb` |  |
+| Produktion | `marker_production.glb` → `marker_output.glb` |  |
 
 Fehlt ein Modell, greift der prozedurale Fallback — das Spiel bricht nie. Die volle Spezifikation (Footprint, Höhe, Pivot, Platzierung, Biom, Budget) für diese UND alle geplanten Modelle dieses Ordners steht in `PROMPTS.md` daneben.

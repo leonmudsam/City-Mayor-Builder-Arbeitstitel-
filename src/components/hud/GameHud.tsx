@@ -1,4 +1,4 @@
-import { Menu } from 'lucide-react';
+import { Menu, Settings } from 'lucide-react';
 import { useGame, useUiStore } from '../../state/store.ts';
 import { xpForNextLevel } from '../../game/progression/levels.ts';
 import { formatMoney, t } from '../../i18n/index.ts';
@@ -45,6 +45,7 @@ export function GameHud() {
           {crest && <span className="hud-level-number">{level}</span>}
         </div>
         <div className="hud-level-text">
+          <span className="hud-brand-name">City Mayor Builder</span>
           <span className="hud-level-label">{t('ui.level')} {level}</span>
           <div className="hud-xpbar">
             <div className="hud-xpbar-fill" style={{ width: `${xpProgress * 100}%` }} />
@@ -140,6 +141,13 @@ export function GameHud() {
       </div>
 
       <DayNightControl />
+      <button
+        className={`hud-menu-btn hud-settings-btn${openPanel === 'settings' ? ' active' : ''}`}
+        onClick={() => setPanel('settings')}
+        title={t('ui.settings')}
+      >
+        <Settings size={19} />
+      </button>
       <button
         className={`hud-menu-btn${openPanel === 'menu' ? ' active' : ''}`}
         onClick={() => setPanel('menu')}

@@ -8,8 +8,11 @@ import {
   Flame,
   Home,
   Leaf,
+  Lock,
   MapPinned,
   Move,
+  Route,
+  Grid2X2,
   PackageOpen,
   ShieldCheck,
   Sparkles,
@@ -22,7 +25,7 @@ import {
   Warehouse,
   X,
 } from 'lucide-react';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useGame, useUiStore } from '../../state/store.ts';
 import { effectiveEffects } from '../../game/buildings/effects.ts';
 import type { BuildingEffect } from '../../game/config/types.ts';
@@ -32,6 +35,7 @@ import { ActionBubble } from '../common/ActionBubble.tsx';
 import { ConfirmModal } from '../common/ConfirmModal.tsx';
 import { BuildingArt } from '../art/index.ts';
 import { formatDuration, formatMoney, t } from '../../i18n/index.ts';
+import { regionIdAt, terrainAt } from '../../game/config/startRegion.config.ts';
 
 /** Money costs use the compact format; materials stay plain integers. */
 function costLabel(cost: Partial<Record<string, number>>): string {
@@ -50,6 +54,8 @@ export function FloatingBuildingSheet() {
   const game = useGame();
   const { selectedBuildingId, selectBuilding, startMoving, setPanel, pushToast } = useUiStore();
   const [confirmDemolish, setConfirmDemolish] = useState(false);
+  const [previewStage, setPreviewStage] = useState<number>();
+  useEffect(() => setPreviewStage(undefined), [selectedBuildingId]);
   if (!selectedBuildingId) return null;
   const b = game.state.buildings[selectedBuildingId];
   const def = b && game.config.buildings.get(b.defId);
@@ -58,6 +64,7 @@ export function FloatingBuildingSheet() {
   const effects = effectiveEffects(def, b.upgradeLevel);
   const upgrade = game.getUpgradeInfo(b.id);
   const maxLevel = upgrade.maxStage;
+  const viewedStage = Math.min(maxLevel, previewStage ?? b.upgradeLevel);
   const bonusPct = game.derived.productionBonus[b.id] ?? 0;
   const ambience = game.derived.ambience[b.id];
   const now = game.state.meta.lastSimTime;
@@ -75,6 +82,18 @@ export function FloatingBuildingSheet() {
   const problems = diagnostics.filter((d) => d.kind === 'problem' && d.code !== 'no_movein');
   const benefits = diagnostics.filter((d) => d.kind === 'benefit');
   const status = buildingStatus(b, diagnostics);
+  const regionId = regionIdAt(b.x, b.y);
+  const region = game.config.regions.get(regionId);
+  const terrain = terrainAt(b.x, b.y);
+  const radius = effects.reduce((max, effect) => {
+    if ('radius' in effect && typeof effect.radius === 'number') return Math.max(max, effect.radius);
+    return max;
+  }, 0);
+  const roadStatus = diagnostics.some((diagnosis) => diagnosis.code === 'no_road')
+    ? { label: t('diag.no_road'), tone: 'bad' }
+    : def.requiresRoad
+      ? { label: t('diag.road_ok'), tone: 'good' }
+      : { label: 'Nicht erforderlich', tone: 'muted' };
   const close = () => selectBuilding(undefined);
 
   return (
@@ -82,8 +101,11 @@ export function FloatingBuildingSheet() {
       <div className="floating-sheet" onClick={(e) => e.stopPropagation()}>
         <div className="floating-sheet-head">
           <div className="sheet-hero">
-            <BuildingArt id={def.id} category={def.category} px={58} />
+            <span className="sheet-hero-art">
+              <BuildingArt id={def.id} category={def.category} px={158} stage={viewedStage} />
+            </span>
             <div className="sheet-hero-text">
+              <span className="sheet-kicker">Gebäude-Details</span>
               <h3>
                 {t(stageNameKey)}
                 {maxLevel > 0 && (
@@ -96,6 +118,7 @@ export function FloatingBuildingSheet() {
               </h3>
               <div className="sheet-substatus">
                 <span className="sheet-category">{t(`category.${def.category}`)}</span>
+                <span className="sheet-stage">Stufe {b.upgradeLevel + 1}/{maxLevel + 1}</span>
                 <span className={`sheet-status-badge ${status.tone}`}>{t(status.key)}</span>
               </div>
             </div>
@@ -104,6 +127,48 @@ export function FloatingBuildingSheet() {
             <X size={18} />
           </button>
         </div>
+
+        {maxLevel > 0 && (
+          <section className="building-stage-gallery">
+            <div className="building-stage-gallery-head">
+              <span>Gebäude-Entwicklung</span>
+              <small>
+                Vorschau · Stufe {viewedStage + 1}/{maxLevel + 1}
+              </small>
+            </div>
+            <div className="building-stage-strip">
+              {Array.from({ length: maxLevel + 1 }, (_, stage) => {
+                const stageDef = stage > 0 ? def.upgrades?.[stage - 1] : undefined;
+                const levelGate = stageDef?.unlockLevel;
+                const locked = levelGate !== undefined && game.state.level.current < levelGate;
+                return (
+                  <button
+                    key={stage}
+                    className={`${viewedStage === stage ? 'active' : ''}${stage === b.upgradeLevel ? ' current' : ''}`}
+                    onClick={() => setPreviewStage(stage)}
+                    title={
+                      stageDef?.nameKey
+                        ? t(stageDef.nameKey)
+                        : `${t(def.nameKey)} · Stufe ${stage + 1}`
+                    }
+                  >
+                    <span className="building-stage-art">
+                      <BuildingArt id={def.id} category={def.category} px={66} stage={stage} />
+                      {locked && (
+                        <i>
+                          <Lock size={12} />
+                          Lv. {levelGate}
+                        </i>
+                      )}
+                    </span>
+                    <b>Stufe {stage + 1}</b>
+                    <small>{stage === b.upgradeLevel ? 'Aktuell' : locked ? `Ab Level ${levelGate}` : 'Vorschau'}</small>
+                  </button>
+                );
+              })}
+            </div>
+          </section>
+        )}
 
         {b.status === 'constructing' && b.constructionEndsAt !== undefined && (
           <>
@@ -148,6 +213,51 @@ export function FloatingBuildingSheet() {
             </div>
           );
         })()}
+
+        <section className="building-site-analysis">
+          <div className="building-site-copy">
+            <h4>
+              <MapPinned size={15} /> {t('ui.building.site_analysis')}
+            </h4>
+            <div className="building-site-row">
+              <span>{t('ui.building.region')}</span>
+              <strong>{region ? t(region.nameKey) : '—'}</strong>
+            </div>
+            <div className="building-site-row">
+              <span>{t('ui.building.terrain')}</span>
+              <strong>{t(`terrain.${terrain}`)}</strong>
+            </div>
+            <div className="building-site-row">
+              <span>{t('ui.building.road')}</span>
+              <strong className={`text-${roadStatus.tone}`}>{roadStatus.label}</strong>
+            </div>
+            <div className="building-site-row">
+              <span>{t('ui.building.footprint')}</span>
+              <strong>
+                <Grid2X2 size={13} /> {def.size.w}×{def.size.h}
+              </strong>
+            </div>
+            <div className="building-site-row">
+              <span>{t('ui.location_bonus_short')}</span>
+              <strong className={bonusPct > 0 ? 'text-good' : 'muted'}>{bonusPct > 0 ? `+${Math.round(bonusPct)}%` : '—'}</strong>
+            </div>
+          </div>
+          <div className="building-radius-preview">
+            <span>{t('ui.building.coverage')}</span>
+            <div className="building-radius-map">
+              {radius > 0 ? (
+                <i
+                  style={{
+                    width: `${46 + 78 * Math.min(1, radius / 24)}px`,
+                    height: `${46 + 78 * Math.min(1, radius / 24)}px`,
+                  }}
+                />
+              ) : <b>—</b>}
+              <Route size={22} />
+            </div>
+            <strong>{radius > 0 ? t('ui.radius.tiles', { n: radius }) : 'Kein Radius'}</strong>
+          </div>
+        </section>
 
         {(problems.length > 0 || benefits.length > 0) && (
           <div className="sheet-diagnostics">

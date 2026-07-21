@@ -4,6 +4,8 @@
 // localStorage under its own key — NOT part of the savegame, so no schema bump
 // and old saves keep loading unchanged (CLAUDE.md §3).
 
+export type WeatherMode = 'clear' | 'rain' | 'fog';
+
 export interface EnvironmentSettings {
   /** Auto-advance the time of day (the sun keeps moving). */
   cycle: boolean;
@@ -11,6 +13,8 @@ export interface EnvironmentSettings {
   timeOfDay: number;
   /** Real minutes for one full in-game day when the cycle runs (1–30). */
   dayLengthMin: number;
+  /** Purely visual atmosphere preset. Never affects the simulation or saves. */
+  weather: WeatherMode;
 }
 
 export const DEFAULT_ENVIRONMENT_SETTINGS: EnvironmentSettings = {
@@ -19,6 +23,7 @@ export const DEFAULT_ENVIRONMENT_SETTINGS: EnvironmentSettings = {
   cycle: false,
   timeOfDay: 0.34,
   dayLengthMin: 8,
+  weather: 'clear',
 };
 
 const KEY = 'cmb.environment';
@@ -35,6 +40,7 @@ function sanitize(raw: unknown): EnvironmentSettings {
     // timeOfDay wraps, but clamp defensively into [0,1) for storage.
     timeOfDay: clampNum(o.timeOfDay, 0, 0.9999, d.timeOfDay),
     dayLengthMin: clampNum(o.dayLengthMin, 1, 30, d.dayLengthMin),
+    weather: o.weather === 'rain' || o.weather === 'fog' || o.weather === 'clear' ? o.weather : d.weather,
   };
 }
 

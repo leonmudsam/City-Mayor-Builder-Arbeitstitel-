@@ -18,8 +18,8 @@ läuft im Browser (Dev/Test) und in der nativen Tauri-App, später auf Mobile.
 | Ordner | Inhalt |
 |---|---|
 | `src/game/` | **Reine Simulation.** `config/`, `simulation/` (Tick), `commands/` (Controller), `economy/`, `buildings/`, `map/`, `progression/`, `storage/` (Saves+Migration), `engine/` (RNG), `types.ts`, `newGame.ts`. Keine Rendering-/React-Imports. |
-| `src/renderer/` | Einziger aktiver Renderer: `three/ThreeMapRenderer.ts` hinter `IMapRenderer.ts`; kein 2D-/Iso-Modus. Atmosphäre (rein visuell): `three/environment.ts` (Tag/Nacht-Grading), `three/SkyEnvironment.ts` (Himmel, Wolken, Sonne/Mond/Sterne, Licht/Fog), `three/environmentSettings.ts` (localStorage, nicht im Save). Vorschau-Bilder: `three/modelThumbnail.ts` rendert Gebäude-`.glb` offscreen zu Thumbnails, Fallback PNG→SVG. Boden: `three/terrainHeight.ts` ist die einzige Höhenquelle für Boden-Mesh und Platzierungen. |
-| `src/components/` | React-UI: `MapView.tsx` + `hud/`, `panels/`, `common/`, `art/`. `hud/WorldMiniMap.tsx` liest Welt, Gebäude, Diagnosen und Missionsziele aus Snapshot/Config; die Kamerapose kommt über `MapApi`. `panels/ActivityRoutePlanner.tsx` projiziert Terrain, Gebäude und eine RNG-neutrale Aktivitätsvorschau in einen Top-down-Planer; gestartet wird weiterhin über den Controller. |
+| `src/renderer/` | Einziger aktiver Renderer: `three/ThreeMapRenderer.ts` hinter `IMapRenderer.ts`; kein 2D-/Iso-Modus. Atmosphäre (rein visuell): `three/environment.ts` (Tag/Nacht-Grading), `three/SkyEnvironment.ts` (Himmel, Wolken, Sonne/Mond/Sterne, Licht/Fog), `three/environmentSettings.ts` (localStorage, nicht im Save). `three/worldVisualProfiles.ts` deutet die 32 kanonischen Regions-IDs ausschließlich für Palette, Splat, Vegetation und neutrale Landmarken; Gameplaygrenzen bleiben in `src/game/`. Vorschau-Bilder: `three/modelThumbnail.ts` rendert Gebäude-`.glb` offscreen zu Thumbnails, Fallback PNG→SVG. Boden: `three/terrainHeight.ts` ist die einzige Höhenquelle für Boden-Mesh und Platzierungen; der Terrainshader mischt zwölf Schichten und nutzt Weltkoordinaten-Triplanar für Steilfels. |
+| `src/components/` | React-UI: `MapView.tsx` + `hud/`, `panels/`, `citywork/`, `common/`, `art/`. `hud/WorldMiniMap.tsx` liest Welt, Gebäude, Diagnosen und Missionsziele aus Snapshot/Config; die Kamerapose kommt über `MapApi`. `panels/ActivityRoutePlanner.tsx` orchestriert Redesign 4.0 aus Controller-Read-Modellen; `citywork/ManualRouteMap.tsx` projiziert Terrain, Gebäude, Straßenanker, Cargo und Analyse in einen interaktiven Top-down-Planer. Reihenfolge entsteht aus dem gezeichneten Weg; Start/Reroute bleiben Controller-Commands. |
 | `src/state/` | Zustand-Store + Controller-/Map-Bridges (`store.ts`). Der React↔Sim-Seam. |
 | `src/assets/` | Statische Kunst + `models/` (3D-`.glb`-Baum, Drop-in), `registry.ts`, `modelManifest.ts`. |
 | `src/i18n/`, `src/services/` | Lokalisierung, Querschnittsdienste. |
@@ -35,7 +35,9 @@ Sie liest Snapshots und schickt Commands.
   `unlockSector`, `setTaxRate`, Handel (`sellResource`/`fulfillTradeContract`),
   Stadtarbeit (`startActivity`/`progressActivity`/`chooseDecision`) usw. Lese-Helfer
   ohne Mutation: `getIncome`, `getBuildingDiagnostics`, `getCoverageOverlay`,
-  `getActivityBoard`, … `update(now, live)` treibt die Simulation via `advance()`.
+  `getActivityBoard`, `getActivityPlanningContext`, `getActivityRoutePreview`,
+  `getActivityInfrastructureWarnings`, … `update(now, live)` treibt die
+  Simulation via `advance()`.
 - **Zustand-Store** (`src/state/store.ts`): `gameController`-Bridge +
   `useGame()` (via `useSyncExternalStore` an `controller.subscribe` und
   `() => controller.version`). Daneben reiner **UI-State** (`useUiStore`: offenes
@@ -72,7 +74,7 @@ und die `README.md` je Modellordner wird daraus generiert (Test:
 `tests/modelReadmes.test.ts`). Fehlt ein Modell → prozeduraler Fallback.
 
 ## 6. Speicherstände & Migration (dürfen nie brechen)
-`SCHEMA_VERSION` in `src/game/newGame.ts` (aktuell 11). Migrationen in
+`SCHEMA_VERSION` in `src/game/newGame.ts` (aktuell 13). Migrationen in
 `src/game/storage/migrations.ts` als lineare Kette (`migrations[n]`: v`n`→v`n+1`).
 `migrateAndValidate()` wendet die Kette an und validiert am Ende mit
 `saveGameSchema` (Zod). Persistenz heute: `localStorage` (`cmb.save.*`) — funktioniert

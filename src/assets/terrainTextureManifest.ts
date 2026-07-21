@@ -13,7 +13,19 @@
 
 // ---- categories & shared per-category technical defaults --------------------
 
-export type TextureCategory = 'grass' | 'earth' | 'stone' | 'sand' | 'snow' | 'water' | 'field' | 'path';
+export type TextureCategory =
+  | 'grass'
+  | 'earth'
+  | 'stone'
+  | 'mountain'
+  | 'desert'
+  | 'swamp'
+  | 'coast'
+  | 'sand'
+  | 'snow'
+  | 'water'
+  | 'field'
+  | 'path';
 
 export interface MapSet {
   normal: boolean;
@@ -37,6 +49,10 @@ export const CATEGORY_DEFAULTS: Record<TextureCategory, CategoryDefaults> = {
   grass: { folder: 'textures/terrain/grass/', resolution: '1024×1024', maps: { normal: true, roughness: true, ao: false, height: true }, detailLevel: 'nah' },
   earth: { folder: 'textures/terrain/earth/', resolution: '1024×1024', maps: { normal: true, roughness: true, ao: false, height: true }, detailLevel: 'nah' },
   stone: { folder: 'textures/terrain/stone/', resolution: '2048×2048', maps: { normal: true, roughness: true, ao: true, height: true }, detailLevel: 'nah–mittel' },
+  mountain: { folder: 'textures/terrain/mountain/', resolution: '2048×2048', maps: { normal: true, roughness: true, ao: true, height: true }, detailLevel: 'nah–fern' },
+  desert: { folder: 'textures/terrain/desert/', resolution: '2048×2048', maps: { normal: true, roughness: true, ao: true, height: true }, detailLevel: 'nah–fern' },
+  swamp: { folder: 'textures/terrain/swamp/', resolution: '2048×2048', maps: { normal: true, roughness: true, ao: true, height: true }, detailLevel: 'nah–mittel' },
+  coast: { folder: 'textures/terrain/coast/', resolution: '2048×2048', maps: { normal: true, roughness: true, ao: true, height: true }, detailLevel: 'nah–mittel' },
   sand: { folder: 'textures/terrain/sand/', resolution: '1024×1024', maps: { normal: true, roughness: true, ao: false, height: true }, detailLevel: 'nah' },
   snow: { folder: 'textures/terrain/snow/', resolution: '1024×1024', maps: { normal: true, roughness: true, ao: false, height: true }, detailLevel: 'nah' },
   water: { folder: 'textures/terrain/water/', resolution: '1024×1024', maps: { normal: true, roughness: false, ao: false, height: false }, detailLevel: 'mittel' },
@@ -109,11 +125,13 @@ export interface BiomeMaterialSet {
 /** Welche Texturen pro Biom im Materialset zur Auswahl stehen (§ "Biome
  *  steuern Texturen"). Der Splatmap-Mix wählt/gewichtet innerhalb dieses Sets. */
 export const BIOME_MATERIAL_SETS: BiomeMaterialSet[] = [
-  { biome: 'Grasland', textures: ['terrain_grass_01', 'terrain_grass_dry', 'terrain_meadow', 'terrain_earth_light'] },
+  { biome: 'Grasland', textures: ['grass_meadow', 'terrain_grass_01', 'terrain_grass_dry', 'terrain_meadow', 'terrain_earth_light'] },
   { biome: 'Mischwald', textures: ['terrain_grass_dark', 'terrain_moss', 'terrain_forest_floor', 'terrain_rock'] },
   { biome: 'Fruchtbares Land', textures: ['terrain_earth_dark', 'terrain_farmland', 'terrain_field_plowed', 'terrain_field_wheat', 'terrain_field_harvest'] },
-  { biome: 'Gebirge', textures: ['terrain_rock', 'terrain_mountain', 'terrain_cliff', 'terrain_rock_granite', 'terrain_gravel', 'terrain_snow', 'terrain_snow_rock', 'terrain_snow_drift'] },
-  { biome: 'Küste', textures: ['terrain_sand_coast', 'terrain_coast', 'terrain_rock', 'terrain_shallow_water'] },
+  { biome: 'Gebirge', textures: ['mountain_rock_base', 'mountain_snow', 'terrain_rock', 'terrain_mountain', 'terrain_cliff', 'terrain_rock_granite', 'terrain_gravel', 'terrain_snow', 'terrain_snow_rock', 'terrain_snow_drift'] },
+  { biome: 'Wüste', textures: ['desert_sand_red', 'terrain_sand_dune', 'terrain_earth_light', 'terrain_rock_granite'] },
+  { biome: 'Sumpf', textures: ['swamp_mud', 'terrain_earth_wet', 'terrain_moss', 'terrain_swamp'] },
+  { biome: 'Küste', textures: ['coast_pebbles', 'terrain_sand_coast', 'terrain_coast', 'terrain_rock', 'terrain_shallow_water'] },
   { biome: 'Fluss/See/Meer', textures: ['terrain_deep_water', 'terrain_shallow_water', 'terrain_riverbed', 'terrain_river_delta', 'terrain_swamp', 'terrain_ice'] },
   { biome: 'Straßen/Wege', textures: ['terrain_path', 'terrain_road_edge', 'terrain_gravel', 'terrain_stone'] },
 ];
@@ -556,6 +574,80 @@ export const TERRAIN_TEXTURES: TerrainTextureEntry[] = [
     biomes: ['Straßen/Wege'],
     motif: 'soft gradient road-edge transition, asphalt grey fading into dirt and grass, small gravel scatter',
   },
+
+  // Map Redesign 5.0 — KI-generierte Kernmaterialien
+  {
+    name: 'grass_meadow',
+    category: 'grass',
+    style: 'painterly stylized realism, weich und natuerlich',
+    palette: 'Mittelgruen, Oliv und Moos mit sehr kleinen cremefarbenen und blauen Bluetentupfern',
+    useCase: 'hochwertige Graslandbasis und offene Lichtungen',
+    materialProps: 'kurzes Wiesengras, organische Cluster, geringe Mikrounruhe',
+    blend: 'Basis-Layer der Ebene; trockenes Gras, Waldboden und fruchtbare Erde ueberblenden regional',
+    priority: 'Pflicht',
+    biomes: ['Grasland', 'Hügelland'],
+    motif: 'natural medium-green meadow grass with broad painterly variation, sparse tiny wildflower flecks and open breathing areas',
+  },
+  {
+    name: 'mountain_rock_base',
+    category: 'mountain',
+    style: 'painterly stylized realism, helle alpine Makroformen',
+    palette: 'warmes Hellgrau, Steinbeige und dezente moosgruene Fugen',
+    useCase: 'triplanare Felsbasis fuer Mittel- und Hochgebirge',
+    materialProps: 'breite Schichtungen, kantige Platten, geringe Mikrokörnung',
+    blend: 'hoehen- und hangabhaengig; triplanar mit cliff, Geröll und Schnee',
+    priority: 'Pflicht',
+    biomes: ['Gebirge', 'Hochland'],
+    motif: 'light warm-grey alpine bedrock with broad angular strata, restrained moss traces and no mirrored pattern',
+  },
+  {
+    name: 'mountain_snow',
+    category: 'mountain',
+    style: 'painterly stylized realism, kompakt und windgeformt',
+    palette: 'warmes Off-White mit sehr hellem Blaugrau',
+    useCase: 'Gipfelzone oberhalb der Felsbaender',
+    materialProps: 'weiche breite Verwehungen, dezente Eiskrusten',
+    blend: 'nur in grosser Hoehe; Alpine-Profil verstaerkt, Hang reduziert',
+    priority: 'Pflicht',
+    biomes: ['Gebirge'],
+    motif: 'clean compact wind-swept alpine snow with broad soft drifts and restrained pale-blue mineral seams',
+  },
+  {
+    name: 'desert_sand_red',
+    category: 'desert',
+    style: 'painterly stylized realism, warm und erosionsgepraegt',
+    palette: 'Terrakotta, Rostorange, Ocker und dunkles Rotbraun',
+    useCase: 'visuelle Wueste der roten Suedostkueste',
+    materialProps: 'kompakter Sand, breite Sandsteinplatten, flache Trockenrisse',
+    blend: 'organisch mit trockenem Gras, Kuestensand und Fels; keine Gameplaywirkung',
+    priority: 'Pflicht',
+    biomes: ['Wüste', 'Trockene Ebene'],
+    motif: 'burnt-sienna desert ground with compact sand, eroded sandstone plates and shallow cracked-earth seams',
+  },
+  {
+    name: 'swamp_mud',
+    category: 'swamp',
+    style: 'painterly stylized realism, feucht und moosig',
+    palette: 'Torfbraun, gedämpftes Oliv, Moosgruen und nasses Anthrazit',
+    useCase: 'Moorboden der westlichen Sumpfbucht',
+    materialProps: 'gesaettigter Schlamm, Torf, Moosinseln und flache feuchte Adern',
+    blend: 'niedrige Lagen; weich mit Waldboden, Feuchterde und Schilfufer',
+    priority: 'Pflicht',
+    biomes: ['Sumpf'],
+    motif: 'dark wet peat and olive-brown mud with broad mossy patches and shallow water-darkened seams',
+  },
+  {
+    name: 'coast_pebbles',
+    category: 'coast',
+    style: 'painterly stylized realism, rund gewaschene Kuestensteine',
+    palette: 'Blaugrau, warmes Steingrau, Beige und dezentes Seegruen',
+    useCase: 'Kiesbuchten, Felskuesten und Flussmuendungen',
+    materialProps: 'runde Kiesel, feuchter Schotter und wenig Sand',
+    blend: 'niedrige Kuestenlagen; mischt Sand, Fels und den tuerkisen Flachwassersaum',
+    priority: 'Pflicht',
+    biomes: ['Küste', 'Flusstal'],
+    motif: 'rounded slate and granite coastal pebbles mixed with muted damp sand and natural size variation',
+  },
 ];
 
 // ---- README/PROMPTS-style markdown rendering (pure) --------------------------
@@ -592,6 +684,10 @@ const CATEGORY_TITLES: Record<TextureCategory, string> = {
   grass: 'Gras',
   earth: 'Erde',
   stone: 'Stein',
+  mountain: 'Gebirge 5.0',
+  desert: 'Wüste 5.0',
+  swamp: 'Sumpf 5.0',
+  coast: 'Küste 5.0',
   sand: 'Sand',
   snow: 'Schnee (optional — kein aktueller Terrain-Typ)',
   water: 'Wasser',

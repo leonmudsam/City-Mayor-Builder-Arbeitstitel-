@@ -130,6 +130,41 @@ const activityBuff = z.object({
   durationSec: z.number().positive(),
 });
 
+const driveVehicle = z.enum([
+  'van',
+  'medium_truck',
+  'large_truck',
+  'refrigerated_truck',
+  'heavy_transporter',
+  'fire_truck',
+  'logging_truck',
+  'police_car',
+  'flatbed',
+  'freight_train',
+  'cargo_plane',
+]);
+
+const activityVehicleDefSchema = z.object({
+  id: driveVehicle,
+  nameKey: z.string(),
+  descriptionKey: z.string(),
+  unlockLevel: z.number().int().min(1),
+  capacity: z.number().int().positive(),
+  speedKph: z.number().positive(),
+  handling: z.number().int().min(1).max(5),
+  operatingCost: z.number().nonnegative(),
+  consumption: z.enum(['low', 'medium', 'high']),
+  imageKey: z.string().min(1),
+  strengthsKeys: z.array(z.string()).min(1),
+  weaknessesKeys: z.array(z.string()).min(1),
+  future: z.boolean().optional(),
+  // Fahrzeugeignung (L4 / A6): optional, nur Bewertung/Prognose — kein Save.
+  loadTimeSec: z.number().nonnegative().optional(),
+  unloadTimeSecPerTarget: z.number().nonnegative().optional(),
+  narrowStreetPenalty: z.number().min(0).max(1).optional(),
+  cooling: z.boolean().optional(),
+});
+
 export const activityDefSchema = z.object({
   id: z.string().min(1),
   type: z.enum(['delivery', 'inspection', 'decision']),
@@ -143,7 +178,8 @@ export const activityDefSchema = z.object({
   requiresAnyBuilding: z.array(z.string()).optional(),
   targetCount: z.object({ min: z.number().int().min(1), max: z.number().int().min(1) }).optional(),
   drive: z.boolean().optional(),
-  vehicle: z.enum(['van', 'fire_truck', 'logging_truck', 'police_car', 'flatbed']).optional(),
+  vehicle: driveVehicle.optional(),
+  vehicleOptions: z.array(driveVehicle).min(1).optional(),
   targetCategories: z
     .array(z.enum(['roads', 'residential', 'production', 'services', 'energy', 'leisure', 'economy', 'government', 'infrastructure', 'decoration', 'special']))
     .optional(),
@@ -151,6 +187,14 @@ export const activityDefSchema = z.object({
   timeLimitSec: z.number().positive().optional(),
   speedBonusFactor: z.number().min(1).optional(),
   costPerTarget: z.record(resourceId, z.number().nonnegative()).optional(),
+  cargoModel: z
+    .object({
+      resource: resourceId,
+      perTarget: z.number().positive(),
+      scaleByResidents: z.boolean().optional(),
+      perishable: z.boolean().optional(),
+    })
+    .optional(),
   options: z
     .array(
       z.object({
@@ -189,6 +233,7 @@ export const tradeContractTemplateSchema = z.object({
 
 export const activitiesConfigSchema = z.object({
   activities: z.array(activityDefSchema),
+  vehicles: z.array(activityVehicleDefSchema),
   tradeContracts: z.array(tradeContractTemplateSchema),
   tradeRotationSec: z.number().positive(),
   tradeOffersPerRotation: z.number().int().positive(),
@@ -289,6 +334,12 @@ export const saveGameSchema = z.object({
         defId: z.string(),
         startedAt: z.number(),
         expiresAt: z.number().optional(),
+        vehicle: driveVehicle.optional(),
+        plannedRoadPath: z
+          .array(z.object({ x: z.number().int(), y: z.number().int() }))
+          .min(2)
+          .optional(),
+        reserved: z.record(resourceId, z.number().nonnegative()).optional(),
         targets: z.array(z.object({ buildingId: z.string(), done: z.boolean() })),
       })
       .optional(),
