@@ -1,10 +1,21 @@
 import { describe, it, expect } from 'vitest';
 import { CameraController3D } from '../src/renderer/three/CameraController3D.ts';
+import { CameraExplorationBoundary } from '../src/renderer/three/CameraExplorationBoundary.ts';
 import { worldOverviewCenter } from '../src/game/config/startRegion.config.ts';
 import { CAMERA_LIMITS, worldCameraBounds } from '../src/renderer/three/CameraConfig.ts';
 import { DEFAULT_CAMERA_SETTINGS, type CameraSettings } from '../src/renderer/three/cameraSettings.ts';
 
 const settings = (over: Partial<CameraSettings> = {}) => () => ({ ...DEFAULT_CAMERA_SETTINGS, ...over });
+
+/** Erlaubtes Rechteck [60..90]×[60..90] als Mini-„freigeschaltete Union". */
+const rectBoundary = (soft = 6, hard = 10) =>
+  new CameraExplorationBoundary({
+    worldTiles: 128,
+    allowed: (x, y) => x >= 60 && x <= 90 && y >= 60 && y <= 90,
+    softDistance: soft,
+    hardDistance: hard,
+    step: 2,
+  });
 
 describe('CameraController3D bounds', () => {
   it('clamps pan target to the world bounds', () => {
@@ -32,6 +43,63 @@ describe('CameraController3D bounds', () => {
     expect(cam.goals().pitch).toBeLessThanOrEqual(CAMERA_LIMITS.maxPitch + 1e-9);
     for (let i = 0; i < 400; i++) cam.orbit(0, -100);
     expect(cam.goals().pitch).toBeGreaterThanOrEqual(CAMERA_LIMITS.minPitch - 1e-9);
+  });
+});
+
+describe('CameraExplorationBoundary (§ Change 9.0 / S3b)', () => {
+  it('leaves targets deep inside the unlocked union untouched at full speed', () => {
+    const b = rectBoundary();
+    const c = b.constrain(75, 75); // Mitte des erlaubten Rechtecks
+    expect(c.x).toBeCloseTo(75, 5);
+    expect(c.z).toBeCloseTo(75, 5);
+    expect(c.slow).toBe(1);
+  });
+
+  it('pulls a target far outside back onto the hard ring', () => {
+    const hard = 10;
+    const b = rectBoundary(6, hard);
+    const c = b.constrain(300, 300); // weit außerhalb
+    // Zurückgeführt in die Nähe der nächsten erlaubten Ecke (~90,90) + hartes Band.
+    expect(c.x).toBeLessThan(90 + hard + 4);
+    expect(c.z).toBeLessThan(90 + hard + 4);
+    expect(c.slow).toBe(0);
+  });
+
+  it('slows down within the soft band before the hard limit', () => {
+    const b = rectBoundary(6, 12);
+    const near = b.constrain(96, 75); // ~6 Kacheln jenseits der rechten Kante
+    expect(near.slow).toBeGreaterThan(0);
+    expect(near.slow).toBeLessThan(1);
+  });
+
+  it('never constrains when nothing is unlocked (empty union = no boundary)', () => {
+    const b = new CameraExplorationBoundary({ worldTiles: 128, allowed: () => false, step: 2 });
+    const c = b.constrain(10, 200);
+    expect(c.x).toBe(10);
+    expect(c.z).toBe(200);
+    expect(c.slow).toBe(1);
+  });
+});
+
+describe('CameraController3D exploration boundary', () => {
+  it('keeps the pan/focus target inside the unlocked union', () => {
+    const cam = new CameraController3D(worldCameraBounds(), settings({ smooth: false }));
+    cam.setExplorationBoundary(rectBoundary(6, 10));
+    cam.focusGround(400, 400); // versuche, in gesperrtes Gebiet zu zielen
+    const g = cam.goals();
+    expect(g.targetX).toBeLessThan(90 + 10 + 4);
+    expect(g.targetZ).toBeLessThan(90 + 10 + 4);
+  });
+
+  it('lets the camera roam freely again once the boundary is cleared (dev cheat)', () => {
+    const cam = new CameraController3D(worldCameraBounds(), settings({ smooth: false }));
+    cam.setExplorationBoundary(rectBoundary(6, 10));
+    cam.setExplorationBoundary(undefined); // Cheat „Kamera-Grenzen aus"
+    cam.focusGround(300, 300);
+    const g = cam.goals();
+    // Nur noch die Welt-Rechteckgrenze begrenzt (padding 8 → maxX = 512+8).
+    expect(g.targetX).toBeCloseTo(300, 5);
+    expect(g.targetZ).toBeCloseTo(300, 5);
   });
 });
 

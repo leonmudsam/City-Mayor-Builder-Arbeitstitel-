@@ -155,12 +155,18 @@ Großauftrag in Phasen S1–S8. Verbindliche Vorab-Audits:
 **1.400** bebaubare Kacheln, kein manuelles Rathaus-Verschieben — §3.2) neu
 gebacken; Regionsbalancing mit rotierten Forst-Ids (Nordwald→12, Südforst→11,
 Ostforst→10) und L3-Erstwahl {7,12}. **Save v19** (Weltumbau, Backup/Neustart
-`cmb.save.backup.world-v18`). Entscheidung **D-033**. Offen: **S3** Fog of War
-(globale Wolkenfront + Kamera-Clamping, existiert nicht) · **S4** Vegetations-
-Performance (Chunking/HLOD/Shader-Wind) · **S5** lebendige Welt (Mammutbäume/
-Tiere) · **S6** Sägewerk-Arbeitsmodus (3D-Kreiswerkzeug/Raycast/Overlay, baut auf
-A1–A5) · **S7** Steinbruch/Farm · **S8** weitere Betriebe. Reihenfolge zwingend
-(§24). Nichts Fehlendes in der UI vortäuschen.
+`cmb.save.backup.world-v18`). Entscheidung **D-033**.
+**v0.81 = S3 erledigt (D-034):** Fog of War als EINE weiche, zusammenhängende
+Wolkenfront statt Pro-Region-Kapseln — globale absolute Nebelhöhe (`worldFogTopY`)
++ `alphaHash`-Dithering; **Kamera-Clamping neu** (`CameraExplorationBoundary` hält
+das Blickziel über der freigeschalteten Union, weiches Randband) mit getrenntem
+Dev-Cheat `cameraBoundsDisabled`; Unlock zieht nur den Nebel zurück (Fade nie neu
+erzeugt). Rein visuell/navigatorisch, **keine Save-Änderung** (v19). Offen:
+**S4** Vegetations-Performance (Chunking/HLOD/Shader-Wind — enthält den
+inkrementellen Deko-/Vegetations-Neuaufbau bei Unlock) · **S5** lebendige Welt
+(Mammutbäume/Tiere) · **S6** Sägewerk-Arbeitsmodus (3D-Kreiswerkzeug/Raycast/
+Overlay, baut auf A1–A5) · **S7** Steinbruch/Farm · **S8** weitere Betriebe.
+Reihenfolge zwingend (§24). Nichts Fehlendes in der UI vortäuschen.
 
 Verbindlicher Einstieg für die Weiterarbeit:
 `docs/HANDOFF_CLAUDE.md` → `docs/agents/PROJECT_STATE.md` →

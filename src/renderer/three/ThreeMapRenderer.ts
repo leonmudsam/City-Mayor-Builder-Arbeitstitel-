@@ -65,6 +65,7 @@ import { SPLAT_BANDS, terrainHeightAt, terrainMinHeightAround, WATER_LEVEL } fro
 import { blendedVisualSplat, regionVisualProfile } from './worldVisualProfiles.ts';
 import { REGION_PROP_BUDGET, selectPropTiles, type PropKind } from './vegetationBudget.ts';
 import { CameraController3D } from './CameraController3D.ts';
+import { CameraExplorationBoundary } from './CameraExplorationBoundary.ts';
 import { CameraInputController, type CameraInputHost } from './CameraInputController.ts';
 import { worldCameraBounds, type CameraPreset } from './CameraConfig.ts';
 import { getCameraSettings } from './cameraSettings.ts';
@@ -374,7 +375,15 @@ export class ThreeMapRenderer implements IMapRenderer {
     fogDisabled: false,
     revealLockedRegionsVisually: false,
     unlockAllRegionsGameplay: false,
+    cameraBoundsDisabled: false,
   };
+  /** Signatur der zuletzt gebauten Kamera-Grenze (Unlock-Set + Cheat) — die
+   *  Nearest-Feature-Berechnung läuft nur, wenn sich diese Signatur ändert. */
+  private cameraBoundaryKey = '';
+  /** § Change 9.0 / S3a: globale absolute Nebeloberkante. Einmal aus dem gebackenen
+   *  Höhenfeld bestimmt (hohe Perzentile → flaches/hügeliges Land wird verdeckt,
+   *  echte Gebirgsgipfel ragen heraus). Ersetzt die frühere Pro-Region-Höhe. */
+  private fogTopY: number | undefined;
   private vegetationGroup = new Group();
   private nearVegetation: Object3D[] = [];
   /** § Säule B: beim letzten Vegetationsaufbau verwendetes Qualitätsprofil —
@@ -1014,11 +1023,14 @@ export class ThreeMapRenderer implements IMapRenderer {
     if (
       state.fogDisabled === this.worldReveal.fogDisabled &&
       state.revealLockedRegionsVisually === this.worldReveal.revealLockedRegionsVisually &&
-      state.unlockAllRegionsGameplay === this.worldReveal.unlockAllRegionsGameplay
+      state.unlockAllRegionsGameplay === this.worldReveal.unlockAllRegionsGameplay &&
+      state.cameraBoundsDisabled === this.worldReveal.cameraBoundsDisabled
     ) return;
     const visualChanged = state.fogDisabled !== this.worldReveal.fogDisabled
       || state.revealLockedRegionsVisually !== this.worldReveal.revealLockedRegionsVisually;
+    const boundsChanged = state.cameraBoundsDisabled !== this.worldReveal.cameraBoundsDisabled;
     this.worldReveal = { ...state };
+    if (boundsChanged) this.updateCameraBoundary();
     if (state.fogDisabled) {
       // Testmodus bedeutet wirklich frei sichtbare Insel: keine 1,8-s-Unlock-
       // Animation und keine unsichtbar weiterlaufenden Marker/Canvas-Texturen.
@@ -1224,6 +1236,8 @@ export class ThreeMapRenderer implements IMapRenderer {
 
     // Organischer Nebel über gesperrten Landschaften (§ Welt 2.0 / A3).
     this.buildRegionFog(regions);
+    // Kamera-Grenze an das aktuelle Freischalt-Set anpassen (§ Change 9.0 / S3b).
+    this.updateCameraBoundary();
 
     // Drop-in terrain models (§ Gebirge/Map): nur für FREIGESCHALTETE Regionen
     // eingesammelt (147k-Kachel-Scans über die ganze Insel wären Verschwendung).
@@ -2335,6 +2349,67 @@ export class ThreeMapRenderer implements IMapRenderer {
     }
   }
 
+  /**
+   * § Change 9.0 / S3b: baut die Kamera-Erkundungsgrenze aus dem aktuellen
+   * Freischalt-Set neu. Die zulässige Target-Fläche ist die Union der
+   * freigeschalteten Regionen (aus derselben `regionIdAt`-Maske wie der Nebel) plus
+   * weiches Randband. Neu berechnet wird nur bei geändertem Unlock-Set oder Cheat
+   * (Signatur `cameraBoundaryKey`). Rein visuell/navigatorisch — keine Sim-Wirkung.
+   */
+  private updateCameraBoundary(): void {
+    const regions = Object.values(this.controller.state.world.regions);
+    const unlocked = new Set(regions.filter((r) => r.status === 'unlocked').map((r) => r.id));
+    const key = `${[...unlocked].sort((a, b) => a - b).join(',')}|cheat:${this.worldReveal.cameraBoundsDisabled ? 1 : 0}`;
+    if (key === this.cameraBoundaryKey) return;
+    this.cameraBoundaryKey = key;
+    const everyUnlocked = [...this.controller.config.regions.values()]
+      .filter((r) => r.unlockable)
+      .every((r) => unlocked.has(r.id));
+    // Dev-Cheat, alles frei oder (theoretisch) nichts frei → keine Einengung.
+    if (this.worldReveal.cameraBoundsDisabled || everyUnlocked || unlocked.size === 0) {
+      this.cam.setExplorationBoundary(undefined);
+      return;
+    }
+    this.cam.setExplorationBoundary(
+      new CameraExplorationBoundary({
+        worldTiles: WORLD_TILES,
+        allowed: (x, y) => unlocked.has(regionIdAt(x, y)),
+        softDistance: 10,
+        hardDistance: 18,
+        step: 4,
+      }),
+    );
+  }
+
+  /**
+   * § Change 9.0 / S3a: eine EINZIGE globale, absolute Nebeloberkante für die
+   * gesamte Welt (§6.4) — nicht mehr pro Region. Aus dem gebackenen Höhenfeld als
+   * hohes Perzentil aller Landhöhen bestimmt: flaches und hügeliges Land liegt
+   * darunter (blickdicht verdeckt), nur echte Gebirgsgipfel ragen als Silhouette
+   * heraus. So bilden benachbarte gesperrte Regionen EINE zusammenhängende
+   * Wolkendecke statt gestufter Einzelkuppeln. Einmal berechnet und gecacht.
+   */
+  private worldFogTopY(): number {
+    if (this.fogTopY !== undefined) return this.fogTopY;
+    const heights: number[] = [];
+    for (let y = 1; y < WORLD_TILES; y += 3) {
+      for (let x = 1; x < WORLD_TILES; x += 3) {
+        const terrain = worldTerrainAt(this.controller.state, x, y);
+        if (terrain === 'water' || terrain === 'river') continue; // nur Land
+        heights.push(terrainHeightAt(x + 0.5, y + 0.5));
+      }
+    }
+    if (heights.length === 0) {
+      this.fogTopY = WATER_LEVEL + 6;
+      return this.fogTopY;
+    }
+    heights.sort((a, b) => a - b);
+    // 86. Perzentil: die oberen ~14 % (reale Gebirgsflanken) dürfen herausragen.
+    const p = heights[Math.min(heights.length - 1, Math.floor(heights.length * 0.86))]!;
+    this.fogTopY = Math.max(WATER_LEVEL + 6, p + 1.5);
+    return this.fogTopY;
+  }
+
   private createFogVolume(
     id: number,
   ): LockedRegionFogVolume | undefined {
@@ -2344,22 +2419,10 @@ export class ThreeMapRenderer implements IMapRenderer {
     const def = this.controller.config.regions.get(id);
     if (!contour || !bounds || !baked || !def) return undefined;
 
-    // Höchster Kachelmittelpunkt der Region → Decke über allen Gipfeln. Die
-    // exakte Schleife läuft nur beim Erzeugen des Volumens und verhindert, dass
-    // ein schmaler Hochpunkt zwischen groben Samples durch die Wolkendecke ragt.
-    let maxH = -Infinity;
-    for (let y = bounds.minY; y <= bounds.maxY; y++) {
-      for (let x = bounds.minX; x <= bounds.maxX; x++) {
-        if (regionIdAt(x, y) !== id) continue;
-        const h = terrainHeightAt(x + 0.5, y + 0.5);
-        if (h > maxH) maxH = h;
-      }
-    }
-    if (!Number.isFinite(maxH)) return undefined;
-    // Die Sperrdecke liegt ÜBER dem höchsten Geländepunkt. Anders als die alte
-    // Teaserfläche darf kein Gipfel und keine Landmarke durchscheinen: Die Region
-    // soll bis zur Freischaltung wirklich unbekannt bleiben.
-    const fogY = Math.max(WATER_LEVEL + 5.5, maxH + 4.8);
+    // § Change 9.0 / S3a: globale absolute Oberkante (siehe worldFogTopY). Flaches
+    // Land wird vollständig verdeckt; Gipfel über fogY ragen bewusst als Silhouette
+    // heraus (§6.4) — die frühere Pro-Region-Höhe (Stufen zwischen Nachbarn) entfällt.
+    const fogY = this.worldFogTopY();
 
     const group = new Group();
     group.userData['regionId'] = id;
@@ -2441,53 +2504,58 @@ export class ThreeMapRenderer implements IMapRenderer {
       }
     }
 
-    // Volumetrische Wolkenwand: ein InstancedMesh je Region statt hunderter
-    // Einzelobjekte. Rand-Ellipsoide reichen vom lokalen Boden bis zur Decke;
-    // Innenwolken formen die aufgewühlte Oberseite aus der Mockup-Perspektive.
-    const cloudGeo = new SphereGeometry(1, 10, 7);
+    // § Change 9.0 / S3a: weiche, zusammenhängende Wolkenfront statt harter
+    // Einzelkuppeln. Ein InstancedMesh je Region, aber mit ALPHA-HASH-Dithering
+    // (ordnungsunabhängig, kein Sortierfehler) und geringerer Deckkraft — dicht
+    // überlappende, kleinere Ballen verschmelzen so zu einer fluffigen Masse ohne
+    // sichtbare „Kapsel"-Silhouetten (§6.1/§6.3). Rand-Ballen bilden die weiche
+    // Wand vom lokalen Boden bis zur globalen Decke, Innenballen die Oberseite.
+    const cloudGeo = new SphereGeometry(1, 12, 8);
     const cloudMat = new MeshStandardMaterial({
-      color: 0xd3dce2,
-      transparent: true,
-      opacity: 0.9,
+      color: 0xdae1e8,
       roughness: 1,
       metalness: 0,
+      alphaHash: true,
+      opacity: 0.8,
       depthWrite: true,
       fog: false,
     });
     const cloudInstances: { x: number; y: number; z: number; sx: number; sy: number; sz: number; shade: number }[] = [];
-    const edgeStep = Math.max(1, Math.ceil(smooth.length / 76));
+    const edgeStep = Math.max(1, Math.ceil(smooth.length / 120));
     for (let i = 0; i < smooth.length; i += edgeStep) {
       const point = smooth[i]!;
       const localGround = terrainHeightAt(point.x, point.y);
       const columnHeight = Math.max(4.5, fogY - localGround + 2.2);
-      const width = 3.2 + hash01(`${id}:edge-width:${i}`) * 2.4;
+      const width = 2.6 + hash01(`${id}:edge-width:${i}`) * 1.9;
       cloudInstances.push({
         x: point.x,
         y: localGround + columnHeight * 0.5,
         z: point.y,
         sx: width,
-        sy: columnHeight * 0.58,
+        sy: columnHeight * 0.6,
         sz: width * (0.82 + hash01(`${id}:edge-depth:${i}`) * 0.34),
         shade: 0.82 + hash01(`${id}:edge-shade:${i}`) * 0.18,
       });
     }
-    const interiorStep = 5;
+    const interiorStep = 4;
     for (let z = bounds.minY; z <= bounds.maxY; z += interiorStep) {
       for (let x = bounds.minX; x <= bounds.maxX; x += interiorStep) {
-        if (regionIdAt(x, z) !== id || hash01(`${id}:cloud:${x},${z}`) < 0.36) continue;
-        const width = 3.4 + hash01(`${id}:cloud-width:${x},${z}`) * 3.8;
+        if (regionIdAt(x, z) !== id || hash01(`${id}:cloud:${x},${z}`) < 0.28) continue;
+        const width = 2.6 + hash01(`${id}:cloud-width:${x},${z}`) * 2.9;
+        // Leichte vertikale Streuung um die globale Decke (auch etwas darunter),
+        // damit die Oberseite aufgewühlt wirkt und Lücken zwischen Ballen füllt.
         cloudInstances.push({
-          x: x + (hash01(`${id}:cloud-x:${x},${z}`) - 0.5) * 2.5,
-          y: fogY + 0.2 + hash01(`${id}:cloud-y:${x},${z}`) * 2.2,
-          z: z + (hash01(`${id}:cloud-z:${x},${z}`) - 0.5) * 2.5,
+          x: x + (hash01(`${id}:cloud-x:${x},${z}`) - 0.5) * 3,
+          y: fogY - 0.6 + hash01(`${id}:cloud-y:${x},${z}`) * 2.6,
+          z: z + (hash01(`${id}:cloud-z:${x},${z}`) - 0.5) * 3,
           sx: width,
-          sy: 1.8 + hash01(`${id}:cloud-height:${x},${z}`) * 2.4,
+          sy: 1.5 + hash01(`${id}:cloud-height:${x},${z}`) * 2,
           sz: width * (0.75 + hash01(`${id}:cloud-depth:${x},${z}`) * 0.42),
-          shade: 0.87 + hash01(`${id}:cloud-shade:${x},${z}`) * 0.13,
+          shade: 0.88 + hash01(`${id}:cloud-shade:${x},${z}`) * 0.12,
         });
       }
     }
-    const cappedInstances = cloudInstances.slice(0, 168);
+    const cappedInstances = cloudInstances.slice(0, 240);
     const cloudWall = new InstancedMesh(cloudGeo, cloudMat, cappedInstances.length);
     const dummy = new Object3D();
     const color = new Color();

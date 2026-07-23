@@ -121,6 +121,10 @@ interface UiState {
   fogDisabled: boolean;
   revealLockedRegionsVisually: boolean;
   toggleRegionFog(): void;
+  /** § Change 9.0 / S3: Dev-Cheat „Kamera-Grenzen aus" — getrennt vom Nebel
+   *  (§7.3). Erlaubt freies Fliegen über gesperrte Regionen. Nicht persistiert. */
+  cameraBoundsDisabled: boolean;
+  toggleCameraBounds(): void;
   /** Hide-the-whole-UI toggle (§8): blanks the HUD frame so the map is clean;
    *  a small restore button stays visible to bring the chrome back. */
   uiHidden: boolean;
@@ -189,8 +193,21 @@ export const useUiStore = create<UiState>((set) => ({
         fogDisabled,
         revealLockedRegionsVisually,
         unlockAllRegionsGameplay: false,
+        cameraBoundsDisabled: state.cameraBoundsDisabled,
       });
       return { fogDisabled, revealLockedRegionsVisually };
+    }),
+  cameraBoundsDisabled: false,
+  toggleCameraBounds: () =>
+    set((state) => {
+      const cameraBoundsDisabled = !state.cameraBoundsDisabled;
+      getMapApi()?.setWorldReveal({
+        fogDisabled: state.fogDisabled,
+        revealLockedRegionsVisually: state.revealLockedRegionsVisually,
+        unlockAllRegionsGameplay: false,
+        cameraBoundsDisabled,
+      });
+      return { cameraBoundsDisabled };
     }),
   uiHidden: false,
   toggleUiHidden: () => set((s) => ({ uiHidden: !s.uiHidden })),

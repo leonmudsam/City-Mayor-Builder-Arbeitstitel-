@@ -40,6 +40,10 @@ export interface WorldRevealState {
   fogDisabled: boolean;
   revealLockedRegionsVisually: boolean;
   unlockAllRegionsGameplay: boolean;
+  /** § Change 9.0 / S3: Dev-Cheat „Kamera-Grenzen aus". Bewusst getrennt von
+   *  `fogDisabled`/`revealLockedRegionsVisually` (§7.3) — erlaubt freies Fliegen
+   *  über gesperrte Regionen, ohne den Nebel zu deaktivieren. Nicht persistiert. */
+  cameraBoundsDisabled: boolean;
 }
 
 export interface RendererCallbacks {

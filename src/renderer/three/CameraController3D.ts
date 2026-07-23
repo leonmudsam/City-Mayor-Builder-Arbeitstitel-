@@ -15,6 +15,7 @@ import {
   type CameraPreset,
 } from './CameraConfig.ts';
 import { DEFAULT_CAMERA_SETTINGS, type CameraSettings } from './cameraSettings.ts';
+import type { CameraExplorationBoundary } from './CameraExplorationBoundary.ts';
 
 const clamp = (v: number, lo: number, hi: number): number => (v < lo ? lo : v > hi ? hi : v);
 
@@ -50,6 +51,10 @@ export class CameraController3D {
   private velX = 0;
   private velZ = 0;
   private panning = false;
+
+  // § Change 9.0 / S3: hält das Kamera-Ziel über den freigeschalteten Regionen.
+  // undefined = keine Grenze (alles frei oder Dev-Cheat „Kamera-Grenzen aus").
+  private boundary: CameraExplorationBoundary | undefined;
 
   constructor(bounds: CameraBounds = worldCameraBounds(), settings: () => CameraSettings = () => DEFAULT_CAMERA_SETTINGS) {
     this.bounds = bounds;
@@ -169,6 +174,17 @@ export class CameraController3D {
   }
 
   /**
+   * § Change 9.0 / S3: setzt (oder entfernt) die Erkundungsgrenze. Der Renderer
+   * baut sie bei jedem Region-Unlock aus der Freischalt-Maske neu und übergibt
+   * `undefined`, wenn alles frei ist oder der Dev-Cheat „Kamera-Grenzen aus" aktiv
+   * ist. Nach dem Setzen wird das aktuelle Ziel sofort einmal zurückgeführt.
+   */
+  setExplorationBoundary(boundary: CameraExplorationBoundary | undefined): void {
+    this.boundary = boundary;
+    this.clampTarget();
+  }
+
+  /**
    * Chase-Kamera (§ A6 Fahrmodus): setzt alle Ziel-Werte direkt, damit die
    * Kamera hinter dem gesteuerten Fahrzeug herzieht und es anschaut. `yaw` ist
    * die Fahrtrichtung; die Kamera sitzt dahinter (yaw+π) und blickt nach vorn.
@@ -268,5 +284,17 @@ export class CameraController3D {
   private clampTarget(): void {
     this.gTargetX = clamp(this.gTargetX, this.bounds.minX, this.bounds.maxX);
     this.gTargetZ = clamp(this.gTargetZ, this.bounds.minZ, this.bounds.maxZ);
+    if (this.boundary) {
+      // Ziel auf die freigeschaltete Union (+ weiches Randband) zurückführen.
+      // Nähe zur Grenze bremst zusätzlich die Pan-Inertia, damit der Übergang
+      // weich bleibt statt hart anzuschlagen (§7.2).
+      const c = this.boundary.constrain(this.gTargetX, this.gTargetZ);
+      this.gTargetX = c.x;
+      this.gTargetZ = c.z;
+      if (c.slow < 1) {
+        this.velX *= c.slow;
+        this.velZ *= c.slow;
+      }
+    }
   }
 }

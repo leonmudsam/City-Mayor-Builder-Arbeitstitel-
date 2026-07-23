@@ -80,3 +80,24 @@ Vorhandene Unlock-Fade-Animation, Klickweiterleitung des Regionsmarkers (Raycast
 prozeduralen Fallbacks bleiben. Der Nebel bleibt **rein visuell** — keine zweite
 Regionslogik, keine Simulation, keine Save-Wirkung (Schema unverändert, sofern
 kein neues persistiertes Feld nötig ist).
+
+## 7. Umsetzungsstand (v0.81 — S3 erledigt)
+
+- **S3a globale Front:** ✅ `worldFogTopY()` (86. Perzentil aller Landhöhen,
+  gecacht) ersetzt die Pro-Region-Höhe; Wolkenballen jetzt mit `alphaHash`
+  (dithered, ordnungsunabhängig), geringerer Deckkraft, dichter/kleiner (Cap
+  168→240) → eine zusammenhängende, weiche Front ohne Kapsel-Silhouetten. Gipfel >
+  Decke ragen bewusst heraus (§6.4). Marker + Fade unverändert.
+- **S3b Kamera-Clamping:** ✅ neu `CameraExplorationBoundary` (three-freies
+  Nearest-Feature-Distanzfeld) + `CameraController3D.setExplorationBoundary` /
+  Zurückführung in `clampTarget`; Renderer baut sie bei Unlock/Cheat neu
+  (`updateCameraBoundary`). Unit-Tests in `camera.test.ts` (+6).
+- **S3c Cheat-Trennung:** ✅ `WorldRevealState.cameraBoundsDisabled` (nicht
+  persistiert) + Store `toggleCameraBounds` + DebugPanel-Button + MapView-Sync.
+- **S3d Unlock-Retract:** ✅ verifiziert — Nebel wird nur zurückgezogen (persistente
+  `fogVolumes`-Fade, `fogGroup` wird bei `rebuildTerrainIfNeeded` NICHT entsorgt).
+  Terrain-Deko/Vegetation bauen beim Unlock noch voll, aber **deterministisch**
+  (Hash → identische Platzierung, kein Prop-Sprung). Der inkrementelle
+  (chunkweise) Neuaufbau ist bewusst Teil von **S4**, nicht hier vorgetäuscht.
+- **Verifikation:** tsc/eslint/build sauber, **346 Tests** grün, 3D-Smoke
+  1600×900 (msedge) `{boot:true, errors:[]}`. Keine Save-Änderung (Schema v19).

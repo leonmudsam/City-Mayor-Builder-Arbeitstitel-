@@ -1,5 +1,87 @@
 # Patch Notes
 
+## v0.81 — Fog of War: globale Wolkenfront & Kamera-Grenzen (§ Change 9.0, Phase S3)
+
+### Was
+
+- **Eine zusammenhängende, weiche Wolkenfront** statt vieler weißer Einzelkuppeln:
+  gesperrte Regionen verschwinden hinter einer durchgehenden, fluffig
+  ausgefransten Nebeldecke (§6.1–§6.3). Benachbarte Sperrgebiete bilden EINE Front
+  auf **einer gemeinsamen, absoluten Höhe**; flaches und hügeliges Land wird
+  blickdicht verdeckt, echte Gebirgsgipfel ragen bewusst als Silhouette heraus
+  (§6.4).
+- **Kamera-Grenzen (neu):** Die Kamera bleibt über den freigeschalteten Regionen.
+  Nähert sich das Blickziel der Sperrgrenze, wird es abgebremst und weich
+  zurückgeführt — kein Flug in gesperrtes Gebiet mehr (§7). Wächst mit jeder
+  Freischaltung automatisch mit.
+- **Dev-Cheat „Kamera-Grenzen deaktivieren"** — getrennt von „Regionsnebel
+  deaktivieren" (§7.3), für freie Screenshot-Flüge ohne den Nebel abzuschalten.
+
+### Warum
+
+Die alte Lösung baute pro gesperrter Region ein eigenes Nebelvolumen mit einem
+gedeckelten Ellipsoid-`InstancedMesh` — im Screenshot zerfiel die Wand sichtbar in
+weiße Kapseln, jede Region hatte eine eigene Nebelhöhe (Stufen zwischen Nachbarn),
+und die Kamera konnte ungehindert über gesperrte Landschaften fliegen und sie
+einsehen. Das Mockup verlangt eine geschlossene, ruhige Wolkensee ums Startgebiet.
+
+### Architektur
+
+- **Globale Nebelhöhe (`worldFogTopY`, S3a):** einmal aus dem gebackenen Höhenfeld
+  als 86. Perzentil aller Landhöhen bestimmt und gecacht — ersetzt die frühere
+  Pro-Region-Höhe `max(WATER_LEVEL+5.5, maxH+4.8)`. Alle Regionen teilen dieselbe
+  Deckenhöhe → eine durchgehende Front.
+- **Weiche Wolken statt Kapseln (S3a):** dieselben instanzierten Ballen, aber mit
+  **Alpha-Hash-Dithering** (`alphaHash`, ordnungsunabhängig, kein Sortierfehler),
+  geringerer Deckkraft und dichter überlappenden, kleineren Ballen (Cap 168→240) —
+  die Silhouetten verschmelzen zu einer fluffigen Masse. Grunddecke + weiche
+  Wandballen (lokaler Boden → globale Decke) + Innenballen bleiben; die
+  Aufdeck-Animation und die Klick-Marker (Schloss/Level) bleiben unverändert.
+- **Kamera-Grenze (`CameraExplorationBoundary`, S3b):** reines, three-freies
+  Datenmodell (Nearest-Feature-Distanzfeld per 2-Pass-Chamfer aus derselben
+  `regionIdAt`-Maske). `CameraController3D.clampTarget` führt das Ziel nach dem
+  Welt-Rechteck zusätzlich auf die freigeschaltete Union + weiches Randband zurück
+  und bremst die Pan-Inertia im Randband. Der Renderer baut die Grenze bei jedem
+  Unlock/Cheat neu (`updateCameraBoundary`, Signatur-gecacht).
+- **Cheat-Trennung (S3c):** `WorldRevealState.cameraBoundsDisabled` (nicht
+  persistiert) getrennt von `fogDisabled`/`revealLockedRegionsVisually`; Store,
+  DebugPanel-Button und MapView-Sync durchgereicht.
+- **Unlock-Retract (S3d, verifiziert):** Der Nebel wird beim Freischalten nur
+  zurückgezogen (Fade in der persistenten `fogVolumes`-Map), NIE neu erzeugt —
+  `rebuildTerrainIfNeeded` entsorgt nur `terrainGroup`, nicht `fogGroup`. Terrain-
+  Deko/Vegetation werden zwar noch voll neu gebaut, aber **deterministisch**
+  (Hash → identische Platzierung, kein sichtbarer Prop-Sprung, gleiche
+  Instanzzahl vor/nach Unlock). Der verschwenderische Voll-Neuaufbau wird in S4
+  (Chunk-/HLOD-Vegetation) inkrementell — bewusst dort, nicht hier vorgetäuscht.
+
+### Auswirkung
+
+- **346 Tests grün** (+6: `CameraExplorationBoundary` + Controller-Integration in
+  `camera.test.ts`). tsc/eslint/build sauber. 3D-Smoke 1600×900 (msedge):
+  `{boot:true, errors:[]}` — die Wolkensee ums Startgebiet ist weich und
+  geschlossen, keine Einzelkapseln; die Kamera hält über dem freigeschalteten
+  Zentralland. Reine Darstellung/Navigation — **keine Simulation, keine
+  Save-Änderung** (Schema bleibt v19).
+
+### Zukunft
+
+- S4 Vegetations-Performance (Chunk-Streaming, HLOD-Waldcluster, Impostoren,
+  Shader-Wind, Waldboden-Schattenmaske) — enthält den inkrementellen Deko-/
+  Vegetations-Neuaufbau aus S3d. S5 lebendige Welt, S6–S8 aktiver Arbeitsmodus.
+- Optional feinjustierbar: Perzentil der globalen Nebelhöhe und das weiche
+  Randband der Kamera-Grenze (soft 10 / hard 18 Kacheln) — auf Zielhardware.
+
+### Dateien / Assets
+
+- Renderer: `src/renderer/three/ThreeMapRenderer.ts` (`worldFogTopY`,
+  `createFogVolume` alphaHash/Dichte, `updateCameraBoundary`),
+  `CameraController3D.ts` (Grenze in `clampTarget`), neue
+  `CameraExplorationBoundary.ts`, `IMapRenderer.ts` (`cameraBoundsDisabled`).
+- UI/State: `state/store.ts` (`toggleCameraBounds`), `panels/DebugPanel.tsx`,
+  `components/MapView.tsx`, `i18n/de.json` (`ui.debug.camera_bounds_*`).
+- Tests: `tests/camera.test.ts` (+6). Docs: `docs/agents/FOG_OF_WAR_AUDIT.md`
+  (Umsetzungsstand), `DECISIONS.md` (D-034). Keine Assets.
+
 ## v0.80 — Zentraler Start & Regionsbalancing (§ Change 9.0, Phase S1/S2)
 
 ### Was

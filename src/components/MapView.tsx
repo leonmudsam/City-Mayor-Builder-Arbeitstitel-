@@ -133,6 +133,7 @@ export function MapView() {
     const syncWorldReveal = (state = useUiStore.getState()) => renderer.setWorldReveal({
       fogDisabled: state.fogDisabled,
       revealLockedRegionsVisually: state.revealLockedRegionsVisually,
+      cameraBoundsDisabled: state.cameraBoundsDisabled,
       unlockAllRegionsGameplay: [...controller.config.regions.values()]
         .filter((region) => region.unlockable)
         .every((region) => controller.state.world.regions[String(region.id)]?.status === 'unlocked'),

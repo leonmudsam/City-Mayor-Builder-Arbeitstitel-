@@ -8,13 +8,21 @@ Vorab-Audits (verbindlich): `CENTRAL_START_REGION_AUDIT.md`, `FOG_OF_WAR_AUDIT.m
 **Erledigt (v0.80):** S1 zentraler Start (Bake-Ziel 820→1.400, neu gebacken),
 S2 Regionsbalancing (Forst-Ids rotiert, L3-Wahl {7,12}, Save v19-Weltumbau). D-033.
 
+**Erledigt (v0.81):** S3 Fog of War — globale absolute Nebelhöhe (`worldFogTopY`),
+weiche zusammenhängende Front via `alphaHash` statt Kapseln, **Kamera-Clamping**
+(neu: `CameraExplorationBoundary` + `clampTarget`), getrennter Dev-Cheat
+`cameraBoundsDisabled`, Unlock-Retract verifiziert (Fog-Fade nie neu erzeugt).
+346 Tests, 3D-Smoke grün. D-034.
+
+**Startregion-Check (Mockup 10, verifiziert):** Zentralland trägt **409 Waldkacheln**
+(nächster Wald 5 Kacheln vom Rathaus, 194 in einem Sägewerk-Radius) → Sägewerk ab
+L2 ohne Expansion nutzbar; Berg/Wasser/Fruchtland im Umkreis; Unlock-Ring {7,12}
+(L3-Gratis) → coastal → Hafen. „Ausreichend props/ressourcen/sektoren" erfüllt.
+
 **Offen (Reihenfolge §24):**
-- **S3 Fog of War** — globale weiche Wolkenfront statt Pro-Region-Kapseln, globale
-  absolute Nebelhöhe, **Kamera-Clamping** (existiert nicht!), getrennter Dev-Cheat,
-  Unlock-Retract ohne Prop-Neugenerierung. Betrifft `ThreeMapRenderer.ts`
-  (`createFogVolume`/`buildRegionFog`), `CameraController3D.ts`/`CameraInputController.ts`.
 - **S4 Vegetations-Performance** — Kachel-Chunking, LOD-Anwendung pro Chunk, HLOD-
   Waldcluster, Impostoren, Shader-Wind, Waldboden-Schattenmaske, Panel erweitern.
+  **Enthält den inkrementellen Deko-/Vegetations-Neuaufbau bei Unlock (aus S3d).**
 - **S5 lebendige Welt** — Waldstruktur, Mammutbäume (`giant_pine_*`/`ancient_tree_*`
   drop-in), Unterholz, Tierhabitate.
 - **S6 Sägewerk-Arbeitsmodus** — 3D-Kreiswerkzeug, Einzelbaum-Raycast, Effizienz-

@@ -1,6 +1,21 @@
-# Projektstand — v0.80
+# Projektstand — v0.81
 
 Stand: 23. Juli 2026
+
+## § Change 9.0 — Fog of War & Kamera-Grenzen S3 (v0.81)
+
+- **S3a Fog:** eine globale absolute Nebeloberkante (`worldFogTopY`, 86. Perzentil
+  aller Landhöhen) + `alphaHash`-Dithering → EINE weiche, zusammenhängende
+  Wolkenfront statt Pro-Region-Kapseln; Gipfel ragen bewusst heraus (§6.4).
+- **S3b Kamera-Clamping (neu):** `CameraExplorationBoundary` hält das Blickziel über
+  der freigeschalteten Union (weiches Randband, Inertia-Bremse); wächst mit jedem
+  Unlock mit. **S3c:** getrennter Dev-Cheat `cameraBoundsDisabled`.
+- **S3d:** Unlock zieht nur den Nebel zurück (Fade, nie neu erzeugt); Terrain/
+  Vegetation deterministisch — inkrementeller Neuaufbau ist S4.
+- Rein visuell/navigatorisch, **keine Save-Änderung** (v19). **346 Tests grün**,
+  tsc/eslint/build/3D-Smoke ok. D-034.
+- **Offen:** S4 Vegetations-Performance (inkl. inkrementellem Unlock-Rebuild), S5
+  lebendige Welt, S6 Sägewerk-Arbeitsmodus, S7 Steinbruch/Farm, S8 weitere Betriebe.
 
 ## § Change 9.0 — Zentraler Start & Regionsbalancing S1/S2 (v0.80)
 

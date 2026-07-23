@@ -1,5 +1,34 @@
 # Entscheidungen
 
+## D-034 — Fog of War: eine globale Wolkenfront + distanzbasierte Kamera-Grenze (§ Change 9.0 / S3)
+
+**Entscheidung:** Der frühere Pro-Region-Nebel (je gesperrter Region ein
+Ellipsoid-`InstancedMesh` mit eigener Höhe) wird zu **einer zusammenhängenden,
+weichen Front** vereinheitlicht: (1) EINE globale, absolute Nebeloberkante
+(`worldFogTopY`, 86. Perzentil aller Landhöhen, gecacht) statt Pro-Region-Höhe;
+(2) **Alpha-Hash-Dithering** + geringere Deckkraft + dichtere, kleinere Ballen,
+damit die Silhouetten zu einer fluffigen Masse verschmelzen (kein Kapsel-Look,
+keine Sortierfehler). Aufdeck-Fade, Marker und prozedurale Fallbacks bleiben.
+
+Zusätzlich wird ein **Kamera-Clamping** neu eingeführt (existierte nicht):
+`CameraExplorationBoundary` ist ein reines, three-freies Nearest-Feature-Distanzfeld
+über der `regionIdAt`-Freischaltmaske. `CameraController3D.clampTarget` führt das
+Blickziel auf die freigeschaltete Union + weiches Randband (soft 10 / hard 18
+Kacheln) zurück und bremst die Pan-Inertia im Randband. Der Dev-Cheat
+„Kamera-Grenzen aus" (`cameraBoundsDisabled`) ist **getrennt** vom Nebel-Cheat
+(§7.3) und nicht persistiert.
+
+**Grund:** §6/§7 verlangen eine ruhige, geschlossene Wolkensee ums Startgebiet und
+verbieten das freie Einsehen gesperrter Landschaften. Die Wiederverwendung der
+bestehenden Ballen + `regionIdAt`-Maske vermeidet ein zweites Nebel-/Regionssystem.
+
+**Konsequenz:** Rein visuell/navigatorisch — **keine Simulation, keine
+Save-Änderung** (Schema bleibt v19). Der Nebel-Retract beim Unlock läuft weiter über
+die persistente `fogVolumes`-Fade-Animation (nie neu erzeugt). Der noch
+verschwenderische Voll-Neuaufbau von Terrain-Deko/Vegetation beim Unlock ist
+**deterministisch** (kein sichtbarer Prop-Sprung) und wird in **S4** inkrementell —
+nicht in S3 vorgetäuscht. Details: `FOG_OF_WAR_AUDIT.md`.
+
 ## D-033 — Zentraler Start via Bake-Zielvorgabe (1.400), Forst-Id-Rotation, Weltumbau v19
 
 **Entscheidung:** Die zu kleine 820-Kachel-Startregion (§ Change 9.0 §0) wird

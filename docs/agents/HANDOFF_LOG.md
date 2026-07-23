@@ -1,5 +1,35 @@
 # Handoff-Log
 
+## 2026-07-23 — § Change 9.0: Fog of War & Kamera-Grenzen S3 (v0.81)
+
+**Rein visuell/navigatorisch, keine Save-Änderung (v19).** Der Pro-Region-Nebel
+(Ellipsoid-Kapseln, Pro-Region-Höhe) wird zu EINER weichen Front vereinheitlicht,
+und ein Kamera-Clamping wird neu eingeführt.
+
+- **S3a Fog:** `worldFogTopY()` (86. Perzentil aller Landhöhen, gecacht) = eine
+  globale absolute Nebeloberkante statt Pro-Region-`fogY`. Wolkenballen jetzt mit
+  `alphaHash` (dithered/ordnungsunabhängig), geringerer Deckkraft, dichter/kleiner
+  (Cap 168→240) → zusammenhängende, fluffige Front ohne Kapsel-Silhouetten; Gipfel
+  ragen bewusst heraus. Marker + Aufdeck-Fade unverändert. (`ThreeMapRenderer.ts`)
+- **S3b Kamera-Clamping (NEU):** `CameraExplorationBoundary.ts` (three-freies
+  Nearest-Feature-Distanzfeld aus `regionIdAt`-Maske) + `CameraController3D`
+  (`setExplorationBoundary`, Zurückführung in `clampTarget`, Inertia-Bremse im
+  Randband). Renderer `updateCameraBoundary` (Signatur-gecacht, bei Unlock/Cheat).
+- **S3c Cheat-Trennung:** `WorldRevealState.cameraBoundsDisabled` (nicht
+  persistiert) → Store `toggleCameraBounds`, DebugPanel-Button (`Compass`),
+  MapView-Sync, i18n `ui.debug.camera_bounds_*`.
+- **S3d Unlock-Retract:** verifiziert — Nebel nur Fade (persistente `fogVolumes`,
+  `fogGroup` bleibt), Terrain/Vegetation deterministisch (kein Prop-Sprung); der
+  inkrementelle Neuaufbau ist S4.
+- **Tests:** `camera.test.ts` +6 (Boundary + Controller-Integration). **346 grün**;
+  tsc/eslint/build sauber; 3D-Smoke 1600×900 (msedge) `{boot:true, errors:[]}` —
+  Wolkensee weich/geschlossen, Kamera hält über Zentralland. Entscheidung **D-034**.
+- **Startregion-Check (Mockup 10):** Zentralland trägt 409 Waldkacheln (nächster
+  Wald 5 Kacheln, 194 in einem Sägewerk-Radius) → Sägewerk ab L2 ohne Expansion;
+  Unlock-Ring {7,12}. „Ausreichend props/ressourcen/sektoren" bestätigt.
+- **Offen:** S4 Vegetations-Performance (inkl. inkrementellem Unlock-Rebuild), S5
+  lebendige Welt, S6 Sägewerk-Arbeitsmodus, S7 Steinbruch/Farm, S8 weitere Betriebe.
+
 ## 2026-07-23 — § Change 9.0: Zentraler Start & Regionsbalancing S1/S2 (v0.80)
 
 **Weltumbau** (Save **v19**, Backup/Neustart `cmb.save.backup.world-v18`): Der
