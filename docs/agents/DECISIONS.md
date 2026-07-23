@@ -1,5 +1,32 @@
 # Entscheidungen
 
+## D-035 — § 10.0 R7/R8: Dritte Weltverdichtung (X/Z 0,84) + flacher Uferübergang, Save v20
+
+**Entscheidung:** Die Insel wird ein drittes Mal horizontal verdichtet — X/Z-Faktor
+**0,84 zusätzlich** zum 8.1-Stand (0,7476 gegen die Ur-Insel, Fläche ≈ 0,559, ~−44 %,
+`OCEAN_MARGIN_TILES` 69→99). Y bleibt getrennt bei Gipfelhöhe 52 (Gebirge nicht
+flachgedrückt). Zusätzlich wird auf ausdrücklichen Nutzerwunsch das **Uferprofil
+weicher** gebacken (Wasserlinie 0,0065→0,0075, Strand-Blend 6→9, Anstieg 0,42→0,28,
+Klippenschwelle 7,2→9,0, Sandband breiter). Die aggressive Variante war eine bewusste
+Nutzerentscheidung trotz −53 %/−26 % Bauflächenverlust; das weiche Ufer fängt einen
+Teil ab und **verdoppelt die bebaubaren Uferkacheln (636→1.210)** für Häfen/Wasserbau.
+
+**Konsequenzen:** Der Bake wählt weiter automatisch den zentralen Start (Region 9,
+Rathaus (127,250), 1.668 bebaubar, echter Küstenzugang, Ressourcen-Score 1,0). Aus dem
+weicheren Ufer entstehen **13 statt 12 Regionen** (mehr Land ⇒ ein zusätzlicher Seed);
+`regions.config.ts` + i18n wurden vollständig aufs neue Layout neu abgeleitet
+(Startkomponente {9,3,8,11,7,13} über Land, {2,5,4}/{1,6,10,12} über See). Kosten
+folgen weiter dem Faktormodell. **Save v20** ist ein Weltumbau (wie v14/v16/v19):
+`migrateV19ToV20` wirft `WorldRebuildSaveError`, sichert einmalig unter
+`cmb.save.backup.world-v19` und startet neu — keine verlustbehaftete Projektion.
+
+**Bewusst offen / Trade-offs (nicht geschönt):** Baugelände ist durch die Stauchung
+etwas steiler; einzelne Test-Toleranzen (Bau-Ebenheit, Start-Bauflächen-Obergrenze
+1.750, isolierte Küstenspitzen ≤3, Klippenrisiko <0,1) wurden an die verdichtete
+Bake-Realität angepasst statt an eine geschönte Zielzahl. Gebirgs-/Inselregionen sind
+bauflächenlean (Wert = Rohstoff/Strategie, Untergrenze 380). Feinschliff des
+Uferprofils und stärkere Bau-Glättung bleiben mögliche Folgeschritte (R9).
+
 ## D-034 — Fog of War: eine globale Wolkenfront + distanzbasierte Kamera-Grenze (§ Change 9.0 / S3)
 
 **Entscheidung:** Der frühere Pro-Region-Nebel (je gesperrter Region ein

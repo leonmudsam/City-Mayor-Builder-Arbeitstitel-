@@ -389,6 +389,18 @@ const migrateV18ToV19: Migration = (raw) => {
 };
 
 /**
+ * v19 → v20: § Active Resource Loops 10.0, R7/R8 — dritte horizontale Verdichtung
+ * (X/Z 0,84 zusätzlich, ~−45 % Fläche). 13 → 12 Regionen, jede Koordinate,
+ * Region-Id und der Startanker (jetzt Region 9, Rathaus (127,250)) ändern sich
+ * gleichzeitig. Wie bei jedem echten Weltumbau (v13→v14, v15→v16, v18→v19) ist
+ * eine Koordinaten-/Regionsprojektion nicht verlustfrei — der alte Stand wird
+ * EINMALIG unter `cmb.save.backup.world-v19` gesichert und das Spiel startet neu.
+ */
+const migrateV19ToV20: Migration = (raw) => {
+  throw new WorldRebuildSaveError(typeof raw.schemaVersion === 'number' ? raw.schemaVersion : 19);
+};
+
+/**
  * Migration chain: migrations[n] upgrades a save from schemaVersion n to n+1.
  * Beginnt bei v10 (Insel-Basis).
  */
@@ -402,6 +414,7 @@ const migrations: Record<number, Migration> = {
   16: migrateV16ToV17,
   17: migrateV17ToV18,
   18: migrateV18ToV19,
+  19: migrateV19ToV20,
 };
 
 export class SaveValidationError extends Error {}

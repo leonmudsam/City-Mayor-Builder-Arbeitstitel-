@@ -4,6 +4,12 @@ import type { GameState } from './types.ts';
 import { allRegionIds, createRegionStub, occupyTiles } from './map/world.ts';
 
 /**
+ * v20 (§ Active Resource Loops 10.0, R7/R8 — dritte horizontale Verdichtung):
+ * X/Z 0,84 ZUSÄTZLICH (~−45 % Gesamtfläche ggü. Ur-Insel), 12 statt 13 Regionen,
+ * neuer zentraler Start (Region 9, Rathaus (127,250), 1.596 bebaubar, endlich mit
+ * Küstenzugang). Jede Koordinate, Region-Id und der Startanker ändern sich —
+ * Weltumbau wie v14/v16/v19. Alte Stände werden einmalig unter
+ * `cmb.save.backup.world-v19` gesichert und neu gestartet (Migration `v19→v20`).
  * v19 (§ Change 9.0, zentraler Start): Startregion von 820 auf 1.400 bebaubare
  * Kacheln vergrößert (neuer Bake) — neuer Rathausanker, neue Region-Zuschnitte,
  * drei rotierte Forst-Ids. Weltumbau: alte Stände werden einmalig unter
@@ -28,7 +34,7 @@ import { allRegionIds, createRegionStub, occupyTiles } from './map/world.ts';
  * v12 (§ Stadtarbeit 2D): laufende Fahrmissionen speichern Fahrzeugklasse und
  * manuell gezeichnete Straßenkette.
  */
-export const SCHEMA_VERSION = 19;
+export const SCHEMA_VERSION = 20;
 
 export function createNewGame(config: GameConfig, cityName: string, now: number): GameState {
   const state: GameState = {

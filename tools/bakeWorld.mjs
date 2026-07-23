@@ -40,33 +40,43 @@ const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
 const WORLD_TILES = 512;          // Weltbreite/-tiefe in Kacheln (1 Kachel ≈ 4 m)
 const SAMPLES_PER_TILE = 2;       // Höhen-Samples je Kachelkante
 const GRID = WORLD_TILES * SAMPLES_PER_TILE + 1; // 1025 — Höhen-Grid-Knoten je Achse
-// § Final World Compaction 8.1 — ZWEITE Verkleinerung. Die 6.1-Insel spannte 420
-// Kacheln (Rand 46). 420 × 0,89 ≈ 374 ⇒ Rand (512 − 374) / 2 = 69. Der Faktor ist
-// bewusst 0,89 je Achse und NICHT 0,8: 0,89² ≈ 0,79 ergibt die gewünschten
-// ca. −21 % FLÄCHE, während 0,8² = 0,64 die Insel um 36 % beschnitten hätte.
-const PREVIOUS_OCEAN_MARGIN_TILES = 46;
-const OCEAN_MARGIN_TILES = 69;    // 374 statt 420 Kacheln Spannweite => X/Z 0,8905, Fläche ca. -21 %
+// § Active Resource Loops 10.0 §22 — DRITTE Verkleinerung. Historie der Spannweite
+// je Achse: 6.1 = 420 Kacheln (Rand 46) → 8.1 = 374 (Rand 69, X/Z 0,89) → 10.0 =
+// 314 (Rand 99). 314 / 374 = 0,84 je Achse ZUSÄTZLICH zum 8.1-Stand (Auftrag:
+// „X/Z ≈ 0,84"); gegenüber der 6.1-Ur-Insel ist das 314 / 420 = 0,7476, also
+// 0,7476² ≈ 0,559 ⇒ ca. −44 % Gesamtfläche (Auftrag „~30 % zusätzlich"). Bewusst
+// aggressivste Variante; das Bauflächenbudget wird über mehr Glättung gehalten,
+// nicht über flachere Gebirge.
+const PREVIOUS_OCEAN_MARGIN_TILES = 46; // Referenz bleibt die 6.1-Ur-Insel (horizontalScaleFromV60)
+const OCEAN_MARGIN_TILES = 99;    // 314 statt 420 Kacheln Spannweite => X/Z 0,7476 ggü. 6.1 (0,84 ggü. 8.1), Fläche ca. -44 %
 // Y wird ausdrücklich GETRENNT abgestimmt (Auftrag §1.3): Bei kompakterem X/Z
-// würde eine proportionale Höhenreduktion die Gebirge flachdrücken. 52 statt 50
-// entspricht Faktor 1,04 — innerhalb des zulässigen Korridors 0,98–1,08 — und
-// hält Gipfel, Täler und Plateaus relativ zur Grundfläche monumentaler als zuvor.
+// würde eine proportionale Höhenreduktion die Gebirge flachdrücken. 52 bleibt (kein
+// proportionales Herunterskalieren) — Faktor 1,04 ggü. der 6.1-Höhe 50, innerhalb
+// des zulässigen Korridors 0,98–1,08 — und hält Gipfel/Täler/Plateaus relativ zur
+// nun kleineren Grundfläche noch monumentaler.
 const PEAK_WORLD_HEIGHT = 52;
 const PREVIOUS_WATERLINE_N = 0.0065;
-const WATERLINE_N = 0.0065;       // unverändert: die Küstenlinie ist in 6.1 abgenommen
+// § 10.0 (Nutzerwunsch flacher Uferübergang): Wasserlinie leicht angehoben, damit
+// die niedrigste Küstenfranse überflutet und der Strand als flache Rampe statt
+// Klippenstufe ausläuft — besser für Hafen-/Wassergebäude-Platzierung.
+const WATERLINE_N = 0.0075;
 const BASELINE_BUILDABLE_TILES = 44_755; // verbindlicher 6.1-Report vor diesem Rebake
 
-// Uferprofil 6.1: etwa drei Viertel der niedrigen Küsten werden als sanfter,
-// bebaubarer Saum interpretiert. Hohe Originalkanten bleiben gezielt Steilküste.
-const SHORE_BLEND_TILES = 6;
-const SHORE_PLATFORM_HEIGHT = 0.38;
-const SHORE_RISE_PER_TILE = 0.42;
-const SHORE_CLIFF_HEIGHT = 7.2;
+// Uferprofil § 10.0: deutlich sanfterer, breiterer Strandsaum. Nach der dritten
+// Verdichtung sind Küsten steiler geworden; ein breiterer Blend (9 statt 6 Kacheln),
+// eine flachere Anstiegsrate und eine höhere Klippenschwelle (nur wirklich hohe
+// Originalkanten bleiben Steilküste) erzeugen an vielen Uferteilen einen flachen,
+// bebaubaren Übergang zum Wasser (Hafen-/Wassergebäude-tauglich, R9-Fundament).
+const SHORE_BLEND_TILES = 9;
+const SHORE_PLATFORM_HEIGHT = 0.30;
+const SHORE_RISE_PER_TILE = 0.28;
+const SHORE_CLIFF_HEIGHT = 9.0;
 
 // Klassifikations-Schwellen (Welt-Einheiten / Kacheln)
 const MOUNTAIN_HEIGHT = 13;       // ab dieser Höhe: Gebirge
 const MOUNTAIN_SLOPE = 1.8;       // ODER ab diesem Höhendelta je Kachelschritt
-const SAND_MAX_HEIGHT = 1.4;      // Strandband: niedrig …
-const SAND_WATER_DIST = 2;        // … und ≤ 2 Kacheln vom Wasser
+const SAND_MAX_HEIGHT = 2.2;      // § 10.0: breiteres Strandband (flacher Uferübergang) …
+const SAND_WATER_DIST = 4;        // … und ≤ 4 Kacheln vom Wasser (mehr sichtbare Strandtextur)
 const FERTILE_MAX_HEIGHT = 4.5;   // fruchtbares Land: tief, flach, gewässernah
 const FERTILE_MAX_SLOPE = 0.65;
 const FERTILE_WATER_DIST = 9;
@@ -84,10 +94,15 @@ const LAKE_MIN_TILES = 36;        // eingeschlossene Wasserflächen ab dieser Gr
 // deutlich stärker als die Landfläche. Mehr Glättungsdurchgänge und eine leicht
 // tolerantere Hangschwelle halten den Bauflächenverlust nahe der Zielmarke von
 // ~20 %, ohne die Gebirge anzutasten (die bleiben über MOUNTAIN_HEIGHT hart).
-const SMOOTH_ITERATIONS = 16;
+// § 10.0: Die DRITTE horizontale Verdichtung (0,84 je Achse ggü. 8.1) staucht das
+// gleiche Höhenprofil auf noch weniger Kacheln ⇒ Hänge werden nochmals ~1,19× so
+// steil. Ohne Nachjustierung stürzt die BEBAUBARE Fläche stärker als die Landfläche.
+// Mehr Glättungsdurchgänge und eine leicht tolerantere Vor-Hangschwelle halten das
+// Bauflächenbudget nahe der Zielmarke, ohne die Gebirge (> MOUNTAIN_HEIGHT) anzutasten.
+const SMOOTH_ITERATIONS = 20;
 const SMOOTH_BLEND = 0.6;         // Anteil 4-Nachbar-Mittel je Iteration
 const MAX_BUILDABLE_STEP = 0.25;  // max. Höhendelta je Halbkachel (≈ 2 m pro Kachel)
-const MAX_BUILDABLE_TILE_SLOPE = 0.82; // kompakter X/Z-Maßstab; Bake glättet anschließend hart auf 0,25/Sample
+const MAX_BUILDABLE_TILE_SLOPE = 0.86; // 10.0: kompakterer X/Z-Maßstab; Bake glättet anschließend hart auf 0,25/Sample
 
 // Organische Regionen (§ Welt 2.0 / § Final World Compaction 8.1 §4).
 // Ziel ist NICHT mehr eine feingliedrige Landschaftskarte, sondern genau eine
@@ -1684,7 +1699,7 @@ function toBase64Lines(bytes) {
 
 // 8a. Terrain-Grid (Sim).
 const terrainTs = `// AUTO-GENERIERT von tools/bakeWorld.mjs — NICHT von Hand editieren.
-// Quelle: reference/world/island 3d new.glb (Terrain & World Scale Overhaul 6.1).
+// Quelle: reference/world/island 3d new.glb (§ 10.0 R7/R8 World Compaction 3.0 (weiches Uferprofil)).
 // Regeln/Schwellen: tools/bakeWorld.mjs + docs/WORLD_REBUILD.md; Statistik:
 // tools/bake-report.md. Neu erzeugen: \`node tools/bakeWorld.mjs\`.
 /* eslint-disable */
@@ -1977,7 +1992,7 @@ const hRange = hMax - hMin;
 const HQ = new Uint16Array(GRID * GRID);
 for (let i = 0; i < HW.length; i++) HQ[i] = Math.round(((HW[i] - hMin) / hRange) * 65535);
 const heightTs = `// AUTO-GENERIERT von tools/bakeWorld.mjs — NICHT von Hand editieren.
-// Quelle: reference/world/island 3d new.glb (Terrain & World Scale Overhaul 6.1).
+// Quelle: reference/world/island 3d new.glb (§ 10.0 R7/R8 World Compaction 3.0 (weiches Uferprofil)).
 // ${GRID}×${GRID} Höhen-Samples (${SAMPLES_PER_TILE}/Kachel + 1), Uint16-quantisiert.
 // Neu erzeugen: \`node tools/bakeWorld.mjs\`.
 /* eslint-disable */
@@ -2120,7 +2135,7 @@ console.log('— geschrieben: src/renderer/three/worldMasks.gen.ts');
   const candidateRows = startAreaCandidates.slice(0, 10)
     .map((candidate, index) => `| ${index + 1} | ${candidate.regionId} | (${candidate.center.x},${candidate.center.y}) | ${candidate.buildableTiles} | ${candidate.earlyBuildable} | ${candidate.centralityScore.toFixed(3)} | ${candidate.flatnessScore.toFixed(3)} | ${candidate.expansionDirectionScore.toFixed(3)} | ${candidate.resourceAccessScore.toFixed(3)} | ${candidate.infrastructureScore.toFixed(3)} | ${candidate.waterRisk.toFixed(3)} | ${candidate.cliffRisk.toFixed(3)} | ${candidate.totalScore.toFixed(2)} |`)
     .join('\n');
-  const report = `# Bake-Report — Terrain & World Scale Overhaul 6.1
+  const report = `# Bake-Report — § 10.0 R7/R8 World Compaction 3.0 (weiches Uferprofil)
 
 > **Auto-generiert** von \`tools/bakeWorld.mjs\`. Nicht von Hand editieren.
 

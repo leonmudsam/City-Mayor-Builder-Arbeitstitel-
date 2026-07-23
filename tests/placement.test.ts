@@ -9,15 +9,29 @@ import { bakedSurfaceAt, regionIdAt, WORLD_TILES } from '../src/game/config/star
 
 const at = (dx: number, dy: number) => nearTownHall(dx, dy);
 
-/** Erste Kachel nördlich des Rathauses, die in einer GESPERRTEN Region liegt. */
+/**
+ * Eine sauber bebaubare Kachel in einer GESPERRTEN Region, deren 3×3-Umfeld
+ * trockenes, klippen-/uferfreies Bauland ist — so ist die Sperre der Region der
+ * EINZIGE Platzierungsgrund (nicht Terrain/Ufer). § 10.0: die verdichtete Insel
+ * hat schmalere Küstenstreifen, weshalb der Test bewusst „reines" Inland sucht.
+ */
 function lockedTile(): { x: number; y: number } {
-  for (let y = 0; y < WORLD_TILES; y++) {
-    for (let x = 0; x < WORLD_TILES; x++) {
+  const cleanGround = (x: number, y: number): boolean => {
+    for (let dy = -1; dy <= 1; dy++) {
+      for (let dx = -1; dx <= 1; dx++) {
+        const s = bakedSurfaceAt(x + dx, y + dy);
+        if (!s.buildable || s.water || s.coast || s.waterfront || s.cliff) return false;
+      }
+    }
+    return true;
+  };
+  for (let y = 1; y < WORLD_TILES - 1; y++) {
+    for (let x = 1; x < WORLD_TILES - 1; x++) {
       const rid = regionIdAt(x, y);
-      if (rid !== 0 && rid !== START_REGION && bakedSurfaceAt(x, y).buildable) return { x, y };
+      if (rid !== 0 && rid !== START_REGION && cleanGround(x, y)) return { x, y };
     }
   }
-  throw new Error('keine gesperrte Region nördlich des Rathauses gefunden');
+  throw new Error('keine saubere gesperrte Inland-Kachel gefunden');
 }
 
 describe('placement', () => {

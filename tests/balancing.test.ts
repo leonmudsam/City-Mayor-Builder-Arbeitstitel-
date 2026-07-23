@@ -201,9 +201,9 @@ describe('config balancing invariants (A10)', () => {
   });
 
   it('keeps every unlockable region gate within L1–L20 (Endgame eingeschlossen)', () => {
-    // § Final World Compaction 8.1: Die konsolidierte Insel spannt die
-    // Progression über die volle 20-Level-Kurve; die Endgame-Region
-    // (Kronengebirge) öffnet auf L20.
+    // § 10.0 R8: Die dritt-verdichtete Insel spannt die Progression über die
+    // volle 20-Level-Kurve; die Endgame-Region (Nordostmassiv, Region 2) öffnet
+    // auf L20.
     const bad = regionsConfig
       .filter((r) => r.unlockable)
       .filter((r) => r.unlockLevel < 1 || r.unlockLevel > 20)

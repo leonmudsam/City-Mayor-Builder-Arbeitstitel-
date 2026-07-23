@@ -212,7 +212,7 @@ describe('§ Active Operations 2.0 — A5 Transport: Save v18', () => {
     controller.createInventoryTransfer({ sourceBuildingId: sawmillId, targetBuildingId: townHallId, resource: 'wood', amount: wood, vehicleId: 'van' });
     const { exportSave, importSave } = await import('../src/game/storage/exportImport.ts');
     const restored = importSave(exportSave(controller.state));
-    expect(restored.schemaVersion).toBe(19);
+    expect(restored.schemaVersion).toBe(20);
     expect(restored.operations!.transfers).toEqual(controller.state.operations!.transfers);
   });
 

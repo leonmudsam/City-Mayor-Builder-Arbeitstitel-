@@ -9,8 +9,8 @@ describe('regionPreview — begünstigte Gebäude (§ C5)', () => {
   });
 
   it('empfiehlt das Sägewerk in einer Holz-Region', () => {
-    // Nordwald (12) ist Wald mit wood ×1.45 (§ Change 9.0: Forst-Ids rotiert).
-    const preview = regionPreview(12)!;
+    // § 10.0 R8: Zentralwald (11) ist Wald mit wood ×1.45.
+    const preview = regionPreview(11)!;
     const wood = preview.favouredBuildings.find((f) => f.defId === 'sawmill');
     expect(wood).toBeDefined();
     expect(wood!.resource).toBe('wood');
@@ -18,14 +18,14 @@ describe('regionPreview — begünstigte Gebäude (§ C5)', () => {
   });
 
   it('empfiehlt den Bauernhof in einer fruchtbaren Region', () => {
-    // Flussgarten (5) ist Flusstal mit food ×1.3.
-    const preview = regionPreview(5)!;
+    // § 10.0 R8: Ostfelder (4) ist Ebene mit food ×1.3.
+    const preview = regionPreview(4)!;
     expect(preview.favouredBuildings.some((f) => f.defId === 'farm' && f.resource === 'food')).toBe(true);
   });
 
   it('bleibt leer für die neutrale Startregion (keine Modifikatoren)', () => {
-    // Zentralland (13) ist die bewusst neutrale Startregion ohne Boni.
-    const preview = regionPreview(13)!;
+    // § 10.0 R8: Zentralland (9) ist die bewusst neutrale Startregion ohne Boni.
+    const preview = regionPreview(9)!;
     expect(preview.favouredBuildings).toEqual([]);
   });
 

@@ -22,7 +22,10 @@ Transport (A5), zentraler Start (S1/S2), Fog/Kamera (S3).
 - ❌ `[P0]` R4 Frühtransport (Handkarren/Handtragen, `InventoryTransferRule`) → Thema 2.
 - ❌ `[P0]` R5 Stadtarbeit Ladungsprognose + Nachfüllmarker → Thema 2.
 - ❌ `[P0]` R6 Straßen A→B terrainbasiert + Kontrollpunkte → **erledigt zugleich Thema 1**.
-- ❌ `[P0]` R7 zentrale Startregion (rote Mitte) · R8 Weltverkleinerung ~30 % + Rebake.
+- ✅ `[P0]` **R7+R8** (D-035, v0.83): dritte Verdichtung X/Z 0,84 (~−44 %) + weiches
+  Uferprofil (Nutzerwunsch, Waterfront 636→1.210); 13 Regionen, zentraler Start 9
+  (1.668 bebaubar, Küstenzugang), Save v20. 🟡 offen: Ufer-Feinschliff + stärkere
+  Bau-Glättung (falls Placement zu steil) → siehe [[shore-transition-request]].
 - ❌ `[P0]` R9 adaptive Uferplattform (Thema 6) · R10 Migration + Balancing.
 
 ---

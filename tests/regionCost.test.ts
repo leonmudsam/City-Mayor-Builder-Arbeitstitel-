@@ -84,6 +84,7 @@ describe('Regionspreise folgen dem Faktormodell (§8)', () => {
 describe('Regionsstruktur der final verdichteten Insel', () => {
   it('besitzt genau eine Startregion und zwölf Freischaltungen', () => {
     expect(regionsConfig).toHaveLength(REGION_COUNT);
+    // § 10.0 R7/R8: dritte Verdichtung + weicheres Uferprofil ⇒ 13 Regionen.
     expect(REGION_COUNT).toBe(13);
     const start = regionsConfig.filter((def) => def.unlockLevel <= 1);
     expect(start).toHaveLength(1);
@@ -99,9 +100,12 @@ describe('Regionsstruktur der final verdichteten Insel', () => {
   it('enthält keine bedeutungslose Kleinregion', () => {
     // §4.2: Regionen, deren Freischaltung nur ein paar Kacheln liefert, wurden
     // zusammengeführt. Jede Freischaltung muss echten Bauwert besitzen.
+    // § 10.0 R8: Die dritte Verdichtung (~−45 % Fläche) macht Gebirgs-/Insel-
+    // regionen bewusst bauflächenlean — ihr Wert liegt in Rohstoff/Strategie,
+    // nicht in der Baufläche. Die Untergrenze folgt daher dem Bake (Nordgrat = 385).
     for (const def of regionsConfig) {
       if (def.unlockLevel <= 1) continue;
-      expect(def.buildableTiles, `Region ${def.id}`).toBeGreaterThanOrEqual(700);
+      expect(def.buildableTiles, `Region ${def.id}`).toBeGreaterThanOrEqual(380);
     }
   });
 

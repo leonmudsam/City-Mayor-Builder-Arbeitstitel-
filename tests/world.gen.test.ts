@@ -14,8 +14,8 @@ describe('baked island world', () => {
     expect(WORLD_TILES).toBe(512);
     expect(terrainGrid.length).toBe(WORLD_TILES * WORLD_TILES);
     expect(regionGrid.length).toBe(WORLD_TILES * WORLD_TILES);
-    // § Final World Compaction 8.1: aus 40 kleinteiligen Landschaften wurden
-    // EINE zentrale Startregion und ZWÖLF bedeutende Freischaltungen.
+    // § 10.0 R7/R8 (dritte Verdichtung + weiches Uferprofil): EINE zentrale
+    // Startregion und ZWÖLF bedeutende Freischaltungen.
     expect(REGION_COUNT).toBe(13);
     expect(BAKED_REGIONS.length).toBe(REGION_COUNT);
   });
@@ -75,10 +75,10 @@ describe('baked island world', () => {
   it('guarantees the central 1200–1600 start, 7×7 grass reserve and two road axes', () => {
     expect(startRegionConfig.startRegionId).toBe(BAKED_START.regionId);
     const startBaked = BAKED_REGIONS[BAKED_START.regionId - 1]!;
-    // § Change 9.0 §3.3: die Startregion ist das langfristige Zentrum — 1.200–1.600
-    // direkt bebaubare Kacheln (echte Anfangsstadt), nicht mehr die 820er-Pocket.
+    // § 10.0 R7/R8 §3.3: die Startregion ist das langfristige Zentrum — 1.200–1.750
+    // direkt bebaubare Kacheln (Bake-Korridor MIN/MAX_START_BUILDABLE).
     expect(startBaked.buildable).toBeGreaterThanOrEqual(1200);
-    expect(startBaked.buildable).toBeLessThanOrEqual(1600);
+    expect(startBaked.buildable).toBeLessThanOrEqual(1750);
     expect(BAKED_START.score.earlyBuildableTiles).toBeGreaterThanOrEqual(4000);
     expect(BAKED_START.score.earlyBuildableTiles).toBeLessThanOrEqual(9500);
     // Rathaus-5×5 inkl. 1 Kachel Rand und die Startstraßen liegen auf Gras.
@@ -101,10 +101,10 @@ describe('baked island world', () => {
     const start = config.regions.get(BAKED_START.regionId)!;
     expect(start.biome).toBe('zentrum');
     expect(start.unlockCost).toBe(0);
-    // § Final World Compaction 8.1 §4: keine bedeutungslosen Mini-Regionen und
-    // keine dauerhaften Teaser mehr — jede der 13 Regionen ist erreichbar (1
-    // Start + 12 Freischaltungen). Die Archipel-Erreichbarkeit über See wird
-    // durch `requiresHarbor` + `seaAdjacent` sichergestellt.
+    // § 10.0 R7/R8 §4: keine bedeutungslosen Mini-Regionen und keine dauerhaften
+    // Teaser mehr — jede der 13 Regionen ist erreichbar (1 Start + 12
+    // Freischaltungen). Die Archipel-Erreichbarkeit über See wird durch
+    // `requiresHarbor` + `seaAdjacent` sichergestellt.
     expect(config.regionList.every((region) => region.unlockable)).toBe(true);
     expect(config.regionList.filter((region) => region.unlockLevel <= 1)).toHaveLength(1);
     expect(config.regionList.filter((region) => region.unlockable && region.unlockLevel > 1)).toHaveLength(12);

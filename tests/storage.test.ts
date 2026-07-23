@@ -20,7 +20,7 @@ describe('save/load (v17 aktive Betriebe)', () => {
     const restored = importSave(exportSave(controller.state));
     expect(restored).toEqual(JSON.parse(JSON.stringify(controller.state)));
     expect(restored.schemaVersion).toBe(SCHEMA_VERSION);
-    expect(restored.schemaVersion).toBe(19);
+    expect(restored.schemaVersion).toBe(20);
   });
 
   it('keeps saves slim: no tile arrays, region stubs only', () => {
@@ -76,6 +76,15 @@ describe('save/load (v17 aktive Betriebe)', () => {
     const v15 = JSON.parse(exportSave(controller.state));
     v15.schemaVersion = 15;
     expect(() => migrateAndValidate(v15)).toThrow(WorldRebuildSaveError);
+  });
+
+  it('rejects v19 coordinates through the explicit 19→20 third-compaction migration', () => {
+    // § 10.0 R7/R8: die dritte Verdichtung (X/Z 0,84 zusätzlich) ändert jede
+    // Koordinate, Region-Id und den Startanker (jetzt Region 9) — Backup + Neustart.
+    const { controller } = newController(undefined, { flatten: false });
+    const v19 = JSON.parse(exportSave(controller.state));
+    v19.schemaVersion = 19;
+    expect(() => migrateAndValidate(v19)).toThrow(WorldRebuildSaveError);
   });
 });
 
@@ -144,5 +153,24 @@ describe('sanktionierter Weltneustart mit Backup', () => {
     expect(storage.getItem('cmb.save.backup.world-v18')).toBe(raw);
     // Der Sicherungsslot taucht nicht als spielbarer Speicherstand auf.
     await expect(adapter.list()).resolves.not.toContain('backup.world-v18');
+  });
+
+  // § 10.0 R7/R8: die dritte Verdichtung ist ein Weltumbau — ein v19-Stand wird
+  // einmalig unter world-v19 gesichert und neu gestartet.
+  it('backs up a v19 slot under the third-compaction key and restarts', async () => {
+    const storage = new MemoryStorage();
+    vi.stubGlobal('localStorage', storage);
+    const { controller } = newController(undefined, { flatten: false });
+    const old = JSON.parse(exportSave(controller.state));
+    old.schemaVersion = 19;
+    const raw = JSON.stringify(old);
+    storage.setItem('cmb.save.hauptstadt', raw);
+
+    const adapter = new LocalStorageSaveAdapter();
+    await expect(adapter.load('hauptstadt')).resolves.toBeUndefined();
+    expect(adapter.legacyBackupCreated).toBe(true);
+    expect(storage.getItem('cmb.save.hauptstadt')).toBeNull();
+    expect(storage.getItem('cmb.save.backup.world-v19')).toBe(raw);
+    await expect(adapter.list()).resolves.not.toContain('backup.world-v19');
   });
 });

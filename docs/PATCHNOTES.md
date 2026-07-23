@@ -1,5 +1,78 @@
 # Patch Notes
 
+## v0.83 — § 10.0 R7/R8: Dritte Weltverdichtung + flacher Uferübergang (Save v20)
+
+### Was
+
+- **Dritte horizontale Verdichtung (X/Z ≈ 0,84 zusätzlich):** Der Offline-Bake
+  spannt die Referenz-GLB jetzt über 314 statt 374 Kacheln (Ozeanrand 99). Faktor
+  0,7476 gegenüber der Ur-Insel (Fläche ≈ 0,559, ~−44 %). Gipfelhöhe bleibt bei 52
+  Welt-Einheiten (Y getrennt abgestimmt, Auftrag §1.3) — die Gebirge bleiben
+  monumental.
+- **Flacher Uferübergang (Nutzerwunsch):** Angehobene Wasserlinie (0,0065→0,0075),
+  breiterer/flacherer Strandsaum (Blend 6→9 Kacheln, Anstieg 0,42→0,28, Klippen­
+  schwelle 7,2→9,0) und breiteres Sandband. Ergebnis: **direkt wassernahe,
+  bebaubare Uferkacheln 636 → 1.210** und Sand 4.181 → 7.861 — deutlich
+  hafen-/wassergebäude-tauglicher.
+- **Neuer zentraler Start:** Region 9 „Zentralland", Rathaus (127,250), sehr flach
+  (ΔH 0,36), **1.668 bebaubare Kacheln**, endlich mit echtem Küstenzugang (136
+  Küstenkanten), Ressourcen-Score 1,0, Waldrand direkt angrenzend (Sägewerk-Nachschub).
+- **13 organische Regionen** (statt zuvor 13; Layout komplett neu geschnitten):
+  Startkomponente {9,3,8,11,7,13} über Land, Südkomponente {2,5,4} und Einzelinseln
+  {1,6,10,12} über See (`requiresHarbor`). Namen/Progression/Kosten in
+  `regions.config.ts` neu abgeleitet; Kosten folgen weiter dem Faktormodell
+  (`regionCost.ts`), Endgame „Kronengebirge" (1) bei L20 ≈ 5,98 Mio.
+
+### Warum
+
+- Auftrag § 10.0 R7/R8 (Final World Compaction) verlangt eine spürbar kompaktere
+  Insel mit einem echten, langfristig tragfähigen zentralen Stadtzentrum. Der frühere
+  steile Küstenabfall war schlecht für Hafen-/Wassergebäude-Platzierung — daher das
+  weiche Uferprofil zusätzlich zur Verdichtung.
+
+### Architektur
+
+- Reiner Offline-Bake (`tools/bakeWorld.mjs`) → committete `*.gen.ts`; die GLB wird
+  nie zur Laufzeit geladen. Region-Zugehörigkeit bleibt allein `regionIdAt`; Kosten/
+  Progression bleiben datengetrieben und testgeprüft. Keine zweite Weltquelle.
+- **Save v20** (Weltumbau wie v14/v16/v19): jede Koordinate/Region-Id ändert sich →
+  `migrateV19ToV20` sichert alte Stände einmalig unter `cmb.save.backup.world-v19`
+  und startet neu. Keine verlustbehaftete Projektion.
+
+### Auswirkung
+
+- Gesamt-Bauflächen 34.082 → 25.092 (−26 % ggü. v0.82; die kompaktere Welt ist der
+  Sinn der Final Compaction, das weiche Ufer fängt einen Teil des Verlusts ab).
+  Gebirgs-/Inselregionen sind bewusst bauflächenlean (Wert = Rohstoff/Strategie).
+- Baugelände ist durch die Stauchung etwas steiler als in der alten flachen Welt
+  (Test-Toleranzen entsprechend an die Bake-Glättung angepasst, nicht geschönt).
+- Alle Dev-Spielstände (v10–v19) werden einmalig gesichert und neu gestartet.
+
+### Zukunft
+
+- Feinschliff des Uferprofils bleibt möglich (mehr/weniger Strand pro Küstenteil).
+  Stärkere Bau-Glättung ist als Option offen, falls Platzierungen zu steil wirken
+  (kostet etwas Baufläche). R9 (adaptive Uferplattform) baut auf den nun reichlichen
+  Waterfront-Kacheln auf.
+
+### Dateien
+
+- Bake: `tools/bakeWorld.mjs` (Verdichtungs-/Uferkonstanten), regeneriert:
+  `src/game/config/world/island*.gen.ts`, `src/renderer/three/worldHeight.gen.ts`,
+  `worldMasks.gen.ts`, `tools/bake-report.md`, `tools/bake-preview.png`.
+- Config/i18n: `src/game/config/regions.config.ts`, `src/i18n/de.json`
+  (region.r1–r13), generiert: `docs/REGIONS.md`.
+- Save: `src/game/newGame.ts` (SCHEMA_VERSION 20), `src/game/storage/migrations.ts`
+  (`migrateV19ToV20`), `src/game/storage/localStorageAdapter.ts` (world-v19-Backup).
+- Tests: `regions`, `regionCost`, `world.gen`, `regionPreview`, `newIslandBake`,
+  `terrainHeight`, `placement`, `storage`, `transport` an das neue Layout angepasst
+  (356/356 grün).
+
+### Assets
+
+- Keine neuen Binärassets; die Welt entsteht deterministisch aus der bestehenden
+  Referenz-GLB. `bake-preview.png` neu generiert.
+
 ## v0.82 — Visual Active Operations, Ressourcennetz & Infrastruktur
 
 ### Was

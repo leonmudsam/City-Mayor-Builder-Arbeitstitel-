@@ -20,6 +20,8 @@ const TERRAIN_OVERHAUL_BACKUP_KEY = 'cmb.save.backup.world-v14';
 const FINAL_COMPACTION_BACKUP_KEY = 'cmb.save.backup.world-v15';
 /** Sicherung vor dem größeren zentralen Start (§ Change 9.0, v18→v19). */
 const CENTRAL_START_BACKUP_KEY = 'cmb.save.backup.world-v18';
+/** Sicherung vor der dritten Verdichtung (§ 10.0 R7/R8, v19→v20). */
+const THIRD_COMPACTION_BACKUP_KEY = 'cmb.save.backup.world-v19';
 
 /**
  * MVP-1 storage: localStorage with a one-generation backup slot. A corrupt
@@ -64,13 +66,15 @@ export class LocalStorageSaveAdapter implements SaveAdapter {
           // Alten Weltstand einmalig sichern (nie überschreiben) und den
           // aktiven Slot räumen, damit künftige Loads sauber frisch starten.
           const backupKey = error instanceof WorldRebuildSaveError
-            ? error.version >= 18
-              ? CENTRAL_START_BACKUP_KEY
-              : error.version >= 15
-                ? FINAL_COMPACTION_BACKUP_KEY
-                : error.version >= 14
-                  ? TERRAIN_OVERHAUL_BACKUP_KEY
-                  : WORLD_REBUILD_BACKUP_KEY
+            ? error.version >= 19
+              ? THIRD_COMPACTION_BACKUP_KEY
+              : error.version >= 18
+                ? CENTRAL_START_BACKUP_KEY
+                : error.version >= 15
+                  ? FINAL_COMPACTION_BACKUP_KEY
+                  : error.version >= 14
+                    ? TERRAIN_OVERHAUL_BACKUP_KEY
+                    : WORLD_REBUILD_BACKUP_KEY
             : LEGACY_BACKUP_KEY;
           if (localStorage.getItem(backupKey) === null) {
             localStorage.setItem(backupKey, raw);
@@ -96,7 +100,8 @@ export class LocalStorageSaveAdapter implements SaveAdapter {
         key !== WORLD_REBUILD_BACKUP_KEY &&
         key !== TERRAIN_OVERHAUL_BACKUP_KEY &&
         key !== FINAL_COMPACTION_BACKUP_KEY &&
-        key !== CENTRAL_START_BACKUP_KEY
+        key !== CENTRAL_START_BACKUP_KEY &&
+        key !== THIRD_COMPACTION_BACKUP_KEY
       ) {
         slots.push(key.slice(PREFIX.length));
       }
