@@ -22,7 +22,7 @@ Stand: 23. Juli 2026
 - Stabile Visual-ViewModels/Actions, getrennte Dev-Szenarien und sieben
   System-/Handoff-Dokumente. **Keine Simulation, kein Balancing, keine
   Save-Änderung (v19).**
-- Verifiziert: TypeScript, ESLint, 351/351 Tests und Produktionsbuild. Preview
+- Verifiziert: TypeScript, ESLint, 354/354 Tests und Produktionsbuild. Preview
   liefert HTTP 200; Runtime-Screenshot mangels verfügbarer integrierter
   Browserinstanz und nativer Tauri-Build mangels Cargo-Toolchain offen.
 - Offen: echte Durchsatzhistorie, Handkarren, physische Zwischenlager,

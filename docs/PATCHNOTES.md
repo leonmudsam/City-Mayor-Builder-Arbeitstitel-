@@ -80,7 +80,8 @@ falsche Bestände, Durchsatzraten oder Fahrzeugfähigkeiten vorzutäuschen.
 - Renderer/State: `IMapRenderer.ts`, `ThreeMapRenderer.ts`,
   `CameraInputController.ts`, `state/store.ts`.
 - Styling: `styles/active-operations.css`.
-- Tests: `tests/activeOperationsViewModels.test.ts`.
+- Tests: `tests/activeOperationsViewModels.test.ts`,
+  `tests/activeOperationsComponents.test.ts`.
 - Dokumentation: sieben neue Active-Operations-System-/Handoff-Dateien plus
   Projektstand, offene Aufgaben, Handoff-Log und Komponentenkarte.
 - Keine neuen Binärassets; Lucide-SVG, Registry-Bilder/GLBs und bestehende
@@ -88,7 +89,7 @@ falsche Bestände, Durchsatzraten oder Fahrzeugfähigkeiten vorzutäuschen.
 
 ### Verifikation
 
-- `npx tsc -b --force`, `npx eslint src tests`, **351/351 Tests in 46 Dateien**
+- `npx tsc -b --force`, `npx eslint src tests`, **354/354 Tests in 47 Dateien**
   und `npm run build` sind grün. Preview unter Basis-URL `/`: HTTP 200.
 - Der verpflichtende Runtime-Screenshot-Smoke blieb in dieser Sitzung
   infrastrukturseitig blockiert, weil die integrierte Browsersteuerung keine

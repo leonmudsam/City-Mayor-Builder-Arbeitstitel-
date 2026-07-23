@@ -94,4 +94,7 @@ optional oder nicht angebunden.
 
 `tests/activeOperationsViewModels.test.ts` prüft reale Controller-Projektionen,
 fehlende optionale Werte, Handkarren-Sperre und mutationsfreie Straßenvorschau.
+`tests/activeOperationsComponents.test.ts` prüft gemeinsame Panel-/Leerzustände,
+Extremwerte, Kapazitätsdarstellung, Tokens/Responsive-Regeln und die Exklusivität
+großer Oberflächen.
 Gesamtverifikation siehe Patchnotes.

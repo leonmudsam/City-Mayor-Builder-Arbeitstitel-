@@ -19,9 +19,10 @@ in exklusive Spielzustände übertragen.
   Dev-Szenarien.
 - Doku: `ACTIVE_OPERATIONS_VISUAL_SYSTEM.md` plus Netzwerk-, Transport-,
   Straßen-, Waterfront-, ViewModel- und Handoff-Dokument.
-- Tests: `activeOperationsViewModels.test.ts`. Offene Bindungen und Reihenfolge:
+- Tests: `activeOperationsViewModels.test.ts` und
+  `activeOperationsComponents.test.ts`. Offene Bindungen und Reihenfolge:
   `ACTIVE_OPERATIONS_VISUAL_HANDOFF.md`.
-- Verifikation: TypeScript und ESLint sauber, 46 Testdateien mit **351/351**
+- Verifikation: TypeScript und ESLint sauber, 47 Testdateien mit **354/354**
   Tests sowie Produktionsbuild grün; Preview `/` antwortet mit HTTP 200.
   Screenshot-Smoke blockiert, weil die integrierte Browsersteuerung keine Instanz
   bereitstellte. Tauri-Build angestoßen, aber lokale Rust-/Cargo-Toolchain fehlt
