@@ -374,6 +374,21 @@ const migrateV17ToV18: Migration = (raw) => {
 };
 
 /**
+ * v18 → v19: § Change 9.0, Phase S1/S2 — zentraler Start neu gebacken. Die
+ * Startregion wurde von 820 auf 1.400 bebaubare Kacheln vergrößert; dabei ändern
+ * sich der Rathausanker, die Region-Zuschnitte und drei rotierte Forst-Ids. Wie
+ * bei jedem echten Weltumbau (v13→v14, v15→v16) ist eine Koordinaten-/
+ * Regionsprojektion nicht verlustfrei: Ein Gebäude aus dem alten kleinen Start
+ * kann in der neuen Region-Segmentierung liegen, und „Region 10 erschlossen"
+ * bedeutet geografisch etwas anderes. Der Auftrag lässt für genau das den
+ * transparenten Weltneustart zu — alter Stand wird EINMALIG unter
+ * `cmb.save.backup.world-v18` gesichert, kein stiller Verlust.
+ */
+const migrateV18ToV19: Migration = (raw) => {
+  throw new WorldRebuildSaveError(typeof raw.schemaVersion === 'number' ? raw.schemaVersion : 18);
+};
+
+/**
  * Migration chain: migrations[n] upgrades a save from schemaVersion n to n+1.
  * Beginnt bei v10 (Insel-Basis).
  */
@@ -386,6 +401,7 @@ const migrations: Record<number, Migration> = {
   15: migrateV15ToV16,
   16: migrateV16ToV17,
   17: migrateV17ToV18,
+  18: migrateV18ToV19,
 };
 
 export class SaveValidationError extends Error {}

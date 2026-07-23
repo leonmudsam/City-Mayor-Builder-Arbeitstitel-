@@ -9,8 +9,8 @@ describe('regionPreview — begünstigte Gebäude (§ C5)', () => {
   });
 
   it('empfiehlt das Sägewerk in einer Holz-Region', () => {
-    // Nordwald (10) ist Wald mit wood ×1.45.
-    const preview = regionPreview(10)!;
+    // Nordwald (12) ist Wald mit wood ×1.45 (§ Change 9.0: Forst-Ids rotiert).
+    const preview = regionPreview(12)!;
     const wood = preview.favouredBuildings.find((f) => f.defId === 'sawmill');
     expect(wood).toBeDefined();
     expect(wood!.resource).toBe('wood');

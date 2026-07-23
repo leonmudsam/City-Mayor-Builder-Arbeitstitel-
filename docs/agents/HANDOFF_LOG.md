@@ -1,5 +1,28 @@
 # Handoff-Log
 
+## 2026-07-23 — § Change 9.0: Zentraler Start & Regionsbalancing S1/S2 (v0.80)
+
+**Weltumbau** (Save **v19**, Backup/Neustart `cmb.save.backup.world-v18`): Der
+Offline-Bake (`tools/bakeWorld.mjs`) wählt weiterhin die zentrale Startregion
+selbst — nur die Zielvorgabe wurde von 820 auf **1.400** bebaubare Kacheln
+umgestellt (`START_REGION_TARGET_BUILDABLE`, Korridor 1.200–1.750). Neu gebacken →
+`world/*.gen.ts`, `worldHeight.gen.ts`, `worldMasks.gen.ts`, `bake-report.md`.
+
+- **Ergebnis:** Startregion 13 = 1.400 bebaubar, Rathaus (144,191),
+  expansionDirectionScore 1.0, Zentralität 0.79, Ressourcen/Infra 1.0, Score 76.5.
+- **Forst-Id-Rotation** (durch den größeren Carve): physischer Nordwald 10→12,
+  Südforst 12→11, Ostforst 11→10. `regions.config.ts` + `i18n/de.json` (Namen) +
+  Freischaltbaum + `docs/REGIONS.md` nachgezogen. L3-Erstwahl = {7, 12}.
+- **Save:** `newGame.ts` SCHEMA_VERSION 19, `migrations.ts` `migrateV18ToV19`
+  (WorldRebuildSaveError), `localStorageAdapter.ts` Backup-Key + list-Exclusion.
+- **Tests:** regions/world.gen/newIslandBake/regionPreview/regionCost/storage/
+  transport neu abgeglichen (Startgröße 1.200–1.600, Nordwald jetzt Id 12,
+  v18-Backup, Pre-9.0→Rebuild). **340 grün**; tsc/eslint/build sauber; 3D-Smoke ok.
+- **Audits vorab (§2):** `CENTRAL_START_REGION_AUDIT`, `FOG_OF_WAR_AUDIT`,
+  `WORLD_RENDERING_PERFORMANCE_AUDIT`, `ACTIVE_RESOURCE_WORK_PLAN`. Entscheidung D-033.
+- **Offen:** S3 Fog/Kamera-Clamping, S4 Vegetations-Performance, S5 lebendige Welt,
+  S6 Sägewerk-Arbeitsmodus, S7 Steinbruch/Farm, S8 weitere Betriebe.
+
 ## 2026-07-23 — Active Operations 2.0: Lagertransport A5 + A5-Reste (v0.79)
 
 **Neues Sim-Modul** `src/game/operations/transport.ts` (rein, kein Renderer/React):

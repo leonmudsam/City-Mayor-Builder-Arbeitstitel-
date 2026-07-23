@@ -72,13 +72,13 @@ describe('baked island world', () => {
     }
   });
 
-  it('guarantees the compact central 650–950 start, 7×7 grass reserve and two road axes', () => {
+  it('guarantees the central 1200–1600 start, 7×7 grass reserve and two road axes', () => {
     expect(startRegionConfig.startRegionId).toBe(BAKED_START.regionId);
     const startBaked = BAKED_REGIONS[BAKED_START.regionId - 1]!;
-    // § Final World Compaction 8.1 §3.1: bewusst kompakter, ausgeschnittener
-    // Startkern (650–950 bebaubare Kacheln) — nicht mehr die gesamte Zentralebene.
-    expect(startBaked.buildable).toBeGreaterThanOrEqual(650);
-    expect(startBaked.buildable).toBeLessThanOrEqual(950);
+    // § Change 9.0 §3.3: die Startregion ist das langfristige Zentrum — 1.200–1.600
+    // direkt bebaubare Kacheln (echte Anfangsstadt), nicht mehr die 820er-Pocket.
+    expect(startBaked.buildable).toBeGreaterThanOrEqual(1200);
+    expect(startBaked.buildable).toBeLessThanOrEqual(1600);
     expect(BAKED_START.score.earlyBuildableTiles).toBeGreaterThanOrEqual(4000);
     expect(BAKED_START.score.earlyBuildableTiles).toBeLessThanOrEqual(9500);
     // Rathaus-5×5 inkl. 1 Kachel Rand und die Startstraßen liegen auf Gras.

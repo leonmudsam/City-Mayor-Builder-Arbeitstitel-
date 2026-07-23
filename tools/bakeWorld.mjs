@@ -98,36 +98,33 @@ const REGION_TARGET_TILES = 6200; // ~79k Landkacheln / 13 Regionen
 const REGION_MIN_COMPONENT = 400; // Biom-Cluster kleiner als das bekommen keinen eigenen Seed
 const REGION_MIN_TILES = 2400;    // alles darunter wandert in den Nachbarn mit längster Grenze
 const REGION_MAX_SEEDS = 12;      // + 1 ausgeschnittene Startregion = 13 (zulässig 12–14)
-/** Bauflächen-Budget der ausgeschnittenen zentralen Startregion (§3.1: 650–950). */
-const START_REGION_TARGET_BUILDABLE = 820;
+/** Bauflächen-Budget der ausgeschnittenen zentralen Startregion.
+ * § Change 9.0 §3.3: 1.200–1.600 direkt gut bebaubare Kacheln. Das REVERSIERT
+ * bewusst die 8.1-Entscheidung „kleine 820er-Pocket" — der neue Auftrag verlangt
+ * ein echtes, langfristig tragfähiges Stadtzentrum (20–35 frühe Gebäude, echtes
+ * Straßennetz, Wohnblöcke, Sägewerk, Farm, Gewerbe, Grün). Die Startregion soll
+ * trotzdem nicht bis weit ins Midgame reichen (§3.3), Zielmitte ~1.400. */
+const START_REGION_TARGET_BUILDABLE = 1400;
 // Zusammenhängende, vollständig bebaubare Gründungsreserve um das Rathaus.
 const RESERVE_X0 = -5, RESERVE_Y0 = -3, RESERVE_W = 20, RESERVE_H = 16;
 const COST_FOREIGN_BIOME = 4;     // Wachstums-Mehrkosten beim Betreten eines fremden Bioms
 const COST_CROSS_RIVER = 6;       // Zusatzkosten, einen Fluss zu queren (Flüsse = natürliche Grenzen)
 const COST_HEIGHT_FACTOR = 4;     // Zusatzkosten je Höhendelta (Gebirgskämme = natürliche Grenzen)
 
-// Zentraler Start 8.1 (Auftrag §3.1): Die Startregion soll Level 1–3 tragen und
-// eine kleine, dichte Stadt ermöglichen — aber ausdrücklich NICHT bis Level 8
-// reichen. Der Spieler soll Platzmangel früh spüren.
-const MIN_START_BUILDABLE = 650;
-const MAX_START_BUILDABLE = 950;
-// Startregion + die ersten beiden Erweiterungen zusammen.
-//
-// ZIELKONFLIKT (dokumentiert, bewusst aufgelöst): Der Auftrag nennt in §3.1
-// „1.800–2.800 Kacheln nach zwei Erweiterungen" UND in §4 nur zwölf
-// Freischaltungen. Beides zusammen geht rechnerisch nicht auf: Nach der zweiten
-// Verkleinerung bleiben rund 35.400 bebaubare Kacheln; abzüglich der 820er
-// Startregion sind das ~2.880 je Region. Start + zwei Erweiterungen sind damit
-// zwangsläufig ~6.600. Für 1.800–2.800 bräuchte es ~35–40 Kleinregionen —
-// also genau die Struktur, die §4 abschafft.
-//
-// Priorisiert wird die REGIONSSTRUKTUR (Akzeptanzkriterien 6–8). Der untere
-// Wert bleibt als echte Mindestanforderung erhalten (die frühe Stadt muss
-// wachsen können), der obere Wert folgt der tatsächlichen Regionsgröße.
-const MIN_EARLY_BUILDABLE = 1800;
-const MAX_EARLY_BUILDABLE = 9500;
+// Zentraler Start 9.0 (Auftrag §3.1/§3.3): Die Startregion ist das langfristige
+// urbane Zentrum und muss Level 1 bis ungefähr Level 4–6 tragen — groß genug für
+// eine echte Anfangsstadt (20–35 Gebäude), aber nicht bis weit ins Midgame. Der
+// zulässige Bauflächenkorridor umschließt das 1.200–1.600-Ziel mit etwas Toleranz
+// nach oben, damit das kostenbasierte Carve-Wachstum es zuverlässig trifft.
+const MIN_START_BUILDABLE = 1200;
+const MAX_START_BUILDABLE = 1750;
+// Startregion + die ersten beiden Erweiterungen zusammen. Mit dem größeren Start
+// (~1.400) und ~2.400–4.000 je Nachbarregion liegt die Frühfläche höher; der
+// Korridor bleibt weit, priorisiert wird weiterhin die REGIONSSTRUKTUR (§4).
+const MIN_EARLY_BUILDABLE = 2600;
+const MAX_EARLY_BUILDABLE = 11000;
 /** Angestrebte Bauflächensumme aus Start + früher Erweiterung (Feinauswahl). */
-const EARLY_BUILDABLE_SWEET_SPOT = 6200;
+const EARLY_BUILDABLE_SWEET_SPOT = 7200;
 
 // Terrain-IDs (Encoding im Gen-Grid; Reihenfolge = TERRAIN_IDS im Gen-File)
 const T = { water: 0, river: 1, sand: 2, fertile: 3, grass: 4, forest: 5, mountain: 6 };
@@ -898,13 +895,14 @@ for (;;) {
 // 7d-bis. § Final World Compaction 8.1 (§3.1, §12) — KOMPAKTE ZENTRALE STARTREGION.
 //
 // Die kostenbasierte Segmentierung erzeugt bewusst gleichwertig große
-// Landschaften (~6.200 Kacheln). Die Startregion darf aber gerade NICHT so groß
-// sein: Sie soll Level 1–3 tragen, eine kleine dichte Stadt ermöglichen und den
-// Spieler früh Platzmangel spüren lassen. Deshalb wird nach der Segmentierung
-// aus der zentralen Region ein kompakter, zusammenhängender Kern mit rund
-// START_REGION_TARGET_BUILDABLE bebaubaren Kacheln herausgelöst und zur eigenen
-// Region gemacht. Der Rest bleibt bei der Wirtsregion — sie wird dadurch die
-// erste natürliche Erweiterungsrichtung.
+// Landschaften (~6.200 Kacheln). § Change 9.0 §3.3: Die Startregion soll das
+// langfristige urbane Zentrum sein — groß genug für eine echte Anfangsstadt
+// (~1.400 bebaubare Kacheln), aber nicht bis weit ins Midgame reichend. Deshalb
+// wird nach der Segmentierung aus der zentralen Region ein kompakter,
+// zusammenhängender Kern mit rund START_REGION_TARGET_BUILDABLE bebaubaren
+// Kacheln herausgelöst und zur eigenen Region gemacht. Der Rest bleibt bei der
+// Wirtsregion — sie wird dadurch die erste natürliche Erweiterungsrichtung; der
+// größere Kern reicht bis an mehrere Nachbarregionen (Expansionsrichtungen).
 const startCarve = (() => {
   // Größte zusammenhängende Landmasse und ihr Flächenschwerpunkt.
   const seen = new Uint8Array(SIZE);

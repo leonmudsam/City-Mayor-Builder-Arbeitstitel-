@@ -1,8 +1,35 @@
-# Übergabe an Claude — v0.79
+# Übergabe an Claude — v0.80
 
 Stand: 23. Juli 2026
 
-## AKTUELLER STAND: Active Operations 2.0 (v0.78–v0.79)
+## AKTUELLER STAND: § Change 9.0 (Central Start, Fog, Living World, Active Work)
+
+Großauftrag in Phasen **S1–S8**. Vorab-Audits (Auftrag §2, verbindlich zuerst
+lesen): `agents/CENTRAL_START_REGION_AUDIT.md`, `agents/FOG_OF_WAR_AUDIT.md`,
+`agents/WORLD_RENDERING_PERFORMANCE_AUDIT.md`, `agents/ACTIVE_RESOURCE_WORK_PLAN.md`.
+
+**Erledigt (v0.80):**
+- **S1 Zentraler Start:** Bake-Zielvorgabe 820→**1.400** bebaubare Kacheln (kein
+  manuelles Rathaus-Verschieben, §3.2); neu gebacken. Startregion 13, Rathaus
+  (144,191), Expansion 1.0.
+- **S2 Regionsbalancing:** Forst-Ids rotiert (Nordwald→12, Südforst→11, Ostforst
+  →10), L3-Erstwahl {7,12} (§5.2, schon implementiert), Namen/Level/Kosten
+  angeglichen. Save **v19** (Weltumbau, Backup/Neustart). **340 Tests grün.** D-033.
+
+**Offen (Reihenfolge §24):**
+- **S3 Fog of War:** globale weiche Wolkenfront (statt Pro-Region-Kapseln), globale
+  absolute Nebelhöhe, **Kamera-Clamping** für gesperrte Regionen (existiert nicht),
+  getrennter Dev-Cheat, Unlock-Retract ohne Prop-Neugenerierung.
+- **S4 Vegetations-Performance:** Kachel-Chunking, LOD-Anwendung pro Chunk, HLOD-
+  Waldcluster, Impostoren, Shader-Wind, Waldboden-Schattenmaske; Panel erweitern.
+- **S5 lebendige Welt:** Waldstruktur, Mammutbäume, Unterholz-Props, Tierhabitate.
+- **S6 Sägewerk-Arbeitsmodus:** 3D-Kreiswerkzeug, Einzelbaum-Raycast, Effizienz-
+  Overlay (§17), Bedienung (§18), Fäll-/Trag-Animationen — baut auf A1–A5 auf.
+- **S7 Steinbruch/Farm**, **S8 Feuerwehr/Wasser/Bauhof/Lagerhaus.**
+
+Save-Schema **v19**. Verifikation im obersten `agents/HANDOFF_LOG.md`.
+
+## Vorherige Front: Active Operations 2.0 (v0.78–v0.79)
 
 Die laufende Arbeitsfront ist das **aktive Betriebssystem** (kein Passiv-Timer
 mehr). Reihenfolge zum Einlesen: `agents/ACTIVE_OPERATIONS_PLAN.md` →

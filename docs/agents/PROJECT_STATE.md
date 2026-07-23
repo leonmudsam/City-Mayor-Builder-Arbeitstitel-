@@ -1,6 +1,18 @@
-# Projektstand — v0.79
+# Projektstand — v0.80
 
 Stand: 23. Juli 2026
+
+## § Change 9.0 — Zentraler Start & Regionsbalancing S1/S2 (v0.80)
+
+- **S1:** Startregion neu gebacken — 820→**1.400** bebaubare Kacheln (echtes
+  Zentrum, §3.3), über die Bake-Zielvorgabe statt manuellem Verschieben (§3.2).
+  Rathaus (144,191), Expansion 1.0, Zentralität 0.79.
+- **S2:** Forst-Ids rotiert (Nordwald→12, Südforst→11, Ostforst→10),
+  L3-Erstwahl {7,12} (§5.2), Namen/Level/Kosten angeglichen.
+- **Save v19** (Weltumbau, Backup/Neustart `cmb.save.backup.world-v18`).
+  **340 Tests grün**, tsc/eslint/build/3D-Smoke ok. D-033.
+- **Offen:** S3 Fog/Kamera-Clamping, S4 Vegetations-Performance, S5 lebendige Welt,
+  S6 Sägewerk-Arbeitsmodus, S7 Steinbruch/Farm, S8 weitere Betriebe.
 
 ## Active Operations 2.0 — Lagertransport A5 (v0.79)
 

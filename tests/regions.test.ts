@@ -21,7 +21,7 @@ function tileInRegion(id: number): { x: number; y: number } {
 // strategische Einzel-Entscheidung aus regions.config.ts (explizite Kosten,
 // Level-Gates, Land- oder See-Erschließung mit Hafenpflicht). Startregion = 13
 // „Zentralland"; direkte Landnachbarn sind Westweiden (7, L3) und Nordwald
-// (10, L3). Die erste Erweiterung ab Level 3 ist gratis (§6).
+// (12, L3, § Change 9.0: Forst-Ids rotiert). Erste Erweiterung ab L3 gratis (§6).
 
 describe('region expansion (Insel-Welt, organische Landschaften)', () => {
   it('is locked below the region definition unlock level', () => {
@@ -38,11 +38,11 @@ describe('region expansion (Insel-Welt, organische Landschaften)', () => {
     expect(controller.unlockRegion(7)).toEqual({ ok: true });
     expect(controller.state.stats.regionsUnlocked).toBe(1);
     const moneyAfterFree = controller.state.resources.money;
-    // Jede WEITERE Erweiterung kostet ihren konfigurierten Preis — Nordwald (10)
+    // Jede WEITERE Erweiterung kostet ihren konfigurierten Preis — Nordwald (12)
     // grenzt ebenfalls an Zentralland.
-    const def = config.regions.get(10)!;
-    expect(controller.getRegionCost(10)).toBe(def.unlockCost);
-    expect(controller.unlockRegion(10)).toEqual({ ok: true });
+    const def = config.regions.get(12)!;
+    expect(controller.getRegionCost(12)).toBe(def.unlockCost);
+    expect(controller.unlockRegion(12)).toEqual({ ok: true });
     expect(controller.state.resources.money).toBe(moneyAfterFree - def.unlockCost);
     // regionsUnlocked zählt nur ZUSÄTZLICHE Regionen (§5).
     expect(controller.state.stats.regionsUnlocked).toBe(2);
@@ -72,13 +72,13 @@ describe('region expansion (Insel-Welt, organische Landschaften)', () => {
     // Unter Level 3 gibt es keine Gratisoption.
     setLevel(controller, 2);
     expect(controller.getFreeRegionExpansionOptions()).toEqual([]);
-    // Ab Level 3 sind beide Start-Landnachbarn (7, 10) gratis wählbar.
+    // Ab Level 3 sind beide Start-Landnachbarn (7, 12) gratis wählbar.
     setLevel(controller, 3);
-    expect(controller.getFreeRegionExpansionOptions()).toEqual([7, 10]);
+    expect(controller.getFreeRegionExpansionOptions()).toEqual([7, 12]);
     const xpBefore = controller.state.level.xp;
     controller.state.resources.money = 0; // bewusst pleite: gratis heißt gratis
-    expect(controller.isFreeRegionExpansionAvailable(10)).toBe(true);
-    expect(controller.unlockRegion(10)).toEqual({ ok: true });
+    expect(controller.isFreeRegionExpansionAvailable(12)).toBe(true);
+    expect(controller.unlockRegion(12)).toEqual({ ok: true });
     // Weder Geld noch XP verbraucht/vergeben (§6: reine Progressionsgeste).
     expect(controller.state.resources.money).toBe(0);
     expect(controller.state.level.xp).toBe(xpBefore);
@@ -140,8 +140,8 @@ describe('region expansion (Insel-Welt, organische Landschaften)', () => {
     const start = tileInRegion(START_REGION);
     expect(regionProductionFactorAt(config, start.x, start.y, 'wood')).toBe(1);
     expect(regionRoadCostFactorAt(config, start.x, start.y)).toBe(1);
-    // Nordwald (10) gibt +45 % Holz (§ Regionscharakter).
-    const forest = tileInRegion(10);
+    // Nordwald (12) gibt +45 % Holz (§ Regionscharakter).
+    const forest = tileInRegion(12);
     expect(regionProductionFactorAt(config, forest.x, forest.y, 'wood')).toBe(1.45);
     // Kronengebirge (1): Straßen teurer (Nachteil), +90 % Stein.
     const mtn = tileInRegion(1);
@@ -165,15 +165,15 @@ describe('region expansion (Insel-Welt, organische Landschaften)', () => {
 
   it('posts a citizen hint about a newly reachable neighbouring landscape on level-up', () => {
     const { controller, config } = newController();
-    // Nordwald (10) grenzt an Zentralland und wird auf Level 3 erschließbar.
+    // Nordwald (12) grenzt an Zentralland und wird auf Level 3 erschließbar.
     setLevel(controller, 2);
     const need = config.levels.find((l) => l.level === 3)!.xpRequired - controller.state.level.xp;
     addXp(controller.state, config, controller.derived, need);
     expect(controller.state.level.current).toBe(3);
     const hints = controller.state.mayor.messages.filter((m) => m.textKey === 'message.region_hint');
-    expect(hints.some((h) => h.params?.name === 'region.r10')).toBe(true);
+    expect(hints.some((h) => h.params?.name === 'region.r12')).toBe(true);
     // Der Hinweis nennt eine Himmelsrichtung und einen Kurzcharakter als i18n-Keys.
-    const delta = hints.find((h) => h.params?.name === 'region.r10')!;
+    const delta = hints.find((h) => h.params?.name === 'region.r12')!;
     expect(String(delta.params?.direction)).toMatch(/^ui\.dir\./);
     expect(String(delta.params?.boon)).toMatch(/^ui\.region\.boon\./);
   });
@@ -182,8 +182,8 @@ describe('region expansion (Insel-Welt, organische Landschaften)', () => {
     const { controller } = newController();
     setLevel(controller, 3);
     controller.state.resources.money = 5_000_000;
-    // Ein Start-Nachbar ist regulär erschließbar (Nordwald, 10)…
-    expect(controller.unlockRegion(10)).toEqual({ ok: true });
+    // Ein Start-Nachbar ist regulär erschließbar (Nordwald, 12)…
+    expect(controller.unlockRegion(12)).toEqual({ ok: true });
     // …aber jenseits der gebackenen Regionen existiert nichts.
     expect(controller.state.world.regions['99']).toBeUndefined();
     expect(controller.unlockRegion(99)).toEqual({ ok: false, error: 'invalid' });

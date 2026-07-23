@@ -1,5 +1,34 @@
 # Entscheidungen
 
+## D-033 — Zentraler Start via Bake-Zielvorgabe (1.400), Forst-Id-Rotation, Weltumbau v19
+
+**Entscheidung:** Die zu kleine 820-Kachel-Startregion (§ Change 9.0 §0) wird
+NICHT durch manuelles Verschieben des Rathauses behoben (§3.2 verbietet das),
+sondern über die **Zielvorgabe des vorhandenen Bake-Startscorings**:
+`START_REGION_TARGET_BUILDABLE` 820 → **1.400**, Korridor `MIN/MAX_START_BUILDABLE`
+1.200–1.750. Der Bake bewertet die zentralen Kandidaten selbst weiter. Der
+größere Carve rotiert drei Wald-Regions-Ids (Nordwald 10→12, Südforst 12→11,
+Ostforst 11→10); `regions.config.ts`, i18n und Freischaltbaum werden nachgezogen.
+Weil sich Rathausanker und Region-Zuschnitte ändern, ist das ein echter Weltumbau
+→ Save **v19** mit Backup/Neustart (`cmb.save.backup.world-v18`), Präzedenz v14/v16.
+
+**Grund:** §3.3 verlangt 1.200–1.600 zusammenhängend bebaubare Kacheln als
+langfristiges Stadtzentrum. Das reversiert bewusst die 8.1-Entscheidung „kleine
+Pocket, früher Platzmangel". Die Bake-Route hält die Wahl deterministisch und
+datengetrieben statt hartkodiert.
+
+**Interpretation „≥3 Expansionsrichtungen" (§22/§23):** Der Auftrag nennt in §5.2
+zugleich „eine von ZWEI angrenzenden Regionen" als Erstwahl. Aufgelöst als:
+*Expansionsrichtungen* = bebaubare Himmelsrichtungen (Bake-`expansionDirectionScore`
+= **1.0**, alle vier) — die Stadt ist keine Sackgasse; *Nachbarregionen* = 2
+(§5.2-konform: {7,12}). Beide Kriterien sind erfüllt, ohne die 2-Regionen-Erstwahl
+zu brechen.
+
+**Konsequenz:** Regionen 1–9 bleiben physisch unverändert; nur die drei Forste und
+Region 13 ändern sich. Alte Stände (v10–v18) werden gesichert und neu gestartet
+(kein stiller Verlust). Nebel-/Kamera-/Vegetations-/Arbeitsmodus-Arbeit (S3–S8) ist
+davon getrennt. Details: `CENTRAL_START_REGION_AUDIT.md`.
+
 ## D-032 — Lagertransport (A5) als vereinfachte Operation im bestehenden Logistiksystem
 
 **Entscheidung:** Der manuelle Transport vom lokalen Betriebslager ins

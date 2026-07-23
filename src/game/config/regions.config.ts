@@ -12,17 +12,20 @@
 // (`requiresHarbor`). Das ist kein neues System — es nutzt die vorhandenen
 // Gebäude `dock_small`/`river_port` und die gebackene Seenachbarschaft.
 //
+// § Change 9.0: Der größere zentrale Start (Region 13, 1.400 Bauflächen) hat die
+// drei Forst-Ids rotiert (physischer Nordwald 10→12, Südforst 12→11, Ostforst
+// 11→10). Die Startregion grenzt jetzt an {7, 12}; das ist die Level-3-Erstwahl.
 // Freischaltreihenfolge (L = über Land, S = über See):
-//   13 Zentralland (Start, 820 Bauflächen)
-//   ├─ L3  10 Nordwald      (L)  ⟵ eine der beiden ist die KOSTENLOSE Erweiterung
+//   13 Zentralland (Start, 1.400 Bauflächen)
+//   ├─ L3  12 Nordwald      (L)  ⟵ eine der beiden ist die KOSTENLOSE Erweiterung
 //   ├─ L3   7 Westweiden    (L)  ⟵ die andere bleibt reguläre Kaufoption
 //   ├─ L6   3 Südterrassen  (L über 7)
-//   ├─ L7   2 Nordostküste  (L über 10)
+//   ├─ L7   2 Nordostküste  (L über 12)
 //   ├─ L9   4 Südplateau    (S über 3)   — erster Hafen-Meilenstein
 //   ├─ L10  5 Flussgarten   (L über 4)
-//   ├─ L11 12 Südforst      (L über 5)   ⟵ Wahl
-//   ├─ L12  6 Ostebene      (L über 5)   ⟵ Wahl
-//   ├─ L14 11 Ostforst      (L über 6)
+//   ├─ L11 11 Südforst      (L über 5)
+//   ├─ L12  6 Ostebene      (L über 5)
+//   ├─ L14 10 Ostforst      (L über 6)
 //   ├─ L16  9 Sonneninsel   (S)          ⟵ Wahl
 //   ├─ L18  8 Nordinsel     (S)          ⟵ Wahl
 //   └─ L20  1 Kronengebirge (S)          — Endgame
@@ -41,17 +44,20 @@ export const regionsConfig: RegionDef[] = [
     unlockable: true,
     unlockLevel: 1,
     unlockCost: 0,
-    buildableTiles: 820,
+    buildableTiles: 1400,
   },
   {
+    // § Change 9.0: physischer Nordwald (Startnachbar) ist nach dem größeren
+    // Start-Carve die ID 12; ID 10 ist jetzt der ÖSTLICHE Forst (über Region 6).
     id: 10,
     nameKey: 'region.r10',
     biome: 'wald',
     unlockable: true,
-    unlockLevel: 3,
-    unlockCost: 95_000,
-    buildableTiles: 2224,
-    productionModifiers: { wood: 1.45 },
+    unlockLevel: 14,
+    unlockCost: 1_130_000,
+    buildableTiles: 1636,
+    productionModifiers: { wood: 1.6 },
+    roadCostFactor: 1.2,
   },
   {
     id: 7,
@@ -107,15 +113,17 @@ export const regionsConfig: RegionDef[] = [
     productionModifiers: { food: 1.3, water: 1.25 },
   },
   {
+    // § Change 9.0: physischer Nordwald — direkter Landnachbar der Startregion
+    // (13→{7,12}). Zusammen mit Region 7 die Level-3-Erstwahl (§5.2), eine davon
+    // gratis. Durch den größeren Start-Carve auf 1.644 Bauflächen geschrumpft.
     id: 12,
     nameKey: 'region.r12',
     biome: 'wald',
     unlockable: true,
-    unlockLevel: 11,
-    unlockCost: 545_000,
-    buildableTiles: 1676,
-    productionModifiers: { wood: 1.55 },
-    roadCostFactor: 1.2,
+    unlockLevel: 3,
+    unlockCost: 90_000,
+    buildableTiles: 1644,
+    productionModifiers: { wood: 1.45 },
   },
   {
     id: 6,
@@ -128,14 +136,15 @@ export const regionsConfig: RegionDef[] = [
     productionModifiers: { food: 1.2, energy: 1.15 },
   },
   {
+    // § Change 9.0: physischer Südforst (über Region 5), ID von 12 auf 11 gerückt.
     id: 11,
     nameKey: 'region.r11',
     biome: 'wald',
     unlockable: true,
-    unlockLevel: 14,
-    unlockCost: 1_130_000,
-    buildableTiles: 1636,
-    productionModifiers: { wood: 1.6 },
+    unlockLevel: 11,
+    unlockCost: 545_000,
+    buildableTiles: 1676,
+    productionModifiers: { wood: 1.55 },
     roadCostFactor: 1.2,
   },
   {

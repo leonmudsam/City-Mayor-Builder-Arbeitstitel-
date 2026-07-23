@@ -20,7 +20,7 @@ describe('save/load (v17 aktive Betriebe)', () => {
     const restored = importSave(exportSave(controller.state));
     expect(restored).toEqual(JSON.parse(JSON.stringify(controller.state)));
     expect(restored.schemaVersion).toBe(SCHEMA_VERSION);
-    expect(restored.schemaVersion).toBe(18);
+    expect(restored.schemaVersion).toBe(19);
   });
 
   it('keeps saves slim: no tile arrays, region stubs only', () => {
@@ -124,5 +124,25 @@ describe('sanktionierter Weltneustart mit Backup', () => {
     const adapter = new LocalStorageSaveAdapter();
     await expect(adapter.load('hauptstadt')).resolves.toBeUndefined();
     expect(storage.getItem('cmb.save.backup.world-v14')).toBe(raw);
+  });
+
+  // § Change 9.0: der größere zentrale Start ist ein Weltumbau — v16/v17/v18-Stände
+  // laufen additiv bis v18 und werden dann einmalig gesichert + neu gestartet.
+  it('backs up a pre-9.0 slot under the central-start key and restarts', async () => {
+    const storage = new MemoryStorage();
+    vi.stubGlobal('localStorage', storage);
+    const { controller } = newController(undefined, { flatten: false });
+    const old = JSON.parse(exportSave(controller.state));
+    old.schemaVersion = 16; // v16/v17/v18 migrieren additiv bis v18, dann Rebuild
+    const raw = JSON.stringify(old);
+    storage.setItem('cmb.save.hauptstadt', raw);
+
+    const adapter = new LocalStorageSaveAdapter();
+    await expect(adapter.load('hauptstadt')).resolves.toBeUndefined();
+    expect(adapter.legacyBackupCreated).toBe(true);
+    expect(storage.getItem('cmb.save.hauptstadt')).toBeNull();
+    expect(storage.getItem('cmb.save.backup.world-v18')).toBe(raw);
+    // Der Sicherungsslot taucht nicht als spielbarer Speicherstand auf.
+    await expect(adapter.list()).resolves.not.toContain('backup.world-v18');
   });
 });

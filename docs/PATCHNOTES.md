@@ -1,5 +1,61 @@
 # Patch Notes
 
+## v0.80 — Zentraler Start & Regionsbalancing (§ Change 9.0, Phase S1/S2)
+
+### Was
+
+- **Die Startregion ist jetzt das echte Zentrum:** statt der kleinen 820-Kachel-
+  Pocket ein zusammenhängender zentraler Kern mit **1.400 gut bebaubaren Kacheln**
+  (§3.3) — Platz für eine echte Anfangsstadt (20–35 Gebäude, Straßennetz,
+  Wohnblöcke, Sägewerk, Farm, Gewerbe). Zentralität und alle vier
+  Expansionsrichtungen (Score 1.0) verbessert; Ressourcen-/Infrastruktur-Score 1.0.
+- **Level-3-Erstwahl** funktioniert an den echten Startnachbarn **{7 Westweiden,
+  12 Nordwald}** (eine gratis, §5.2/§6).
+- Regionen, Namen, Level und Kosten an den neuen Bake angepasst.
+
+### Warum
+
+Der alte Start war zu klein, lag nicht überzeugend im Zentrum und lief nach
+wenigen Gebäuden voll (§0). Der Auftrag verlangt einen zentralen, langfristig
+tragfähigen Stadtkern.
+
+### Architektur
+
+- **Kein manuelles Verschieben (§3.2):** Der Offline-Bake (`tools/bakeWorld.mjs`)
+  bewertet die zentralen Kandidaten selbst; nur seine Zielvorgabe wurde von 820 auf
+  **1.400** bebaubare Kacheln umgestellt (Korridor 1.200–1.750). Neu gebacken →
+  `world/*.gen.ts` regeneriert.
+- **Forst-Id-Rotation:** Der größere Start-Carve hat die drei Wald-Regions-Ids
+  verschoben (physischer Nordwald 10→12, Südforst 12→11, Ostforst 11→10). Config,
+  i18n-Namen und Freischaltbaum wurden entsprechend nachgezogen; jede Region bleibt
+  über Land oder See (Hafen) erreichbar.
+- **Save-Schema v19:** echter Weltumbau (neuer Rathausanker, neue Region-Zuschnitte)
+  → Migration `v18→v19` sichert alte Stände einmalig unter
+  `cmb.save.backup.world-v18` und startet transparent neu (Präzedenz v14/v16).
+- Reine Sim/Config-Änderung; kein Renderer-Umbau (Nebel/Performance folgen S3/S4).
+
+### Auswirkung
+
+- **340 Tests grün.** Betroffene Region-/Bake-/Save-Tests neu abgeglichen
+  (Startgröße 1.200–1.600, L3-Wahl {7,12}, v18-Backup). tsc/eslint/build sauber,
+  3D-Smoke `{boot,buildOpened,errors:[]}` — der größere Start rendert.
+
+### Zukunft
+
+- S3 Fog of War (globale Wolkenfront + Kamera-Clamping), S4 Vegetations-Performance
+  (Chunking/HLOD/Shader-Wind), S5 lebendige Welt, S6–S8 aktiver Arbeitsmodus. Audits:
+  `CENTRAL_START_REGION_AUDIT`, `FOG_OF_WAR_AUDIT`, `WORLD_RENDERING_PERFORMANCE_AUDIT`,
+  `ACTIVE_RESOURCE_WORK_PLAN`. Entscheidung: D-033.
+
+### Dateien / Assets
+
+- Bake: `tools/bakeWorld.mjs` (Startziele), regenerierte `world/*.gen.ts`,
+  `worldHeight.gen.ts`, `worldMasks.gen.ts`, `bake-report.md`, `bake-preview.png`.
+- Config/i18n/Docs: `regions.config.ts`, `i18n/de.json` (Forstnamen),
+  `docs/REGIONS.md`/`BUILDINGS.md` (generiert).
+- Save: `newGame.ts` (v19), `storage/migrations.ts` (v18→v19),
+  `storage/localStorageAdapter.ts` (Backup-Key), re-baselinte Tests.
+
 ## v0.79 — Lagertransport ins Zentrallager (Active Operations 2.0, Phase A5)
 
 ### Was

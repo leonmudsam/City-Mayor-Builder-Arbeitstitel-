@@ -212,18 +212,18 @@ describe('§ Active Operations 2.0 — A5 Transport: Save v18', () => {
     controller.createInventoryTransfer({ sourceBuildingId: sawmillId, targetBuildingId: townHallId, resource: 'wood', amount: wood, vehicleId: 'van' });
     const { exportSave, importSave } = await import('../src/game/storage/exportImport.ts');
     const restored = importSave(exportSave(controller.state));
-    expect(restored.schemaVersion).toBe(18);
+    expect(restored.schemaVersion).toBe(19);
     expect(restored.operations!.transfers).toEqual(controller.state.operations!.transfers);
   });
 
-  it('Migration v17→v18 ergänzt einen leeren transfers-Katalog', async () => {
-    const { migrateAndValidate } = await import('../src/game/storage/migrations.ts');
+  // § Change 9.0: Der v18→v19-Weltumbau (größerer zentraler Start) ist
+  // save-brechend — ein Pre-9.0-Stand (v17) wird gesichert und neu gestartet.
+  it('ein Pre-9.0-Save (v17) löst den transparenten Weltneustart aus', async () => {
+    const { migrateAndValidate, WorldRebuildSaveError } = await import('../src/game/storage/migrations.ts');
     const { controller } = sawmillWithLocalWood(0);
     const raw = JSON.parse(JSON.stringify(controller.state)) as Record<string, unknown>;
     raw.schemaVersion = 17;
     delete (raw.operations as Record<string, unknown>).transfers;
-    const migrated = migrateAndValidate(raw);
-    expect(migrated.schemaVersion).toBe(18);
-    expect(migrated.operations!.transfers).toEqual({});
+    expect(() => migrateAndValidate(raw)).toThrow(WorldRebuildSaveError);
   });
 });

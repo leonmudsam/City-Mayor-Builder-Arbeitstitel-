@@ -1,4 +1,30 @@
-# Offene Aufgaben nach v0.78
+# Offene Aufgaben nach v0.80
+
+## § Change 9.0 — Central Start, Fog, Living World, Active Work (P0, in Arbeit)
+
+Vorab-Audits (verbindlich): `CENTRAL_START_REGION_AUDIT.md`, `FOG_OF_WAR_AUDIT.md`,
+`WORLD_RENDERING_PERFORMANCE_AUDIT.md`, `ACTIVE_RESOURCE_WORK_PLAN.md`.
+
+**Erledigt (v0.80):** S1 zentraler Start (Bake-Ziel 820→1.400, neu gebacken),
+S2 Regionsbalancing (Forst-Ids rotiert, L3-Wahl {7,12}, Save v19-Weltumbau). D-033.
+
+**Offen (Reihenfolge §24):**
+- **S3 Fog of War** — globale weiche Wolkenfront statt Pro-Region-Kapseln, globale
+  absolute Nebelhöhe, **Kamera-Clamping** (existiert nicht!), getrennter Dev-Cheat,
+  Unlock-Retract ohne Prop-Neugenerierung. Betrifft `ThreeMapRenderer.ts`
+  (`createFogVolume`/`buildRegionFog`), `CameraController3D.ts`/`CameraInputController.ts`.
+- **S4 Vegetations-Performance** — Kachel-Chunking, LOD-Anwendung pro Chunk, HLOD-
+  Waldcluster, Impostoren, Shader-Wind, Waldboden-Schattenmaske, Panel erweitern.
+- **S5 lebendige Welt** — Waldstruktur, Mammutbäume (`giant_pine_*`/`ancient_tree_*`
+  drop-in), Unterholz, Tierhabitate.
+- **S6 Sägewerk-Arbeitsmodus** — 3D-Kreiswerkzeug, Einzelbaum-Raycast, Effizienz-
+  Overlay (§17), Bedienung (§18), Fäll-/Trag-Animationen (baut auf A1–A5 auf).
+- **S7 Steinbruch/Farm** — Knoten-Generalisierung tree→rock→crop, Feld-Lebenszyklus.
+- **S8 Feuerwehr/Wasser/Bauhof/Lagerhaus** — gemeinsames Operation-Framework.
+
+---
+
+# Offene Aufgaben nach v0.78 (Active Operations 2.0)
 
 ## Active Operations 2.0 — Weiterbau nach dem Sägewerk-Referenzschnitt (P0)
 

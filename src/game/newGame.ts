@@ -4,6 +4,10 @@ import type { GameState } from './types.ts';
 import { allRegionIds, createRegionStub, occupyTiles } from './map/world.ts';
 
 /**
+ * v19 (§ Change 9.0, zentraler Start): Startregion von 820 auf 1.400 bebaubare
+ * Kacheln vergrößert (neuer Bake) — neuer Rathausanker, neue Region-Zuschnitte,
+ * drei rotierte Forst-Ids. Weltumbau: alte Stände werden einmalig unter
+ * `cmb.save.backup.world-v18` gesichert und neu gestartet (Migration `v18→v19`).
  * v18 (Active Operations 2.0, A5 Transport): additiver `operations.transfers`-
  * Katalog laufender Lagertransporte. Alte Saves bleiben ladbar (Migration
  * v17→v18 ergänzt ein leeres `transfers`); keine Weltänderung.
@@ -24,7 +28,7 @@ import { allRegionIds, createRegionStub, occupyTiles } from './map/world.ts';
  * v12 (§ Stadtarbeit 2D): laufende Fahrmissionen speichern Fahrzeugklasse und
  * manuell gezeichnete Straßenkette.
  */
-export const SCHEMA_VERSION = 18;
+export const SCHEMA_VERSION = 19;
 
 export function createNewGame(config: GameConfig, cityName: string, now: number): GameState {
   const state: GameState = {

@@ -20,9 +20,9 @@
 | 7 | Westweiden | Ebene | L3 · 90.000 Geld | — | 2.955 | Nahrung ×1.25 | — |
 | 8 | Nordinsel | Vorgelagerte Insel | L18 · 2.775.000 Geld | — | 794 | Stein ×1.4, Nahrung ×1.15 | Straßen ×1.4 |
 | 9 | Sonneninsel | Küste | L16 · 1.495.000 Geld | — | 1.098 | Energie ×1.35, Nahrung ×1.1, Wasser ×0.85 | Straßen ×1.3 |
-| 10 | Nordwald | Wald | L3 · 95.000 Geld | — | 2.224 | Holz ×1.45 | — |
-| 11 | Ostforst | Wald | L14 · 1.130.000 Geld | — | 1.636 | Holz ×1.6 | Straßen ×1.2 |
-| 12 | Südforst | Wald | L11 · 545.000 Geld | — | 1.676 | Holz ×1.55 | Straßen ×1.2 |
-| 13 | Zentralland | Zentrum | L1 · 0 Geld | — | 820 | — | — |
+| 10 | Ostforst | Wald | L14 · 1.130.000 Geld | — | 1.636 | Holz ×1.6 | Straßen ×1.2 |
+| 11 | Südforst | Wald | L11 · 545.000 Geld | — | 1.676 | Holz ×1.55 | Straßen ×1.2 |
+| 12 | Nordwald | Wald | L3 · 90.000 Geld | — | 1.644 | Holz ×1.45 | — |
+| 13 | Zentralland | Zentrum | L1 · 0 Geld | — | 1.400 | — | — |
 
 **Produktion** = Multiplikatoren auf den Gebäude-Output in dieser Region (ab A4 wirksam). **Nachteil** = Malus (z. B. teurere Straßen im Gebirge). Neutral (Startregion) hat bewusst beides nicht.

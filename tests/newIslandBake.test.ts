@@ -82,9 +82,9 @@ describe('Terrain & World Scale Overhaul 6.1 bake', () => {
       }
     }
     expect((max - min) / 100).toBeLessThan(0.85);
-    // § Final World Compaction 8.1 §3.1: kompakter, ausgeschnittener Startkern.
-    expect(BAKED_START.score.buildableTiles).toBeGreaterThanOrEqual(650);
-    expect(BAKED_START.score.buildableTiles).toBeLessThanOrEqual(950);
+    // § Change 9.0 §3.3: zentraler Start als langfristiges Zentrum, 1.200–1.600.
+    expect(BAKED_START.score.buildableTiles).toBeGreaterThanOrEqual(1200);
+    expect(BAKED_START.score.buildableTiles).toBeLessThanOrEqual(1600);
     expect(BAKED_START.score.expansionDirectionScore).toBeGreaterThanOrEqual(0.75);
     expect(BAKED_START.score.resourceAccessScore).toBe(1);
     expect(BAKED_START.score.waterRisk).toBe(0);
