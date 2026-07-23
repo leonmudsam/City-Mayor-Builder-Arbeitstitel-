@@ -2,6 +2,7 @@ import { Bug, CheckCheck, CloudOff, Coins, Hammer, MapPinned, PackageOpen, Compa
 import { useGame, useUiStore } from '../../state/store.ts';
 import { GraphicsQualityControl, PerfReadout } from './PerformancePanel.tsx';
 import { t } from '../../i18n/index.ts';
+import { WorldCompactionPreview } from '../world/WorldCompactionPreview.tsx';
 
 // Prototype cheats (§10): a clearly-labelled debug area for balancing tests,
 // gated behind the debugTools feature flag. Every action routes through a
@@ -110,6 +111,7 @@ export function DebugPanel() {
           Vegetations-Performance (keine „Optimierung nach Gefühl"). */}
       <PerfReadout />
       <GraphicsQualityControl />
+      <WorldCompactionPreview />
     </aside>
   );
 }

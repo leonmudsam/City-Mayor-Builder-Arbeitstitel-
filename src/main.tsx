@@ -9,6 +9,7 @@ import './styles/animations.css';
 import './styles/responsive.css';
 import './styles/citywork.css';
 import './styles/citywork-v4.css';
+import './styles/active-operations.css';
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>

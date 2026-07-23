@@ -1,4 +1,4 @@
-import { AlertTriangle, ArrowDownToLine, Flag, RotateCcw, Warehouse } from 'lucide-react';
+import { AlertTriangle, ArrowDownToLine, Flag, PackageCheck, RotateCcw, Warehouse } from 'lucide-react';
 import { BuildingArt } from '../art/index.ts';
 import type { ActivityProgress, CargoRouteStop } from '../../game/activities/logistics.ts';
 import type { ActivityVehicleDef } from '../../game/config/types.ts';
@@ -56,6 +56,29 @@ export function TourOverview({
       </div>
       {resupplyTotal > 0 && (
         <p className="citywork-v4-tour-resupply">Nachladen {resupplyDone}/{resupplyTotal}</p>
+      )}
+      {cargoStops && cargoStops.length > 0 && vehicle && (
+        <div className="citywork-cargo-timeline" aria-label="Ladungsverlauf">
+          {cargoStops.map((stop, index) => {
+            const before =
+              stop.type === 'delivery'
+                ? stop.cargoAfter + stop.amount
+                : Math.max(0, stop.cargoAfter - stop.amount);
+            const delta = stop.type === 'delivery' ? -stop.amount : stop.amount;
+            const pct = vehicle.capacity > 0 ? Math.min(100, (stop.cargoAfter / vehicle.capacity) * 100) : 0;
+            return (
+              <div key={`cargo-${stop.type}-${stop.pathIndex}-${index}`} className={`cargo-timeline-stop ${stop.type} ${stop.status}`}>
+                <span>{stopMeta(stop.type).icon}</span>
+                <div>
+                  <small>{before.toLocaleString('de-DE')} → {stop.cargoAfter.toLocaleString('de-DE')}</small>
+                  <i><b style={{ width: `${pct}%` }} /></i>
+                </div>
+                <strong className={delta < 0 ? 'out' : 'in'}>{delta > 0 ? '+' : ''}{delta.toLocaleString('de-DE')}</strong>
+              </div>
+            );
+          })}
+          <p><PackageCheck size={13} /> Jeder Wert stammt aus der Cargo-Auswertung der gezeichneten Route.</p>
+        </div>
       )}
       <div className="citywork-v4-tour-list">
         {stops.map((stop, index) => {

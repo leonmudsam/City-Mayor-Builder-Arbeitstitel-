@@ -1,4 +1,30 @@
-# Offene Aufgaben nach v0.80
+> **Themen­sortierter Gesamtüberblick: [`BACKLOG.md`](BACKLOG.md)** — jeder offene
+> Auftrag genau einmal, nach Thema (Straßen, Stadtarbeit, Betriebe, Bauen/Kamera,
+> Welt/Grafik, Häfen …). Diese Datei hier bleibt die auftrags-/phasenbezogene Detailsicht.
+
+# Offene Aufgaben nach v0.82
+
+## Visual Active Operations – verbleibende Daten-/Logikbindungen
+
+**Erledigt (v0.82, visuell):** fokussierter Arbeitsgebietsmodus mit
+terrainfolgendem Overlay und Einzelklick, Betriebs-Tabs, ehrliches lokales Lager,
+Ressourcen-Netzwerkdrawer, Transportplanner, Cargo-Timeline, bestätigungspflichtiger
+Straßenentwurf, adaptiver Waterfront-Ghost, zentrale `--ui-*`-Tokens, ViewModels,
+Dev-Szenarien und vollständiger Handoff. Save bleibt v19.
+
+**Offen – nicht in React lösen:**
+
+- rollierender Betriebsdurchsatz als ReadModel (z. B. 10 Spielminuten),
+- Handkarren als datengetriebene, Controller-validierte Transportmethode,
+- physische Zwischenlager/Bestände und freie Zielkapazität je Gebäude,
+- optionale Nachfüllquellen samt Umweg/Ladezeit,
+- atomarer Straßenpfad-Command, Alternativroute, Kontrollpunkte, Steigung,
+  Viadukt und Abrissdiagnose,
+- wirtschaftliche Pfeilerhöhe/-kosten und Rampenlänge für Waterfront,
+- Rechteck-/Polygon-Auswahl erst nach passendem UI-Entwurfsvertrag,
+- Fäll-/Trag-Animationsclips und echtes Baum-Mesh-Raycast.
+
+Verbindlicher Einstieg: `ACTIVE_OPERATIONS_VISUAL_HANDOFF.md`.
 
 ## § Change 9.0 — Central Start, Fog, Living World, Active Work (P0, in Arbeit)
 
@@ -25,8 +51,9 @@ L2 ohne Expansion nutzbar; Berg/Wasser/Fruchtland im Umkreis; Unlock-Ring {7,12}
   **Enthält den inkrementellen Deko-/Vegetations-Neuaufbau bei Unlock (aus S3d).**
 - **S5 lebendige Welt** — Waldstruktur, Mammutbäume (`giant_pine_*`/`ancient_tree_*`
   drop-in), Unterholz, Tierhabitate.
-- **S6 Sägewerk-Arbeitsmodus** — 3D-Kreiswerkzeug, Einzelbaum-Raycast, Effizienz-
-  Overlay (§17), Bedienung (§18), Fäll-/Trag-Animationen (baut auf A1–A5 auf).
+- **S6 Sägewerk-Arbeitsmodus:** Visual/UI v0.82 erledigt (terrainfolgende Fläche,
+  Kreisradius, Einzelknoten-Klick, Effizienz/Tooltip, Bestätigung). Offen bleiben
+  echtes Baum-Mesh-Raycast, Rechteck/Polygon und Fäll-/Trag-Animationen.
 - **S7 Steinbruch/Farm** — Knoten-Generalisierung tree→rock→crop, Feld-Lebenszyklus.
 - **S8 Feuerwehr/Wasser/Bauhof/Lagerhaus** — gemeinsames Operation-Framework.
 
@@ -73,9 +100,9 @@ Transport-Betriebskosten je Fahrt (Geldsenke). +4 Tests.
   geologische neue Vorkommen statt fester Nachwachszeit.
 - **A10 Automatisierung:** Vorarbeiter, wiederholbare Arbeitszonen, Lagerregeln,
   wiederkehrende Transporte (verbrauchen weiter Fahrzeuge/Arbeiter/Zeit).
-- **Renderer:** 3D-Einzelbaum-Raycast im Arbeitsmodus (einzelne Bäume anklicken),
-  Fäll-/Trag-Animationen, Hervorhebung reservierter/erschöpfter Knoten. Aktuell:
-  Arbeitsgebiet-Auswahl über das Gebäudefenster; Arbeiter als gepoolte Figuren.
+- **Renderer-Reste:** echtes Baum-Mesh-Raycast und Fäll-/Trag-Animationen.
+  Tilegenaue Einzelknoten-Auswahl sowie Hervorhebung verfügbar/reserviert/
+  ungültig sind seit v0.82 vorhanden; Arbeiter bleiben gepoolte Figuren.
 
 ## Vegetations-Performance — Ausbaustufe 2 (P0)
 

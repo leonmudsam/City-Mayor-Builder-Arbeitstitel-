@@ -31,6 +31,9 @@ import { ActivityRoutePlanner } from './components/panels/ActivityRoutePlanner.t
 import { MenuPanel } from './components/panels/MenuPanel.tsx';
 import { WeatherPanel } from './components/panels/WeatherPanel.tsx';
 import { ActivityExecutionWidget } from './components/citywork/ActivityExecutionWidget.tsx';
+import { WorkAreaPlanner } from './components/operations/WorkAreaPlanner.tsx';
+import { ResourceNetworkPanel } from './components/operations/ResourceNetworkPanel.tsx';
+import { SmartRoadPlannerHud } from './components/operations/SmartRoadPlannerHud.tsx';
 import { formatDuration, formatMoney } from './i18n/index.ts';
 import { Toasts } from './components/common/Toasts.tsx';
 import { EventModal } from './components/common/EventModal.tsx';
@@ -213,6 +216,8 @@ export function App() {
     ui.stopMoving();
     ui.selectBuilding(undefined);
     ui.openRegionDialog(undefined);
+    ui.closeWorkAreaPlanner();
+    ui.closeResourceNetwork();
     ui.setPanel(undefined);
     controller.resetTo(next);
     void adapter.save(DEFAULT_SLOT, next);
@@ -259,6 +264,9 @@ const RIGHT_SHEET_PANELS = new Set(['build', 'status', 'economy', 'trade', 'mayo
 function GameScreen({ onImport, onReset }: { onImport(json: string): boolean; onReset(variant?: ResetVariant): void }) {
   const openPanel = useUiStore((s) => s.openPanel);
   const activityPlannerDefId = useUiStore((s) => s.activityPlannerDefId);
+  const workAreaPlannerBuildingId = useUiStore((s) => s.workAreaPlannerBuildingId);
+  const resourceNetworkResource = useUiStore((s) => s.resourceNetworkResource);
+  const placingDefId = useUiStore((s) => s.placingDefId);
   const selectedBuildingId = useUiStore((s) => s.selectedBuildingId);
   const regionDialog = useUiStore((s) => s.regionDialog);
   const uiHidden = useUiStore((s) => s.uiHidden);
@@ -297,6 +305,16 @@ function GameScreen({ onImport, onReset }: { onImport(json: string): boolean; on
 
         {activityPlannerDefId ? (
           <ActivityRoutePlanner key={activityPlannerDefId} defId={activityPlannerDefId} />
+        ) : workAreaPlannerBuildingId ? (
+          <>
+            <WorkAreaPlanner key={workAreaPlannerBuildingId} />
+            <CameraControls />
+          </>
+        ) : resourceNetworkResource ? (
+          <>
+            <ResourceNetworkPanel key={resourceNetworkResource} resource={resourceNetworkResource} />
+            <CameraControls />
+          </>
         ) : (
           <>
             {/* Persistent HUD frame: civic status/minimap on the left, inbox on
@@ -328,6 +346,7 @@ function GameScreen({ onImport, onReset }: { onImport(json: string): boolean; on
             {openPanel === 'build' && <BuildMenu />}
             <ActivityExecutionWidget />
             <DriveHud />
+            {placingDefId === 'road' && <SmartRoadPlannerHud />}
           </>
         )}
       </main>

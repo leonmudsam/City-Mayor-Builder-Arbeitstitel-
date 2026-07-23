@@ -1,4 +1,4 @@
-import { Anchor, ArrowDownRight, ArrowUpRight, Building2, Lock, Ruler, Waves, X } from 'lucide-react';
+import { Anchor, ArrowDownRight, ArrowUpRight, Building2, Gift, Lock, Ruler, Waves, X } from 'lucide-react';
 import { useGame, useUiStore } from '../../state/store.ts';
 import { formatMoney, t } from '../../i18n/index.ts';
 import { eventImage, uiImage } from '../../assets/registry.ts';
@@ -100,7 +100,7 @@ export function RegionDialog() {
         )}
         {isFree && (
           <p className="region-free-hint">
-            <span className="region-free-badge">🎁 {t('ui.region.free_badge')}</span>
+            <span className="region-free-badge"><Gift size={14} /> {t('ui.region.free_badge')}</span>
             {t('ui.region.free_hint')}
           </p>
         )}

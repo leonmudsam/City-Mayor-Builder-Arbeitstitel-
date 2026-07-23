@@ -4,6 +4,7 @@
 | --- | --- | --- |
 | Level/Wappen/XP | `hud/GameHud.tsx` | Controller-Snapshot, `xpForNextLevel` |
 | Ressourcenraten | `hud/ResourceCard.tsx` | `getIncome`, `derived.productionPerMin` |
+| Ressourcen-Gesamtnetz | `operations/ResourceNetworkPanel.tsx` | `getInventoryNetworkOverview`, lokale Inventare/Transfers; Fokus über `MapApi` |
 | Zeit/Tageslauf | `hud/CameraControls.tsx::DayNightControl` | `environmentSettings.ts` |
 | Wetter-/Atmosphärenfenster | `panels/WeatherPanel.tsx` | lokales `environmentSettings.ts` → `SkyEnvironment` |
 | Linke Hauptnavigation | `hud/QuickActionBar.tsx` | `useUiStore`, `MapApi` |
@@ -14,8 +15,11 @@
 | 3D-Info-Layer | `hud/InfoLayerControl.tsx` | UI-Store → `MapApi.setInfoLayer` |
 | Infrastruktur-Layer | `hud/InfoLayerControl.tsx` | UI-Store → `MapApi.setInfrastructureLayer`; Renderer liest Controller-Graph/Diagnosen |
 | Gebäudekatalog | `panels/BuildMenu.tsx` | Building-Config, Buildkosten, `startPlacing` |
-| Gebäudedetail / Hafenanschlüsse | `panels/FloatingBuildingSheet.tsx` | Gebäude-Snapshot, Diagnosen, `getBuildingInfrastructureStatus`, `getAvailableHarborConnections` |
-| Hafen-Ghost | `renderer/three/ThreeMapRenderer.ts` | `getWaterfrontPlacementPreview`; Land-/Wasserzellen und automatische Rotation |
+| Gebäudedetail / Aktiver Betrieb | `panels/FloatingBuildingSheet.tsx` | Gebäude-Snapshot, Diagnosen, Worker/Inventory/Operation, Config-Stufen |
+| Arbeitsgebiet | `operations/WorkAreaPlanner.tsx` | WorkArea/Nodes/OperationPreview → Bestätigung per `startBuildingOperationWithNodes` |
+| Betriebstransport | `logistics/TransportPlanner.tsx` | Transfer-Ziele/-Preview/Fahrzeug-Config → `createInventoryTransfer` |
+| Smart Road Planning | `operations/SmartRoadPlannerHud.tsx` | UI-Draft → `roadPathPreview` → bestehende Platzierungs-Commands |
+| Hafen-Ghost/-HUD | `operations/WaterfrontPlacementHud.tsx`, `renderer/three/ThreeMapRenderer.ts` | `placementDiagnostics`, `getWaterfrontPlacementPreview`; GLB/Fallback, Plattform/Pfeiler/Anker |
 | Schifffahrtsvorschau | `renderer/three/ThreeMapRenderer.ts` | `getShippingRoutePreview`; reine gestrichelte Graphprojektion |
 | Dev-Reveal | `panels/DebugPanel.tsx` | UI-only `toggleRegionFog` getrennt von `debugUnlockAllRegions` |
 | Region freischalten | `panels/RegionDialog.tsx` | Regions-Config, `unlockRegion` |
@@ -24,12 +28,13 @@
 | Routenplanung | `panels/ActivityRoutePlanner.tsx` | Orchestrierung über Plan-/Analyse-/Start-Commands |
 | Manuelle 2D-Karte | `citywork/ManualRouteMap.tsx` | Terrain-/Gebäude-Snapshot, `RouteRoadAnchors`, `ActivityRoutePreview` |
 | Fahrzeug + Cargo | `citywork/VehicleSelector.tsx` | `ActivityPlanningContext.vehicles`, `CargoPlan`, `CargoRouteEvaluation`, `vehicleImage` |
-| Live-Tour | `citywork/TourOverview.tsx` | `CargoRouteStop[]`, Gebäude-Snapshot/Config |
+| Live-Tour / Cargo-Timeline | `citywork/TourOverview.tsx` | `CargoRouteStop[]`, Gebäude-Snapshot/Config, echte Ladung vor/nach Stopp |
 | Infrastrukturberater | `citywork/InfrastructureAdvisor.tsx` | `getActivityInfrastructureWarnings` |
 | Routenkennzahlen | `citywork/RouteSummary.tsx` | `ActivityRoutePreview` |
 | Kamera | `hud/CameraControls.tsx`, `MapView.tsx` | `IMapRenderer`/`MapApi` |
 | UI-Komposition | `App.tsx` | Ein-Sheet-Regel aus `useUiStore` |
-| Visuelles System | `styles.css`, `styles/{tokens,layout,components,animations,responsive,citywork,citywork-v4}.css` | Legacy-Basis plus geordnete Tokens/Breakpoints |
+| Dev-Weltvergleich | `world/WorldCompactionPreview.tsx` | dokumentierte Bake-Kennzahlen, nur `DebugPanel` |
+| Visuelles System | `styles.css`, `styles/{tokens,layout,components,animations,responsive,citywork,citywork-v4,active-operations}.css` | Legacy-Basis plus geordnete Tokens/Breakpoints |
 | 3D-Welt | `renderer/three/ThreeMapRenderer.ts` | Controller-Snapshots, Asset-Registry |
 | Himmel/Wetter | `renderer/three/SkyEnvironment.ts` | rein visuelle Environment-Settings |
 

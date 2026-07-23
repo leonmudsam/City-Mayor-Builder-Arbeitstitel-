@@ -1,5 +1,104 @@
 # Patch Notes
 
+## v0.82 — Visual Active Operations, Ressourcennetz & Infrastruktur
+
+### Was
+
+- **Fokussierter Arbeitsgebietsmodus:** Sägewerk bleibt in der echten 3D-Welt;
+  darüber liegen terrainfolgende Fläche, effizienter/maximaler Ring,
+  instanzierte Ressourcenpunkte, Wege und Mittelpunkt. Einzel-, Kreis- und
+  Ausschlussauswahl sind bedienbar; Rechteck/Polygon zeigen einen erklärten
+  Sperrzustand. Cursor-Tooltip und feste Legende erklären Ertrag, Distanz,
+  Effizienz und Status.
+- **Betriebsfenster mit vier Tabs:** Übersicht, Lager, Aufträge, Upgrades.
+  Echte Arbeiterzustände, lokales Lager/Reserve/Transportmenge,
+  Auftragspreview und Config-Stufen mit Gebäudeartwork. Eine nicht vorhandene
+  Durchsatzhistorie wird nicht geschätzt, sondern als „Nicht angebunden“ gezeigt.
+- **Ressourcen-Gesamtnetz aus dem HUD:** global verfügbarer Pool und echte lokale
+  Betriebslager/Transporte, eindeutige Regions-/Richtungsnamen, Kapazitäten,
+  Kartenfokus und Details. Keine erfundene Rathaus-/Lagerhaus-Aufteilung.
+- **Transportplanung:** Quelle→Methode→Ziel, echte Menge, Fahrzeugwerte,
+  Ladungszahl, Route, Dauer, Straßenanteil und Betriebskosten. Handkarren ist
+  hochwertig sichtbar, aber mangels Controller-Vertrag klar deaktiviert.
+- **Stadtarbeit:** Ladung vor/nach jedem echten Cargo-Stopp samt Delta und
+  Nachfüllmarkierung.
+- **Straßenplanung:** Klick/Drag erzeugt einen noch nicht gebauten Entwurf.
+  Start/Ziel/Kosten/Brücken/Blockaden werden vorab angezeigt; Bau erst nach
+  Bestätigung. Alternative Route bleibt erklärt gesperrt.
+- **Wassergebäude:** spezialisiertes Platzierungs-HUD, reales Drop-in-GLB als
+  transparenter Ghost (prozeduraler Fallback), Plattform, weiße Pfeiler,
+  Wasseranker, Tiefe, Fundamentausgleich und Rotation.
+- **Region/Dev:** Emoji im Gratis-Badge durch SVG ersetzt; Dev-Panel zeigt den
+  dokumentarischen Weltverdichtungsvergleich.
+
+### Warum
+
+Das Referenzbild erklärt neun Systeme gleichzeitig, wäre als echter Bildschirm
+aber eine Dashboard-Wand. Die Umsetzung trennt die Zustände und hält die Welt
+bedienbar. Gleichzeitig müssen fehlende Simulationsdaten sichtbar bleiben, ohne
+falsche Bestände, Durchsatzraten oder Fahrzeugfähigkeiten vorzutäuschen.
+
+### Architektur
+
+- `viewModels.ts` definiert renderer- und state-freie Visual-Verträge sowie
+  Callback-Interfaces. `adapters.ts` befüllt sie ausschließlich aus vorhandenen
+  Controller-Read-Helpern. Dev-Szenarien liegen getrennt unter `src/dev`.
+- UI-Store hält nur Arbeitsgebiet-, Ressourcennetz- und Straßenentwürfe. Erst
+  Primäraktionen rufen vorhandene Commands auf; React mutiert keinen `GameState`.
+- Renderer ergänzt `setWorkAreaOverlay` und `setRoadPlanOverlay`. Fläche/Linien
+  sind gebündelt, Knoten/Straßen instanziert und identische Arbeitsgebiete
+  signaturgecacht.
+- Straßenbau nutzt weiterhin die eine Placement-Logik. Mangels atomarem
+  Pfad-Command wird ein komplett validierter/finanzierbarer Entwurf beim
+  Bestätigen über die bestehenden Kachel-Commands ausgeführt.
+- Zentrale semantische `--ui-*`-Tokens und gemeinsame Panel-/Metric-/Capacity-/
+  Status-Komponenten; keine zweite UI-Bibliothek.
+
+### Auswirkung
+
+- Keine Wirtschaftsformel, kein Balancing, kein neues Simulationssystem.
+- Save-Schema bleibt **v19**, keine Migration.
+- Browser-/Desktop-Codebasis bleibt gemeinsam; Assets laufen über Registry und
+  Fallbacks.
+- Responsive Breakpoints decken 1920×1080, 1600×900, 1440×900 und 1366×768 mit
+  internen Scrollflächen und erreichbaren Primäraktionen ab.
+
+### Zukunft
+
+- Durchsatz-ReadModel, Handkarren, physische Zwischenlager und optionale
+  Nachfüllquellen aus der Simulation anbinden.
+- Atomaren Straßenpfad-Command, Alternativrouten, Kontrollpunkte,
+  Steigung/Viadukt/Abriss sowie wirtschaftliche Waterfront-Pfeilerwerte liefern.
+- Rechteck/Polygon und echte Baum-Mesh-Raycast-Auswahl danach freischalten;
+  Fäll-/Trag-Clips als Drop-in-Animationen ergänzen.
+
+### Dateien / Assets
+
+- UI: `components/{operations,logistics,common,world}/**`,
+  `FloatingBuildingSheet.tsx`, `TourOverview.tsx`, `ResourceDetailPopover.tsx`,
+  `MapView.tsx`, `App.tsx`.
+- Renderer/State: `IMapRenderer.ts`, `ThreeMapRenderer.ts`,
+  `CameraInputController.ts`, `state/store.ts`.
+- Styling: `styles/active-operations.css`.
+- Tests: `tests/activeOperationsViewModels.test.ts`.
+- Dokumentation: sieben neue Active-Operations-System-/Handoff-Dateien plus
+  Projektstand, offene Aufgaben, Handoff-Log und Komponentenkarte.
+- Keine neuen Binärassets; Lucide-SVG, Registry-Bilder/GLBs und bestehende
+  Fallbacks.
+
+### Verifikation
+
+- `npx tsc -b --force`, `npx eslint src tests`, **351/351 Tests in 46 Dateien**
+  und `npm run build` sind grün. Preview unter Basis-URL `/`: HTTP 200.
+- Der verpflichtende Runtime-Screenshot-Smoke blieb in dieser Sitzung
+  infrastrukturseitig blockiert, weil die integrierte Browsersteuerung keine
+  Browserinstanz bereitstellte. Es wurde kein externer Browser-Fallback verwendet
+  und keine visuelle Freigabe vorgetäuscht.
+- `npm run tauri:build` wurde ausgeführt und stoppte vor der nativen Kompilierung
+  bei `cargo metadata: program not found`. Der Browser-/Frontend-Build selbst ist
+  erfolgreich; für den nativen Build fehlt auf diesem Rechner die Rust-/Cargo-
+  Toolchain.
+
 ## v0.81 — Fog of War: globale Wolkenfront & Kamera-Grenzen (§ Change 9.0, Phase S3)
 
 ### Was

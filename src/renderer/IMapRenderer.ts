@@ -14,8 +14,33 @@ export interface HoverInfo {
   defId: string;
   error: PlacementError | undefined;
   bonusPct: number;
+  x: number;
+  y: number;
   rotation?: BuildingRotation;
   waterfront?: WaterfrontPlacementPreview;
+}
+
+/** Rein visuelle Arbeitsgebiets-Projektion. Keine dieser Angaben wird vom
+ * Renderer persistiert oder in Simulationszustand zurückgeschrieben. */
+export interface WorkAreaOverlayNode {
+  id: string;
+  x: number;
+  y: number;
+  state: 'available' | 'selected' | 'reserved' | 'excluded' | 'invalid';
+}
+
+export interface WorkAreaOverlay {
+  center: { x: number; y: number };
+  radius: number;
+  efficientRadius: number;
+  maximumRadius: number;
+  nodes: WorkAreaOverlayNode[];
+}
+
+export interface RoadPlanOverlayTile {
+  x: number;
+  y: number;
+  status: 'start' | 'end' | 'ok' | 'bridge' | 'elevated' | 'exists' | 'blocked';
 }
 
 /** Renderer-owned camera state exposed as plain numbers for lightweight HUDs. */
@@ -61,6 +86,9 @@ export interface RendererCallbacks {
   onMove(id: string, x: number, y: number): void;
   /** Ghost validation changed — UI shows/hides the placement banner. */
   onHoverInfo(info: HoverInfo | undefined): void;
+  /** Arbeitsgebietsmodus: Kartenklick/-hover auf einen echten Ressourcenknoten. */
+  onWorkAreaNodeClick?(id: string): void;
+  onWorkAreaNodeHover?(id: string | undefined, clientX?: number, clientY?: number): void;
   /** Eine Landschaft wurde gerade erschlossen (zentrales "Neues Gebiet"-Popup). */
   onRegionUnlocked(id: RegionId): void;
   /** § A6 Fahrmodus: Ein-/Ausstieg ins gesteuerte Fahrzeug (UI zeigt Fahr-HUD). */
@@ -91,6 +119,9 @@ export interface IMapRenderer {
   /** Changes only which renderer-owned marker billboards are visible. */
   setInfoLayer(mode: InfoLayerMode): void;
   setInfrastructureLayer(mode: InfrastructureLayerMode): void;
+  /** Terrainfolgende, rein visuelle Planungs-Layer. */
+  setWorkAreaOverlay(overlay: WorkAreaOverlay | undefined): void;
+  setRoadPlanOverlay(tiles: RoadPlanOverlayTile[]): void;
   /** Dev-Präsentation und echte Progression bleiben strikt getrennt. */
   setWorldReveal(state: WorldRevealState): void;
   centerOnCity(): void;

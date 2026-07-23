@@ -1,9 +1,17 @@
 import { create } from 'zustand';
 import { useSyncExternalStore } from 'react';
 import type { GameController } from '../game/commands/controller.ts';
-import type { RegionId } from '../game/types.ts';
+import type { RegionId, ResourceId } from '../game/types.ts';
 import type { CameraPreset } from '../renderer/three/CameraConfig.ts';
-import type { InfoLayerMode, InfrastructureLayerMode, MapCameraView, WorldRevealState } from '../renderer/IMapRenderer.ts';
+import type {
+  InfoLayerMode,
+  InfrastructureLayerMode,
+  MapCameraView,
+  RoadPlanOverlayTile,
+  WorkAreaOverlay,
+  WorldRevealState,
+} from '../renderer/IMapRenderer.ts';
+import type { WorkAreaSelectionMode } from '../components/operations/viewModels.ts';
 
 // The React side never mutates game state directly: it reads snapshots off
 // the controller (re-rendering via the version counter) and sends commands.
@@ -40,6 +48,8 @@ export interface MapApi {
   /** Renderer-only building information filter. */
   setInfoLayer(mode: InfoLayerMode): void;
   setInfrastructureLayer(mode: InfrastructureLayerMode): void;
+  setWorkAreaOverlay(overlay: WorkAreaOverlay | undefined): void;
+  setRoadPlanOverlay(tiles: RoadPlanOverlayTile[]): void;
   /** Dev-only renderer state; progression is still controller-owned. */
   setWorldReveal(state: WorldRevealState): void;
   /** § A6: Läuft eine selbst-fahrbare Fahrmission (Button zeigen)? */
@@ -142,6 +152,29 @@ interface UiState {
   activityPlannerDefId: string | undefined;
   openActivityPlanner(defId: string): void;
   closeActivityPlanner(): void;
+  /** Rein visueller Arbeitsgebiets-Entwurf. Persistiert erst über den
+   *  bestehenden startBuildingOperationWithNodes-Command. */
+  workAreaPlannerBuildingId: string | undefined;
+  workAreaSelectionMode: WorkAreaSelectionMode;
+  workAreaRadius: number;
+  workAreaSelectedNodeIds: string[];
+  workAreaHoverNodeId: string | undefined;
+  openWorkAreaPlanner(buildingId: string, radius: number, selectedNodeIds: string[]): void;
+  closeWorkAreaPlanner(): void;
+  setWorkAreaSelectionMode(mode: WorkAreaSelectionMode): void;
+  setWorkAreaRadius(radius: number): void;
+  setWorkAreaSelectedNodeIds(nodeIds: string[]): void;
+  toggleWorkAreaNode(nodeId: string, selected?: boolean): void;
+  setWorkAreaHoverNode(nodeId?: string): void;
+  /** Große, aber rein lesende Ressourcen-Netzwerksicht. */
+  resourceNetworkResource: ResourceId | undefined;
+  openResourceNetwork(resource: ResourceId): void;
+  closeResourceNetwork(): void;
+  /** UI-only Straßenentwurf. Kosten/Validierung kommen aus roadPathPreview;
+   *  gebaut wird erst nach Bestätigung über placeBuilding. */
+  roadPlanPath: { x: number; y: number }[];
+  setRoadPlanPath(path: { x: number; y: number }[]): void;
+  clearRoadPlan(): void;
   placingDefId: string | undefined;
   /** Cosmetic facing (degrees) chosen for the building about to be placed
    *  (§ Gebäude-Rotation). Resets to 0 whenever placement starts/stops. */
@@ -227,12 +260,71 @@ export const useUiStore = create<UiState>((set) => ({
   openActivityPlanner: (defId) =>
     set({
       activityPlannerDefId: defId,
+      workAreaPlannerBuildingId: undefined,
+      resourceNetworkResource: undefined,
+      roadPlanPath: [],
       openPanel: undefined,
       selectedBuildingId: undefined,
       regionDialog: undefined,
       placingDefId: undefined,
     }),
   closeActivityPlanner: () => set({ activityPlannerDefId: undefined }),
+  workAreaPlannerBuildingId: undefined,
+  workAreaSelectionMode: 'circle',
+  workAreaRadius: 1,
+  workAreaSelectedNodeIds: [],
+  workAreaHoverNodeId: undefined,
+  openWorkAreaPlanner: (buildingId, radius, selectedNodeIds) =>
+    set({
+      workAreaPlannerBuildingId: buildingId,
+      workAreaSelectionMode: 'circle',
+      workAreaRadius: radius,
+      workAreaSelectedNodeIds: [...new Set(selectedNodeIds)],
+      workAreaHoverNodeId: undefined,
+      resourceNetworkResource: undefined,
+      activityPlannerDefId: undefined,
+      openPanel: undefined,
+      selectedBuildingId: undefined,
+      regionDialog: undefined,
+      placingDefId: undefined,
+      movingBuildingId: undefined,
+      roadPlanPath: [],
+    }),
+  closeWorkAreaPlanner: () =>
+    set({
+      workAreaPlannerBuildingId: undefined,
+      workAreaSelectedNodeIds: [],
+      workAreaHoverNodeId: undefined,
+    }),
+  setWorkAreaSelectionMode: (mode) => set({ workAreaSelectionMode: mode }),
+  setWorkAreaRadius: (radius) => set({ workAreaRadius: Math.max(1, Math.round(radius)) }),
+  setWorkAreaSelectedNodeIds: (nodeIds) => set({ workAreaSelectedNodeIds: [...new Set(nodeIds)] }),
+  toggleWorkAreaNode: (nodeId, selected) =>
+    set((state) => {
+      const next = new Set(state.workAreaSelectedNodeIds);
+      const shouldSelect = selected ?? !next.has(nodeId);
+      if (shouldSelect) next.add(nodeId);
+      else next.delete(nodeId);
+      return { workAreaSelectedNodeIds: [...next] };
+    }),
+  setWorkAreaHoverNode: (nodeId) => set({ workAreaHoverNodeId: nodeId }),
+  resourceNetworkResource: undefined,
+  openResourceNetwork: (resource) =>
+    set({
+      resourceNetworkResource: resource,
+      workAreaPlannerBuildingId: undefined,
+      activityPlannerDefId: undefined,
+      openPanel: undefined,
+      selectedBuildingId: undefined,
+      regionDialog: undefined,
+      placingDefId: undefined,
+      movingBuildingId: undefined,
+      roadPlanPath: [],
+    }),
+  closeResourceNetwork: () => set({ resourceNetworkResource: undefined }),
+  roadPlanPath: [],
+  setRoadPlanPath: (path) => set({ roadPlanPath: path.map((point) => ({ x: Math.round(point.x), y: Math.round(point.y) })) }),
+  clearRoadPlan: () => set({ roadPlanPath: [] }),
   placingDefId: undefined,
   placingRotation: 0,
   rotatePlacing: () => set((s) => ({ placingRotation: (((s.placingRotation + 90) % 360) as 0 | 90 | 180 | 270) })),
@@ -245,7 +337,15 @@ export const useUiStore = create<UiState>((set) => ({
     set((s) => {
       const openPanel = s.openPanel === panel ? undefined : panel;
       return openPanel
-        ? { openPanel, selectedBuildingId: undefined, regionDialog: undefined, activityPlannerDefId: undefined }
+        ? {
+            openPanel,
+            selectedBuildingId: undefined,
+            regionDialog: undefined,
+            activityPlannerDefId: undefined,
+            workAreaPlannerBuildingId: undefined,
+            resourceNetworkResource: undefined,
+            roadPlanPath: [],
+          }
         : { openPanel: undefined };
     }),
   startPlacing: (defId) =>
@@ -257,8 +357,11 @@ export const useUiStore = create<UiState>((set) => ({
       regionDialog: undefined,
       openPanel: undefined,
       activityPlannerDefId: undefined,
+      workAreaPlannerBuildingId: undefined,
+      resourceNetworkResource: undefined,
+      roadPlanPath: [],
     }),
-  stopPlacing: () => set({ placingDefId: undefined, placingRotation: 0 }),
+  stopPlacing: () => set({ placingDefId: undefined, placingRotation: 0, roadPlanPath: [] }),
   startMoving: (id) =>
     set({
       movingBuildingId: id,
@@ -267,18 +370,39 @@ export const useUiStore = create<UiState>((set) => ({
       regionDialog: undefined,
       openPanel: undefined,
       activityPlannerDefId: undefined,
+      workAreaPlannerBuildingId: undefined,
+      resourceNetworkResource: undefined,
+      roadPlanPath: [],
     }),
   stopMoving: () => set({ movingBuildingId: undefined }),
   selectBuilding: (id) =>
     set(
       id
-        ? { selectedBuildingId: id, placingDefId: undefined, regionDialog: undefined, openPanel: undefined, activityPlannerDefId: undefined }
+        ? {
+            selectedBuildingId: id,
+            placingDefId: undefined,
+            regionDialog: undefined,
+            openPanel: undefined,
+            activityPlannerDefId: undefined,
+            workAreaPlannerBuildingId: undefined,
+            resourceNetworkResource: undefined,
+            roadPlanPath: [],
+          }
         : { selectedBuildingId: undefined },
     ),
   openRegionDialog: (id) =>
     set(
       id
-        ? { regionDialog: id, selectedBuildingId: undefined, placingDefId: undefined, openPanel: undefined, activityPlannerDefId: undefined }
+        ? {
+            regionDialog: id,
+            selectedBuildingId: undefined,
+            placingDefId: undefined,
+            openPanel: undefined,
+            activityPlannerDefId: undefined,
+            workAreaPlannerBuildingId: undefined,
+            resourceNetworkResource: undefined,
+            roadPlanPath: [],
+          }
         : { regionDialog: undefined },
     ),
   pushToast: (text, kind = 'info') =>

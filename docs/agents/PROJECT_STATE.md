@@ -1,6 +1,33 @@
-# Projektstand — v0.81
+# Projektstand — v0.82
 
 Stand: 23. Juli 2026
+
+## Visual Active Operations, Ressourcennetz & Infrastruktur (v0.82)
+
+- Das Referenz-Dashboard ist in getrennte Zustände zerlegt: Arbeitsgebiet,
+  Betriebs-Tabs, Ressourcennetz, Transport, Cargo-Timeline, Straßenentwurf,
+  Wasserbau-Ghost sowie bestehende Regions-/Performanceflächen. Die
+  Ein-Hauptfläche-Regel bleibt erhalten.
+- **Arbeitsgebiet produktiv:** UI-only Node-Entwurf; terrainfolgende Fläche,
+  Reichweitenringe, instanzierte Knoten und Wege. Bestätigung ausschließlich via
+  `startBuildingOperationWithNodes`.
+- **Betrieb/Netz/Transport:** echte Worker-/Inventory-/Preview-Daten. Fehlende
+  Durchsatzhistorie, zentrale Lageraufteilung und Handkarrenlogik werden sichtbar
+  nicht vorgetäuscht.
+- **Straße:** Klick/Drag erzeugt erstmals einen Preview-Entwurf statt Sofortbau;
+  Kosten/Blockaden aus `roadPathPreview`, Bau erst nach Bestätigung. Wasserbau
+  nutzt optionales transparentes GLB plus Plattform, Pfeiler und Anker.
+- **Stadtarbeit:** Ladung vor/nach jedem echten `CargoRouteStop` sichtbar.
+  Dev-Panel zeigt zusätzlich den dokumentarischen Weltverdichtungsvergleich.
+- Stabile Visual-ViewModels/Actions, getrennte Dev-Szenarien und sieben
+  System-/Handoff-Dokumente. **Keine Simulation, kein Balancing, keine
+  Save-Änderung (v19).**
+- Verifiziert: TypeScript, ESLint, 351/351 Tests und Produktionsbuild. Preview
+  liefert HTTP 200; Runtime-Screenshot mangels verfügbarer integrierter
+  Browserinstanz und nativer Tauri-Build mangels Cargo-Toolchain offen.
+- Offen: echte Durchsatzhistorie, Handkarren, physische Zwischenlager,
+  optionale Nachfüllquellen, atomarer Straßenpfad/Alternativen/Viadukte,
+  wirtschaftliche Waterfront-Pfeilerwerte und Rechteck/Polygon.
 
 ## § Change 9.0 — Fog of War & Kamera-Grenzen S3 (v0.81)
 

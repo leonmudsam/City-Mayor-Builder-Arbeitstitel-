@@ -5,12 +5,49 @@ import type { HoverInfo, IMapRenderer, RendererCallbacks } from '../renderer/IMa
 import { getController, setMapApi, useUiStore, type MapApi } from '../state/store.ts';
 import { ServiceOverlayBanner } from './hud/ServiceOverlayBanner.tsx';
 import { t } from '../i18n/index.ts';
+import { buildSmartRoadPlanView, buildWorkAreaPlannerView } from './operations/adapters.ts';
+import { WaterfrontPlacementHud } from './operations/WaterfrontPlacementHud.tsx';
 
 interface CoverageInfo {
   label: string;
   underCapacity: boolean;
   counts: { supplied: number; partial: number; unsupplied: number };
   capacity?: { servable: number; used: number };
+}
+
+/** Schließt Lücken eines schnellen Pointer-Drags orthogonal, ohne diagonal
+ * unverbundene Straßenkacheln zu erzeugen. Der Entwurf bleibt reiner UI-State. */
+function extendRoadDraft(
+  path: readonly { x: number; y: number }[],
+  target: { x: number; y: number },
+): { x: number; y: number }[] {
+  const next = [...path];
+  const last = next[next.length - 1];
+  if (!last) return [{ x: target.x, y: target.y }];
+  if (last.x === target.x && last.y === target.y) return next;
+  let x = last.x;
+  let y = last.y;
+  const xFirst = Math.abs(target.x - x) >= Math.abs(target.y - y);
+  const walkX = () => {
+    while (x !== target.x) {
+      x += Math.sign(target.x - x);
+      next.push({ x, y });
+    }
+  };
+  const walkY = () => {
+    while (y !== target.y) {
+      y += Math.sign(target.y - y);
+      next.push({ x, y });
+    }
+  };
+  if (xFirst) {
+    walkX();
+    walkY();
+  } else {
+    walkY();
+    walkX();
+  }
+  return next;
 }
 
 /** Imperative camera surface exposed to the HUD. */
@@ -26,6 +63,8 @@ function makeMapApi(r: IMapRenderer): MapApi {
     focusGround: (x, z, dist) => r.focusGround(x, z, dist),
     setInfoLayer: (mode) => r.setInfoLayer(mode),
     setInfrastructureLayer: (mode) => r.setInfrastructureLayer(mode),
+    setWorkAreaOverlay: (overlay) => r.setWorkAreaOverlay(overlay),
+    setRoadPlanOverlay: (tiles) => r.setRoadPlanOverlay(tiles),
     setWorldReveal: (state) => r.setWorldReveal(state),
     canDrive: () => r.canDrive(),
     enterDrive: () => r.enterDrive(),
@@ -40,6 +79,7 @@ export function MapView() {
   const rendererRef = useRef<IMapRenderer>(undefined);
   const [hoverInfo, setHoverInfo] = useState<HoverInfo | undefined>(undefined);
   const [coverage, setCoverage] = useState<CoverageInfo | undefined>(undefined);
+  const [workAreaHover, setWorkAreaHover] = useState<{ id: string; x: number; y: number }>();
 
   useEffect(() => {
     const host = hostRef.current;
@@ -82,6 +122,20 @@ export function MapView() {
         }
       },
       onHoverInfo: (info) => setHoverInfo(info),
+      onWorkAreaNodeClick: (id) => {
+        const state = useUiStore.getState();
+        if (state.workAreaSelectionMode === 'single') state.setWorkAreaSelectedNodeIds([id]);
+        else state.toggleWorkAreaNode(id, state.workAreaSelectionMode === 'exclude' ? false : undefined);
+      },
+      onWorkAreaNodeHover: (id, clientX, clientY) => {
+        useUiStore.getState().setWorkAreaHoverNode(id);
+        const rect = host.getBoundingClientRect();
+        setWorkAreaHover(
+          id && clientX !== undefined && clientY !== undefined
+            ? { id, x: clientX - rect.left, y: clientY - rect.top }
+            : undefined,
+        );
+      },
       // § A6 Fahrmodus: Ein-/Ausstieg spiegeln + erreichte Ziele abschließen.
       onDriveChange: (isActive) => useUiStore.getState().setDriveActive(isActive),
       onDriveProgress: (id) => {
@@ -100,6 +154,11 @@ export function MapView() {
       },
       onCoverageInfo: (info) => setCoverage(info),
       onPlace: (defId, x, y, rotation) => {
+        if (defId === 'road') {
+          const state = useUiStore.getState();
+          state.setRoadPlanPath(extendRoadDraft(state.roadPlanPath, { x, y }));
+          return;
+        }
         const result = controller.placeBuilding(defId, x, y, rotation);
         if (!result.ok) {
           ui.pushToast(placementErrorText(defId, result.error), 'error');
@@ -114,6 +173,11 @@ export function MapView() {
       // Drag-painting a road: silent on overlap so a swipe doesn't spam toasts,
       // but a real blocker (funds, locked sector) still surfaces once.
       onDragPlace: (defId, x, y) => {
+        if (defId === 'road') {
+          const state = useUiStore.getState();
+          state.setRoadPlanPath(extendRoadDraft(state.roadPlanPath, { x, y }));
+          return;
+        }
         const result = controller.placeBuilding(defId, x, y);
         if (!result.ok && result.error !== 'occupied') {
           ui.pushToast(placementErrorText(defId, result.error), 'error');
@@ -130,6 +194,8 @@ export function MapView() {
     renderer.applyPreset(ui.cameraPreset);
     renderer.setInfoLayer(ui.infoLayerMode);
     renderer.setInfrastructureLayer(ui.infrastructureLayerMode);
+    renderer.setRoadPlanOverlay([]);
+    renderer.setWorkAreaOverlay(undefined);
     const syncWorldReveal = (state = useUiStore.getState()) => renderer.setWorldReveal({
       fogDisabled: state.fogDisabled,
       revealLockedRegionsVisually: state.revealLockedRegionsVisually,
@@ -148,6 +214,10 @@ export function MapView() {
       renderer.setSelected(s.selectedBuildingId);
       renderer.setInfoLayer(s.infoLayerMode);
       renderer.setInfrastructureLayer(s.infrastructureLayerMode);
+      const roadPlan = s.placingDefId === 'road' && s.roadPlanPath.length > 0
+        ? buildSmartRoadPlanView(controller, s.roadPlanPath)
+        : undefined;
+      renderer.setRoadPlanOverlay(roadPlan?.tiles ?? []);
       syncWorldReveal(s);
     });
     const unsubscribeController = controller.subscribe(() => syncWorldReveal());
@@ -158,6 +228,10 @@ export function MapView() {
         useUiStore.getState().stopMoving();
         useUiStore.getState().selectBuilding(undefined);
         useUiStore.getState().openRegionDialog(undefined);
+        useUiStore.getState().closeWorkAreaPlanner();
+        useUiStore.getState().closeResourceNetwork();
+        renderer.setWorkAreaOverlay(undefined);
+        renderer.setRoadPlanOverlay([]);
       }
       // Rotate the building about to be placed, 90° per press (§ Gebäude-Rotation).
       if ((e.key === 'r' || e.key === 'R') && useUiStore.getState().placingDefId !== undefined) {
@@ -187,9 +261,45 @@ export function MapView() {
 
   return (
     <div className={`map-host${overlayMode ? ' overlay-active' : ''}`} ref={hostRef}>
-      {active && <PlacementBanner info={hoverInfo} moving={moving !== undefined} />}
+      {active && hoverInfo?.waterfront
+        ? <WaterfrontPlacementHud info={hoverInfo} />
+        : active && <PlacementBanner info={hoverInfo} moving={moving !== undefined} />}
       {banner && !active && <ServiceOverlayBanner label={banner.label} detail={banner.detail} tone={banner.tone} />}
       {coverage && !active && <CoverageLegend info={coverage} />}
+      {workAreaHover && <WorkAreaMapTooltip hover={workAreaHover} />}
+    </div>
+  );
+}
+
+function WorkAreaMapTooltip({ hover }: { hover: { id: string; x: number; y: number } }) {
+  const game = getController();
+  const state = useUiStore.getState();
+  if (!state.workAreaPlannerBuildingId) return null;
+  const view = buildWorkAreaPlannerView(
+    game,
+    state.workAreaPlannerBuildingId,
+    state.workAreaSelectionMode,
+    state.workAreaRadius,
+    state.workAreaSelectedNodeIds,
+  );
+  const node = view?.nodes.find((candidate) => candidate.id === hover.id);
+  if (!node) return null;
+  return (
+    <div
+      className="work-area-map-tooltip"
+      style={{
+        left: `${hover.x}px`,
+        top: `${hover.y}px`,
+        transform: `translate(${hover.x > window.innerWidth * 0.65 ? '-105%' : '18px'}, ${hover.y > window.innerHeight * 0.65 ? '-105%' : '18px'})`,
+      }}
+    >
+      <strong>{node.label}</strong>
+      <span>{node.stateLabel}</span>
+      <dl>
+        <div><dt>Ertrag</dt><dd>{node.amountMin} {node.resourceLabel}</dd></div>
+        <div><dt>Entfernung</dt><dd>{node.distanceTiles} Felder</dd></div>
+        <div><dt>Effizienz</dt><dd>{node.efficiencyPct}%</dd></div>
+      </dl>
     </div>
   );
 }

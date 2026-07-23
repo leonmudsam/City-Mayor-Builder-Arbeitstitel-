@@ -1,5 +1,32 @@
 # Handoff-Log
 
+## 2026-07-23 — Visual Active Operations & Infrastructure UI (v0.82)
+
+**Rein visuell/UI, Save unverändert v19.** Das überladene Referenz-Dashboard wurde
+in exklusive Spielzustände übertragen.
+
+- Arbeitsgebietsmodus mit UI-only Node-Entwurf, Radius/Einzel/Ausnahme,
+  terrainfolgendem Three-Layer, Cursor-Tooltip und Controller-Bestätigung.
+- Gebäudefenster mit Tabs, echten Workern, lokalem Lager,
+  Auftrags-/Upgradeansicht; Durchsatz bleibt ehrlich „nicht angebunden“.
+- Ressourcen-Netzwerkdrawer aus dem HUD, physische lokale Standorte,
+  Transportplanner mit echten Preview-Werten; Handkarren sichtbar gesperrt.
+- Stadtarbeit-Cargo-Timeline aus `CargoRouteStop[]`.
+- Straßenbau als Preview vor Bestätigung; Wasserbau-GLB-Ghost,
+  Fundament/Pfeiler/Wasseranker und spezialisiertes HUD.
+- Gemeinsame `GamePanel`-/Metric-/Capacity-/Status-Bausteine,
+  `active-operations.css`, Visual-ViewModels/Action-Verträge und getrennte
+  Dev-Szenarien.
+- Doku: `ACTIVE_OPERATIONS_VISUAL_SYSTEM.md` plus Netzwerk-, Transport-,
+  Straßen-, Waterfront-, ViewModel- und Handoff-Dokument.
+- Tests: `activeOperationsViewModels.test.ts`. Offene Bindungen und Reihenfolge:
+  `ACTIVE_OPERATIONS_VISUAL_HANDOFF.md`.
+- Verifikation: TypeScript und ESLint sauber, 46 Testdateien mit **351/351**
+  Tests sowie Produktionsbuild grün; Preview `/` antwortet mit HTTP 200.
+  Screenshot-Smoke blockiert, weil die integrierte Browsersteuerung keine Instanz
+  bereitstellte. Tauri-Build angestoßen, aber lokale Rust-/Cargo-Toolchain fehlt
+  (`cargo metadata: program not found`).
+
 ## 2026-07-23 — § Change 9.0: Fog of War & Kamera-Grenzen S3 (v0.81)
 
 **Rein visuell/navigatorisch, keine Save-Änderung (v19).** Der Pro-Region-Nebel

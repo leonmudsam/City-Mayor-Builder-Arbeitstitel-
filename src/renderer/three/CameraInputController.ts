@@ -32,6 +32,8 @@ export interface CameraInputHost {
   paint(clientX: number, clientY: number): void;
   selectAt(clientX: number, clientY: number): void;
   ghostMove(clientX: number, clientY: number): void;
+  /** Passiver Karten-Hover für visuelle Planungsmodi; darf nie mutieren. */
+  hoverAt(clientX: number, clientY: number): void;
   cancel(): void;
   focusCity(): void;
   focusSelected(): void;
@@ -136,6 +138,7 @@ export class CameraInputController {
       this.hoverX = e.clientX;
       this.hoverY = e.clientY;
       if (this.host.isPlacing()) this.host.ghostMove(e.clientX, e.clientY);
+      this.host.hoverAt(e.clientX, e.clientY);
       return;
     }
     const dx = e.clientX - this.lastX;

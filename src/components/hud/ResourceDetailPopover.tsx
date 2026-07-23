@@ -15,6 +15,7 @@ function fmt(n: number): string {
 export function ResourceDetailPopover({ id }: { id: ResourceId }) {
   const game = useGame();
   const setPanel = useUiStore((s) => s.setPanel);
+  const openResourceNetwork = useUiStore((s) => s.openResourceNetwork);
   const stock = game.state.resources[id];
   const cap = game.derived.storageCaps[id];
   const perMin = game.derived.productionPerMin[id];
@@ -65,6 +66,9 @@ export function ResourceDetailPopover({ id }: { id: ResourceId }) {
         {cap > 0 && <DetailRow label={t('ui.storage')} value={fmt(cap)} />}
       </div>
       <p className="res-detail-note">{full ? t('ui.storage.full') : t(`ui.resource.note.${id}`)}</p>
+      <button className="btn-link res-detail-link" onClick={() => openResourceNetwork(id)}>
+        Gesamtes Ressourcennetz öffnen
+      </button>
     </div>
   );
 }

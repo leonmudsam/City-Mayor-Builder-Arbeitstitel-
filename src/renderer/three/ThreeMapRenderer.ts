@@ -121,6 +121,8 @@ import type {
   InfoLayerMode,
   InfrastructureLayerMode,
   RendererCallbacks,
+  RoadPlanOverlayTile,
+  WorkAreaOverlay,
   WorldRevealState,
 } from '../IMapRenderer.ts';
 import { t } from '../../i18n/index.ts';
@@ -414,6 +416,10 @@ export class ThreeMapRenderer implements IMapRenderer {
   };
   private vehicleLastPos = new Map<string, { x: number; z: number }>();
   private overlayGroup = new Group();
+  /** Planungslayer bleiben getrennt vom Ghost und können ohne Welt-Rebuild
+   * aktualisiert/entsorgt werden. Je Layer entstehen nur wenige Draw-Calls. */
+  private workAreaOverlayGroup = new Group();
+  private roadPlanOverlayGroup = new Group();
   private infrastructureOverlayGroup = new Group();
   private markerGroup = new Group();
   private ground: Mesh | undefined; // invisible pick plane
@@ -449,6 +455,9 @@ export class ThreeMapRenderer implements IMapRenderer {
   private infoLayerMode: InfoLayerMode = 'problems';
   private infrastructureLayerMode: InfrastructureLayerMode = 'off';
   private lastHoverKey = '';
+  private workAreaOverlay: WorkAreaOverlay | undefined;
+  private workAreaOverlayKey = '';
+  private workAreaHoverNodeId: string | undefined;
 
   private smoke: { obj: Object3D; mat: SpriteMaterial | undefined; vy: number; age: number; ttl: number }[] = [];
   private smokeTimer = 0;
@@ -567,6 +576,8 @@ export class ThreeMapRenderer implements IMapRenderer {
       this.buildingGroup,
       this.liveGroup,
       this.infrastructureOverlayGroup,
+      this.workAreaOverlayGroup,
+      this.roadPlanOverlayGroup,
       this.overlayGroup,
       this.markerGroup,
     );
@@ -633,6 +644,8 @@ export class ThreeMapRenderer implements IMapRenderer {
       delete this.vehicleAssets;
     }
     this.disposeGroup(this.overlayGroup);
+    this.disposeGroup(this.workAreaOverlayGroup);
+    this.disposeGroup(this.roadPlanOverlayGroup);
     this.disposeGroup(this.infrastructureOverlayGroup);
     for (const m of this.markers) this.disposeGroup(m.obj);
     for (const t of this.markerTex.values()) t.dispose();
@@ -669,6 +682,192 @@ export class ThreeMapRenderer implements IMapRenderer {
     if (mode === this.infoLayerMode) return;
     this.infoLayerMode = mode;
     this.rebuildMarkers();
+  }
+
+  setWorkAreaOverlay(overlay: WorkAreaOverlay | undefined): void {
+    const key = overlay
+      ? `${overlay.center.x},${overlay.center.y}|${overlay.radius}|${overlay.efficientRadius}|${overlay.maximumRadius}|${overlay.nodes.map((node) => `${node.id}:${node.state}`).join(',')}`
+      : '';
+    if (key === this.workAreaOverlayKey) return;
+    this.workAreaOverlayKey = key;
+    this.workAreaOverlay = overlay;
+    this.workAreaHoverNodeId = undefined;
+    this.clearOwnedGroup(this.workAreaOverlayGroup);
+    if (!overlay) {
+      this.callbacks.onWorkAreaNodeHover?.(undefined);
+      return;
+    }
+
+    // Eine zusammenhängende, leicht transparente Oberfläche aus exakt den
+    // Kacheln des aktuellen Radius. Jede Ecke liest terrainHeightAt, wodurch
+    // der Layer auch auf Hängen weder schwebt noch im Boden verschwindet.
+    const positions: number[] = [];
+    const r = Math.max(1, Math.ceil(overlay.radius));
+    for (let z = Math.floor(overlay.center.y - r); z <= Math.ceil(overlay.center.y + r); z++) {
+      for (let x = Math.floor(overlay.center.x - r); x <= Math.ceil(overlay.center.x + r); x++) {
+        const dx = x + 0.5 - overlay.center.x;
+        const dz = z + 0.5 - overlay.center.y;
+        if (dx * dx + dz * dz > overlay.radius * overlay.radius) continue;
+        const y00 = terrainHeightAt(x, z) + 0.055;
+        const y10 = terrainHeightAt(x + 1, z) + 0.055;
+        const y11 = terrainHeightAt(x + 1, z + 1) + 0.055;
+        const y01 = terrainHeightAt(x, z + 1) + 0.055;
+        positions.push(
+          x, y00, z,
+          x + 1, y10, z,
+          x + 1, y11, z + 1,
+          x, y00, z,
+          x + 1, y11, z + 1,
+          x, y01, z + 1,
+        );
+      }
+    }
+    const areaGeo = new BufferGeometry();
+    areaGeo.setAttribute('position', new Float32BufferAttribute(positions, 3));
+    areaGeo.computeVertexNormals();
+    const area = new Mesh(
+      areaGeo,
+      new MeshBasicMaterial({
+        color: 0x1da9c9,
+        transparent: true,
+        opacity: 0.11,
+        depthWrite: false,
+        side: DoubleSide,
+      }),
+    );
+    area.renderOrder = 14;
+    this.workAreaOverlayGroup.add(area);
+
+    const addRing = (radius: number, color: number, dashed = false): void => {
+      const ringPoints: Vector3[] = [];
+      const steps = 96;
+      for (let i = 0; i <= steps; i++) {
+        const angle = (i / steps) * Math.PI * 2;
+        const x = overlay.center.x + Math.cos(angle) * radius;
+        const z = overlay.center.y + Math.sin(angle) * radius;
+        ringPoints.push(new Vector3(x, terrainHeightAt(x, z) + 0.13, z));
+      }
+      const geometry = new BufferGeometry().setFromPoints(ringPoints);
+      const material = dashed
+        ? new LineDashedMaterial({ color, dashSize: 0.7, gapSize: 0.4, transparent: true, opacity: 0.95 })
+        : new LineBasicMaterial({ color, transparent: true, opacity: 0.95 });
+      const line = new Line(geometry, material);
+      if (dashed) line.computeLineDistances();
+      line.renderOrder = 16;
+      this.workAreaOverlayGroup.add(line);
+    };
+    addRing(overlay.radius, 0x51d6ed);
+    addRing(overlay.efficientRadius, 0x57d98c, true);
+    if (overlay.maximumRadius > overlay.radius) addRing(overlay.maximumRadius, 0xf1a43c, true);
+
+    if (overlay.nodes.length > 0) {
+      const geometry = new CylinderGeometry(0.23, 0.23, 0.09, 12);
+      const material = new MeshBasicMaterial({ vertexColors: true, transparent: true, opacity: 0.94 });
+      const nodes = new InstancedMesh(geometry, material, overlay.nodes.length);
+      const dummy = new Object3D();
+      const colors: Record<WorkAreaOverlay['nodes'][number]['state'], number> = {
+        available: 0x45c97c,
+        selected: 0x64e6ff,
+        reserved: 0xf0a23b,
+        excluded: 0x7f8b96,
+        invalid: 0xe45647,
+      };
+      overlay.nodes.forEach((node, index) => {
+        dummy.position.set(node.x + 0.5, terrainHeightAt(node.x + 0.5, node.y + 0.5) + 0.14, node.y + 0.5);
+        dummy.updateMatrix();
+        nodes.setMatrixAt(index, dummy.matrix);
+        nodes.setColorAt(index, new Color(colors[node.state]));
+      });
+      nodes.instanceMatrix.needsUpdate = true;
+      if (nodes.instanceColor) nodes.instanceColor.needsUpdate = true;
+      nodes.renderOrder = 18;
+      this.workAreaOverlayGroup.add(nodes);
+    }
+
+    // Wege aller ausgewählten Knoten werden in einem LineSegments-Draw-Call
+    // gerendert und entlang der Oberfläche in Ein-Kachel-Schritten abgetastet.
+    const pathPositions: number[] = [];
+    for (const node of overlay.nodes) {
+      if (node.state !== 'selected') continue;
+      const dx = node.x + 0.5 - overlay.center.x;
+      const dz = node.y + 0.5 - overlay.center.y;
+      const steps = Math.max(1, Math.ceil(Math.hypot(dx, dz)));
+      for (let i = 0; i < steps; i++) {
+        const a = i / steps;
+        const b = (i + 1) / steps;
+        const ax = overlay.center.x + dx * a;
+        const az = overlay.center.y + dz * a;
+        const bx = overlay.center.x + dx * b;
+        const bz = overlay.center.y + dz * b;
+        pathPositions.push(
+          ax, terrainHeightAt(ax, az) + 0.1, az,
+          bx, terrainHeightAt(bx, bz) + 0.1, bz,
+        );
+      }
+    }
+    if (pathPositions.length > 0) {
+      const pathGeo = new BufferGeometry();
+      pathGeo.setAttribute('position', new Float32BufferAttribute(pathPositions, 3));
+      const paths = new LineSegments(
+        pathGeo,
+        new LineDashedMaterial({ color: 0x8feaff, dashSize: 0.28, gapSize: 0.18, transparent: true, opacity: 0.65 }),
+      );
+      paths.computeLineDistances();
+      paths.renderOrder = 15;
+      this.workAreaOverlayGroup.add(paths);
+    }
+
+    const center = new Mesh(
+      new CylinderGeometry(0.45, 0.58, 0.16, 16),
+      new MeshBasicMaterial({ color: 0xf0b641, transparent: true, opacity: 0.95 }),
+    );
+    center.position.set(
+      overlay.center.x,
+      terrainHeightAt(overlay.center.x, overlay.center.y) + 0.16,
+      overlay.center.y,
+    );
+    center.renderOrder = 19;
+    this.workAreaOverlayGroup.add(center);
+  }
+
+  setRoadPlanOverlay(tiles: RoadPlanOverlayTile[]): void {
+    this.clearOwnedGroup(this.roadPlanOverlayGroup);
+    if (tiles.length === 0) return;
+    const geometry = new BoxGeometry(0.86, 0.045, 0.86);
+    const material = new MeshBasicMaterial({ vertexColors: true, transparent: true, opacity: 0.82 });
+    const mesh = new InstancedMesh(geometry, material, tiles.length);
+    const dummy = new Object3D();
+    const colors: Record<RoadPlanOverlayTile['status'], number> = {
+      start: 0x4ed17c,
+      end: 0xf0a13a,
+      ok: 0xeef7fa,
+      bridge: 0x45c7e7,
+      elevated: 0xc69cff,
+      exists: 0x758b96,
+      blocked: 0xe65345,
+    };
+    tiles.forEach((tile, index) => {
+      dummy.position.set(tile.x + 0.5, terrainHeightAt(tile.x + 0.5, tile.y + 0.5) + 0.12, tile.y + 0.5);
+      dummy.updateMatrix();
+      mesh.setMatrixAt(index, dummy.matrix);
+      mesh.setColorAt(index, new Color(colors[tile.status]));
+    });
+    mesh.instanceMatrix.needsUpdate = true;
+    if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
+    mesh.renderOrder = 18;
+    this.roadPlanOverlayGroup.add(mesh);
+
+    const points = tiles.map(
+      (tile) => new Vector3(tile.x + 0.5, terrainHeightAt(tile.x + 0.5, tile.y + 0.5) + 0.16, tile.y + 0.5),
+    );
+    if (points.length > 1) {
+      const route = new Line(
+        new BufferGeometry().setFromPoints(points),
+        new LineBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.72 }),
+      );
+      route.renderOrder = 19;
+      this.roadPlanOverlayGroup.add(route);
+    }
   }
 
   /** MapApi "Karte zentrieren" / Zentrum-preset. */
@@ -961,6 +1160,7 @@ export class ThreeMapRenderer implements IMapRenderer {
       },
       selectAt: (cx, cy) => this.selectAt(cx, cy),
       ghostMove: (cx, cy) => this.updateGhostAt(cx, cy),
+      hoverAt: (cx, cy) => this.hoverWorkAreaAt(cx, cy),
       cancel: () => this.callbacks.onCancelPlacement(),
       focusCity: () => this.cam.focusCity(),
       focusSelected: () => this.focusSelected(),
@@ -1061,6 +1261,14 @@ export class ThreeMapRenderer implements IMapRenderer {
   }
 
   private selectAt(clientX: number, clientY: number): void {
+    if (this.workAreaOverlay) {
+      const tile = this.pickTileAt(clientX, clientY);
+      const node = tile
+        ? this.workAreaOverlay.nodes.find((candidate) => candidate.x === tile.x && candidate.y === tile.y)
+        : undefined;
+      if (node) this.callbacks.onWorkAreaNodeClick?.(node.id);
+      return;
+    }
     const id = this.pickBuildingAt(clientX, clientY);
     if (id) {
       this.callbacks.onSelectBuilding(id);
@@ -1080,6 +1288,18 @@ export class ThreeMapRenderer implements IMapRenderer {
       }
     }
     this.callbacks.onSelectBuilding(undefined);
+  }
+
+  private hoverWorkAreaAt(clientX: number, clientY: number): void {
+    if (!this.workAreaOverlay) return;
+    const tile = this.pickTileAt(clientX, clientY);
+    const node = tile
+      ? this.workAreaOverlay.nodes.find((candidate) => candidate.x === tile.x && candidate.y === tile.y)
+      : undefined;
+    const next = node?.id;
+    if (next === this.workAreaHoverNodeId) return;
+    this.workAreaHoverNodeId = next;
+    this.callbacks.onWorkAreaNodeHover?.(next, clientX, clientY);
   }
 
   // ---- placement ghost ------------------------------------------------------
@@ -1115,6 +1335,8 @@ export class ThreeMapRenderer implements IMapRenderer {
       defId: def.id,
       error,
       bonusPct,
+      x,
+      y,
       ...(waterfront ? { rotation: displayRotation, waterfront } : {}),
     });
 
@@ -1175,7 +1397,45 @@ export class ThreeMapRenderer implements IMapRenderer {
       new MeshStandardMaterial({ color: col, transparent: true, opacity: 0.22 }),
     );
     box.position.y = 0.7;
+    box.userData['ghostMassing'] = true;
     grp.add(box);
+    if (waterfront) {
+      // Weiße Gründungspunkte machen den automatischen Höhenausgleich lesbar,
+      // ohne eine neue Platzierungsregel einzuführen.
+      const pileMaterial = new MeshStandardMaterial({
+        color: 0xf4fbff,
+        emissive: 0xa9dded,
+        emissiveIntensity: 0.2,
+        transparent: true,
+        opacity: 0.78,
+        roughness: 0.72,
+      });
+      const corners = [
+        [-w * 0.38, -h * 0.38],
+        [w * 0.38, -h * 0.38],
+        [-w * 0.38, h * 0.38],
+        [w * 0.38, h * 0.38],
+      ] as const;
+      for (const [px, pz] of corners) {
+        const worldX = x + w / 2 + px;
+        const worldZ = y + h / 2 + pz;
+        const ground = terrainHeightAt(worldX, worldZ);
+        const pileHeight = Math.max(0.16, ghostBase - ground + 0.24);
+        const pile = new Mesh(new CylinderGeometry(0.09, 0.12, pileHeight, 10), pileMaterial);
+        pile.position.set(px, -pileHeight / 2 + 0.2, pz);
+        grp.add(pile);
+      }
+      const anchorMaterial = new MeshBasicMaterial({ color: 0x75e5ff, transparent: true, opacity: 0.9 });
+      for (const cell of waterfront.waterCells.filter((_, index) => index % Math.max(1, Math.ceil(waterfront.waterCells.length / 6)) === 0)) {
+        const anchor = new Mesh(new CylinderGeometry(0.13, 0.13, 0.07, 16), anchorMaterial);
+        anchor.position.set(
+          cell.x + 0.5 - (x + w / 2),
+          WATER_LEVEL - ghostBase + 0.13,
+          cell.y + 0.5 - (y + h / 2),
+        );
+        grp.add(anchor);
+      }
+    }
     // Front-facing indicator (§ Gebäude-Rotation): a small arrow at the edge the
     // player chose as the front, so the rotation choice is visible before
     // committing — roads auto-orient from their neighbour mask, so skip it there.
@@ -1191,6 +1451,48 @@ export class ThreeMapRenderer implements IMapRenderer {
     }
     this.overlayGroup.add(grp);
     this.ghost = grp;
+
+    // Wenn ein Drop-in-GLB existiert, erscheint es als echte transparente
+    // Gebäudevorschau. Materialkopien verhindern, dass der Cache oder bereits
+    // gebaute Instanzen durch die Ghost-Transparenz verändert werden.
+    const modelUrl = buildingModel(def.id, 0);
+    if (modelUrl && def.category !== 'roads') {
+      void loadModel(modelUrl)
+        .then((source) => {
+          if (this.destroyed || this.ghost !== grp) return;
+          const model = source.clone(true);
+          model.traverse((object) => {
+            const mesh = object as Mesh;
+            if (!mesh.isMesh) return;
+            const materials = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
+            const ghostMaterials = materials.map((material) => {
+              const clone = material.clone();
+              clone.transparent = true;
+              clone.opacity = error ? 0.34 : 0.52;
+              clone.depthWrite = false;
+              return clone;
+            });
+            mesh.material = Array.isArray(mesh.material) ? ghostMaterials : ghostMaterials[0]!;
+            mesh.castShadow = false;
+            mesh.receiveShadow = false;
+          });
+          fitObject(model, {
+            footprint: Math.max(w, h) * 0.88,
+            rotationY: (displayRotation * Math.PI) / 180,
+            castShadow: false,
+          });
+          const massing = grp.children.find((child) => child.userData['ghostMassing']);
+          if (massing) {
+            grp.remove(massing);
+            this.disposeGroup(massing);
+          }
+          model.position.y += 0.29;
+          grp.add(model);
+        })
+        .catch(() => {
+          // Prozedurale Massing-Box bleibt der garantierte Fallback.
+        });
+    }
   }
 
   private clearGhost(): void {
@@ -4924,6 +5226,16 @@ export class ThreeMapRenderer implements IMapRenderer {
       if (Array.isArray(mat)) mat.forEach((m) => !cacheOwned.has(m) && m.dispose());
       else if (mat && !cacheOwned.has(mat)) mat.dispose();
     });
+  }
+
+  /** Entsorgt nur die aktuell erzeugten Kinder, die persistente Szenengruppe
+   * selbst bleibt registriert und kann im nächsten UI-Frame neu befüllt werden. */
+  private clearOwnedGroup(group: Group): void {
+    for (let index = group.children.length - 1; index >= 0; index--) {
+      const child = group.children[index]!;
+      group.remove(child);
+      this.disposeGroup(child);
+    }
   }
 }
 

@@ -43,6 +43,9 @@ import { ConfirmModal } from '../common/ConfirmModal.tsx';
 import { BuildingArt } from '../art/index.ts';
 import { formatDuration, formatMoney, t } from '../../i18n/index.ts';
 import { regionIdAt, terrainAt } from '../../game/config/startRegion.config.ts';
+import { CapacityBar, StatusChip } from '../common/GamePanel.tsx';
+import { buildBuildingOperationView, defaultWorkAreaSelection } from '../operations/adapters.ts';
+import { TransportPlanner } from '../logistics/TransportPlanner.tsx';
 
 /** Money costs use the compact format; materials stay plain integers. */
 function costLabel(cost: Partial<Record<string, number>>): string {
@@ -429,9 +432,13 @@ function ResidentialGrowthNote() {
  */
 function BuildingOperationSection({ buildingId }: { buildingId: string }) {
   const game = useGame();
-  const { pushToast } = useUiStore();
+  const { pushToast, openWorkAreaPlanner, openResourceNetwork } = useUiStore();
   const info = game.getBuildingOperationInfo(buildingId);
-  if (!info) return null;
+  const operationView = buildBuildingOperationView(game, buildingId);
+  const [tab, setTab] = useState<'overview' | 'storage' | 'orders' | 'upgrades'>('overview');
+  if (!info || !operationView) return null;
+  const building = game.state.buildings[buildingId]!;
+  const def = game.config.buildings.get(building.defId)!;
   const running = info.active !== undefined;
   const preview = running ? undefined : game.getBuildingOperationPreview(buildingId);
   const resName = t(`resource.${info.resource}`);
@@ -442,16 +449,36 @@ function BuildingOperationSection({ buildingId }: { buildingId: string }) {
     const result = game.startBuildingOperation(buildingId);
     if (!result.ok) pushToast(t(result.error === 'invalid' ? 'ui.operation.no_trees' : `error.${result.error}`), 'error');
   };
+  const openArea = () =>
+    openWorkAreaPlanner(
+      buildingId,
+      info.efficientRadius,
+      defaultWorkAreaSelection(game, buildingId, info.efficientRadius),
+    );
 
   return (
     <section className="building-operation">
       <div className="op-head">
         <span><Axe size={15} /> {t('ui.operation.title')}</span>
-        {info.storageFull && <span className="op-badge bad">{t('ui.operation.storage_full')}</span>}
-        {info.active?.paused && <span className="op-badge warn">{t('ui.operation.paused')}</span>}
+        <StatusChip tone={operationView.status === 'active' ? 'good' : operationView.status === 'storage_full' ? 'danger' : 'warning'}>
+          {operationView.statusLabel}
+        </StatusChip>
       </div>
 
-      <div className="op-metrics">
+      <div className="operation-detail-tabs" role="tablist" aria-label="Betriebsdetails">
+        {([
+          ['overview', 'Übersicht'],
+          ['storage', 'Lager'],
+          ['orders', 'Aufträge'],
+          ['upgrades', 'Upgrades'],
+        ] as const).map(([id, label]) => (
+          <button key={id} type="button" role="tab" aria-selected={tab === id} className={tab === id ? 'active' : ''} onClick={() => setTab(id)}>
+            {label}
+          </button>
+        ))}
+      </div>
+
+      {tab === 'overview' && <div className="op-metrics">
         <div className="op-metric">
           <span><Users size={13} /> {t('ui.operation.workers')}</span>
           <strong>{info.workersBusy} / {info.workerSlots}</strong>
@@ -465,31 +492,64 @@ function BuildingOperationSection({ buildingId }: { buildingId: string }) {
           <strong>{info.availableNodes}</strong>
         </div>
         <div className="op-metric">
-          <span><Warehouse size={13} /> {t('ui.operation.work_area')}</span>
-          <strong>{t('ui.operation.tiles', { n: info.efficientRadius })}</strong>
+          <span><TrendingUp size={13} /> Durchsatz</span>
+          <strong className="muted">Nicht angebunden</strong>
         </div>
-      </div>
+      </div>}
 
-      <div className="op-storage">
+      {tab === 'overview' && (
+        <div className="operation-workers">
+          {operationView.workers.length > 0 ? operationView.workers.map((worker) => (
+            <div className="operation-worker-row" key={worker.id}>
+              <span className="worker-avatar"><Users size={14} /></span>
+              <span><strong>{worker.displayName}</strong><small>{worker.statusLabel}{worker.detail ? ` · ${worker.detail}` : ''}</small></span>
+              <i><b style={{ width: `${worker.progressPct}%` }} /></i>
+              <em>{worker.progressPct}%</em>
+            </div>
+          )) : <p className="op-hint">Arbeiter erscheinen mit dem ersten bestätigten Auftrag.</p>}
+        </div>
+      )}
+
+      {tab !== 'upgrades' && <div className="op-storage">
         <div className="op-storage-head">
           <span><PackageOpen size={13} /> {t('ui.operation.local_storage')}</span>
           <strong>{Math.round(inv.used)} / {inv.capacity} {resName}</strong>
         </div>
         <div className="op-storage-bar"><i style={{ width: `${storagePct}%` }} className={info.storageFull ? 'full' : ''} /></div>
-      </div>
+      </div>}
 
-      {preview && preview.validTargetIds.length > 0 && (
+      {tab === 'storage' && (
+        <>
+          <CapacityBar
+            label={`Lagerbelegung · ${resName}`}
+            used={operationView.localStored}
+            reserved={operationView.localReserved}
+            capacity={operationView.localCapacity}
+          />
+          <div className="storage-facts">
+            <span><b>{Math.round(operationView.availableForTransport)}</b><small>Für Transport verfügbar</small></span>
+            <span><b>{Math.round(operationView.localReserved)}</b><small>Reserviert</small></span>
+            <span><b>{Math.max(0, Math.round(operationView.localCapacity - operationView.localStored))}</b><small>Freie Kapazität</small></span>
+          </div>
+          <button className="op-cta ghost" type="button" onClick={() => openResourceNetwork(info.resource)}>
+            <Warehouse size={15} /> Gesamtes Ressourcennetz
+          </button>
+          <TransportPlanner compact sourceBuildingId={buildingId} resource={info.resource} />
+        </>
+      )}
+
+      {tab === 'orders' && preview && preview.validTargetIds.length > 0 && (
         <div className="op-preview">
           <div><Sparkles size={13} /> {t('ui.operation.expected_yield')}<b>~{preview.expectedYield} {resName}</b></div>
           <div><Clock size={13} /> {t('ui.operation.duration')}<b>{formatDuration(preview.expectedDurationSec * 1000)}</b></div>
           <div><Route size={13} /> {t('ui.operation.travel')}<b>{preview.travelDistanceAvg}</b></div>
         </div>
       )}
-      {preview?.warnings.map((w) => (
+      {tab === 'orders' && preview?.warnings.map((w) => (
         <p key={w} className="op-warning"><AlertTriangle size={13} /> {t(w)}</p>
       ))}
 
-      <div className="op-actions">
+      {tab === 'overview' && <div className="op-actions">
         <button className="op-cta" onClick={start}>
           <Axe size={16} /> {running ? t('ui.operation.adjust') : t('ui.operation.start', { resource: resName })}
         </button>
@@ -503,10 +563,33 @@ function BuildingOperationSection({ buildingId }: { buildingId: string }) {
             <button className="op-mini danger" onClick={() => game.cancelBuildingOperation(buildingId)} title={t('ui.operation.stop')}><Square size={15} /></button>
           </>
         )}
-      </div>
-      <p className="op-hint">{t('ui.operation.transport_hint')}</p>
+        <button className="op-cta ghost" onClick={openArea}>
+          <MapPinned size={16} /> Arbeitsgebiet anpassen
+        </button>
+      </div>}
 
-      <BuildingTransportSection buildingId={buildingId} resource={info.resource} />
+      {tab === 'orders' && (
+        <button className="op-cta" onClick={openArea}><MapPinned size={16} /> Arbeitsgebiet öffnen</button>
+      )}
+
+      {tab === 'overview' && <BuildingTransportSection buildingId={buildingId} resource={info.resource} />}
+
+      {tab === 'upgrades' && (
+        <div className="operation-upgrade-preview">
+          {def.operation!.stages.map((stage, index) => (
+            <article key={index} className={index === building.upgradeLevel ? 'current' : index < building.upgradeLevel ? 'complete' : ''}>
+              <BuildingArt id={def.id} category={def.category} px={80} stage={index} />
+              <span><small>Stufe {index + 1}</small><strong>{index === building.upgradeLevel ? 'Aktuell' : index < building.upgradeLevel ? 'Erreicht' : 'Vorschau'}</strong></span>
+              <dl>
+                <div><dt>Arbeiter</dt><dd>{stage.workerSlots}</dd></div>
+                <div><dt>Tempo</dt><dd>{stage.workSpeed}/min</dd></div>
+                <div><dt>Traglast</dt><dd>{stage.carryCapacity}</dd></div>
+                <div><dt>Lager</dt><dd>{stage.storageCapacity}</dd></div>
+              </dl>
+            </article>
+          ))}
+        </div>
+      )}
     </section>
   );
 }
