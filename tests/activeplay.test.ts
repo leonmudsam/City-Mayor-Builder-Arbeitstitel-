@@ -14,26 +14,29 @@ const at = (dx: number, dy: number) => nearTownHall(dx, dy);
 describe('no AFK farming (§1/§16)', () => {
   it('does not produce, earn or grow offline — only build timers advance', () => {
     const { controller } = newController();
-    setLevel(controller, 2);
+    setLevel(controller, 4);
     flattenTerrain(controller);
-    for (let dx = 5; dx <= 10; dx++) controller.placeBuilding('road', at(dx, 5).x, at(dx, 5).y);
+    // § Active Operations 2.0: das Sägewerk produziert nicht mehr passiv; der
+    // „nichts offline"-Vertrag wird am weiterhin passiven Steinbruch geprüft.
+    controller.state.resources = { money: 100_000, wood: 200, stone: 0, food: 100, freshwater: 0 };
+    for (let dx = 5; dx <= 12; dx++) controller.placeBuilding('road', at(dx, 5).x, at(dx, 5).y);
     controller.placeBuilding('house_small', at(3, 6).x, at(3, 6).y);
-    expect(controller.placeBuilding('sawmill', at(6, 6).x, at(6, 6).y)).toEqual({ ok: true });
-    controller.update(T0 + 40_000, true); // buildings finish, live
+    expect(controller.placeBuilding('quarry', at(6, 6).x, at(6, 6).y)).toEqual({ ok: true });
+    controller.update(T0 + 95_000, true); // buildings finish, live
 
-    const wood = controller.state.resources.wood;
+    const stone = controller.state.resources.stone;
     const money = controller.state.resources.money;
     const pop = controller.state.citizens.population;
 
     // A long offline gap: nothing accrues.
-    controller.update(T0 + 40_000 + 8 * 60 * MIN, false);
-    expect(controller.state.resources.wood).toBe(wood);
+    controller.update(T0 + 95_000 + 8 * 60 * MIN, false);
+    expect(controller.state.resources.stone).toBe(stone);
     expect(controller.state.resources.money).toBe(money);
     expect(controller.state.citizens.population).toBe(pop);
 
     // The same span live DOES accrue.
-    controller.update(T0 + 40_000 + 8 * 60 * MIN + 5 * MIN, true);
-    expect(controller.state.resources.wood).toBeGreaterThan(wood);
+    controller.update(T0 + 95_000 + 8 * 60 * MIN + 5 * MIN, true);
+    expect(controller.state.resources.stone).toBeGreaterThan(stone);
   });
 
   it('finishes a build offline (and grants its XP), because timers do run', () => {

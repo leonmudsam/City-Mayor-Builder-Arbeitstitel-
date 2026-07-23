@@ -79,6 +79,27 @@ export interface RouteRoadAnchors {
   targets: { id: string; x: number; y: number }[];
 }
 
+/**
+ * Verkehrsprognose des BEREITS GEZEICHNETEN Weges (§ Overhaul 8.0 / §9). Sie
+ * braucht keine vollständige Route: Sobald die erste Kachel liegt, existiert
+ * eine echte Netzlast — die Planung muss deshalb nie „Wird geprüft" anzeigen.
+ * Rein aus Pfad + Anrainerdichte + Straßengraph, ohne RNG und ohne Zeit.
+ */
+export interface RouteTrafficForecast {
+  /** Mittlere normierte Netzlast des Weges 0..1. */
+  totalLoad: number;
+  /** Stau-Risiko 0..1 (Anteil kritischer Kacheln, mit Kreuzungen gewichtet). */
+  congestionRisk: number;
+  /** Stark belastete Straßenkacheln als „x,y" — die UI markiert sie auf der Karte. */
+  criticalSegments: string[];
+  /** Effektiver Tempofaktor 0..1 (1 = freie Fahrt). */
+  averageSpeedFactor: number;
+  /** Erwarteter Zeitverlust gegenüber freier Fahrt (Sekunden). */
+  expectedDelaySeconds: number;
+  /** Vier Anzeigestufen (§9: Niedrig/Mittel/Hoch/Kritisch). */
+  level: 'low' | 'medium' | 'high' | 'critical';
+}
+
 // Fahr-/Bewertungs-Konstanten (Arcade, bewusst grob — es ist eine Prognose).
 const MS_PER_TILE = 780; // Grundfahrzeit je Kachel
 const CONGESTION_TIME_FACTOR = 1.4; // Verkehr streckt die Fahrzeit
@@ -310,6 +331,82 @@ function finaliseAnalysis(
     efficiencyScore,
     expectedMedal,
     rewardMultiplier: Math.round(rewardMultiplier * 100) / 100,
+  };
+}
+
+// Prognose-Konstanten (§9). Bewusst grob und benannt — es bleibt eine Prognose.
+/** Normierte Last, ab der eine Kachel als Problemabschnitt markiert wird. */
+const CRITICAL_TILE_LOAD = 0.7;
+/** Zusatzlast, die eine Kreuzung auf dem Weg erzeugt (Abbiegen/Vorfahrt). */
+const INTERSECTION_LOAD = 0.12;
+/** Maximaler Tempoverlust bei voller Netzlast (0,55 → 45 % Restgeschwindigkeit). */
+const MAX_SPEED_LOSS = 0.55;
+
+/**
+ * Verkehrsprognose für einen gezeichneten Weg (§9). Anders als `analyseRoute`
+ * braucht sie weder Quelle noch vollständige Zielkette: Sie bewertet exakt die
+ * Kacheln, die der Spieler bereits gezeichnet hat. Zusätzlich zur reinen
+ * Anrainerdichte gehen Kreuzungen (Abbiegevorgänge) und — falls übergeben —
+ * Fahrzeuggröße/Handling in engen Straßen ein. Vollständig deterministisch.
+ */
+export function forecastRouteTraffic(
+  path: readonly { x: number; y: number }[],
+  roads: ReadonlySet<string>,
+  busyness: ReadonlyMap<string, number>,
+  vehicle?: { handling: number; narrowStreetPenalty?: number },
+): RouteTrafficForecast {
+  if (path.length === 0) {
+    return {
+      totalLoad: 0,
+      congestionRisk: 0,
+      criticalSegments: [],
+      averageSpeedFactor: 1,
+      expectedDelaySeconds: 0,
+      level: 'low',
+    };
+  }
+
+  const criticalSegments: string[] = [];
+  const seen = new Set<string>();
+  let loadSum = 0;
+  let intersections = 0;
+  for (const point of path) {
+    const k = key(point.x, point.y);
+    let load = Math.min(1, (busyness.get(k) ?? 0) / BUSY_NORM);
+    // Kreuzungen kosten zusätzlich Zeit: Abbiegen, Warten, kreuzender Verkehr.
+    let neighbours = 0;
+    for (const [dx, dy] of DIRS) if (roads.has(key(point.x + dx, point.y + dy))) neighbours++;
+    if (neighbours >= 3) {
+      load = Math.min(1, load + INTERSECTION_LOAD);
+      if (!seen.has(k)) intersections++;
+    }
+    loadSum += load;
+    if (load >= CRITICAL_TILE_LOAD && !seen.has(k)) criticalSegments.push(k);
+    seen.add(k);
+  }
+
+  const totalLoad = loadSum / path.length;
+  // Enge Straßen: ein großes, schwerfälliges Fahrzeug leidet unter derselben
+  // Netzlast stärker als ein wendiger Transporter.
+  const narrow = vehicle?.narrowStreetPenalty ?? 0;
+  const handling = vehicle?.handling ?? 3;
+  const vehiclePenalty = narrow * totalLoad * (1 - Math.min(1, handling / 5));
+  const effectiveLoad = Math.min(1, totalLoad + vehiclePenalty);
+  const averageSpeedFactor = Math.max(0.2, 1 - effectiveLoad * MAX_SPEED_LOSS);
+  const freeFlowSec = (path.length * MS_PER_TILE) / 1000;
+  const expectedDelaySeconds = Math.round(freeFlowSec * (1 / averageSpeedFactor - 1));
+  const congestionRisk =
+    Math.min(1, criticalSegments.length / path.length + (intersections / path.length) * 0.5) * 0.5 + effectiveLoad * 0.5;
+  const level =
+    congestionRisk >= 0.72 ? 'critical' : congestionRisk >= 0.5 ? 'high' : congestionRisk >= 0.26 ? 'medium' : 'low';
+
+  return {
+    totalLoad: Math.round(totalLoad * 100) / 100,
+    congestionRisk: Math.round(congestionRisk * 100) / 100,
+    criticalSegments,
+    averageSpeedFactor: Math.round(averageSpeedFactor * 100) / 100,
+    expectedDelaySeconds,
+    level,
   };
 }
 

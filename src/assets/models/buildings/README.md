@@ -36,6 +36,8 @@ Ordner: `src/assets/models/buildings/`  ·  Loader: `buildingModel(id, stage)`  
 | office | `office.glb` | economy/ | 4×4 | 8 | 4 | `office_stage2`…`office_stage4` | `office_construction.glb` |
 | power_plant | `power_plant.glb` | energy/ | 8×8 | 11 | 2 | `power_plant_stage2` | `power_plant_construction.glb` |
 | wind_farm | `wind_farm.glb` | energy/ | 7×7 | 11 | 1 | — | `wind_farm_construction.glb` |
+| dock_small | `dock_small.glb` | resources/ | Land 2×2 + Wasser 2×2 | 6 | 1 | — | `dock_small_construction.glb` |
+| river_port | `river_port.glb` | resources/ | Land 4×3 + Wasser 4×3 | 9 | 1 | — | `river_port_construction.glb` |
 | park | `park.glb` | leisure/ | 5×5 | 7 | 2 | `park_stage2` | `park_construction.glb` |
 | playground | `playground.glb` | leisure/ | 3×3 | 7 | 1 | — | `playground_construction.glb` |
 | deco_tree | `deco_tree.glb` | leisure/ | 1×1 | 7 | 1 | — | `deco_tree_construction.glb` |

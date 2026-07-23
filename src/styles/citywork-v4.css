@@ -596,6 +596,13 @@
 .citywork-v4-tour-stop dl div { display: flex; justify-content: space-between; gap: 8px; font-size: 12px; }
 .citywork-v4-tour-stop dt { color: var(--text-muted); }
 .citywork-v4-tour-stop dd { margin: 0; color: #dce9ee; }
+/* § Overhaul 8.0 / §3.2: Ein leer passiertes Ziel ist ein sichtbarer Hinweis,
+   kein stiller Routenfehler — es bleibt offen und kann nachgeliefert werden. */
+.citywork-v4-tour-stop.skipped { border-color: rgba(238, 169, 46, .4); background: rgba(48, 34, 10, .55); }
+.citywork-v4-tour-stop.skipped .citywork-v4-tour-line i { color: #2a1d05; background: var(--gold); }
+.citywork-v4-tour-stop.skipped > div small { color: var(--gold); }
+/* Nachfüllstopps werden getrennt von den Lieferzielen ausgewiesen (§3.2). */
+.citywork-v4-tour-resupply { margin: 0 0 6px; color: #62db8d; font-size: 12px; font-weight: 700; }
 .citywork-v4-tour-open { display: flex; align-items: center; gap: 8px; padding: 8px; color: var(--gold); border: 1px dashed rgba(238, 169, 46, .28); border-radius: 8px; }
 .citywork-v4-tour-open span { display: flex; flex-direction: column; }
 .citywork-v4-tour-open strong { color: #eef5f7; font-size: 12px; }

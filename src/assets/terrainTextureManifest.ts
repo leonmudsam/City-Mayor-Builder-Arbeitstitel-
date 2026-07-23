@@ -1,15 +1,9 @@
-// Single source of truth for the Terrain-System-V2 material textures (v0.42) —
+// Single source of truth for the Terrain-System-V2 material textures (v0.73) —
 // mirrors src/assets/modelManifest.ts's pattern exactly: this data generates
 // docs/TERRAIN_TEXTURES.md (see tests/terrainTextures.test.ts), so the doc can
-// never drift from what's actually planned. NOT yet consumed by the renderer:
-// this is the *preparation* for a splatmap-blended ground shader (folder layout,
-// naming, per-texture spec, blend rules) — the shader itself, and the drop-in
-// registry wiring beyond discovery, are a follow-up phase once real textures
-// exist to verify against (see docs/3D_WORLD_ASSETS.md "Terrain-Elevation").
-//
-// Until then the renderer keeps using the vertex-coloured heightfield (v0.39) —
-// dropping a texture file in today does nothing yet, same "never breaks" promise
-// as everywhere else, just not wired to a consumer yet.
+// never drift from the material library actually consumed by the renderer.
+// Terrain 6.1 uses world-space/triplanar blending plus selected Normal-,
+// Roughness- and AO maps; the vertex colours remain the drop-in fallback.
 
 // ---- categories & shared per-category technical defaults --------------------
 
@@ -46,8 +40,8 @@ export interface CategoryDefaults {
  *  SIZE_CLASS_BUDGETS in modelManifest.ts: shared values resolved by class,
  *  not restated per row). Override per-entry only where it truly differs. */
 export const CATEGORY_DEFAULTS: Record<TextureCategory, CategoryDefaults> = {
-  grass: { folder: 'textures/terrain/grass/', resolution: '1024×1024', maps: { normal: true, roughness: true, ao: false, height: true }, detailLevel: 'nah' },
-  earth: { folder: 'textures/terrain/earth/', resolution: '1024×1024', maps: { normal: true, roughness: true, ao: false, height: true }, detailLevel: 'nah' },
+  grass: { folder: 'textures/terrain/grass/', resolution: '2048×2048', maps: { normal: true, roughness: true, ao: true, height: true }, detailLevel: 'nah–fern' },
+  earth: { folder: 'textures/terrain/earth/', resolution: '2048×2048', maps: { normal: true, roughness: true, ao: true, height: true }, detailLevel: 'nah–mittel' },
   stone: { folder: 'textures/terrain/stone/', resolution: '2048×2048', maps: { normal: true, roughness: true, ao: true, height: true }, detailLevel: 'nah–mittel' },
   mountain: { folder: 'textures/terrain/mountain/', resolution: '2048×2048', maps: { normal: true, roughness: true, ao: true, height: true }, detailLevel: 'nah–fern' },
   desert: { folder: 'textures/terrain/desert/', resolution: '2048×2048', maps: { normal: true, roughness: true, ao: true, height: true }, detailLevel: 'nah–fern' },
@@ -125,18 +119,76 @@ export interface BiomeMaterialSet {
 /** Welche Texturen pro Biom im Materialset zur Auswahl stehen (§ "Biome
  *  steuern Texturen"). Der Splatmap-Mix wählt/gewichtet innerhalb dieses Sets. */
 export const BIOME_MATERIAL_SETS: BiomeMaterialSet[] = [
-  { biome: 'Grasland', textures: ['grass_meadow', 'terrain_grass_01', 'terrain_grass_dry', 'terrain_meadow', 'terrain_earth_light'] },
-  { biome: 'Mischwald', textures: ['terrain_grass_dark', 'terrain_moss', 'terrain_forest_floor', 'terrain_rock'] },
-  { biome: 'Fruchtbares Land', textures: ['terrain_earth_dark', 'terrain_farmland', 'terrain_field_plowed', 'terrain_field_wheat', 'terrain_field_harvest'] },
-  { biome: 'Gebirge', textures: ['mountain_rock_base', 'mountain_snow', 'terrain_rock', 'terrain_mountain', 'terrain_cliff', 'terrain_rock_granite', 'terrain_gravel', 'terrain_snow', 'terrain_snow_rock', 'terrain_snow_drift'] },
+  { biome: 'Grasland', textures: ['grass_meadow_fresh', 'grass_meadow_dark', 'grass_wildflowers', 'grass_trampled', 'grass_wet'] },
+  { biome: 'Mischwald', textures: ['forest_floor_moss', 'forest_floor_needles', 'forest_floor_leaves', 'forest_floor_roots', 'forest_edge_grass'] },
+  { biome: 'Fruchtbares Land', textures: ['fertile_valley_ground', 'coast_mud_fertile', 'terrain_field_plowed', 'terrain_field_wheat', 'terrain_field_harvest'] },
+  { biome: 'Gebirge', textures: ['mountain_granite_base', 'mountain_cliff_faceted', 'mountain_strata', 'mountain_scree', 'mountain_moss', 'mountain_snow', 'mountain_wet_rock'] },
   { biome: 'Wüste', textures: ['desert_sand_red', 'terrain_sand_dune', 'terrain_earth_light', 'terrain_rock_granite'] },
-  { biome: 'Sumpf', textures: ['swamp_mud', 'terrain_earth_wet', 'terrain_moss', 'terrain_swamp'] },
-  { biome: 'Küste', textures: ['coast_pebbles', 'terrain_sand_coast', 'terrain_coast', 'terrain_rock', 'terrain_shallow_water'] },
+  { biome: 'Sumpf', textures: ['moor_heather_ground', 'swamp_mud', 'forest_floor_dark_soil', 'grass_mossy'] },
+  { biome: 'Küste', textures: ['coast_shore_accessible', 'coast_sand_wet', 'coast_gravel_stylized', 'coast_mud_fertile'] },
   { biome: 'Fluss/See/Meer', textures: ['terrain_deep_water', 'terrain_shallow_water', 'terrain_riverbed', 'terrain_river_delta', 'terrain_swamp', 'terrain_ice'] },
   { biome: 'Straßen/Wege', textures: ['terrain_path', 'terrain_road_edge', 'terrain_gravel', 'terrain_stone'] },
 ];
 
 // ---- the textures -----------------------------------------------------------
+
+type Terrain61Row = readonly [
+  name: string,
+  category: TextureCategory,
+  useCase: string,
+  palette: string,
+  biomes: readonly string[],
+];
+
+/** Verbindliche 2048er Bibliothek aus dem 6.1-Visual-Audit. Die zugehörigen
+ * `_normal`, `_roughness` und `_ao` Dateien werden über denselben Registry-
+ * Pfad gefunden, sind aber keine eigenständigen Farb-Layer. */
+const TERRAIN_61_ROWS: readonly Terrain61Row[] = [
+  ['mountain_granite_base', 'mountain', 'Triplanare alpine Felsbasis', 'warmes Granitgrau und Beige', ['Gebirge']],
+  ['mountain_granite_light', 'mountain', 'Sonnenflächen und helle Grate', 'helles Steingrau', ['Gebirge']],
+  ['mountain_granite_dark', 'mountain', 'Nordflanken und tiefe Fugen', 'Anthrazit und kühles Grau', ['Gebirge']],
+  ['mountain_cliff_faceted', 'mountain', 'Steile kantige Klippenflächen', 'Schiefergrau mit warmen Kanten', ['Gebirge', 'Küste']],
+  ['mountain_strata', 'mountain', 'Breite geologische Schichtbänder', 'Grau, Beige und Ocker', ['Gebirge']],
+  ['mountain_scree', 'mountain', 'Geröllfächer am Gebirgsfuß', 'gemischtes Steingrau', ['Gebirge']],
+  ['mountain_moss', 'mountain', 'Moosige untere Felshänge', 'Moosgrün und Graubraun', ['Gebirge', 'Mischwald']],
+  ['mountain_wet_rock', 'mountain', 'Nasse Felsen an Wasserfällen und Küsten', 'dunkles Graphitgrau', ['Gebirge', 'Küste']],
+  ['grass_meadow_fresh', 'grass', 'Frische Wiesenbasis und Bauland', 'sattes Mittelgrün', ['Grasland']],
+  ['grass_meadow_dark', 'grass', 'Beschattete Wiesen und Waldsäume', 'dunkles Waldgrün', ['Grasland', 'Mischwald']],
+  ['grass_meadow_dry', 'grass', 'Trockene sonnige Wiesen', 'Gelbgrün und Stroh', ['Trockene Ebene']],
+  ['grass_soft_ground', 'grass', 'Weicher Übergangsboden in Mulden', 'gedecktes Grünbraun', ['Grasland']],
+  ['grass_mossy', 'grass', 'Feuchte moosige Lichtungen', 'Moosgrün', ['Mischwald', 'Sumpf']],
+  ['grass_wildflowers', 'grass', 'Seltene Blütencluster in Nahsicht', 'Grün mit kleinen Farbtupfern', ['Grasland']],
+  ['grass_trampled', 'grass', 'Genutzte Flächen und Wegränder', 'Oliv und Erdbraun', ['Grasland']],
+  ['grass_wet', 'grass', 'Regennasse Uferwiesen', 'tiefes nasses Grün', ['Küste', 'Flusstal']],
+  ['forest_floor_needles', 'earth', 'Nadelwaldboden', 'Braun und dunkles Grün', ['Mischwald']],
+  ['forest_floor_moss', 'earth', 'Moosiger Waldboden-Basislayer', 'Moosgrün und Torfbraun', ['Mischwald']],
+  ['forest_floor_leaves', 'earth', 'Laubwaldboden', 'Rotbraun und Oliv', ['Mischwald']],
+  ['forest_floor_dark_soil', 'earth', 'Dunkle feuchte Walderde', 'Schokoladenbraun', ['Mischwald', 'Sumpf']],
+  ['forest_floor_roots', 'earth', 'Wurzelreiche Waldränder', 'Erdbraun und Grau', ['Mischwald']],
+  ['forest_edge_grass', 'grass', 'Weicher Wald-Wiesen-Übergang', 'Waldgrün zu Wiesengrün', ['Mischwald', 'Grasland']],
+  ['coast_shore_accessible', 'coast', 'Baubare flache Uferzone', 'Nassgrün, Sand und Kies', ['Küste', 'Flusstal']],
+  ['coast_sand_wet', 'coast', 'Nasser Sand direkt am Wassersaum', 'Beige und dunkles Ocker', ['Küste']],
+  ['coast_gravel_stylized', 'coast', 'Stilisierter Uferkies', 'Blaugrau und Beige', ['Küste', 'Flusstal']],
+  ['coast_mud_fertile', 'coast', 'Fruchtbarer Schlamm an Flussauen', 'dunkles Braun und Oliv', ['Flusstal', 'Sumpf']],
+  ['dry_steppe', 'grass', 'Warme trockene Regionalbasis', 'Oliv, Ocker und Stroh', ['Trockene Ebene']],
+  ['fertile_valley_ground', 'earth', 'Fruchtbare Tal- und Ackerbasis', 'sattes Grün und dunkle Erde', ['Fruchtbares Land']],
+  ['moor_heather_ground', 'swamp', 'Moor- und Heideboden', 'Torfbraun, Violett und Oliv', ['Sumpf']],
+] as const;
+
+const TERRAIN_TEXTURES_61: TerrainTextureEntry[] = TERRAIN_61_ROWS.map(
+  ([name, category, useCase, palette, biomes]) => ({
+    name,
+    category,
+    style: 'stilisiert, low-poly-kompatibel, malerische Makroformen',
+    palette,
+    useCase,
+    materialProps: 'matt bis natürlich feucht, breite Formen statt Foto-Mikrorauschen',
+    blend: 'weltkoordinatenbasiert nach Biom, Höhe, Neigung und Wassernähe; Nahdetail per LOD',
+    priority: 'Pflicht',
+    motif: `${useCase.toLowerCase()}, broad painterly low-poly shapes, restrained micro detail`,
+    biomes,
+  }),
+);
 
 export const TERRAIN_TEXTURES: TerrainTextureEntry[] = [
   // Gras
@@ -648,6 +700,7 @@ export const TERRAIN_TEXTURES: TerrainTextureEntry[] = [
     biomes: ['Küste', 'Flusstal'],
     motif: 'rounded slate and granite coastal pebbles mixed with muted damp sand and natural size variation',
   },
+  ...TERRAIN_TEXTURES_61,
 ];
 
 // ---- README/PROMPTS-style markdown rendering (pure) --------------------------
@@ -694,7 +747,20 @@ const CATEGORY_TITLES: Record<TextureCategory, string> = {
   field: 'Felder',
   path: 'Wege & Straßenränder',
 };
-const CATEGORY_ORDER: TextureCategory[] = ['grass', 'earth', 'stone', 'sand', 'snow', 'water', 'field', 'path'];
+const CATEGORY_ORDER: TextureCategory[] = [
+  'grass',
+  'earth',
+  'stone',
+  'mountain',
+  'desert',
+  'swamp',
+  'coast',
+  'sand',
+  'snow',
+  'water',
+  'field',
+  'path',
+];
 
 /** Markdown für docs/TERRAIN_TEXTURES.md — vollständig generiert. */
 export function renderTerrainTexturesDoc(): string {
@@ -723,14 +789,12 @@ export function renderTerrainTexturesDoc(): string {
     `### Höhe (§ "Höhe steuert Material")\n\n${ruleTable(SPLAT_HEIGHT_RULES)}\n\n` +
     `### Neigung (§ "Je steiler → mehr Felsen")\n\n${ruleTable(SPLAT_SLOPE_RULES)}\n\n` +
     `### Feuchtigkeit / Wassernähe\n\n${ruleTable(SPLAT_MOISTURE_RULES)}\n\n` +
-    `**Umsetzungsstand:** Diese Regeln sind die Spezifikation für den künftigen Ground-` +
-    `Shader — der Renderer nutzt aktuell weiterhin das vertex-gefärbte Höhenfeld (v0.39, ` +
-    `\`ThreeMapRenderer.buildGroundMesh\`). Der Shader selbst ist eine eigene Code-Phase, ` +
-    `sobald reale Texturen zum Verifizieren vorliegen — die Drop-in-Ordner und der Loader ` +
-    `(\`terrainTextureUrl()\` in \`src/assets/registry.ts\`) sind aber bereits vorbereitet.\n`;
+    `**Umsetzungsstand:** Der Three-Renderer wertet diese Regeln aktiv aus: world-space ` +
+    `De-Tiling für Ebenen, triplanare Projektion für Fels, ausgewählte Normal-/Roughness-/AO-Maps, ` +
+    `Regen-Wetness sowie kameraabhängiges Nahdetail. Vertexfarben bleiben der sichere Fallback.\n`;
 
   return (
-    `# Terrain-Texturen — Splatmap-Materialsystem (v0.42, Terrain System V2)\n\n` +
+    `# Terrain-Texturen — Splatmap-Materialsystem (v0.73, Terrain 6.1)\n\n` +
     `${GEN_BANNER}\n\n` +
     `Ersetzt einzelne kleine 3D-Modelle (Gras, kleine Felsen, Erde) durch ein ` +
     `**Terrain-Materialsystem**: die Bodenoberfläche besteht aus nahtlos kachelbaren, ` +
@@ -739,8 +803,8 @@ export function renderTerrainTexturesDoc(): string {
     `große Felsen, Gebäude, Brücken — siehe \`docs/3D_WORLD_ASSETS.md\`).\n\n` +
     `**Drop-in:** \`.png\`/\`.webp\`/\`.jpg\` in den unten angegebenen Ordner unter ` +
     `\`src/assets/textures/terrain/…\` legen, Dateiname exakt wie hier. Erkennung ist ` +
-    `bereits vorbereitet (\`terrainTextureUrl()\`); die Renderer-Anbindung an den ` +
-    `Splatmap-Shader folgt in einer eigenen Phase (siehe „Splatmap-Konzept" unten).\n\n` +
+    `zentral über \`terrainTextureUrl()\`; fehlende Dateien fallen auf die gebackene ` +
+    `Vertexpalette zurück, ohne die Welt zu blockieren.\n\n` +
     `${categorySections}\n` +
     `${biomeSection}\n` +
     `${splatSection}`

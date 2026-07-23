@@ -14,6 +14,9 @@ Ein Marker pro Gebäude (Priorität: Aufgabe > Bau > Problem > Upgrade). Schwebt
 | Aufgabe / Kartenziel | `marker_task.glb` → `marker_activity.glb` → `marker_target.glb` |  |
 | Im Bau | `marker_construction.glb` → `marker_build.glb` |  |
 | Problem | `marker_problem.glb` → `marker_alert.glb` |  |
+| Straßenanschluss fehlt | `marker_problem_road.glb` → `marker_problem.glb` → `marker_alert.glb` |  |
+| Wasseranschluss fehlt | `marker_problem_water.glb` → `marker_problem.glb` → `marker_alert.glb` |  |
+| Infrastruktur teilweise verbunden | `marker_problem_network.glb` → `marker_problem.glb` → `marker_alert.glb` |  |
 | Upgrade verfügbar | `marker_upgrade.glb` → `marker_bonus.glb` → `marker_arrow.glb` |  |
 | Bedürfnis / Versorgung | `marker_need.glb` → `marker_service.glb` |  |
 | Produktion | `marker_production.glb` → `marker_output.glb` |  |

@@ -34,25 +34,25 @@ describe('upgrade keeps old effects until it completes (§2)', () => {
     expect(controller.derived.storageCaps.wood).toBe(700);
   });
 
-  it('a sawmill keeps producing at its old rate throughout the upgrade', () => {
+  // § Active Operations 2.0: Upgrade-Kontinuität am passiven Steinbruch geprüft —
+  // das Sägewerk produziert nicht mehr passiv (kein productionPerMin-Eintrag).
+  it('a quarry keeps producing at its old rate throughout the upgrade', () => {
     const { controller } = newController();
-    setLevel(controller, 7);
+    setLevel(controller, 8);
     flattenTerrain(controller); // zero terrain bonus → exact rates
-    controller.placeBuilding('sawmill', at(1, 6).x, at(1, 6).y); // 4x4 unter den Startstrassen
-    controller.update(T0 + 40_000); // sawmill finishes (30s)
-    const saw = Object.values(controller.state.buildings).find((b) => b.defId === 'sawmill')!;
-    expect(controller.derived.productionPerMin.wood).toBe(45); // base stage
+    controller.state.resources = { money: 500_000, wood: 500, stone: 500, food: 100, freshwater: 0 };
+    controller.placeBuilding('quarry', at(1, 6).x, at(1, 6).y); // 5×5 unter den Startstrassen
+    controller.update(T0 + 95_000); // quarry finishes (90s)
+    const quarry = Object.values(controller.state.buildings).find((b) => b.defId === 'quarry')!;
+    expect(controller.derived.productionPerMin.stone).toBe(38); // base stage
 
-    controller.state.resources.money = 500_000;
-    controller.state.resources.wood = 500;
-    controller.state.resources.stone = 500;
-    expect(controller.upgradeBuilding(saw.id)).toEqual({ ok: true });
-    // Mid-upgrade: still producing the OLD 45/min, not 0 (no production blackout).
-    expect(controller.derived.productionPerMin.wood).toBe(45);
+    expect(controller.upgradeBuilding(quarry.id)).toEqual({ ok: true });
+    // Mid-upgrade: still producing the OLD 38/min, not 0 (no production blackout).
+    expect(controller.derived.productionPerMin.stone).toBe(38);
 
-    controller.update(T0 + 40_000 + 260_000); // 240s upgrade completes
-    expect(saw.upgradeLevel).toBe(1);
-    expect(controller.derived.productionPerMin.wood).toBe(100); // Grosssaegewerk-Stufe
+    controller.update(T0 + 95_000 + 320_000); // 300s upgrade completes
+    expect(quarry.upgradeLevel).toBe(1);
+    expect(controller.derived.productionPerMin.stone).toBe(80); // Tiefbruch-Stufe
   });
 });
 

@@ -96,6 +96,9 @@ export const MARKER_MODELS = {
   activity: ['marker_task', 'marker_activity', 'marker_target'],
   construction: ['marker_construction', 'marker_build'],
   problem: ['marker_problem', 'marker_alert'],
+  road_problem: ['marker_problem_road', 'marker_problem', 'marker_alert'],
+  water_problem: ['marker_problem_water', 'marker_problem', 'marker_alert'],
+  partial_problem: ['marker_problem_network', 'marker_problem', 'marker_alert'],
   upgrade: ['marker_upgrade', 'marker_bonus', 'marker_arrow'],
   need: ['marker_need', 'marker_service'],
   production: ['marker_production', 'marker_output'],
@@ -317,6 +320,9 @@ export const MODEL_FOLDER_DOCS: ModelFolderDoc[] = [
       { purpose: 'Aufgabe / Kartenziel', names: MARKER_MODELS.activity },
       { purpose: 'Im Bau', names: MARKER_MODELS.construction },
       { purpose: 'Problem', names: MARKER_MODELS.problem },
+      { purpose: 'Straßenanschluss fehlt', names: MARKER_MODELS.road_problem },
+      { purpose: 'Wasseranschluss fehlt', names: MARKER_MODELS.water_problem },
+      { purpose: 'Infrastruktur teilweise verbunden', names: MARKER_MODELS.partial_problem },
       { purpose: 'Upgrade verfügbar', names: MARKER_MODELS.upgrade },
       { purpose: 'Bedürfnis / Versorgung', names: MARKER_MODELS.need },
       { purpose: 'Produktion', names: MARKER_MODELS.production },
@@ -391,6 +397,13 @@ export interface BuildingLike {
   id: string;
   category: string;
   size: { w: number; h: number };
+  waterfront?: {
+    landWidth: number;
+    landDepth: number;
+    waterWidth: number;
+    waterDepth: number;
+    minimumWaterDepth: number;
+  };
   sizeClass?: BuildingSizeClass;
   unlockLevel: number;
   upgrades?: unknown[];
@@ -404,6 +417,8 @@ export const BUILDING_NODES: Record<string, string> = {
   sawmill: '`chimney` (Rauch-Ursprung am Schornstein)',
   power_plant: '`chimney` (Dampf/Rauch am Kühlturm/Schlot)',
   wind_farm: '`rotor` (drehende Rotorblätter je Turbine)',
+  dock_small: '`water_access` (Mitte der Wasserseite), `land_access` (Mitte der Landseite)',
+  river_port: '`water_access` (Mitte der Kaikante), `land_access` (Tor zur Straßenseite), `crane` (optionaler Drehknoten)',
 };
 
 /** Markdown for the buildings folder README, derived from the building config so
@@ -420,7 +435,10 @@ export function buildBuildingsReadme(buildings: readonly BuildingLike[]): string
           : stages === 2
             ? `\`${b.id}${BUILD_STAGE_PREFIX}2\``
             : '—';
-      return `| ${b.id} | \`${b.id}.glb\` | ${folder}/ | ${b.size.w}×${b.size.h} | ${b.unlockLevel} | ${stages} | ${stageFiles} | \`${b.id}${BUILD_CONSTRUCTION_SUFFIX}.glb\` |`;
+      const footprint = b.waterfront
+        ? `Land ${b.waterfront.landWidth}×${b.waterfront.landDepth} + Wasser ${b.waterfront.waterWidth}×${b.waterfront.waterDepth}`
+        : `${b.size.w}×${b.size.h}`;
+      return `| ${b.id} | \`${b.id}.glb\` | ${folder}/ | ${footprint} | ${b.unlockLevel} | ${stages} | ${stageFiles} | \`${b.id}${BUILD_CONSTRUCTION_SUFFIX}.glb\` |`;
     })
     .join('\n');
   return (
@@ -547,6 +565,8 @@ export const BUILDING_PROMPTS: Record<string, string> = {
   water_pump: 'a compact water pumping station: a small building with pipes, valves and a tank',
   warehouse: 'a rectangular storage warehouse with large roller doors, a flat roof and loading bays',
   depot: 'a logistics depot: a large shed with loading docks, crates, a small yard and parked trailers',
+  dock_small: 'a compact wooden and stone quay with two mooring bollards, a short pier, stacked crates and a tiny harbor office; split footprint with water on the -Z side and land access on +Z',
+  river_port: 'a substantial river and coastal cargo port with a broad stone quay, warehouse, gantry crane, loading apron, bollards, crates and a navigation light; split footprint with water on the -Z side and road access on +Z',
   waterworks: 'a waterworks facility with round filtration tanks, pipes and a control building',
   market: 'a small market hall with striped awnings, crates of produce and a paved front',
   supermarket: 'a modern supermarket: a wide flat building with a big storefront, a sign board and a small parking strip',
@@ -932,6 +952,15 @@ export const FOLDER_PROMPTS: FolderPrompts[] = [
           { name: 'truck_food', footprint: '≈0.5×0.9', sizeClass: 'vehicle', status: 'planned', motif: 'a small food delivery truck with a box body, front facing +Z, low-poly' },
           { name: 'ambulance', footprint: '≈0.4×0.7', sizeClass: 'vehicle', status: 'planned', motif: 'a white ambulance with a red cross and a light bar, front facing +Z, low-poly' },
           { name: 'bus_small', footprint: '≈0.4×1.0', sizeClass: 'vehicle', status: 'planned', motif: 'a small city bus, front facing +Z, low-poly' },
+          { name: 'service_boat', footprint: '≈0.7×1.6', sizeClass: 'vehicle', pivot: 'mittig auf der Wasserlinie', status: 'planned', motif: 'a compact municipal service boat with a small wheelhouse, rubber fenders and an open utility deck, bow facing +Z, low-poly' },
+          { name: 'cargo_boat_small', footprint: '≈0.8×2.0', sizeClass: 'vehicle', pivot: 'mittig auf der Wasserlinie', status: 'planned', motif: 'a small cargo boat with a stern wheelhouse and an open hold for crates, bow facing +Z, low-poly' },
+          { name: 'ferry_small', footprint: '≈0.9×2.2', sizeClass: 'vehicle', pivot: 'mittig auf der Wasserlinie', status: 'planned', motif: 'a compact passenger ferry with broad windows and a clear bow ramp, bow facing +Z, low-poly' },
+          { name: 'cargo_barge', footprint: '≈1.1×3.2', sizeClass: 'vehicle', pivot: 'mittig auf der Wasserlinie', status: 'planned', motif: 'a low river cargo barge with a broad open deck carrying crates and pallets, bow facing +Z, low-poly' },
+          { name: 'river_freighter', footprint: '≈1.1×3.4', sizeClass: 'vehicle', pivot: 'mittig auf der Wasserlinie', status: 'planned', motif: 'a compact self-propelled river freighter with a stern wheelhouse, covered hold and navigation lights, bow facing +Z, low-poly' },
+          { name: 'ferry_medium', footprint: '≈1.2×3.3', sizeClass: 'vehicle', pivot: 'mittig auf der Wasserlinie', status: 'planned', motif: 'a medium two-deck passenger ferry with broad windows and boarding gates, bow facing +Z, low-poly' },
+          { name: 'cargo_ship', footprint: '≈1.5×4.5', sizeClass: 'vehicle', pivot: 'mittig auf der Wasserlinie', status: 'planned', motif: 'a coastal cargo ship with a stern superstructure, two deck cranes and several cargo hatches, bow facing +Z, low-poly' },
+          { name: 'passenger_ship', footprint: '≈1.5×4.2', sizeClass: 'vehicle', pivot: 'mittig auf der Wasserlinie', status: 'planned', motif: 'a small coastal passenger ship with three readable decks, broad windows and a clean silhouette, bow facing +Z, low-poly' },
+          { name: 'construction_barge', footprint: '≈1.5×4.0', sizeClass: 'vehicle', pivot: 'mittig auf der Wasserlinie', status: 'planned', motif: 'a construction barge with a lattice crane, material pallets and safety rails, bow facing +Z, low-poly' },
         ],
       },
     ],
@@ -947,6 +976,9 @@ export const FOLDER_PROMPTS: FolderPrompts[] = [
           { name: 'marker_task', footprint: '~1 Kachel hoch', sizeClass: 'marker', pivot: 'zentriert, schwebt über dem Gebäude', frontFacing: 'n/a, immer zur Kamera (Billboard-Fallback)', status: 'live', motif: 'a floating quest/task marker: a rounded teal pin with a clean icon, readable from any angle' },
           { name: 'marker_construction', footprint: '~1 Kachel hoch', sizeClass: 'marker', pivot: 'zentriert, schwebt', status: 'live', motif: 'a floating construction marker: a yellow pin with a wrench or hard-hat icon' },
           { name: 'marker_problem', footprint: '~1 Kachel hoch', sizeClass: 'marker', pivot: 'zentriert, schwebt', status: 'live', motif: 'a floating problem marker: a red pin with a white exclamation mark' },
+          { name: 'marker_problem_road', footprint: '~1 Kachel hoch', sizeClass: 'marker', pivot: 'zentriert, schwebt', status: 'live', motif: 'a floating red road-connection problem marker: a broken road icon in a rounded pin' },
+          { name: 'marker_problem_water', footprint: '~1 Kachel hoch', sizeClass: 'marker', pivot: 'zentriert, schwebt', status: 'live', motif: 'a floating blue waterway problem marker: a blocked anchor icon in a rounded pin' },
+          { name: 'marker_problem_network', footprint: '~1 Kachel hoch', sizeClass: 'marker', pivot: 'zentriert, schwebt', status: 'live', motif: 'a floating amber partial-network marker: two disconnected link nodes in a rounded pin' },
           { name: 'marker_upgrade', footprint: '~1 Kachel hoch', sizeClass: 'marker', pivot: 'zentriert, schwebt', status: 'live', motif: 'a floating upgrade marker: a green pin with a white up-arrow' },
         ],
       },
@@ -1142,7 +1174,9 @@ function buildingSpecLine(b: BuildingLike, stageIndex: number, stages: number): 
   const bud = BUILDING_SIZE_BUDGETS[cls];
   const parts: string[] = [
     `Größenklasse \`${cls}\` — ${bud.label} (${bud.triBudget}, ${bud.textureSize}, ${bud.materials})`,
-    `Footprint ${b.size.w}×${b.size.h} (fix über alle Stufen)`,
+    b.waterfront
+      ? `Footprint Land ${b.waterfront.landWidth}×${b.waterfront.landDepth} + Wasser ${b.waterfront.waterWidth}×${b.waterfront.waterDepth}, Rotation im ${b.size.w}×${b.size.h}-Bauplot, Mindesttiefe ${b.waterfront.minimumWaterDepth} m`
+      : `Footprint ${b.size.w}×${b.size.h} (fix über alle Stufen)`,
     `Pivot ${DEFAULT_PIVOT}`,
     `Front ${DEFAULT_FRONT} (Eingang zur Straße)`,
   ];

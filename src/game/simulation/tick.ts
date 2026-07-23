@@ -3,9 +3,12 @@ import type { GameState, NeedId, ResourceId } from '../types.ts';
 import type { Derived } from './derived.ts';
 import { recomputeDerived } from './derived.ts';
 import { effectiveEffects, isContributing } from '../buildings/effects.ts';
+import { buildingInfrastructureStatus, isInfrastructureOperational } from '../infrastructure/buildingInfrastructure.ts';
 import { computeIncome } from '../economy/income.ts';
 import { addXp } from '../progression/levels.ts';
 import { updateQuests } from './quests.ts';
+import { advanceOperations } from '../operations/operations.ts';
+import { advanceTransfers } from '../operations/transport.ts';
 import { nextRandom, newId } from '../engine/rng.ts';
 
 export interface TickResult {
@@ -155,7 +158,12 @@ function advanceLiveEconomy(
     if (!isContributing(b)) continue;
     const def = config.buildings.get(b.defId);
     if (!def) continue;
+    if (!isInfrastructureOperational(buildingInfrastructureStatus(state, config, derived.roadNetwork, b))) continue;
     const bonus = (1 + (derived.productionBonus[b.id] ?? 0) / 100) * productionBuff;
+    // § Active Operations 2.0: Ein Betrieb mit Operationsprofil (Sägewerk)
+    // erzeugt seine Ressource NICHT passiv — sie entsteht über Arbeiter +
+    // Ressourcenknoten und landet im lokalen Lager (advanceOperations unten).
+    if (def.operation) continue;
     for (const eff of effectiveEffects(def, b.upgradeLevel)) {
       if (eff.type !== 'produce') continue;
       // Production-chain hook: output scales with input availability.
@@ -177,6 +185,16 @@ function advanceLiveEconomy(
       state.stats.produced[eff.resource] = (state.stats.produced[eff.resource] ?? 0) + stored;
     }
   }
+
+  // 2b. Aktive Betriebe (§ Active Operations 2.0): Arbeiter fällen Bäume und
+  //     lagern Holz ins lokale Betriebslager. Nur live, mit dem bereits
+  //     zeitfaktor-skalierten dtMin — Pause/2×/4× wirken dadurch automatisch.
+  advanceOperations(state, config, dtMin, chunkEnd);
+
+  // 2c. Lagertransporte (§ Active Operations 2.0, A5): manuell erteilte Fahrten
+  //     bringen lokal geerntete Ware ins Zentrallager (globaler Pool). Nur live,
+  //     zeitfaktor-korrekt; `derived.storageCaps` deckelt die Einlagerung.
+  advanceTransfers(state, config, derived, dtMin);
 
   // 3. Needs & happiness.
   const pop = state.citizens.population;

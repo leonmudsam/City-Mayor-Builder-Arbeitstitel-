@@ -1,5 +1,308 @@
 # Handoff-Log
 
+## 2026-07-23 — Active Operations 2.0: Lagertransport A5 + A5-Reste (v0.79)
+
+**Neues Sim-Modul** `src/game/operations/transport.ts` (rein, kein Renderer/React):
+manueller Lagertransport vom lokalen Betriebslager ins Zentrallager (globaler
+Pool über ein Lagergebäude als Anlieferpunkt). **Verwendet `routeAnalysis.ts` +
+`logistics.ts` wieder — kein zweites Logistiksystem (§8).**
+
+- **Datenmodell** (Save **v18**, additiv): `operations.transfers` (Key =
+  transferId), `InventoryTransfer` in `types.ts` (Skalare + `onboard`/`delivered`;
+  Polyline wird deterministisch rekonstruiert, nicht persistiert). Migration
+  `v17→v18` ergänzt leeres `transfers`; alte Saves ladbar. Zod in `schemas.ts`.
+- **Zustandsmaschine** `advanceTransfers` (Live-Tick, zeitfaktor-korrekt):
+  `loading → in_transit → unloading → (Rest? returning → loading : delivered)`.
+  Reservierung im Quell-Lager; gedeckelte Einlagerung; `stats.produced` NICHT
+  doppelt gezählt. **Mehrfachladung** (Fahrzeug pendelt), **Rückruf jederzeit**
+  (Ladung kehrt zurück), **Betriebskosten** je Fahrt (`operatingCost`, Geldsenke).
+- **Commands:** `createInventoryTransfer`, `cancelInventoryTransfer`.
+  **Read-Helper:** `getInventoryTransferTargets`, `getInventoryTransferPreview`,
+  `getBuildingTransfers`, `getAllTransfers`, `getInventoryNetworkOverview`
+  (global/lokal/reserviert/unterwegs, §7.2), `getTransferRenderStates`.
+- **UI:** Transport-Bereich in `FloatingBuildingSheet.tsx` (Ziel/Fahrzeug/Vorschau
+  mit Fahrten+Kosten, laufende Transporte, Rückruf) + CSS + i18n. **Renderer:**
+  additive gepoolte 3D-Fahrzeuge (`updateVehicles`), Position aus der Sim.
+- **Tests:** `tests/transport.test.ts` (12) + `storage.test.ts` v18. Gesamt
+  **339 grün**; tsc/eslint/build sauber; 3D-Smoke `{boot,buildOpened,errors:[]}`.
+- **Entscheidung:** D-032. **Offen:** A6–A10 (A6 braucht Node-Generalisierung +
+  Passiv-Test-Migration), Zwischenlager-Puffer, Kraftstoff.
+
+Einstieg für die Fortsetzung: `ACTIVE_OPERATIONS_PLAN.md` → `OPEN_TASKS.md` (A6–A10).
+
+## 2026-07-23 — Active Operations 2.0: Sägewerk-Referenzschnitt (v0.78)
+
+**Neue Datenmodelle** (persistiert, Save v17, additiv): `OperationsState`
+(`inventories`/`workers`/`active`/`nodeDeltas`), `BuildingInventory`,
+`BuildingWorkerState`, `ActiveBuildingOperation`, `ResourceNodeDelta` (alle in
+`src/game/types.ts`). Config: `BuildingOperationProfile`/`BuildingOperationStage`
+(`config/types.ts` + Zod in `config/schemas.ts`).
+
+- **Lokale Lager:** `state.operations.inventories[buildingId]` — Holz landet nur
+  hier, volles Lager stoppt die Arbeit. Global unverändert (Zentral-/Übergang).
+- **Ressourcenknoten:** `operations/nodes.ts` — Bäume aus Wald+Hash abgeleitet,
+  NodeId `"x,y"`, nur Deltas persistiert; `resolveNode`/`deriveNodesInArea`.
+- **Arbeiter/Operationen:** `operations/operations.ts` — `advanceOperations` im
+  Live-Tick (laufen/fällen/tragen/einlagern), Reservierung, Regeneration,
+  Zeitfaktor-korrekt, keine Offline-Produktion.
+- **Commands:** `startBuildingOperation`, `startBuildingOperationWithNodes`,
+  `cancel/pause/resumeBuildingOperation`.
+- **Read-Helper:** `getBuildingOperationInfo`, `getBuildingOperationPreview`,
+  `getBuildingInventory`, `getBuildingWorkers`, `getResourceNodesNear`,
+  `getBuildingWorkArea`, `getWorkerRenderStates`.
+- **Sägewerk:** einziges Gebäude mit `operation`-Profil; passiver `produce`-Pfad
+  in Tick+Derived abgeschaltet. **Steinbruch/Farm/Feuerwehr:** noch passiv (A6–A8).
+- **Transport:** noch keiner (A5) — Holz bleibt lokal gebunden, ehrlich ausgewiesen.
+- **Automatisierung:** offen (A10).
+- **Save-Migration:** `v16→v17` additiv, alte Saves ladbar, keine Datenverluste.
+- **Offene Codex-UI-Arbeit:** 3D-Einzelbaum-Auswahl/Arbeitsmodus, Fäll-/Trag-
+  Animationen. **Benötigte Modelle/Animationen:** optionale `.glb`-Arbeiter +
+  Fäll-/Trag-Clips (Drop-in; aktuell gepoolte Prozedurfiguren).
+- **Tests:** `tests/operations.test.ts` (9) + Re-baseline von 6 Passiv-Tests auf
+  den Steinbruch. Gesamt **327 grün**; tsc/eslint/build sauber.
+
+Einstieg für die Fortsetzung: `ACTIVE_OPERATIONS_PLAN.md` → `OPEN_TASKS.md` (A5–A10).
+
+## 2026-07-23 — Vegetations-Performance & Grafikqualität, Säule B (v0.77)
+
+**Umgesetzt**
+
+- Reine, getestete Schicht: `graphicsQuality.ts` (4 Profile + `vegetationLodTier`),
+  `graphicsSettings.ts` (persistiert, kein Save), `perfStats.ts` (Telemetrie).
+- Renderer-Anbindung: Dichteskalierung + Schattenbudget in `rebuildVegetation`,
+  Nahdetail/Pixel-Ratio/Tierbudget aus dem Profil, Rebuild-nur-Vegetation bei
+  Qualitätswechsel. Nebel-Cheat erzwingt keine Maximalqualität.
+- UI: Grafikqualität-Auswahl (SettingsPanel, spielerseitig) + Dev-Performance-
+  Panel (DebugPanel). `tests/graphicsQuality.test.ts` (8).
+
+**Verifikation**: tsc/eslint sauber, 318 Tests grün, `npm run build` ok,
+3D-Screenshot-Smoke über Ultra/Niedrig/Hoch fehlerfrei (Welt + Grafikqualität-
+Sektion visuell bestätigt).
+
+**Wichtig für die Weiterarbeit**
+
+- Deep-LOD (HLOD/Impostor/Chunk-Streaming/Shader-Wind/Atlas) ist bewusst
+  zurückgestellt — nur auf Zielhardware messbar. `vegetationLodTier` und die
+  Profil-Sichtweiten liegen bereit, um es zu speisen (`OPEN_TASKS.md` P0).
+
+## 2026-07-23 — Final World Compaction, Säule A (v0.76)
+
+**Umgesetzt**
+
+- Zweite horizontale Verdichtung (Spannweite 420 → 374, Fläche −20,7 %); Gipfel
+  50 → 52; Baueinheiten unskaliert. Voller Rebake (`tools/bakeWorld.mjs`).
+- 40 → 13 Regionen (1 Start + 12). Neues Faktor-Kostenmodell `regionCost.ts`,
+  Seeadjazenz + Hafenpflicht (`regionUnlockBlocker`), Gratis-Erst-Erweiterung
+  ab L3 ohne Belohnung. Regionsdialog um Gratis-/Hafen-/Nachbarschafts-Hinweis
+  erweitert; Tutorial-Nachricht `message.free_expansion_hint`.
+- Save-Schema **v16** mit Backup-Neustart `v15 → v16`.
+
+**Tests**: 17 alte Welt-/Regionstests auf die 13-Regionen-/v16-Welt umgeschrieben,
+neue Fälle (Gratiserweiterung ohne Belohnung, Hafen-Gate). `regionCost.test.ts`.
+`docs/REGIONS.md` neu generiert. 310 Tests grün; tsc/eslint sauber.
+
+**Wichtig für die Weiterarbeit**
+
+- `FREE_EXPANSION_LEVEL` liegt jetzt in `progression/levels.ts` (Controller
+  re-exportiert). `getFreeRegionExpansionOptions()`/`getRegionUnlockBlocker()`/
+  `isRegionHarborDependent()` sind die UI-Lesepfade.
+- **Säule B (Vegetations-Performance) ist noch komplett offen** —
+  `OPEN_TASKS.md` P0 + `WORLD_PERFORMANCE_AUDIT.md`.
+- Zielkonflikt §3.1 vs. §4 zugunsten der Regionsstruktur aufgelöst (D-028).
+
+## 2026-07-22 — Core Gameplay Overhaul 8.0, Phase G1 + Zeitvertrag (v0.75)
+
+**Behobene Bugs**
+
+- Stadtarbeit „4/5 Stopps": `evaluateCargoRoute` hakte ein Ziel beim ERSTEN
+  Kontakt ab, auch wenn die Ladung nicht reichte. Der gültige Zweitkontakt nach
+  dem Nachfüllen wurde ignoriert; die Route blieb dauerhaft unvollständig.
+- „Verkehr: Wird geprüft": Die Kennzahl hing an `analysis`, die es erst bei
+  vollständig verbundener Zielkette gibt.
+- Abschluss-Popup mit „– %": Kennzahlen existierten nur bei erfolgreicher
+  Routenanalyse, wurden aber unbedingt gerendert.
+- Props verschwanden beim Region-Unlock: indexbasierte Deckelung über die
+  weltweite Kachelliste (`i % ceil(len / cap)`).
+- Zeitsteuerung ohne Wirkung: Die HUD-Knöpfe schrieben nur `dayLengthMin`.
+- Fünf Bürgeranliegen nannten im deutschen Text pre-×20-Einwohnerzahlen.
+
+**Neue Datenmodelle**
+
+- `ActivityStopStatus`, `ActivityProgress`, `CargoRouteStop.status`
+- `RouteTrafficForecast`
+- `ActivityRunResult`
+- `SimulationSpeed`, `SIMULATION_SPEEDS`
+- `PropKind`, `REGION_PROP_BUDGET`
+
+**Neue Commands / Read-Helper**
+
+- `GameController.setSpeed` / `getSpeed` / `advanceByRealTime`
+- `GameController.getActivityTrafficForecast`
+- `ActivityRoutePreview.traffic` und `.progress`
+- rein: `forecastRouteTraffic`, `selectPropTiles`, `propHash`
+
+**Geänderte Balancingwerte**
+
+Keine. Nur fünf deutsche Questtexte an ihre echten Zielwerte angeglichen.
+
+**Neue Regionsstruktur / neue Einwohnerwerte**
+
+Keine — beides gehört zu den Phasen G3 und G4 und ist im Plan beschrieben.
+
+**Stadtarbeit-Änderungen**
+
+Stopplogik, getrennte Fortschrittszählung, Verkehrsprognose und
+Abschlussbericht. Bedienung (§4.2), Lagerstopps (§6) und seltenere, tiefere
+Aufträge (§5) bleiben offen.
+
+**Lieferketten-Vorbereitung**
+
+Noch nicht begonnen (Phase G6). `ActivityProgress.returnRequired` existiert
+bereits als Vertrag, ist aber ehrlich immer `false`, weil das Missionsmodell
+keine Pflichtrückkehr kennt.
+
+**Zeitsteuerung**
+
+Realzeit × Geschwindigkeit → ein Tick-Pfad. Pause = keine Simulationszeit.
+Renderer: `simDt` für Weltanimation, Echtzeit für Kamera/Eingabe. Bewusst NICHT
+im Save; `meta.lastSimTime` ist damit von der Wanduhr entkoppelt.
+
+**Save-Migration**
+
+Keine — Schema bleibt **v15**.
+
+**Offene Codex-UI-Arbeit**
+
+- `criticalSegments` der Verkehrsprognose auf der Planungskarte markieren
+  (`ManualRouteMap.tsx`).
+- Bedienung der Routenplanung gemäß §4.2 (Klick auf Straße vs. Karte ziehen).
+
+**Offene Assets**
+
+Keine neuen. Der erweiterte Biom-Prop-Katalog bleibt drop-in-fähig.
+
+**Tests**
+
+`tests/simulationSpeed.test.ts` (8), `tests/vegetationBudget.test.ts` (8),
+`tests/questText.test.ts` (3) neu; `tests/logistics.test.ts` und
+`tests/routeAnalysis.test.ts` erweitert. Gesamt: 296 Tests in 41 Dateien.
+
+**Verifikation**
+
+`npx tsc -b --force` ✅ · `npx eslint src tests` ✅ · `npx vitest run` ✅ (296) ·
+`npm run build` ✅. Windows-Tauri-Build und 3D-Screenshot-Smoke **nicht
+ausgeführt** — beide stehen in `OPEN_TASKS.md`.
+
+**Nächster Schritt**
+
+Phase G2, zwingend beginnend mit dem Terrain-Picking: `groundPointAt` raycastet
+gegen eine flache Ebene bei y = 0 statt gegen das Höhenfeld
+(`ThreeMapRenderer.ts:514–520`). Das erklärt den Platzierungsversatz, den
+„Ghost aktualisiert sich nicht"-Eindruck und sehr wahrscheinlich auch die
+abgelehnten Anlegerplätze. Details: `CORE_GAMEPLAY_OVERHAUL_AUDIT.md` §2.1.
+
+## 2026-07-22 — Waterways, Harbors & Infrastructure 7.0 (v0.74)
+
+- Küstenkegel auf projiziert-degenerierte Wanddreiecke im Bake zurückgeführt;
+  173 ungültige Heightfield-Proben werden verworfen, ein isolierter Ausreißer
+  konservativ repariert. Finale Diagnose: 0 isolierte Peaks, 12,311 m maximaler
+  Nachbarschritt.
+- Regionsnebel/Visual-Reveal und echte Gameplay-Freischaltung getrennt. Terrain,
+  Vegetation, Props und Landmarken bleiben beim visuellen Audit sichtbar;
+  Teaserregionen werden vom echten Dev-Cheat nicht freigeschaltet.
+- Quadratische Ozeanplatte durch radiales Fernmesh ersetzt, Ferninseln als
+  unregelmäßige Silhouetten in Distanznebel neu aufgebaut.
+- Straßenpflicht aus der allgemeinen Platzierungsvalidierung entfernt.
+  Anschlussstatus, Produktions-/Versorgungssperre sowie Straßen-, Wasser- und
+  Teilnetzmarker laufen über denselben Simulations-/Diagnosepfad.
+- `dock_small` und `river_port` mit Config, Land-/Wasser-Footprint,
+  Tiefenprüfung, automatischer Ausrichtung, Ghostzellen, Baushop-/Sheetangaben,
+  prozeduralem Fallback und Drop-in-Vertrag ergänzt.
+- Bake exportiert 569 Wasser-Nodes und 1.775 supercover-geprüfte Kanten. Der
+  Controller berechnet eine Dijkstra-Vorschau; das Infrastruktur-Overlay zeichnet
+  Netz, Häfen und eine gestrichelte Richtungsroute ohne Renderer-Gameplaylogik.
+- Keine persistente Schifffahrt und keine Save-Migration; Schema bleibt v15.
+- Verifikation: `npx tsc -b --force`, `npx eslint src tests`, 38
+  Vitest-Dateien mit 269/269 Tests und `npm run build` erfolgreich. Die
+  Bake-Vorschau wurde visuell geprüft; der Preview-Server lieferte HTTP 200.
+- Ein Runtime-WebGL-Screenshot war nicht möglich, weil die integrierte
+  Browsersteuerung keine Browserinstanz bereitstellte. `npm run tauri:build`
+  erreichte den erfolgreichen Frontend-Build und stoppte erst bei fehlendem
+  `cargo`/`rustc` in der lokalen Umgebung.
+
+## 2026-07-22 — Terrain & World Scale 6.1 (v0.73)
+
+- X/Z-Quellspanne auf Faktor 0,8898 verdichtet und alle Weltableitungen neu
+  gebacken: 44.757 bebaubare Kacheln, exakt 20,0 % weniger als 6.0.
+- Bake-Score wählt Herzland (24) zentral auf der größten Landmasse: Rathaus
+  `(125,193)`, 1.290 direkte und 4.418 frühe Baukacheln, zwei Straßenachsen.
+- Schiffsankunft bleibt separat bei `(222,206)` mit 115-Kachel-Trasse und
+  zukünftiger Hafenposition vorbereitet; kein alter Ostküsten-Stadtstart.
+- Wasserlinie moderat angehoben, Ufer geglättet und klassifiziert: 569 direkte
+  Wasserbaukacheln, 16 garantierte 5×5-Aprons, 2 Brückenkorridore.
+- Neuer World-Space-/Triplanar-Splatshader mit elf aktiven Schichten,
+  kameraabhängigen Detailmaps, Regen-Wetness und instanziertem Nahgras; 29 neue
+  2048er Farbtexturen plus ausgewählte PBR-Maps sind drop-in-dokumentiert.
+- Save v15 sichert inkompatible v14-Weltstände kontrolliert; Gameplaylogik und
+  Renderer bleiben getrennt.
+- Verifikation: TypeScript, ESLint, 36 Vitest-Dateien mit 262/262 Tests und
+  Produktionsbuild erfolgreich. Bake-Vorschau geprüft; WebGL-Screenshot wegen
+  fehlender integrierter Browserinstanz und nativer Tauri-Build wegen fehlendem
+  `cargo`/`rustc` in dieser Umgebung nicht ausführbar.
+
+## 2026-07-22 — Codex — World Rebuild 6.0 (v0.72)
+
+- Neue 45-MB-Insel sicher nach `reference/world/` kopiert und mit festem
+  SHA-256 vollständig auditiert; alle 78 Source-Teile stehen im generierten
+  JSON-/Markdownbericht.
+- Einzige Bake-Pipeline auf 512² Terrain, 1025² Höhe, 40 Regionen, Oststart,
+  Bebaubarkeit, Wasser-/Küstenmasken, Infrastrukturhooks und drei UI-Karten
+  umgestellt. Source-GLB wird nie zur Laufzeit geladen.
+- Hauptgebirge stammt ausschließlich aus dem Height-Bake; 64 Terrain-Chunks,
+  triplanare Profile, Tiefenwasser und instanzierte Vegetation bleiben der
+  performante Rendererpfad.
+- Simulation besitzt eine zentrale Surface-Abfrage; Platzierung, Vorschau und
+  Rendererfundament verwenden denselben Footprintbefund.
+- Save v14 nutzt kontrollierten Neustart mit einmaligem Backup für v10–v13,
+  weil alte Koordinaten nicht zuverlässig projizierbar sind.
+- Dev-Reveal ist rein visuell und Release-gated.
+- Einstieg: `NEW_ISLAND_AUDIT.md`, `NEW_ISLAND_REBUILD_PLAN.md`,
+  `docs/WORLD_REBUILD.md`, danach `OPEN_TASKS.md`.
+- Alte Source nicht löschen/verschieben, bevor ein sauber isolierter
+  Git-Sicherungspunkt existiert; der Arbeitsbaum enthält Nutzeränderungen.
+- Verifikation: `npx tsc -b --force`, `npx eslint src tests`, 36 Vitest-Dateien
+  mit 259/259 Tests und `npm run build` erfolgreich. Preview liefert HTTP 200;
+  die Source-GLB ist nicht im Produktionsbundle.
+- Visueller Browser-Smoke in dieser Sitzung blockiert: die integrierte
+  Browsersteuerung meldete keine verfügbare Browserinstanz. Die technische
+  Bake-Vorschau wurde geprüft, aber nicht als Runtime-Screenshot ausgegeben.
+- `npm run tauri:build` erreicht das Frontendskript, bricht lokal jedoch vor dem
+  nativen Build ab, weil `cargo` und `rustc` nicht installiert/im PATH sind.
+
+## 2026-07-21 — Codex — Regions-Wolkenwand und Sperrmarker (v0.71)
+
+- Das bestehende Regionsnebel-Volumen in `ThreeMapRenderer` zu einer wirklich
+  blickdichten Wolkenwand aus Grunddecke, drei Alpha-Lagen und einem
+  instanzierten Volumen ausgebaut.
+- Wolkendecke liegt oberhalb des höchsten Terrainpunkts und ihre geglättete
+  Kontur greift leicht über die technische Regionsgrenze; Terrain, Gipfel und
+  Landmarken gesperrter Gebiete scheinen nicht mehr durch.
+- Große Canvas-Weltmarker mit Schloss, lokalisiertem Regionsnamen und echtem
+  Freischaltlevel ergänzt; Marker-Raycasts öffnen den vorhandenen
+  Regionsdialog.
+- Minimap verdeckt gesperrte Landschaften mit einer prozeduralen Wolkenmaske und
+  zeigt Schloss-/Level-Marker an kanonischen `BAKED_REGIONS`-Zentren.
+- Bestehendes `cloud_bank.webp` bleibt optional; Material-/Canvas-Fallbacks
+  funktionieren ohne neue Pflichtassets. Keine Simulation, Config oder
+  Save-Migration; Schema v13.
+- Verifikation: `npx tsc -b --force`, `npx eslint src tests`, 35 Vitest-Dateien
+  mit 259/259 Tests und `npm run build` erfolgreich. Produktions-Preview auf
+  Basis-URL `/` lieferte HTTP 200. Die Browser-Control-Skill fand in dieser
+  Sitzung keine übernehmbare In-App-Browserinstanz, daher blieb der echte
+  3D-Screenshot-Smoke offen. `npm run tauri:build` wurde angestoßen und scheitert
+  ausschließlich an der lokalen Voraussetzung `cargo` (Programm nicht
+  installiert), nicht am Frontend-Build.
+
 ## 2026-07-21 — Codex — Map Redesign 5.0 (v0.70)
 
 ### Umsetzung

@@ -200,11 +200,14 @@ describe('config balancing invariants (A10)', () => {
     expect(bad, `Regions-Voraussetzungen inkonsistent: ${bad.join(', ')}`).toEqual([]);
   });
 
-  it('keeps every unlockable region gate within L1–L18 (Teaser ausgenommen)', () => {
+  it('keeps every unlockable region gate within L1–L20 (Endgame eingeschlossen)', () => {
+    // § Final World Compaction 8.1: Die konsolidierte Insel spannt die
+    // Progression über die volle 20-Level-Kurve; die Endgame-Region
+    // (Kronengebirge) öffnet auf L20.
     const bad = regionsConfig
       .filter((r) => r.unlockable)
-      .filter((r) => r.unlockLevel < 1 || r.unlockLevel > 18)
+      .filter((r) => r.unlockLevel < 1 || r.unlockLevel > 20)
       .map((r) => `Region ${r.id}: L${r.unlockLevel}`);
-    expect(bad, `Regions-Gate außerhalb L1–L18: ${bad.join(', ')}`).toEqual([]);
+    expect(bad, `Regions-Gate außerhalb L1–L20: ${bad.join(', ')}`).toEqual([]);
   });
 });

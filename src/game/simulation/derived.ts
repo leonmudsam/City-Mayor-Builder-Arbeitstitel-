@@ -3,6 +3,7 @@ import type { GameState, NeedId, ResourceId } from '../types.ts';
 import { centerOf, chebyshev, effectiveEffects, isContributing } from '../buildings/effects.ts';
 import { locationBonusPct } from '../buildings/location.ts';
 import { computeRoadNetwork, regionProductionFactorAt } from '../map/world.ts';
+import { buildingInfrastructureStatus, isInfrastructureOperational } from '../infrastructure/buildingInfrastructure.ts';
 
 /**
  * Values derived from the set of active buildings. Recomputed only on
@@ -61,6 +62,7 @@ interface RadiusSource {
 }
 
 export function recomputeDerived(state: GameState, config: GameConfig): Derived {
+  const roadNetwork = computeRoadNetwork(state, config);
   const storageCaps: Record<ResourceId, number> = { money: Number.POSITIVE_INFINITY, wood: 0, stone: 0, food: 0, freshwater: 0 };
   const capacity: Record<NeedId, number> = { housing: 0, water: 0, food: 0, work: 0, leisure: 0, energy: 0, safety: 0, health: 0, freshwater: 0 };
   const productionPerMin: Record<ResourceId, number> = { money: 0, wood: 0, stone: 0, food: 0, freshwater: 0 };
@@ -93,6 +95,7 @@ export function recomputeDerived(state: GameState, config: GameConfig): Derived 
     if (!isContributing(b)) continue;
     const def = config.buildings.get(b.defId);
     if (!def) continue;
+    if (!isInfrastructureOperational(buildingInfrastructureStatus(state, config, roadNetwork, b))) continue;
     const { cx, cy } = centerOf(def, b);
     let housingHere = 0;
     let sensitivityHere = 1;
@@ -149,6 +152,10 @@ export function recomputeDerived(state: GameState, config: GameConfig): Derived 
           ambienceSources.push({ cx, cy, radius: eff.radius, amount: eff.amount });
           break;
         case 'produce':
+          // § Active Operations 2.0: Betriebe mit Operationsprofil erzeugen nicht
+          // passiv — ihr Holz entsteht aktiv über Arbeiter, deshalb tauchen sie
+          // NICHT in productionPerMin/productionBonus (Passiv-„+X/min") auf.
+          if (def.operation) break;
           producers.push({
             id: b.id,
             resource: eff.resource,
@@ -237,7 +244,7 @@ export function recomputeDerived(state: GameState, config: GameConfig): Derived 
     extraDemand,
     distributionCoverage,
     fireProtected,
-    roadNetwork: computeRoadNetwork(state, config),
+    roadNetwork,
     productionBonus,
     ambience,
     avgAmbience,

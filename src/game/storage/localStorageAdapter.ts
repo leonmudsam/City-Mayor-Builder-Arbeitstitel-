@@ -5,12 +5,19 @@ import {
   LegacyWorldSaveError,
   migrateAndValidate,
   type MigrationNotice,
+  WorldRebuildSaveError,
 } from './migrations.ts';
 
 const PREFIX = 'cmb.save.';
 const BACKUP_SUFFIX = '.backup';
 /** Sicherung eines Vor-Insel-Saves (≤ v9, § MVP4): nie überschrieben, nie geladen. */
 const LEGACY_BACKUP_KEY = 'cmb.save.backup.v9';
+/** Einmalige Sicherung der vollständig ersetzten Inselwelt v10–v13. */
+const WORLD_REBUILD_BACKUP_KEY = 'cmb.save.backup.world-v13';
+/** Sicherung der 6.0-Welt vor der kompakteren 6.1-Geografie. */
+const TERRAIN_OVERHAUL_BACKUP_KEY = 'cmb.save.backup.world-v14';
+/** Sicherung der 6.1-Welt vor der final verdichteten 13-Regionen-Insel (8.1). */
+const FINAL_COMPACTION_BACKUP_KEY = 'cmb.save.backup.world-v15';
 
 /**
  * MVP-1 storage: localStorage with a one-generation backup slot. A corrupt
@@ -54,8 +61,15 @@ export class LocalStorageSaveAdapter implements SaveAdapter {
         if (error instanceof LegacyWorldSaveError) {
           // Alten Weltstand einmalig sichern (nie überschreiben) und den
           // aktiven Slot räumen, damit künftige Loads sauber frisch starten.
-          if (localStorage.getItem(LEGACY_BACKUP_KEY) === null) {
-            localStorage.setItem(LEGACY_BACKUP_KEY, raw);
+          const backupKey = error instanceof WorldRebuildSaveError
+            ? error.version >= 15
+              ? FINAL_COMPACTION_BACKUP_KEY
+              : error.version >= 14
+                ? TERRAIN_OVERHAUL_BACKUP_KEY
+                : WORLD_REBUILD_BACKUP_KEY
+            : LEGACY_BACKUP_KEY;
+          if (localStorage.getItem(backupKey) === null) {
+            localStorage.setItem(backupKey, raw);
           }
           localStorage.removeItem(candidate);
           this.legacyBackupCreated = true;
@@ -71,7 +85,13 @@ export class LocalStorageSaveAdapter implements SaveAdapter {
     const slots: string[] = [];
     for (let i = 0; i < localStorage.length; i++) {
       const key = localStorage.key(i);
-      if (key?.startsWith(PREFIX) && !key.endsWith(BACKUP_SUFFIX) && key !== LEGACY_BACKUP_KEY) {
+      if (
+        key?.startsWith(PREFIX) &&
+        !key.endsWith(BACKUP_SUFFIX) &&
+        key !== LEGACY_BACKUP_KEY &&
+        key !== WORLD_REBUILD_BACKUP_KEY &&
+        key !== TERRAIN_OVERHAUL_BACKUP_KEY
+      ) {
         slots.push(key.slice(PREFIX.length));
       }
     }

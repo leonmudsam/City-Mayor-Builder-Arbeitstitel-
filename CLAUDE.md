@@ -54,13 +54,13 @@ Gebäudesystem 2.0 + Welt 2.0 sind vollständig (A1–A10). **Nur noch der
 `house_row`/`apartment` und `pixi.js` sind endgültig entfernt (kein Modus-Wähler
 wieder einführen). Gebäude-/Regions-/Prompt-Doku ist **generiert & testgeprüft**
 (`docs/BUILDINGS.md`, `docs/REGIONS.md`, `models/**/PROMPTS.md` — Regel §5 gilt
-weiter). Save-Schema steht bei **v13** (manuelle Routen + reservierte Ladung). Balancing/Progression sind über
-20 Level × 32 Regionen ausbalanciert und durch `config.test.ts`/`balancing.test.ts`
+weiter). Save-Schema steht bei **v14** (neue Welt; v10–v13 werden einmalig gesichert). Balancing/Progression sind über
+20 Level × 40 Regionen abgesichert und durch `config.test.ts`/`balancing.test.ts`
 gegen Regressionen gesichert. Bewusst offen (drop-in-fähig, Prompts existieren):
 der erweiterte Biom-Prop-Katalog (Wasserfälle/Windmühlen/Boote/Landmarken) —
 prozedurale Fallbacks decken den Kern, echte `.glb` einfach einlegen.
 
-## Status: Overhaul 3.0 — verbindlicher Mockup-Pass (v0.60–v0.70)
+## Status: World Rebuild 6.0 — verbindlicher Stand (v0.60–v0.72)
 Die visuelle Mockup-Grundlage ist umgesetzt: maritimes Glas-HUD, vertikale linke
 Hauptnavigation, Live-Inselkarte, Bürger-Kompakt-/Detailansicht,
 KI-Regions-Hero, Ein-Sheet-Regel, organischere Vegetation, Küstenschaum,
@@ -103,6 +103,49 @@ Inselbake, Gameplayregionen und Save v13 bleiben unverändert. Vor Weltarbeit
 zuerst `docs/agents/MAP_REDESIGN_AUDIT.md`, danach
 `MAP_REDESIGN_PLAN.md` und `WORLD_ASSET_MANIFEST.md` lesen. Region 9/29 sind nur
 visuell Wüste/Sumpf; jede Gameplaywirkung ist `TODO(CLAUDE_LOGIC)`.
+
+v0.71 ersetzt den niedrigen Teasernebel gesperrter Regionen durch eine
+blickdichte Wolkenwand oberhalb des höchsten Terrainpunkts. Ein gedeckeltes
+Wolken-`InstancedMesh`, drei Alpha-Lagen und die vorhandene Unlock-Animation
+bleiben Teil desselben Three-Renderer-Pfads. Welt und Minimap zeigen Schloss,
+Regionsname beziehungsweise echtes Level aus kanonischer Config. Keine
+Simulation und keine Save-Änderung; Schema bleibt v13.
+
+v0.72 ersetzt die frühere 384²-Geometrie durch den Offline-Bake aus
+`reference/world/island 3d new.glb`: 512² Terrain, 1025² Höhe, 40 Regionen,
+Oststart, Surface-/Wasser-/Infrastrukturmasken und Save v14 mit einmaligem
+Backup-/Neustart für v10–v13. Die GLB wird nie zur Laufzeit geladen. Verbindliche
+Einstiegsdokumente: `docs/agents/NEW_ISLAND_AUDIT.md` und
+`NEW_ISLAND_REBUILD_PLAN.md`.
+
+v0.76/0.77 (Final World Compaction 8.1) verdichten die Insel ein zweites Mal
+(13 Regionen, Save v16) und führen Vegetations-Qualitätsstufen + Dev-Performance-
+Panel ein (Säule B). Details: `PATCHNOTES.md`, `WORLD_COMPACTION_REPORT.md`,
+`WORLD_PERFORMANCE_AUDIT.md`.
+
+v0.78 startet **Active Operations 2.0**: das Sägewerk erzeugt kein passives Holz
+mehr, sondern über Arbeiter + Ressourcenknoten (Bäume) + lokales Betriebslager
+(Save **v17**, additiv). Nur Gebäude mit `BuildingDef.operation` sind aktive
+Betriebe; ihr `produce`-Pfad ist in Tick+Derived abgeschaltet. Reines Sim-Modul
+`src/game/operations/**` (kein Renderer/React). Sägewerkholz bleibt bis Phase A5
+(Transport) bewusst lokal gebunden — Transport/Steinbruch/Farm/Feuerwehr/
+Automatisierung sind Folgephasen und dürfen in der UI nicht vorgetäuscht werden.
+Verbindlicher Einstieg vor Betriebsarbeit: `docs/agents/ACTIVE_OPERATIONS_PLAN.md`.
+Keine zweite Logistik-Simulation anlegen — Transport (A5) wiederverwendet
+`activities/logistics.ts` + `routeAnalysis.ts`.
+
+v0.79 setzt **Phase A5 (Transport)** um: ein manueller Lagertransport bringt
+lokal geerntetes Holz über Fahrzeug + Straßenroute ins **Zentrallager** (globaler
+Pool über ein Lagergebäude als Anlieferpunkt). Reine Sim
+`src/game/operations/transport.ts` mit Zustandsmaschine `loading→in_transit→
+unloading→delivered` (nur live), Reservierung im Quell-Lager, gedeckelter
+Einlagerung (kein Doppelzählen in `stats.produced`) und Netzwerk-Übersicht
+global/lokal/reserviert/unterwegs (§7.2). **Verwendet `routeAnalysis.ts` +
+`logistics.ts` wieder — kein zweites System (§8).** Save **v18** additiv
+(`operations.transfers`) mit Migration `v17→v18`. Additive gepoolte 3D-Fahrzeuge.
+Offen (nicht vortäuschen): Mehrfachladung/Nachfüllfahrten, Rückruf während der
+Fahrt, Transport-Betriebskosten, Zwischenlager-Puffer. Details:
+`docs/agents/LOGISTICS_INTEGRATION.md`, D-032.
 
 Verbindlicher Einstieg für die Weiterarbeit:
 `docs/HANDOFF_CLAUDE.md` → `docs/agents/PROJECT_STATE.md` →

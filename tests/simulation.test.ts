@@ -20,41 +20,46 @@ describe('simulation tick', () => {
     expect(controller.state.level.xp).toBe(xpBefore + 5);
   });
 
+  // § Active Operations 2.0: Das Sägewerk erzeugt kein passives Holz mehr (eigene
+  // Aktiv-Tests in operations.test.ts). Der passive „nichts offline / Produktion
+  // nur live"-Vertrag wird am Steinbruch geprüft, der weiter passiv produziert.
   it('produces into storage only while playing live, never offline (§ no AFK)', () => {
     const { controller } = newController();
-    setLevel(controller, 2);
+    setLevel(controller, 4);
     flattenTerrain(controller); // no location bonus in this test
-    controller.placeBuilding('sawmill', at(1, 6).x, at(1, 6).y); // 45 wood/min, 4×4 unter den Startstraßen
-    controller.update(T0 + 31_000, true); // construction (30s) done
-    const woodAfterBuild = controller.state.resources.wood;
+    controller.state.resources = { money: 100_000, wood: 200, stone: 0, food: 100, freshwater: 0 };
+    controller.placeBuilding('quarry', at(1, 6).x, at(1, 6).y); // 38 stone/min, 5×5
+    controller.update(T0 + 91_000, true); // construction (90s) done
+    const stoneAfterBuild = controller.state.resources.stone;
 
     // Offline catch-up: build timers advance but NOTHING is produced (v0.21).
-    controller.update(T0 + 31_000 + 5 * MIN, false);
-    expect(controller.state.resources.wood).toBe(woodAfterBuild);
+    controller.update(T0 + 91_000 + 5 * MIN, false);
+    expect(controller.state.resources.stone).toBe(stoneAfterBuild);
 
-    // Live play: production accrues into storage.
-    const producedBefore = controller.state.stats.produced.wood;
-    controller.update(T0 + 31_000 + 10 * MIN, true);
-    expect(controller.state.resources.wood).toBeCloseTo(woodAfterBuild + 225, 0);
-    expect(controller.state.stats.produced.wood - producedBefore).toBeCloseTo(225, 0);
-    // Storage still caps hoarding even when live (town hall: 400 wood).
+    // Live play: production accrues into storage (5 min × 38/min = 190).
+    const producedBefore = controller.state.stats.produced.stone;
+    controller.update(T0 + 91_000 + 10 * MIN, true);
+    expect(controller.state.resources.stone).toBeCloseTo(stoneAfterBuild + 190, 0);
+    expect(controller.state.stats.produced.stone - producedBefore).toBeCloseTo(190, 0);
+    // Storage still caps hoarding even when live (town hall: 400 stone).
     controller.update(T0 + 8 * 60 * MIN, true);
-    expect(controller.state.resources.wood).toBe(400);
+    expect(controller.state.resources.stone).toBe(400);
   });
 
   it('applies the terrain location bonus to production', () => {
     const { controller } = newController();
-    setLevel(controller, 2);
+    setLevel(controller, 4);
     flattenTerrain(controller);
-    controller.placeBuilding('sawmill', at(1, 6).x, at(1, 6).y); // 4×4: (1..4, 6..9), unter den Startstraßen
-    // 4 forest tiles in radius 3 around the footprint → +20 % (5 %/tile).
-    paintTerrain(controller, [[at(6, 6).x, at(6, 6).y], [at(6, 7).x, at(6, 7).y], [at(0, 10).x, at(0, 10).y], [at(1, 10).x, at(1, 10).y]], 'forest');
-    const sawmill = Object.values(controller.state.buildings).find((b) => b.defId === 'sawmill');
-    controller.update(T0 + 31_000, true); // construction done → bonus becomes active
-    expect(controller.derived.productionBonus[sawmill!.id]).toBe(20);
-    const woodAfterBuild = controller.state.resources.wood;
-    controller.update(T0 + 31_000 + 5 * MIN, true); // 45/min × 1.2 × 5 min = 270
-    expect(controller.state.resources.wood).toBeCloseTo(woodAfterBuild + 270, 0);
+    controller.state.resources = { money: 100_000, wood: 200, stone: 0, food: 100, freshwater: 0 };
+    controller.placeBuilding('quarry', at(1, 6).x, at(1, 6).y); // 5×5: (1..5, 6..10)
+    // 4 mountain tiles in radius 3 east of the footprint → +40 % (10 %/tile).
+    paintTerrain(controller, [[at(6, 6).x, at(6, 6).y], [at(6, 7).x, at(6, 7).y], [at(6, 8).x, at(6, 8).y], [at(6, 9).x, at(6, 9).y]], 'mountain');
+    const quarry = Object.values(controller.state.buildings).find((b) => b.defId === 'quarry');
+    controller.update(T0 + 91_000, true); // construction done → bonus becomes active
+    expect(controller.derived.productionBonus[quarry!.id]).toBe(40);
+    const stoneAfterBuild = controller.state.resources.stone;
+    controller.update(T0 + 91_000 + 5 * MIN, true); // 38/min × 1.4 × 5 min = 266
+    expect(controller.state.resources.stone).toBeCloseTo(stoneAfterBuild + 266, 0);
   });
 
   it('only counts water supply for housing inside a well radius', () => {

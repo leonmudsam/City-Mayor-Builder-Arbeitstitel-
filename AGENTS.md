@@ -48,14 +48,14 @@ der Cloud-Umgebung** (kein Rust/Windows) — dort nur den Browser-Pfad verifizie
 (gitignored). GitHub Pages ist abgeschaltet — kein Deploy-Workflow wieder einführen.
 `archive/legacy-2d/` = archivierte 2D-/Iso-Reste (nicht reaktivieren).
 
-## Status: Ausbaustufe 2.0 abgeschlossen, Overhaul 3.0 aktiv (v0.50–v0.70)
+## Status: Ausbaustufe 2.0 abgeschlossen, World Rebuild 6.0 aktiv (v0.50–v0.72)
 Gebäudesystem 2.0 + Welt 2.0 sind vollständig (A1–A10). **Nur noch der
 3D-Renderer** existiert (`src/renderer/three/`); der 2D-/Iso-Pixi-Renderer,
 `house_row`/`apartment` und `pixi.js` sind endgültig entfernt (kein Modus-Wähler
 wieder einführen). Gebäude-/Regions-/Prompt-Doku ist **generiert & testgeprüft**
 (`docs/BUILDINGS.md`, `docs/REGIONS.md`, `models/**/PROMPTS.md` — Regel §5 gilt
-weiter). Save-Schema steht bei **v13** (manuelle Routen + reservierte Ladung). Balancing/Progression sind über
-20 Level × 32 Regionen ausbalanciert und durch `config.test.ts`/`balancing.test.ts`
+weiter). Save-Schema steht bei **v14** (neue Welt; v10–v13 werden einmalig gesichert). Balancing/Progression sind über
+20 Level × 40 Regionen abgesichert und durch `config.test.ts`/`balancing.test.ts`
 gegen Regressionen gesichert. Bewusst offen (drop-in-fähig, Prompts existieren):
 der erweiterte Biom-Prop-Katalog (Wasserfälle/Windmühlen/Boote/Landmarken) —
 prozedurale Fallbacks decken den Kern, echte `.glb` einfach einlegen.
@@ -87,3 +87,17 @@ Vegetation, animierte Flüsse und neutrale Landmark-Fallbacks. Inselbake,
 Gameplayregionen und Save v13 bleiben unverändert. Vor Weltarbeit zuerst
 `docs/agents/MAP_REDESIGN_AUDIT.md` lesen; Wüste/Sumpf sind visuell und jede
 Gameplaywirkung bleibt `TODO(CLAUDE_LOGIC)`.
+
+v0.71 ersetzt den niedrigen Regions-Teasernebel im bestehenden Renderer durch
+eine blickdichte Wolkenwand oberhalb aller Geländeobjekte. Weltmarker zeigen
+Schloss, lokalisierten Regionsnamen und echtes Freischaltlevel; die Minimap
+verdeckt dieselben gesperrten IDs und zeigt Schloss/Level an. Die Unlock-Animation
+bleibt erhalten. Rein visuell, keine Config-/Save-Änderung; Schema bleibt v13.
+
+v0.72 ersetzt die alte Geometrie vollständig durch den Offline-Bake aus
+`reference/world/island 3d new.glb`: 512² Terrain, 1025² Höhe, 40 organische
+Regionen, Oststart, Bau-/Wasser-/Infrastrukturmasken und gemeinsame UI-Karten.
+Die Source-GLB wird nie zur Laufzeit geladen; die alte Source hat keinen aktiven
+Verbraucher und bleibt bis zur Git-Sicherung erhalten. Save v14 verwendet für
+v10–v13 einen einmaligen Backup-/Neustartpfad. Vor Weltarbeit zuerst
+`docs/agents/NEW_ISLAND_AUDIT.md` und `NEW_ISLAND_REBUILD_PLAN.md` lesen.

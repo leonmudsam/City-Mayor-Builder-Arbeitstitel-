@@ -5,6 +5,7 @@
 // über `RendererCallbacks` zurück.
 
 import type { PlacementError } from '../game/buildings/placement.ts';
+import type { BuildingRotation, WaterfrontPlacementPreview } from '../game/buildings/placement.ts';
 import type { RegionId } from '../game/types.ts';
 import type { CameraPreset } from './three/CameraConfig.ts';
 
@@ -13,6 +14,8 @@ export interface HoverInfo {
   defId: string;
   error: PlacementError | undefined;
   bonusPct: number;
+  rotation?: BuildingRotation;
+  waterfront?: WaterfrontPlacementPreview;
 }
 
 /** Renderer-owned camera state exposed as plain numbers for lightweight HUDs. */
@@ -26,6 +29,18 @@ export interface MapCameraView {
 
 /** Presentation-only filter for the world-space building marker layer. */
 export type InfoLayerMode = 'off' | 'problems' | 'needs' | 'upgrades' | 'production' | 'all';
+export type InfrastructureLayerMode = 'off' | 'all' | 'roads' | 'waterways' | 'harbors' | 'trade' | 'supply' | 'problems';
+
+/**
+ * Explizite Trennung von Sichtprüfung und Progression. Nur der Controller darf
+ * `unlockAllRegionsGameplay` verändern; der Renderer liest den Wert lediglich,
+ * damit Debugzustände eindeutig diagnostizierbar bleiben.
+ */
+export interface WorldRevealState {
+  fogDisabled: boolean;
+  revealLockedRegionsVisually: boolean;
+  unlockAllRegionsGameplay: boolean;
+}
 
 export interface RendererCallbacks {
   onSelectBuilding(id: string | undefined): void;
@@ -71,6 +86,9 @@ export interface IMapRenderer {
   setSelected(id: string | undefined): void;
   /** Changes only which renderer-owned marker billboards are visible. */
   setInfoLayer(mode: InfoLayerMode): void;
+  setInfrastructureLayer(mode: InfrastructureLayerMode): void;
+  /** Dev-Präsentation und echte Progression bleiben strikt getrennt. */
+  setWorldReveal(state: WorldRevealState): void;
   centerOnCity(): void;
   applyPreset(preset: CameraPreset): void;
   focusSelected(): void;

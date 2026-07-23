@@ -3,6 +3,7 @@ import type { BuildingDef } from '../config/types.ts';
 import type { GameState, NeedId } from '../types.ts';
 import type { Derived } from '../simulation/derived.ts';
 import { centerOf, chebyshev, effectiveEffects, isContributing } from './effects.ts';
+import { buildingInfrastructureStatus, isInfrastructureOperational } from '../infrastructure/buildingInfrastructure.ts';
 
 // A single, generic coverage-overlay system (§1). Any building that serves a
 // radius — wells/pumps (water), parks (leisure), markets (food distribution),
@@ -114,6 +115,7 @@ export function coverageOverlay(state: GameState, config: GameConfig, derived: D
     if (!isContributing(b)) continue;
     const def = config.buildings.get(b.defId);
     if (!def) continue;
+    if (!isInfrastructureOperational(buildingInfrastructureStatus(state, config, derived.roadNetwork, b))) continue;
     for (const s of sourcesOf(def, b.upgradeLevel)) {
       if (!sameGroup(s.group, group)) continue;
       const { cx, cy } = centerOf(def, b);
@@ -147,6 +149,7 @@ export function coverageOverlay(state: GameState, config: GameConfig, derived: D
     if (!isContributing(b)) continue;
     const def = config.buildings.get(b.defId);
     if (!def || !isConsumer(def, group)) continue;
+    if (!isInfrastructureOperational(buildingInfrastructureStatus(state, config, derived.roadNetwork, b))) continue;
     const { cx, cy } = centerOf(def, b);
     const hits = sourceCenters.reduce((n, s) => (chebyshev(cx, cy, s.cx, s.cy) <= s.radius ? n + 1 : n), 0);
     let cstate: CoverageState;

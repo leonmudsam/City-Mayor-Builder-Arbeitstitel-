@@ -3,11 +3,17 @@ import {
   CheckCircle2,
   Clock3,
   Flame,
+  Fuel,
   Gauge,
   MapPin,
+  PackageOpen,
   PartyPopper,
+  RotateCcw,
   Route,
+  Sparkles,
   Star,
+  Timer,
+  TrafficCone,
   Truck,
   type LucideIcon,
 } from 'lucide-react';
@@ -80,26 +86,59 @@ export function EventModal({ event, onClose }: { event: GameEvent; onClose: () =
   );
 }
 
+/**
+ * Abschlussbericht einer Stadtarbeit (§ Overhaul 8.0 / §3.3). Es werden nur
+ * Kennzahlen angezeigt, für die die Simulation einen ECHTEN Wert geliefert hat —
+ * eine Inspektion ohne Fahrt zeigt keine leere „Strecke – " mehr, sondern die
+ * Zeile entfällt. Platzhalter wie „– %" gibt es hier bewusst nicht.
+ */
 function ActivityResultBody({ event }: { event: GameEvent }) {
   const stars = event.titleKey.endsWith('_gold') ? 3 : event.titleKey.endsWith('_silver') ? 2 : 1;
+  const params = event.params ?? {};
+  const metrics: { icon: LucideIcon; label: string; value: string }[] = [];
+  const push = (icon: LucideIcon, label: string, value: unknown): void => {
+    if (value === undefined || value === null || value === '') return;
+    metrics.push({ icon, label, value: String(value) });
+  };
+  push(Clock3, 'Gesamtzeit', params.elapsed);
+  push(Timer, 'Fahrzeit', params.drivingTime);
+  push(PackageOpen, 'Be-/Entladen', params.handlingTime);
+  push(Route, 'Strecke', params.distance);
+  push(Fuel, 'Leerfahrt', params.emptyTravel);
+  push(Gauge, 'Auslastung', params.utilisation);
+  push(TrafficCone, 'Verkehr', params.traffic);
+  push(Sparkles, 'Qualitätsverlust', params.spoilage);
+  push(RotateCcw, 'Nachfüllungen', params.resupplies);
+  push(CheckCircle2, 'Lieferziele', params.deliveries);
+  push(Gauge, 'Planungseffizienz', params.efficiency);
+  push(CheckCircle2, 'Straßenanteil', params.roadCoverage);
+
   return (
     <div className="activity-result-body">
       <div className="activity-result-medal">
         <span><Truck size={38} /></span>
         <div>{[0, 1, 2].map((index) => <Star key={index} size={24} fill={index < stars ? 'currentColor' : 'none'} className={index < stars ? 'earned' : ''} />)}</div>
-        <strong>{String(event.params?.quality ?? 'Abgeschlossen')}</strong>
-        <small>{String(event.params?.name ?? '')}</small>
+        <strong>{String(params.quality ?? 'Abgeschlossen')}</strong>
+        <small>{String(params.name ?? '')}</small>
       </div>
       <div className="activity-result-grid">
-        <span><Clock3 size={16} /><small>Gesamtzeit</small><strong>{String(event.params?.elapsed ?? '–')}</strong></span>
-        <span><Route size={16} /><small>Strecke</small><strong>{String(event.params?.distance ?? '–')}</strong></span>
-        <span><Gauge size={16} /><small>Effizienz</small><strong>{String(event.params?.efficiency ?? '–')} %</strong></span>
-        <span><CheckCircle2 size={16} /><small>Straßenanteil</small><strong>{String(event.params?.roadCoverage ?? '–')}</strong></span>
+        {metrics.map((metric) => {
+          const Icon = metric.icon;
+          return (
+            <span key={metric.label}>
+              <Icon size={16} />
+              <small>{metric.label}</small>
+              <strong>{metric.value}</strong>
+            </span>
+          );
+        })}
       </div>
       <div className="activity-result-reward">
-        <span><strong>{String(event.params?.money ?? '0')}</strong><small>Geld</small></span>
-        <span><strong>{String(event.params?.xp ?? '0')} XP</strong><small>Erfahrung</small></span>
-        <span><strong>{String(event.params?.vehicle ?? '–')}</strong><small>Fahrzeug</small></span>
+        <span><strong>{String(params.money ?? '0')}</strong><small>Geld</small></span>
+        <span><strong>{String(params.xp ?? '0')} XP</strong><small>Erfahrung</small></span>
+        {params.vehicle !== undefined && (
+          <span><strong>{String(params.vehicle)}</strong><small>Fahrzeug</small></span>
+        )}
       </div>
     </div>
   );

@@ -1,9 +1,11 @@
 # 3D-Welt-Assets — Zielbild, Stilstandard, Konzepte (v0.40 — World Graphics V2)
 
-> **Aktueller Status v0.70:** Es existiert nur noch der Three-Renderer. Der
+> **Aktueller Status v0.71:** Es existiert nur noch der Three-Renderer. Der
 > Map-Redesign-5.0-Pass nutzt zwölf visuelle Regionsprofile und Terrainlayer,
 > Triplanar-Fels, animierte Flüsse, mehrere vorhandene Baum-GLBs sowie
-> Landmark-Fallbacks. Die präzise aktuelle Matrix steht in
+> Landmark-Fallbacks. Gesperrte Regionen werden im selben Renderer durch eine
+> blickdichte, instanzierte Wolkenwand plus Schloss-/Level-Marker verdeckt. Die
+> präzise aktuelle Matrix steht in
 > `docs/agents/MAP_REDESIGN_AUDIT.md`, `TERRAIN_MATERIAL_MATRIX.md` und
 > `WORLD_ASSET_MANIFEST.md`. Ältere Zukunftsaussagen in diesem Konzeptpapier
 > sind historisch zu lesen; Manifest und generierte Ordnerdokumente sind die

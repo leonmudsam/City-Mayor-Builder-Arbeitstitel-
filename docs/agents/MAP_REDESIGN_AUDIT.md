@@ -1,6 +1,10 @@
 # Map Redesign 5.0 — Audit
 
-Stand: 21. Juli 2026 · Referenzstand v0.70
+> Historische v0.71-Renderergrundlage. Geometrie-, Maß- und Regionsangaben sind
+> seit World Rebuild 6.0 durch `NEW_ISLAND_AUDIT.md` und
+> `NEW_ISLAND_REBUILD_PLAN.md` ersetzt.
+
+Stand: 21. Juli 2026 · Referenzstand v0.71
 
 ## Kurzfazit
 
@@ -16,6 +20,12 @@ v0.70 setzt deshalb auf der bestehenden Pipeline an: 12 visuelle Regionsprofile,
 mehrere Vegetationsfamilien, neutrale Regionslandmarken und eine gebündelte
 Flussströmungsfläche. Gameplay-Regionen, bebaubare Flächen und Saves bleiben
 identisch.
+
+v0.71 schließt den separaten Mockup-Befund für gesperrte Regionen: Der frühere
+niedrige Teasernebel ließ Terrainspitzen sichtbar. Die bestehende Regionskontur
+trägt nun eine vollständige Wolkendecke oberhalb des höchsten Terrainpunkts,
+eine instanzierte Randwand und einen Schloss-/Level-Marker. Die Minimap nutzt
+dieselben Regions-IDs und Zentren. Regionslogik, Bake und Saves bleiben identisch.
 
 ## Bestehende Pipeline
 
@@ -46,7 +56,7 @@ identisch.
 | Sumpf | spielmechanisch als Küste geführt | keine eigene visuelle Identität | Moor, Schilf, Totholz und dunkles Wasser | Region 29 erhält Sumpfprofil, KI-Matschtextur, Schilf/Totholz-Verteilung und Moorlandmarke | Gameplay-Auswirkungen bewusst `TODO(CLAUDE_LOGIC)` |
 | Wüste | spielmechanisch als Küste geführt | keine rote Trockenzone | rote Felsen, trockener Boden, spärliche Vegetation | Region 9 erhält Wüstenprofil, KI-Sandsteintextur, trockene Props und Felsnadel | Gameplay-Auswirkungen bewusst `TODO(CLAUDE_LOGIC)` |
 | Fruchtbares Land | Farmboden und Felder vorhanden | zu wenig Abgrenzung vom Gras | warme Auen, strukturierte Agrarränder | Profil `fruchttal`, Agrarvegetation, bestehende Farmtextur bleibt führend | Hecken-/Obstbaum-GLBs offen |
-| Nebel | Wetter- und Regionsnebel vorhanden | Übergänge teilweise generisch | gestaffelte Sichttiefe und Nebelbänke | bestehende vier Nebelschichten mit regionalen Profilen weitergenutzt | dichter biomeigener Bodennebel optional |
+| Nebel | Wetternebel und niedriger Regions-Teaser vorhanden | gesperrtes Terrain und Gipfel blieben sichtbar; Status nur indirekt | blickdichte Wolkenwand, atmosphärischer Rand, Schloss und Level | v0.71: Decke über Maximalhöhe, drei Alpha-Lagen, ein Wolken-`InstancedMesh`, Canvas-Marker und Minimap-Maske | Dichte und Markergröße auf Zielhardware abnehmen; biomeigener Bodennebel optional |
 | Beleuchtung | Tageszeit-/Wettergrading vorhanden | Materiale wirkten bei Distanz flach | warme, atmosphärische Modellierung | neue Farbbereiche reagieren auf bestehendes Licht/Fog; keine zweite Lichtpipeline | HDR-Umgebungskarte optional |
 | Vegetation | instanzierte Bäume/Büsche/Blumen | Biomunterschiede zu schwach | charakteristische Silhouetten je Biom | profilabhängige Dichte, drei Baumquellen, Felsen, Schilf und Totholz | weitere echte GLBs fehlen, Fallback bleibt aktiv |
 | Landmarken | Boot, Windmühle, Leuchtturm, Wasserfall | wenige neutrale Orientierungspunkte | Felsbogen, Urbaum, Ruine, Insel, Wüsten-/Sumpfzeichen | sechs neue Manifest-Slots mit deterministischer Platzierung und Fallback | echte Drop-in-Modelle offen |
@@ -59,4 +69,3 @@ Regions-IDs, verändert aber weder `GameState` noch Config-Boni. Insbesondere si
 Morgenküste und Westbucht nur visuell als Wüste beziehungsweise Sumpf markiert.
 Eine spätere spielmechanische Umwidmung muss datengetrieben in `src/game/config/`
 erfolgen und bei Save-Daten die normale Migrationskette einhalten.
-

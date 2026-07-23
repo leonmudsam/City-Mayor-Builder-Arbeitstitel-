@@ -15,28 +15,38 @@ import {
   rewardTierFor,
   type TradeContractOffer,
 } from '../simulation/activities.ts';
-import type { GameState, RegionId, ResourceId, TerrainType } from '../types.ts';
+import type { ActiveBuildingOperation, BuildingWorkerState, GameState, InventoryTransfer, RegionId, ResourceId, TerrainType } from '../types.ts';
 import { recomputeDerived, type Derived } from '../simulation/derived.ts';
 import { advance, moveInPerMin } from '../simulation/tick.ts';
 import { updateQuests, objectiveTarget, questFocus, type QuestFocus } from '../simulation/quests.ts';
-import { validatePlacement, isConnectedToRoad, type PlacementError } from '../buildings/placement.ts';
+import {
+  validatePlacement,
+  isConnectedToRoad,
+  waterfrontPlacementPreview,
+  type BuildingRotation,
+  type PlacementError,
+  type WaterfrontPlacementPreview,
+} from '../buildings/placement.ts';
 import { locationBonusPct } from '../buildings/location.ts';
-import { demolishRefund, effectiveBuildCost, isFirstBuildDiscounted } from '../buildings/effects.ts';
+import { centerOf, demolishRefund, effectiveBuildCost, isFirstBuildDiscounted } from '../buildings/effects.ts';
 import { buildLimitAt, countOf, nextLimitLevel } from '../buildings/limits.ts';
 import { coverageOverlay, type CoverageOverlay } from '../buildings/coverage.ts';
 import { buildingDiagnostics, primaryMarker, type Diagnosis } from '../buildings/diagnostics.ts';
 import { canAfford, grantGold, grantResources, spendCost, spendGold } from '../economy/economyService.ts';
 import { computeIncome, type IncomeBreakdown } from '../economy/income.ts';
-import { addXp } from '../progression/levels.ts';
+import { addXp, FREE_EXPANSION_LEVEL } from '../progression/levels.ts';
 import {
   clearTiles,
   findDistrictCenterSpot,
-  isRegionAdjacentToUnlocked,
+  regionUnlockBlocker,
+  type RegionUnlockBlocker,
   occupyTiles,
   rebuildOccupancyIndex,
   regionHasTerrain,
   regionRoadCostFactorAt,
   regionUnlockCost,
+  samplePlacementSurface,
+  type PlacementSurfaceSample,
   worldTerrainAt,
 } from '../map/world.ts';
 import { BAKED_REGIONS, regionIdAt, startRegionConfig } from '../config/startRegion.config.ts';
@@ -45,10 +55,13 @@ import {
   analyseManualActivityRouteFrom,
   activityRouteRoadAnchorsFrom,
   buildingCenter,
+  computeRoadBusyness,
+  forecastRouteTraffic,
   targetOrderOnPath,
   type RouteAnalysis,
   type RoutePointInput,
   type RouteRoadAnchors,
+  type RouteTrafficForecast,
 } from '../activities/routeAnalysis.ts';
 import { regionPreview, type RegionPreview } from '../regions/regionPreview.ts';
 import { analyseRoadPath, type RoadPlanPreview } from '../roads/roadPlanning.ts';
@@ -57,12 +70,62 @@ import {
   evaluateCargoRoute,
   resolveCargoModel,
   evaluateInfrastructure,
+  type ActivityProgress,
   type CargoPlan,
   type CargoRouteEvaluation,
   type InfrastructureEvaluation,
   type InfrastructureWarning,
 } from '../activities/logistics.ts';
 import { newId } from '../engine/rng.ts';
+import {
+  availableWorkNodes,
+  cancelOperation,
+  ensureInventory,
+  getInventory,
+  inventoryFree,
+  inventoryUsed,
+  nodesInWorkArea,
+  operationStage,
+  previewOperation,
+  selectAreaNodeIds,
+  setOperationPaused,
+  startOperation,
+  workAreaBounds,
+  workerRenderStates,
+  type OperationPreview,
+  type WorkerRenderState,
+} from '../operations/operations.ts';
+import { resolveNode, type ResourceNode } from '../operations/nodes.ts';
+import {
+  availableForTransfer,
+  cancelInventoryTransfer,
+  createInventoryTransfer,
+  inventoryNetworkOverview,
+  previewTransfer,
+  sampleRoutePath,
+  transferRoute,
+  transferTargets,
+  type CreateTransferInput,
+  type ResourceNetworkStat,
+  type TransferError,
+  type TransferPreview,
+  type TransferRenderState,
+  type TransferTarget,
+} from '../operations/transport.ts';
+import {
+  buildingInfrastructureStatus,
+  infrastructureNetworkOverview,
+  type BuildingInfrastructureStatus,
+  type InfrastructureNetworkOverview,
+} from '../infrastructure/buildingInfrastructure.ts';
+import {
+  getAvailableHarborConnections,
+  getShippingRoutePreview,
+  getWaterNavigationGraph,
+  type AvailableHarborConnection,
+  type ShippingRoutePreview,
+  type WaterNavigationGraph,
+} from '../infrastructure/waterNavigation.ts';
 
 export type CommandError =
   | PlacementError
@@ -71,7 +134,12 @@ export type CommandError =
   | 'invalid'
   | 'cooldown'
   | 'locked'
-  | 'feature_disabled';
+  | 'feature_disabled'
+  // § Active Operations 2.0, A5 Transport
+  | 'no_vehicle'
+  | 'no_cargo'
+  | 'no_target'
+  | 'no_route';
 
 export type CommandResult = { ok: true } | { ok: false; error: CommandError };
 
@@ -87,15 +155,53 @@ export type GameEvent =
       money: number;
       xp: number;
       quality?: ActivityQuality;
-      result?: {
-        elapsedMs: number;
-        distanceTiles?: number;
-        efficiencyScore?: number;
-        roadCoverage?: number;
-        vehicle?: DriveVehicle;
-      };
+      result?: ActivityRunResult;
     }
   | { type: 'change' };
+
+/**
+ * Abschlussbericht einer beendeten Stadtarbeit (§ Overhaul 8.0 / §3.3). Jeder
+ * Wert stammt aus der echten Simulation bzw. der validierten Routenprojektion.
+ * Optionale Felder fehlen genau dann, wenn es sie für diesen Auftragstyp NICHT
+ * gibt (eine Inspektion hat keine Ladung) — die UI blendet sie dann aus, statt
+ * einen Platzhalter wie „– %" anzuzeigen.
+ */
+export interface ActivityRunResult {
+  elapsedMs: number;
+  vehicle?: DriveVehicle;
+  /** Fahrmissionen: aus der validierten, gezeichneten Kette. */
+  distanceTiles?: number;
+  efficiencyScore?: number;
+  roadCoverage?: number;
+  drivingDurationMs?: number;
+  handlingDurationMs?: number;
+  emptyTravelRatio?: number;
+  /** Fahrzeugauslastung 0..1 (transportierte Menge ÷ Kapazität). */
+  loadUtilisation?: number;
+  /** Verkehrseinfluss des gefahrenen Weges 0..1. */
+  trafficLoad?: number;
+  /** §12 Qualitätsverlust verderblicher Ware 0..1. */
+  spoilageRisk?: number;
+  resupplyStops?: number;
+  deliveryTargetsCompleted?: number;
+  deliveryTargetsTotal?: number;
+}
+
+/**
+ * § Final World Compaction 8.1 (§6): Ab diesem Level schenkt die Progression die
+ * erste Regionserweiterung. In `progression/levels.ts` definiert und hier
+ * re-exportiert, damit Controller, Quests und UI-Hinweis dieselbe Wahrheit teilen.
+ */
+export { FREE_EXPANSION_LEVEL };
+
+/**
+ * §26: Pause und die drei Zeitfaktoren. Der Wert ist der Multiplikator zwischen
+ * realer und simulierter Zeit — 0 heißt „es vergeht keine Simulationszeit".
+ */
+export type SimulationSpeed = 0 | 1 | 2 | 4;
+
+/** Auswählbare Geschwindigkeitsstufen für die HUD-Leiste. */
+export const SIMULATION_SPEEDS: readonly SimulationSpeed[] = [0, 1, 2, 4];
 
 /** Why a mission can't be started right now (§16.1 board state). */
 export type ActivityUnavailableReason = 'cooldown' | 'missing_building' | 'no_targets' | 'busy';
@@ -119,8 +225,11 @@ export interface PlacementDiagnostics {
   reason?: PlacementError;
   terrain: TerrainType;
   regionId: number;
+  /** Höhen-/Hang-/Überlappungswerte der tatsächlich geprüften Grundfläche. */
+  surface: PlacementSurfaceSample;
   /** Orthogonaler Anschluss an das verbundene Straßennetz. */
   roadAccess: boolean;
+  waterfront?: WaterfrontPlacementPreview;
   /** Standort-/Regionsbonus in Prozentpunkten auf die Produktion (kann negativ sein). */
   locationBonusPct: number;
   buildCost: Partial<Record<ResourceId, number>>;
@@ -157,6 +266,13 @@ export interface ActivityRoutePreview {
   cargoPlan?: CargoPlan;
   cargoRoute?: CargoRouteEvaluation;
   infrastructure?: InfrastructureEvaluation;
+  /**
+   * §9: Verkehrsprognose des bereits gezeichneten Weges. Liegt ab der ersten
+   * Kachel vor — die UI zeigt deshalb nie mehr „Wird geprüft".
+   */
+  traffic?: RouteTrafficForecast;
+  /** §3.2: getrennte Zählung Lieferziele/Nachfüllstopps für die Anzeige. */
+  progress: ActivityProgress;
   complete: boolean;
 }
 
@@ -174,6 +290,34 @@ export interface ActivityExecutionSnapshot {
   cargo?: CargoPlan;
 }
 
+/** Lokales Betriebslager als UI-Sicht (§ Active Operations 2.0). */
+export interface BuildingInventoryView {
+  capacity: number;
+  used: number;
+  free: number;
+  items: Partial<Record<ResourceId, number>>;
+  reserved: Partial<Record<ResourceId, number>>;
+}
+
+/**
+ * Gebündelte Betriebssicht für das Gebäudefenster (§18): Arbeiter, Auftrag,
+ * lokales Lager, Reichweiten. Reine Read-Projektion.
+ */
+export interface BuildingOperationInfo {
+  isOperationBuilding: boolean;
+  resource: ResourceId;
+  workerSlots: number;
+  /** Arbeiter, die gerade unterwegs/am Arbeiten sind (nicht im Betrieb warten). */
+  workersBusy: number;
+  efficientRadius: number;
+  maxRadius: number;
+  inventory: BuildingInventoryView;
+  /** Verfügbare Knoten im effizienten Arbeitsgebiet. */
+  availableNodes: number;
+  storageFull: boolean;
+  active?: { targetCount: number; remainingCount: number; paused: boolean };
+}
+
 /**
  * The command API between UI and simulation. The UI never touches simulation
  * internals: it calls named commands and subscribes to change notifications.
@@ -187,6 +331,22 @@ export class GameController {
   version = 0;
 
   private listeners = new Set<(event: GameEvent) => void>();
+
+  /**
+   * Reine Renderer-Hilfe: die Straßen-Polyline je Transport (transferId →
+   * Kachelkette) für die interpolierte 3D-Fahrt. NICHT persistiert — sie wird
+   * deterministisch aus dem Straßengraph rekonstruiert und nach Lieferung/Abbruch
+   * verworfen (Slim-Save-Philosophie).
+   */
+  private transferRoutes = new Map<string, { x: number; y: number }[]>();
+
+  /**
+   * § Overhaul 8.0 / §26 — Simulationsgeschwindigkeit. 0 = Pause, sonst der
+   * Faktor, mit dem REALE Zeit in Simulationszeit umgerechnet wird. Die
+   * Geschwindigkeit ist eine Sitzungseinstellung und bewusst NICHT im Save:
+   * ein Spielstand wird nie pausiert geladen, und das Schema bleibt unberührt.
+   */
+  private speed: SimulationSpeed = 1;
 
   constructor(config: GameConfig, state: GameState) {
     this.config = config;
@@ -223,6 +383,40 @@ export class GameController {
     for (const listener of this.listeners) listener(event);
   }
 
+  /** § §26: aktuelle Simulationsgeschwindigkeit (0 = Pause). */
+  getSpeed(): SimulationSpeed {
+    return this.speed;
+  }
+
+  /**
+   * §26: Simulationsgeschwindigkeit setzen. Pause hält die GESAMTE Simulation
+   * an — Einkommen, Verbrauch, Produktion, Wachstum, Bauzeit, Missionen und
+   * Ereignisse gleichermaßen, weil ab dann keine Simulationszeit mehr vergeht.
+   * UI, Kamera und Planungsmodi bleiben bedienbar (sie hängen nicht am Tick).
+   */
+  setSpeed(speed: SimulationSpeed): void {
+    if (this.speed === speed) return;
+    this.speed = speed;
+    this.notify({ type: 'change' });
+  }
+
+  /**
+   * §26 Kernvertrag: REALE vergangene Millisekunden werden mit der gewählten
+   * Geschwindigkeit in Simulationszeit umgerechnet und dann durch denselben
+   * einen Tick-Pfad geschickt. Dadurch skalieren Einnahmen, Verbrauch,
+   * Produktion, Wachstum und Bauzeit zwangsläufig GEMEINSAM — es gibt keinen
+   * Weg, nur die Einnahmen zu beschleunigen. Bei Pause vergeht keine
+   * Simulationszeit, also passiert exakt nichts.
+   *
+   * Die Simulationsuhr (`meta.lastSimTime`) ist damit bewusst von der Echtzeit
+   * entkoppelt; jedes zeitabhängige System im Spiel rechnet bereits gegen
+   * `lastSimTime` und bleibt deshalb konsistent.
+   */
+  advanceByRealTime(realDeltaMs: number, live = false): void {
+    if (this.speed === 0 || realDeltaMs <= 0) return;
+    this.update(this.state.meta.lastSimTime + realDeltaMs * this.speed, live);
+  }
+
   /**
    * Drive the simulation to `now`. `live` is `true` only for real foreground
    * ticks while the tab is visible — the entire economy (production, income,
@@ -248,7 +442,25 @@ export class GameController {
   placeBuilding(defId: string, x: number, y: number, rotation?: 0 | 90 | 180 | 270): CommandResult {
     const def = this.config.buildings.get(defId);
     if (!def) return fail('not_found');
-    const placementError = validatePlacement(this.state, this.config, this.derived, def, x, y);
+    const waterfront = waterfrontPlacementPreview(
+      this.state,
+      this.config,
+      this.derived,
+      def,
+      x,
+      y,
+      rotation ?? 0,
+    );
+    const effectiveRotation = waterfront?.valid ? waterfront.suggestedRotation : (rotation ?? 0);
+    const placementError = waterfront?.reason ?? validatePlacement(
+      this.state,
+      this.config,
+      this.derived,
+      def,
+      x,
+      y,
+      def.waterfront ? { rotation: effectiveRotation } : undefined,
+    );
     if (placementError) return fail(placementError);
     // Escalating cost for anti-spam utilities (warehouses, §7) or a first-build
     // discount for core economy buildings (§ faster early game). Lifetime count
@@ -271,7 +483,7 @@ export class GameController {
       ...(instant ? {} : { constructionEndsAt: now + def.constructionSec * 1000 }),
       // Cosmetic facing only (§ Gebäude-Rotation) — omit entirely for 0° so saves
       // stay minimal; footprint/placement were already validated above unrotated.
-      ...(rotation ? { rotation } : {}),
+      ...(effectiveRotation ? { rotation: effectiveRotation } : {}),
     };
     occupyTiles(this.state, x, y, def.size.w, def.size.h, id);
     this.state.stats.built[defId] = (this.state.stats.built[defId] ?? 0) + 1;
@@ -379,8 +591,20 @@ export class GameController {
     const viaFeature = this.config.features.moveBuildings;
     if (!viaFeature && def.canRelocate !== true) return fail('feature_disabled');
     if (b.x === x && b.y === y) return ok;
-    const placementError = validatePlacement(this.state, this.config, this.derived, def, x, y, {
+    const waterfront = waterfrontPlacementPreview(
+      this.state,
+      this.config,
+      this.derived,
+      def,
+      x,
+      y,
+      b.rotation ?? 0,
+      buildingId,
+    );
+    const effectiveRotation = waterfront?.valid ? waterfront.suggestedRotation : (b.rotation ?? 0);
+    const placementError = waterfront?.reason ?? validatePlacement(this.state, this.config, this.derived, def, x, y, {
       ignoreBuildingId: buildingId,
+      ...(def.waterfront ? { rotation: effectiveRotation } : {}),
     });
     if (placementError) return fail(placementError);
     // Relocation fee (only on the canRelocate path — the dev flag stays free).
@@ -391,6 +615,8 @@ export class GameController {
     clearTiles(this.state, b.x, b.y, def.size.w, def.size.h, buildingId);
     b.x = x;
     b.y = y;
+    if (effectiveRotation) b.rotation = effectiveRotation;
+    else delete b.rotation;
     occupyTiles(this.state, x, y, def.size.w, def.size.h, buildingId);
     this.afterStructuralChange();
     return ok;
@@ -416,8 +642,16 @@ export class GameController {
     for (const prereq of def.prerequisiteRegionIds ?? []) {
       if (this.state.world.regions[String(prereq)]?.status !== 'unlocked') return fail('locked');
     }
-    if (!isRegionAdjacentToUnlocked(this.state, id)) return fail('invalid');
-    const cost = regionUnlockCost(this.config, id);
+    // § Final World Compaction 8.1: Landnachbarschaft ODER — für die
+    // Archipel-Regionen — Seenachbarschaft plus echter Hafen.
+    const blocker = regionUnlockBlocker(this.state, id);
+    if (blocker === 'not_adjacent') return fail('invalid');
+    if (blocker === 'needs_harbor') return fail('locked');
+    // § §6: Die ERSTE Erweiterung nach der Startregion ist ab Level 3 gratis.
+    // Es gibt dafür weder Geld- noch XP-Belohnung und kein Bürgeranliegen —
+    // sie ist reine Progressionsbelohnung und einmalig.
+    const free = this.isFreeRegionExpansionAvailable(id);
+    const cost = free ? 0 : regionUnlockCost(this.config, id);
     const spend = spendCost(this.state, { money: cost }, 'unlock_region');
     if (!spend.ok) return fail('insufficient');
     region.status = 'unlocked';
@@ -429,9 +663,61 @@ export class GameController {
       if (nr?.status === 'unlocked' && nr.districtId !== 'main') { region.districtId = nr.districtId; break; }
     }
     this.state.stats.regionsUnlocked += 1;
-    addXp(this.state, this.config, this.derived, 30);
+    // Gekaufte Erweiterungen geben XP; die kostenlose Erst-Erweiterung nicht
+    // (§6: keine Belohnung, reine Progressionsgeste).
+    if (!free) addXp(this.state, this.config, this.derived, 30);
     this.afterStructuralChange();
     return ok;
+  }
+
+  /**
+   * § Final World Compaction 8.1 (§6) — Ist die kostenlose Erweiterung für
+   * diese Region gerade verfügbar?
+   *
+   * Bedingungen: Level 3 erreicht, noch KEINE Erweiterung gekauft (die
+   * Startregion zählt nicht mit) und die Region ist regulär erschließbar. Der
+   * Spieler wählt damit eine seiner beiden frühen Nachbarregionen frei aus; die
+   * andere bleibt eine normale Kaufoption. Reine Leseprüfung.
+   */
+  isFreeRegionExpansionAvailable(id: RegionId): boolean {
+    if (this.state.stats.regionsUnlocked > 0) return false;
+    const def = this.config.regions.get(id);
+    if (!def?.unlockable || def.unlockLevel <= 1) return false;
+    if (this.state.level.current < def.unlockLevel) return false;
+    if (this.state.level.current < FREE_EXPANSION_LEVEL) return false;
+    if (this.state.world.regions[String(id)]?.status === 'unlocked') return false;
+    return regionUnlockBlocker(this.state, id) === undefined;
+  }
+
+  /**
+   * Alle Regionen, die gerade als kostenlose Erstverwendung wählbar sind.
+   * Die UI zeigt daraus die Auswahl (§6: „eine oder zwei geeignete
+   * Nachbarregionen werden angeboten").
+   */
+  getFreeRegionExpansionOptions(): RegionId[] {
+    if (this.state.stats.regionsUnlocked > 0) return [];
+    if (this.state.level.current < FREE_EXPANSION_LEVEL) return [];
+    return [...this.config.regions.values()]
+      .filter((def) => this.isFreeRegionExpansionAvailable(def.id))
+      .map((def) => def.id)
+      .sort((a, b) => a - b);
+  }
+
+  /**
+   * Warum eine gesperrte Region gerade nicht erschließbar ist (§ Final World
+   * Compaction 8.1) — für den Regionsdialog, damit die UI die Hafenpflicht der
+   * Archipel-Regionen ehrlich benennt statt nur den Knopf zu sperren. Reine
+   * Leseprüfung, keine State-Mutation.
+   */
+  getRegionUnlockBlocker(id: RegionId): RegionUnlockBlocker | undefined {
+    const region = this.state.world.regions[String(id)];
+    if (!region || region.status === 'unlocked') return undefined;
+    return regionUnlockBlocker(this.state, id);
+  }
+
+  /** Besitzt die Region laut Bake überhaupt einen Seezugang (Hafenkandidat)? */
+  isRegionHarborDependent(id: RegionId): boolean {
+    return this.config.regions.get(id)?.requiresHarbor === true;
   }
 
   /**
@@ -884,6 +1170,9 @@ export class GameController {
           roadPath: roadPath.map((point) => ({ ...point })),
         })
       : undefined;
+    // §9: Die Verkehrsprognose hängt NICHT an der vollständigen Zielkette — sie
+    // bewertet den gezeichneten Weg und steht deshalb ab der ersten Kachel.
+    const traffic = this.getActivityTrafficForecast(roadPath, vehicle);
     return {
       anchors,
       reachedTargetIds,
@@ -892,8 +1181,42 @@ export class GameController {
       ...(cargoPlan ? { cargoPlan } : {}),
       ...(cargoRoute ? { cargoRoute } : {}),
       ...(infrastructure ? { infrastructure } : {}),
+      ...(traffic ? { traffic } : {}),
+      progress: cargoRoute?.progress ?? {
+        deliveryTargetsCompleted: reachedTargetIds.length,
+        deliveryTargetsTotal: candidateTargetIds.length,
+        resupplyStopsCompleted: 0,
+        resupplyStopsTotal: 0,
+        returnRequired: false,
+        returnCompleted: false,
+      },
       complete: analysis !== undefined && (cargoRoute?.cargoValid ?? true),
     };
+  }
+
+  /**
+   * §9 Verkehrsprognose des gezeichneten Weges. Reine Read-Projektion aus dem
+   * echten Straßengraph und der Anrainerdichte; `undefined` nur bei leerem Weg.
+   */
+  getActivityTrafficForecast(
+    roadPath: readonly { x: number; y: number }[],
+    vehicle?: DriveVehicle,
+  ): RouteTrafficForecast | undefined {
+    if (roadPath.length === 0) return undefined;
+    const vehicleDef = vehicle ? this.config.activities.vehicles.find((v) => v.id === vehicle) : undefined;
+    return forecastRouteTraffic(
+      roadPath,
+      this.derived.roadNetwork,
+      computeRoadBusyness(this.state, this.config, this.derived.roadNetwork),
+      vehicleDef
+        ? {
+            handling: vehicleDef.handling,
+            ...(vehicleDef.narrowStreetPenalty !== undefined
+              ? { narrowStreetPenalty: vehicleDef.narrowStreetPenalty }
+              : {}),
+          }
+        : undefined,
+    );
   }
 
   /**
@@ -1150,6 +1473,57 @@ export class GameController {
   }
 
   /**
+   * Abschlussbericht einer beendeten Mission (§3.3). Alle Kennzahlen stammen aus
+   * der echten Laufzeit und der validierten Routenprojektion; ein Feld fehlt nur
+   * dann, wenn es für diesen Auftragstyp keinen realen Wert gibt. Es wird
+   * nichts geschätzt, gerundet-erfunden oder mit Platzhaltern gefüllt.
+   */
+  private buildActivityRunResult(
+    def: ActivityDef,
+    active: NonNullable<GameState['activities']['active']>,
+    now: number,
+  ): ActivityRunResult {
+    const targetIds = active.targets.map((candidate) => candidate.buildingId);
+    const result: ActivityRunResult = {
+      elapsedMs: Math.max(0, now - active.startedAt),
+      deliveryTargetsCompleted: active.targets.filter((candidate) => candidate.done).length,
+      deliveryTargetsTotal: active.targets.length,
+      ...(active.vehicle ? { vehicle: active.vehicle } : {}),
+    };
+    const path = active.plannedRoadPath;
+    if (!path) return result;
+
+    const analysis = this.analyseManualActivityRoute(def.id, targetIds, path, active.vehicle);
+    if (analysis) {
+      result.distanceTiles = analysis.distanceTiles;
+      result.efficiencyScore = analysis.efficiencyScore;
+      result.roadCoverage = analysis.roadCoverage;
+    }
+    const infrastructure = this.getActivityInfrastructure(def.id, targetIds, active.vehicle, {
+      ...(active.vehicle ? { vehicle: active.vehicle } : {}),
+      roadPath: path.map((point) => ({ ...point })),
+    });
+    if (infrastructure) {
+      result.drivingDurationMs = infrastructure.drivingDurationMs;
+      result.handlingDurationMs = infrastructure.handlingDurationMs;
+      result.spoilageRisk = infrastructure.spoilageRisk;
+    }
+    const cargoRoute = this.getActivityCargoRoute(def.id, targetIds, path, active.vehicle);
+    if (cargoRoute) {
+      result.emptyTravelRatio = Math.round(cargoRoute.emptyTravelRatio * 100) / 100;
+      result.resupplyStops = cargoRoute.plannedResupplies;
+    }
+    const cargo = this.getActivityCargoPlan(def.id, targetIds, active.vehicle);
+    if (cargo && cargo.capacity > 0) {
+      result.loadUtilisation =
+        Math.round(Math.min(1, Math.min(cargo.capacity, cargo.totalRequired) / cargo.capacity) * 100) / 100;
+    }
+    const traffic = this.getActivityTrafficForecast(path, active.vehicle);
+    if (traffic) result.trafficLoad = traffic.totalLoad;
+    return result;
+  }
+
+  /**
    * Upfront an der Quelle zu reservierende Ladung (§ Stadtarbeit-Logik 2.0, L3):
    * `costPerTarget × Zielanzahl` je Ressource. `undefined`, wenn die Aktivität
    * nichts verbraucht (Feuerwehr/Polizei/Inspektion).
@@ -1203,25 +1577,7 @@ export class GameController {
       const tier = rewardTierFor(def, this.state.level.current);
       const quality = resolveQuality(def, active.startedAt, now);
       const scale = QUALITY_SCALE[quality];
-      const routeAnalysis = active.plannedRoadPath
-        ? this.analyseManualActivityRoute(
-            def.id,
-            active.targets.map((candidate) => candidate.buildingId),
-            active.plannedRoadPath,
-            active.vehicle,
-          )
-        : undefined;
-      const result = {
-        elapsedMs: Math.max(0, now - active.startedAt),
-        ...(routeAnalysis
-          ? {
-              distanceTiles: routeAnalysis.distanceTiles,
-              efficiencyScore: routeAnalysis.efficiencyScore,
-              roadCoverage: routeAnalysis.roadCoverage,
-            }
-          : {}),
-        ...(active.vehicle ? { vehicle: active.vehicle } : {}),
-      };
+      const result = this.buildActivityRunResult(def, active, now);
       delete this.state.activities.active;
       this.payoutActivity(
         def,
@@ -1360,13 +1716,7 @@ export class GameController {
     tier?: ActivityRewardTier,
     setCooldown = true,
     quality?: ActivityQuality,
-    result?: {
-      elapsedMs: number;
-      distanceTiles?: number;
-      efficiencyScore?: number;
-      roadCoverage?: number;
-      vehicle?: DriveVehicle;
-    },
+    result?: ActivityRunResult,
   ): void {
     const now = this.state.meta.lastSimTime;
     if (money > 0) grantResources(this.state, { money }, this.derived.storageCaps, `activity_${def.id}`);
@@ -1441,6 +1791,28 @@ export class GameController {
     return ok;
   }
 
+  /**
+   * Schaltet alle regulär erschließbaren Regionen als echten Gameplay-Cheat
+   * frei. Nicht erschließbare Teaserinseln bleiben bewusst gesperrt. Anders als
+   * der visuelle Nebel-Schalter mutiert dieser Command den persistierten State.
+   */
+  debugUnlockAllRegions(): CommandResult {
+    if (!this.config.features.debugTools) return fail('feature_disabled');
+    let unlocked = 0;
+    for (const def of this.config.regions.values()) {
+      if (!def.unlockable) continue;
+      const region = this.state.world.regions[String(def.id)];
+      if (!region || region.status === 'unlocked') continue;
+      region.status = 'unlocked';
+      unlocked++;
+    }
+    if (unlocked > 0) {
+      this.state.stats.regionsUnlocked += unlocked;
+      this.afterStructuralChange();
+    }
+    return ok;
+  }
+
   // ---- Read helpers for the UI (no mutation) ------------------------------
 
   canAffordCost(cost: Partial<Record<ResourceId, number>>): boolean {
@@ -1458,24 +1830,45 @@ export class GameController {
    * Standortbonus und Baukosten an (x,y). Bündelt vorhandene Prüfungen, dupliziert
    * keine Regeln. `ignoreBuildingId` blendet ein zu verschiebendes Gebäude aus.
    */
-  placementDiagnostics(defId: string, x: number, y: number, ignoreBuildingId?: string): PlacementDiagnostics | undefined {
+  placementDiagnostics(
+    defId: string,
+    x: number,
+    y: number,
+    ignoreBuildingId?: string,
+    rotation: BuildingRotation = 0,
+  ): PlacementDiagnostics | undefined {
     const def = this.config.buildings.get(defId);
     if (!def) return undefined;
-    const reason = validatePlacement(
+    const baseReason = validatePlacement(
       this.state,
       this.config,
       this.derived,
       def,
       x,
       y,
-      ignoreBuildingId ? { ignoreBuildingId } : undefined,
+      def.waterfront
+        ? { rotation, ...(ignoreBuildingId ? { ignoreBuildingId } : {}) }
+        : (ignoreBuildingId ? { ignoreBuildingId } : undefined),
     );
+    const waterfront = waterfrontPlacementPreview(
+      this.state,
+      this.config,
+      this.derived,
+      def,
+      x,
+      y,
+      rotation,
+      ignoreBuildingId,
+    );
+    const reason = waterfront ? waterfront.reason : baseReason;
     return {
-      valid: reason === undefined,
+      valid: waterfront ? waterfront.valid : reason === undefined,
       ...(reason ? { reason } : {}),
       terrain: worldTerrainAt(this.state, x, y),
       regionId: regionIdAt(x, y),
+      surface: samplePlacementSurface(this.state, x, y, def.size.w, def.size.h),
       roadAccess: isConnectedToRoad(this.derived, def, x, y),
+      ...(waterfront ? { waterfront } : {}),
       locationBonusPct: Math.round(locationBonusPct(this.state, def, x, y)),
       buildCost: this.getBuildCost(defId, x, y),
     };
@@ -1632,6 +2025,53 @@ export class GameController {
     return coverageOverlay(this.state, this.config, this.derived, buildingId);
   }
 
+  /** Multimodaler Anschlusszustand eines einzelnen Gebäudes. */
+  getBuildingInfrastructureStatus(buildingId: string): BuildingInfrastructureStatus | undefined {
+    const building = this.state.buildings[buildingId];
+    if (!building) return undefined;
+    return buildingInfrastructureStatus(this.state, this.config, this.derived.roadNetwork, building);
+  }
+
+  getInfrastructureNetworkOverview(): InfrastructureNetworkOverview {
+    return infrastructureNetworkOverview(this.state, this.config, this.derived.roadNetwork);
+  }
+
+  getWaterNavigationGraph(): WaterNavigationGraph {
+    return getWaterNavigationGraph();
+  }
+
+  getAvailableHarborConnections(harborId: string): AvailableHarborConnection[] {
+    return getAvailableHarborConnections(this.state, this.config, this.derived.roadNetwork, harborId);
+  }
+
+  getShippingRoutePreview(originHarborId: string, destinationHarborId: string): ShippingRoutePreview | undefined {
+    return getShippingRoutePreview(
+      this.state,
+      this.config,
+      this.derived.roadNetwork,
+      originHarborId,
+      destinationHarborId,
+    );
+  }
+
+  getWaterfrontPlacementPreview(
+    defId: string,
+    position: { x: number; y: number },
+    rotation: BuildingRotation = 0,
+  ): WaterfrontPlacementPreview | undefined {
+    const def = this.config.buildings.get(defId);
+    if (!def) return undefined;
+    return waterfrontPlacementPreview(
+      this.state,
+      this.config,
+      this.derived,
+      def,
+      position.x,
+      position.y,
+      rotation,
+    );
+  }
+
   /** Problems & benefits for a building (§2/§4/§12) — sheet + map markers. */
   getBuildingDiagnostics(buildingId: string): Diagnosis[] {
     const b = this.state.buildings[buildingId];
@@ -1640,7 +2080,269 @@ export class GameController {
   }
 
   /** The single marker (if any) to float above a building on the map (§4). */
-  getBuildingMarker(buildingId: string): 'problem' | 'upgrade' | undefined {
+  getBuildingMarker(
+    buildingId: string,
+  ): 'problem' | 'road_problem' | 'water_problem' | 'partial_problem' | 'upgrade' | undefined {
     return primaryMarker(this.getBuildingDiagnostics(buildingId));
+  }
+
+  // ---- Aktive Betriebe (§ Active Operations 2.0) --------------------------
+  // Commands starten/steuern Arbeitsaufträge; Read-Helper liefern Lager,
+  // Arbeiter, Knoten und Vorschau. Keine direkte Mutation aus UI/Renderer (§1).
+
+  /**
+   * Startet einen Arbeitsauftrag über das (effiziente) Arbeitsgebiet: alle
+   * verfügbaren Ressourcenknoten in Reichweite werden vorgemerkt (§26.3
+   * Arbeitsgebiet). `radius`/`maxCount` verfeinern die Auswahl.
+   */
+  startBuildingOperation(buildingId: string, radius?: number, maxCount?: number): CommandResult {
+    const b = this.state.buildings[buildingId];
+    const def = b && this.config.buildings.get(b.defId);
+    if (!b || !def?.operation || b.status !== 'active') return fail('invalid');
+    const now = this.state.meta.lastSimTime;
+    const r = Math.min(def.operation.maxRadius, Math.max(1, radius ?? def.operation.efficientRadius));
+    const nodeIds = selectAreaNodeIds(this.state, def, b, r, maxCount ?? 60, now);
+    if (nodeIds.length === 0) return fail('invalid');
+    ensureInventory(this.state, b.id, operationStage(def.operation, b.upgradeLevel).storageCapacity);
+    startOperation(this.state, b.id, nodeIds, now);
+    this.notify({ type: 'change' });
+    return ok;
+  }
+
+  /** Startet einen Auftrag über eine explizite Knotenauswahl (§26.3 Einzelbäume). */
+  startBuildingOperationWithNodes(buildingId: string, nodeIds: string[]): CommandResult {
+    const b = this.state.buildings[buildingId];
+    const def = b && this.config.buildings.get(b.defId);
+    if (!b || !def?.operation || b.status !== 'active') return fail('invalid');
+    const now = this.state.meta.lastSimTime;
+    const valid = this.getBuildingOperationPreview(buildingId, nodeIds)?.validTargetIds ?? [];
+    if (valid.length === 0) return fail('invalid');
+    ensureInventory(this.state, b.id, operationStage(def.operation, b.upgradeLevel).storageCapacity);
+    startOperation(this.state, b.id, valid, now);
+    this.notify({ type: 'change' });
+    return ok;
+  }
+
+  cancelBuildingOperation(buildingId: string): CommandResult {
+    if (!this.state.operations?.active[buildingId]) return fail('invalid');
+    cancelOperation(this.state, buildingId);
+    this.notify({ type: 'change' });
+    return ok;
+  }
+
+  pauseBuildingOperation(buildingId: string): CommandResult {
+    if (!setOperationPaused(this.state, buildingId, true)) return fail('invalid');
+    this.notify({ type: 'change' });
+    return ok;
+  }
+
+  resumeBuildingOperation(buildingId: string): CommandResult {
+    if (!setOperationPaused(this.state, buildingId, false)) return fail('invalid');
+    this.notify({ type: 'change' });
+    return ok;
+  }
+
+  /** Lokales Betriebslager als UI-Sicht (undefined, wenn kein aktiver Betrieb). */
+  getBuildingInventory(buildingId: string): BuildingInventoryView | undefined {
+    const b = this.state.buildings[buildingId];
+    const def = b && this.config.buildings.get(b.defId);
+    if (!b || !def?.operation) return undefined;
+    const inv = getInventory(this.state, buildingId);
+    const capacity = inv?.capacity ?? operationStage(def.operation, b.upgradeLevel).storageCapacity;
+    return {
+      capacity,
+      used: inventoryUsed(inv),
+      free: inv ? inventoryFree(inv) : capacity,
+      items: inv ? { ...inv.items } : {},
+      reserved: inv ? { ...inv.reserved } : {},
+    };
+  }
+
+  /** Arbeiterzustände eines Betriebs (Renderer/Detailfenster). */
+  getBuildingWorkers(buildingId: string): BuildingWorkerState[] {
+    return this.state.operations?.workers[buildingId] ?? [];
+  }
+
+  /** Aktiver Auftrag eines Betriebs. */
+  getBuildingOperation(buildingId: string): ActiveBuildingOperation | undefined {
+    return this.state.operations?.active[buildingId];
+  }
+
+  /** Kombinierte Betriebssicht fürs Gebäudefenster (§18). */
+  getBuildingOperationInfo(buildingId: string): BuildingOperationInfo | undefined {
+    const b = this.state.buildings[buildingId];
+    const def = b && this.config.buildings.get(b.defId);
+    if (!b || !def?.operation) return undefined;
+    const profile = def.operation;
+    const stage = operationStage(profile, b.upgradeLevel);
+    const now = this.state.meta.lastSimTime;
+    const inv = this.getBuildingInventory(buildingId)!;
+    const workers = this.getBuildingWorkers(buildingId);
+    const workersBusy = workers.filter((w) => w.status !== 'idle' && w.status !== 'waiting').length;
+    const op = this.getBuildingOperation(buildingId);
+    const remaining = op
+      ? op.targetNodeIds.filter((id) => {
+          const node = resolveNode(this.state, profile.nodeTerrain, id, now);
+          return node && node.remainingAmount > 0 && node.state !== 'regrowing' && node.state !== 'depleted';
+        }).length
+      : 0;
+    return {
+      isOperationBuilding: true,
+      resource: profile.resource,
+      workerSlots: stage.workerSlots,
+      workersBusy,
+      efficientRadius: profile.efficientRadius,
+      maxRadius: profile.maxRadius,
+      inventory: inv,
+      availableNodes: availableWorkNodes(this.state, def, b, profile.efficientRadius, now).length,
+      storageFull: inv.free <= 0,
+      ...(op ? { active: { targetCount: op.targetNodeIds.length, remainingCount: remaining, paused: op.status === 'paused' } } : {}),
+    };
+  }
+
+  /** Vorschau eines Auftrags (§4.2): Ertrag, Dauer, Warnungen. */
+  getBuildingOperationPreview(buildingId: string, nodeIds?: string[]): OperationPreview | undefined {
+    const b = this.state.buildings[buildingId];
+    const def = b && this.config.buildings.get(b.defId);
+    if (!b || !def?.operation) return undefined;
+    const now = this.state.meta.lastSimTime;
+    const ids = nodeIds ?? selectAreaNodeIds(this.state, def, b, def.operation.efficientRadius, 60, now);
+    return previewOperation(this.state, this.config, b, ids, now);
+  }
+
+  /** Arbeitsgebiet eines Betriebs (Renderer-Overlay, §18 „Arbeitsgebiet"). */
+  getBuildingWorkArea(buildingId: string): { efficientRadius: number; maxRadius: number; center: { x: number; y: number }; bounds: { minX: number; minY: number; maxX: number; maxY: number } } | undefined {
+    const b = this.state.buildings[buildingId];
+    const def = b && this.config.buildings.get(b.defId);
+    if (!b || !def?.operation) return undefined;
+    const { cx, cy } = centerOf(def, b);
+    return {
+      efficientRadius: def.operation.efficientRadius,
+      maxRadius: def.operation.maxRadius,
+      center: { x: cx, y: cy },
+      bounds: workAreaBounds(def, b, def.operation.maxRadius),
+    };
+  }
+
+  /** Ressourcenknoten im Arbeitsgebiet (Arbeitsmodus/Renderer-Hervorhebung). */
+  getResourceNodesNear(buildingId: string, radius?: number): ResourceNode[] {
+    const b = this.state.buildings[buildingId];
+    const def = b && this.config.buildings.get(b.defId);
+    if (!b || !def?.operation) return [];
+    const now = this.state.meta.lastSimTime;
+    return nodesInWorkArea(this.state, def, b, Math.min(def.operation.maxRadius, radius ?? def.operation.efficientRadius), now);
+  }
+
+  /** Sichtbare Arbeiter aller Betriebe (additive Renderer-Darstellung). */
+  getWorkerRenderStates(): WorkerRenderState[] {
+    return workerRenderStates(this.state, this.config);
+  }
+
+  // ---- Lagertransport (§ Active Operations 2.0, Phase A5) -----------------
+  // Bringt lokal geerntete Ware manuell ins Zentrallager. Baut auf demselben
+  // Logistikmodell wie die Stadtarbeit auf (kein zweites System, §8).
+
+  /**
+   * Startet einen Transport vom Betriebslager zu einem Zielgebäude mit
+   * Lagerkapazität. Reserviert die Ladung im Quell-Lager; die Ware wird erst
+   * beim Beladen entnommen und bei der Einlagerung am Ziel global verfügbar.
+   */
+  createInventoryTransfer(input: CreateTransferInput): CommandResult {
+    const now = this.state.meta.lastSimTime;
+    const result = createInventoryTransfer(this.state, this.config, this.derived, input, now);
+    if (typeof result === 'string') return fail(this.transferErrorCode(result));
+    // Straßen-Polyline für die 3D-Fahrt cachen (rein visuell, nicht persistiert).
+    const route = transferRoute(this.state, this.config, this.derived, input.sourceBuildingId, input.targetBuildingId, input.vehicleId);
+    if (route) this.transferRoutes.set(result.id, route.path);
+    this.notify({ type: 'change' });
+    return ok;
+  }
+
+  /** Bricht einen noch ladenden Transport ab (gibt die Reservierung frei). */
+  cancelInventoryTransfer(transferId: string): CommandResult {
+    if (!cancelInventoryTransfer(this.state, transferId)) return fail('invalid');
+    this.transferRoutes.delete(transferId);
+    this.notify({ type: 'change' });
+    return ok;
+  }
+
+  private transferErrorCode(error: TransferError): CommandError {
+    switch (error) {
+      case 'no_vehicle':
+        return 'no_vehicle';
+      case 'no_cargo':
+        return 'no_cargo';
+      case 'no_target':
+        return 'no_target';
+      case 'no_route':
+        return 'no_route';
+      default:
+        return 'invalid';
+    }
+  }
+
+  /** Mögliche Transportziele (Lagergebäude) für eine Ressource. */
+  getInventoryTransferTargets(sourceBuildingId: string, resource: ResourceId): TransferTarget[] {
+    return transferTargets(this.state, this.config, sourceBuildingId, resource);
+  }
+
+  /** Frei verfügbare (nicht reservierte) Menge im lokalen Lager. */
+  getAvailableForTransfer(buildingId: string, resource: ResourceId): number {
+    return availableForTransfer(this.state, buildingId, resource);
+  }
+
+  /** Vorschau eines geplanten Transports (Distanz, Dauer, Warnungen). */
+  getInventoryTransferPreview(input: CreateTransferInput): TransferPreview | undefined {
+    return previewTransfer(this.state, this.config, this.derived, input);
+  }
+
+  /** Laufende Transporte eines Betriebs (Quelle). */
+  getBuildingTransfers(buildingId: string): InventoryTransfer[] {
+    const transfers = this.state.operations?.transfers;
+    if (!transfers) return [];
+    return Object.values(transfers).filter((t) => t.sourceBuildingId === buildingId);
+  }
+
+  /** Alle laufenden Transporte (HUD/Netzwerkübersicht). */
+  getAllTransfers(): InventoryTransfer[] {
+    return Object.values(this.state.operations?.transfers ?? {});
+  }
+
+  /** Netzwerkweite Aufschlüsselung je Ressource (§7.2). */
+  getInventoryNetworkOverview(): Record<ResourceId, ResourceNetworkStat> {
+    return inventoryNetworkOverview(this.state);
+  }
+
+  /** Interpolierte Fahrzeugpositionen laufender Transporte (additiver Renderer-Layer). */
+  getTransferRenderStates(): TransferRenderState[] {
+    const transfers = this.state.operations?.transfers;
+    if (!transfers) return [];
+    const out: TransferRenderState[] = [];
+    for (const t of Object.values(transfers)) {
+      if (t.status === 'delivered') continue;
+      let path = this.transferRoutes.get(t.id);
+      if (!path) {
+        // Nach dem Laden (Save) fehlt der Cache — Polyline neu ableiten.
+        const route = transferRoute(this.state, this.config, this.derived, t.sourceBuildingId, t.targetBuildingId, t.vehicleId);
+        path = route?.path ?? [];
+        this.transferRoutes.set(t.id, path);
+      }
+      const pos =
+        t.status === 'in_transit'
+          ? sampleRoutePath(path, t.progress)
+          : t.status === 'returning'
+            ? sampleRoutePath(path, 1 - t.progress) // leer zurück zur Quelle
+            : t.status === 'loading'
+              ? path[0]
+              : path[path.length - 1];
+      if (!pos) continue;
+      out.push({ id: t.id, resource: t.resource, status: t.status, ...(t.vehicleId ? { vehicleId: t.vehicleId } : {}), x: pos.x, y: pos.y });
+    }
+    // Erledigte/entfernte Transporte aus dem Cache räumen.
+    if (this.transferRoutes.size > out.length + 8) {
+      const live = new Set(Object.keys(transfers));
+      for (const id of this.transferRoutes.keys()) if (!live.has(id)) this.transferRoutes.delete(id);
+    }
+    return out;
   }
 }

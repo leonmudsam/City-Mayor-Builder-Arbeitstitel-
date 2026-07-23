@@ -1,8 +1,70 @@
-# World Asset Manifest — Map Redesign 5.0
+# World Asset Manifest — Terrain 6.1 / Infrastruktur 7.0
 
-Stand: 21. Juli 2026
+Stand: 22. Juli 2026
 
-## Neu generierte und aktive Texturen
+## Wasser-, Hafen- und Horizontassets 7.0
+
+| Asset | Drop-in-Pfad | Status | Fallback |
+|---|---|---|---|
+| Kleiner Anleger | `src/assets/models/buildings/resources/dock_small.glb` | Laufzeit verdrahtet | prozeduraler Holz-/Steinkai |
+| Flusshafen | `src/assets/models/buildings/resources/river_port.glb` | Laufzeit verdrahtet | prozeduraler Kai, Lager, Kran |
+| Straßenproblem | `src/assets/models/markers/marker_problem_road.glb` | optional verdrahtet | Canvas-Straßensymbol |
+| Wasserproblem | `src/assets/models/markers/marker_problem_water.glb` | optional verdrahtet | Canvas-Ankersymbol |
+| Teilnetzproblem | `src/assets/models/markers/marker_problem_network.glb` | optional verdrahtet | Canvas-Netzsymbol |
+| Schiffsflotte | `src/assets/models/vehicles/{cargo_boat_small,ferry_small,service_boat,cargo_barge,river_freighter,ferry_medium,cargo_ship,passenger_ship,construction_barge}.glb` | vollständig spezifiziert, noch nicht simuliert | keine vorgetäuschte Fahrt |
+| Fern-Ozean | prozedurales radiales Mesh | live | kein Pflichtasset |
+| Ferninseln | prozedurale unregelmäßige Ringmeshes | live, rein kosmetisch | starker Distanznebel |
+
+Gebäudepfade werden rekursiv per ID erkannt. Die Wasserfahrzeuge werden erst mit
+einem kanonischen Schiffs-/Routenmodell laufzeitverdrahtet; ihr heutiger Eintrag
+ist ein verbindlicher Authoringvertrag, keine versteckte Simulation. Vollständige
+Footprints und Anschlusskonventionen: `HARBOR_SYSTEM_PLAN.md`.
+
+## Terrain & World Scale 6.1 — aktive Weltquelle
+
+| Asset | Pfad | Status | Laufzeit |
+|---|---|---|---|
+| Neue Insel-Source | `reference/world/island 3d new.glb` | verbindliche Authoring-/Bakequelle, SHA-256 `63cb…c917` | wird nie geladen |
+| Alte Insel-Source | `reference/stylized island map 3d model.glb` | kein Verbraucher; Archivierung erst nach Git-Sicherung | wird nie geladen |
+| Höhen-/Terrainbake | `src/game/config/world/island*.gen.ts`, `src/renderer/three/world*.gen.ts` | aktiv, gemeinsam generiert | synchron/performant |
+| Große Gipfelmodule | frühere `MOUNTAIN_FEATURE_MODELS` | für Hauptsilhouette entfernt | kleine Felsdetails bleiben erlaubt |
+
+Die neue Source ist absichtlich nicht im rekursiv erkannten `src/assets`-Baum.
+`tools/bakeWorld.mjs` ist der einzige Verbraucher. Ein abweichender Source-Hash
+muss Audit, Bake, Tests und Kartenassets gemeinsam aktualisieren.
+
+## Neue 2048er Terrainbibliothek
+
+Vier Stilvorlagen wurden im Modus `generate` aus den Nutzer-Screenshots als
+Referenz erzeugt: facettierter Granit, frische Low-Poly-Wiese, dunkler
+Mischwaldboden und zugängliches Ufer. `tools/processTerrainTextures.ps1`
+skaliert/variiert diese Vorlagen deterministisch und erzeugt ausgewählte
+Normal-, Roughness- und AO-Maps.
+
+| Familie | Farbtexturen | Zusatzmaps | Aktiv im Shader |
+|---|---:|---:|---|
+| Gebirge | 9 | Normal/Roughness/AO für Granit und Klippe | Granit, Klippe, Schichten, Schnee |
+| Gras | 8 | Normal/Roughness/AO für Frischwiese | Frischwiese; Varianten in Manifest |
+| Wald | 6 | Normal/Roughness/AO für Moosboden | Moosboden + AO |
+| Ufer | 4 | Normal/Roughness/AO für zugängliches Ufer | zugängliches Ufer |
+| Regionale Ergänzungen | 3 | über Basismaterial vorbereitet | Steppe, Fruchttal; Moorprofil |
+
+Die vollständigen Dateinamen, Ordner und Prompts stehen testgesichert in
+`docs/TERRAIN_TEXTURES.md`. Die älteren 1254er 5.0-Quellen bleiben als
+kompatible Drop-ins erhalten, sind aber nicht mehr der Standardlayer.
+
+## Atmosphäre und Regionsnebel (v0.71)
+
+| Asset | Pfad | Nutzung | Fallback |
+|---|---|---|---|
+| Wolkenbank | `src/assets/environment/cloud_bank.webp` | Alpha-Maske für drei driftende Decklagen über gesperrten Regionen; zusätzlich vorhandene Himmelsnutzung | blickdichte Materialdecke und instanzierte Wolkenellipsoide bleiben ohne Bild aktiv |
+
+Die Schloss-/Level-Tafel ist bewusst kein separates Bitmap: Der Renderer erzeugt
+sie aus lokalisiertem Regionsnamen und Config-Level als Canvas-Textur. Auch die
+Minimap-Wolkenmaske ist deterministisch prozedural. Dadurch gibt es keine neue
+Pflichtdatei und keinen Parallelpfad zur Drop-in-Registry.
+
+## Historische 5.0-Texturen
 
 Alle sechs Bilder wurden mit dem integrierten Bildgenerator im Modus
 `generate` als quadratische, nahtlos gedachte Base-Color-Vorlage erzeugt. Die
@@ -35,7 +97,7 @@ Perspektive, kein Objektfokus, keine harten Schatten, keine gespiegelte Symmetri
 
 ## Neue Drop-in-Slots mit aktivem Fallback
 
-| Motiv | Primärname | Modellprompt | Status v0.70 |
+| Motiv | Primärname | Modellprompt | Status v0.71 |
 |---|---|---|---|
 | Felsbogen | `landmark_rock_arch.glb` | stilisierter natürlicher Felsbogen aus hellem geschichtetem Küstengestein, asymmetrisch, 3×2 Kacheln, Pivot mittig unten, wenige Materialien | Fallback live, GLB offen |
 | Alter Solitärbaum | `landmark_old_tree.glb` | großer knorriger Laubbaum mit breiter unregelmäßiger Krone und sichtbaren Wurzeln, 2×2 Kacheln, Pivot unten | Fallback live, GLB offen |
@@ -56,4 +118,3 @@ Perspektive, kein Objektfokus, keine harten Schatten, keine gespiegelte Symmetri
   Texturpfade. Dateiname allein aktiviert das Modell über die Registry.
 - Neue Namen zuerst im zentralen Manifest ergänzen und anschließend
   `WRITE_MODEL_DOCS=1 npx vitest run tests/modelReadmes.test.ts` ausführen.
-

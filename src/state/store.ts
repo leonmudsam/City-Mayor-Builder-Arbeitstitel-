@@ -3,7 +3,7 @@ import { useSyncExternalStore } from 'react';
 import type { GameController } from '../game/commands/controller.ts';
 import type { RegionId } from '../game/types.ts';
 import type { CameraPreset } from '../renderer/three/CameraConfig.ts';
-import type { InfoLayerMode, MapCameraView } from '../renderer/IMapRenderer.ts';
+import type { InfoLayerMode, InfrastructureLayerMode, MapCameraView, WorldRevealState } from '../renderer/IMapRenderer.ts';
 
 // The React side never mutates game state directly: it reads snapshots off
 // the controller (re-rendering via the version counter) and sends commands.
@@ -39,6 +39,9 @@ export interface MapApi {
   focusGround(x: number, z: number, dist?: number): void;
   /** Renderer-only building information filter. */
   setInfoLayer(mode: InfoLayerMode): void;
+  setInfrastructureLayer(mode: InfrastructureLayerMode): void;
+  /** Dev-only renderer state; progression is still controller-owned. */
+  setWorldReveal(state: WorldRevealState): void;
   /** § A6: Läuft eine selbst-fahrbare Fahrmission (Button zeigen)? */
   canDrive(): boolean;
   /** § A6: In das Missionsfahrzeug einsteigen (false, wenn nicht möglich). */
@@ -112,6 +115,12 @@ interface UiState {
   /** World-space marker filter; presentation state, never persisted in the save. */
   infoLayerMode: InfoLayerMode;
   setInfoLayerMode(mode: InfoLayerMode): void;
+  infrastructureLayerMode: InfrastructureLayerMode;
+  setInfrastructureLayerMode(mode: InfrastructureLayerMode): void;
+  /** Dev-only visibility audit, deliberately not persisted. */
+  fogDisabled: boolean;
+  revealLockedRegionsVisually: boolean;
+  toggleRegionFog(): void;
   /** Hide-the-whole-UI toggle (§8): blanks the HUD frame so the map is clean;
    *  a small restore button stays visible to bring the chrome back. */
   uiHidden: boolean;
@@ -165,6 +174,24 @@ export const useUiStore = create<UiState>((set) => ({
     getMapApi()?.setInfoLayer(mode);
     set({ infoLayerMode: mode });
   },
+  infrastructureLayerMode: 'off',
+  setInfrastructureLayerMode: (mode) => {
+    getMapApi()?.setInfrastructureLayer(mode);
+    set({ infrastructureLayerMode: mode, ...(mode === 'problems' ? { infoLayerMode: 'problems' as const } : {}) });
+  },
+  fogDisabled: false,
+  revealLockedRegionsVisually: false,
+  toggleRegionFog: () =>
+    set((state) => {
+      const fogDisabled = !state.fogDisabled;
+      const revealLockedRegionsVisually = fogDisabled;
+      getMapApi()?.setWorldReveal({
+        fogDisabled,
+        revealLockedRegionsVisually,
+        unlockAllRegionsGameplay: false,
+      });
+      return { fogDisabled, revealLockedRegionsVisually };
+    }),
   uiHidden: false,
   toggleUiHidden: () => set((s) => ({ uiHidden: !s.uiHidden })),
   cameraPreset: 'city',

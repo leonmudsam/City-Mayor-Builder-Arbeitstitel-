@@ -1,6 +1,8 @@
 import {
   AlertTriangle,
+  Anchor,
   ArrowUp,
+  Axe,
   BriefcaseBusiness,
   CheckCircle2,
   Clock,
@@ -11,16 +13,21 @@ import {
   Lock,
   MapPinned,
   Move,
+  Pause,
+  Play,
   Route,
   Grid2X2,
   PackageOpen,
   ShieldCheck,
   Sparkles,
+  Square,
   Store,
   Trash2,
   TrendingDown,
   TrendingUp,
+  TreePine,
   Truck,
+  Users,
   UserX,
   Warehouse,
   X,
@@ -29,7 +36,7 @@ import { useEffect, useState } from 'react';
 import { useGame, useUiStore } from '../../state/store.ts';
 import { effectiveEffects } from '../../game/buildings/effects.ts';
 import type { BuildingEffect } from '../../game/config/types.ts';
-import type { BuildingInstance } from '../../game/types.ts';
+import type { BuildingInstance, DriveVehicle, ResourceId } from '../../game/types.ts';
 import type { Diagnosis } from '../../game/buildings/diagnostics.ts';
 import { ActionBubble } from '../common/ActionBubble.tsx';
 import { ConfirmModal } from '../common/ConfirmModal.tsx';
@@ -79,6 +86,8 @@ export function FloatingBuildingSheet() {
   // "no_movein" is shown by the dedicated growth note below, so drop it here to
   // avoid saying the same thing twice.
   const diagnostics = game.getBuildingDiagnostics(b.id);
+  const infrastructure = game.getBuildingInfrastructureStatus(b.id);
+  const harborConnections = def.waterfront ? game.getAvailableHarborConnections(b.id) : [];
   const problems = diagnostics.filter((d) => d.kind === 'problem' && d.code !== 'no_movein');
   const benefits = diagnostics.filter((d) => d.kind === 'benefit');
   const status = buildingStatus(b, diagnostics);
@@ -214,6 +223,8 @@ export function FloatingBuildingSheet() {
           );
         })()}
 
+        {def.operation && b.status === 'active' && <BuildingOperationSection buildingId={b.id} />}
+
         <section className="building-site-analysis">
           <div className="building-site-copy">
             <h4>
@@ -231,6 +242,22 @@ export function FloatingBuildingSheet() {
               <span>{t('ui.building.road')}</span>
               <strong className={`text-${roadStatus.tone}`}>{roadStatus.label}</strong>
             </div>
+            {def.waterfront && (
+              <>
+                <div className="building-site-row">
+                  <span><Anchor size={13} /> {t('ui.building.water_network')}</span>
+                  <strong className={infrastructure?.modes.water ? 'text-good' : 'text-bad'}>
+                    {infrastructure?.modes.water ? t('ui.building.water_connected') : t('ui.building.water_missing')}
+                  </strong>
+                </div>
+                <div className="building-site-row">
+                  <span>{t('ui.building.harbor_connections')}</span>
+                  <strong className={harborConnections.some((connection) => connection.status === 'planned') ? 'text-good' : 'text-bad'}>
+                    {harborConnections.filter((connection) => connection.status === 'planned').length}
+                  </strong>
+                </div>
+              </>
+            )}
             <div className="building-site-row">
               <span>{t('ui.building.footprint')}</span>
               <strong>
@@ -391,6 +418,200 @@ function ResidentialGrowthNote() {
     <p className={`sheet-growth ${g.reason === 'unhappy' ? 'text-bad' : 'text-warn'}`}>
       <UserX size={14} /> {t(key)}
     </p>
+  );
+}
+
+/**
+ * Betriebsbereich des Gebäudefensters (§ Active Operations 2.0, §18): großer
+ * Aktionsbutton, Arbeiter, lokales Lager, Auftragswarteschlange und ehrliche
+ * Vorschau/Warnungen. Liest ausschließlich Controller-Read-Helper; jede Aktion
+ * läuft über einen Command (keine direkte State-Mutation, CLAUDE.md §1).
+ */
+function BuildingOperationSection({ buildingId }: { buildingId: string }) {
+  const game = useGame();
+  const { pushToast } = useUiStore();
+  const info = game.getBuildingOperationInfo(buildingId);
+  if (!info) return null;
+  const running = info.active !== undefined;
+  const preview = running ? undefined : game.getBuildingOperationPreview(buildingId);
+  const resName = t(`resource.${info.resource}`);
+  const inv = info.inventory;
+  const storagePct = inv.capacity > 0 ? Math.min(100, Math.round((inv.used / inv.capacity) * 100)) : 0;
+
+  const start = () => {
+    const result = game.startBuildingOperation(buildingId);
+    if (!result.ok) pushToast(t(result.error === 'invalid' ? 'ui.operation.no_trees' : `error.${result.error}`), 'error');
+  };
+
+  return (
+    <section className="building-operation">
+      <div className="op-head">
+        <span><Axe size={15} /> {t('ui.operation.title')}</span>
+        {info.storageFull && <span className="op-badge bad">{t('ui.operation.storage_full')}</span>}
+        {info.active?.paused && <span className="op-badge warn">{t('ui.operation.paused')}</span>}
+      </div>
+
+      <div className="op-metrics">
+        <div className="op-metric">
+          <span><Users size={13} /> {t('ui.operation.workers')}</span>
+          <strong>{info.workersBusy} / {info.workerSlots}</strong>
+        </div>
+        <div className="op-metric">
+          <span><TreePine size={13} /> {t('ui.operation.active_orders')}</span>
+          <strong>{info.active?.remainingCount ?? 0}</strong>
+        </div>
+        <div className="op-metric">
+          <span><MapPinned size={13} /> {t('ui.operation.available_nodes')}</span>
+          <strong>{info.availableNodes}</strong>
+        </div>
+        <div className="op-metric">
+          <span><Warehouse size={13} /> {t('ui.operation.work_area')}</span>
+          <strong>{t('ui.operation.tiles', { n: info.efficientRadius })}</strong>
+        </div>
+      </div>
+
+      <div className="op-storage">
+        <div className="op-storage-head">
+          <span><PackageOpen size={13} /> {t('ui.operation.local_storage')}</span>
+          <strong>{Math.round(inv.used)} / {inv.capacity} {resName}</strong>
+        </div>
+        <div className="op-storage-bar"><i style={{ width: `${storagePct}%` }} className={info.storageFull ? 'full' : ''} /></div>
+      </div>
+
+      {preview && preview.validTargetIds.length > 0 && (
+        <div className="op-preview">
+          <div><Sparkles size={13} /> {t('ui.operation.expected_yield')}<b>~{preview.expectedYield} {resName}</b></div>
+          <div><Clock size={13} /> {t('ui.operation.duration')}<b>{formatDuration(preview.expectedDurationSec * 1000)}</b></div>
+          <div><Route size={13} /> {t('ui.operation.travel')}<b>{preview.travelDistanceAvg}</b></div>
+        </div>
+      )}
+      {preview?.warnings.map((w) => (
+        <p key={w} className="op-warning"><AlertTriangle size={13} /> {t(w)}</p>
+      ))}
+
+      <div className="op-actions">
+        <button className="op-cta" onClick={start}>
+          <Axe size={16} /> {running ? t('ui.operation.adjust') : t('ui.operation.start', { resource: resName })}
+        </button>
+        {running && (
+          <>
+            {info.active?.paused ? (
+              <button className="op-mini" onClick={() => game.resumeBuildingOperation(buildingId)} title={t('ui.operation.resume')}><Play size={15} /></button>
+            ) : (
+              <button className="op-mini" onClick={() => game.pauseBuildingOperation(buildingId)} title={t('ui.operation.pause')}><Pause size={15} /></button>
+            )}
+            <button className="op-mini danger" onClick={() => game.cancelBuildingOperation(buildingId)} title={t('ui.operation.stop')}><Square size={15} /></button>
+          </>
+        )}
+      </div>
+      <p className="op-hint">{t('ui.operation.transport_hint')}</p>
+
+      <BuildingTransportSection buildingId={buildingId} resource={info.resource} />
+    </section>
+  );
+}
+
+function BuildingTransportSection({ buildingId, resource }: { buildingId: string; resource: ResourceId }) {
+  const game = useGame();
+  const { pushToast } = useUiStore();
+  const resName = t(`resource.${resource}`);
+  const available = Math.floor(game.getAvailableForTransfer(buildingId, resource));
+  const targets = game.getInventoryTransferTargets(buildingId, resource);
+  const vehicles = game.config.activities.vehicles.filter((v) => !v.future && v.unlockLevel <= game.state.level.current);
+  const transfers = game.getBuildingTransfers(buildingId);
+
+  const [planning, setPlanning] = useState(false);
+  const [targetId, setTargetId] = useState(() => targets[0]?.buildingId ?? '');
+  const [vehicleId, setVehicleId] = useState<DriveVehicle | ''>(() => vehicles[0]?.id ?? '');
+
+  const validTarget = targets.some((tg) => tg.buildingId === targetId) ? targetId : (targets[0]?.buildingId ?? '');
+  const validVehicle = vehicles.some((v) => v.id === vehicleId) ? (vehicleId as DriveVehicle) : (vehicles[0]?.id as DriveVehicle | undefined);
+  const preview =
+    planning && validTarget && validVehicle && available > 0
+      ? game.getInventoryTransferPreview({ sourceBuildingId: buildingId, targetBuildingId: validTarget, resource, amount: available, vehicleId: validVehicle })
+      : undefined;
+
+  const confirm = () => {
+    if (!validTarget || !validVehicle) return;
+    const result = game.createInventoryTransfer({ sourceBuildingId: buildingId, targetBuildingId: validTarget, resource, amount: available, vehicleId: validVehicle });
+    if (!result.ok) {
+      pushToast(t(`error.${result.error}`), 'error');
+      return;
+    }
+    setPlanning(false);
+  };
+
+  return (
+    <div className="op-transport">
+      <div className="op-transport-head">
+        <span><Truck size={14} /> {t('ui.transport.title')}</span>
+        <strong>{available} {resName} {t('ui.transport.available').toLowerCase()}</strong>
+      </div>
+
+      {transfers.length > 0 && (
+        <ul className="op-transfers">
+          {transfers.map((tr) => {
+            const target = targets.find((tg) => tg.buildingId === tr.targetBuildingId);
+            const label =
+              tr.status === 'loading' ? 'ui.transport.status_loading'
+              : tr.status === 'in_transit' ? 'ui.transport.status_in_transit'
+              : tr.status === 'returning' ? 'ui.transport.status_returning'
+              : 'ui.transport.status_unloading';
+            const delivered = tr.delivered ?? 0;
+            return (
+              <li key={tr.id} className="op-transfer">
+                <div className="op-transfer-row">
+                  <span><Truck size={12} /> {tr.amount} {t(`resource.${tr.resource}`)} → {target ? t(target.nameKey) : '—'}</span>
+                  <button className="op-mini danger" onClick={() => game.cancelInventoryTransfer(tr.id)} title={t('ui.transport.recall')}><X size={13} /></button>
+                </div>
+                <div className="op-transfer-bar"><i style={{ width: `${Math.round(Math.min(1, tr.progress) * 100)}%` }} className={tr.status} /></div>
+                <span className="op-transfer-status">{t(label)}{delivered > 0 ? ` · ${t('ui.transport.progress', { done: delivered, total: tr.amount })}` : ''}</span>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+
+      {available <= 0 ? (
+        <p className="op-hint">{t('ui.transport.no_cargo', { resource: resName })}</p>
+      ) : targets.length === 0 ? (
+        <p className="op-warning"><AlertTriangle size={13} /> {t('ui.transport.no_targets', { resource: resName })}</p>
+      ) : !planning ? (
+        <button className="op-cta ghost" onClick={() => setPlanning(true)}><Truck size={15} /> {t('ui.transport.plan')}</button>
+      ) : (
+        <div className="op-transport-form">
+          <label>
+            <span>{t('ui.transport.target')}</span>
+            <select value={validTarget} onChange={(e) => setTargetId(e.target.value)}>
+              {targets.map((tg) => <option key={tg.buildingId} value={tg.buildingId}>{t(tg.nameKey)}</option>)}
+            </select>
+          </label>
+          <label>
+            <span>{t('ui.transport.vehicle')}</span>
+            <select value={validVehicle ?? ''} onChange={(e) => setVehicleId(e.target.value as DriveVehicle)}>
+              {vehicles.map((v) => <option key={v.id} value={v.id}>{t(v.nameKey)} ({v.capacity})</option>)}
+            </select>
+          </label>
+          {preview && (
+            <div className="op-transport-preview">
+              <div><PackageOpen size={12} /> {t('ui.transport.amount')}<b>{preview.amount} {resName}</b></div>
+              <div><Truck size={12} /> {t('ui.transport.loads')}<b>{preview.loads}×</b></div>
+              <div><Route size={12} /> {t('ui.transport.distance')}<b>{preview.distanceTiles}</b></div>
+              <div><Clock size={12} /> {t('ui.transport.duration')}<b>{formatDuration(preview.totalSec * 1000)}</b></div>
+              <div><Warehouse size={12} /> {t('ui.transport.road_coverage')}<b>{Math.round(preview.roadCoverage * 100)}%</b></div>
+              <div><Coins size={12} /> {t('ui.transport.cost')}<b>{preview.operatingCost.toLocaleString('de-DE')}</b></div>
+            </div>
+          )}
+          {preview?.warnings.map((w) => (
+            <p key={w} className="op-warning small"><AlertTriangle size={12} /> {t(w)}</p>
+          ))}
+          <div className="op-transport-actions">
+            <button className="op-cta" onClick={confirm} disabled={!preview || preview.amount <= 0}><Truck size={15} /> {t('ui.transport.confirm')}</button>
+            <button className="op-mini" onClick={() => setPlanning(false)} title={t('ui.transport.cancel')}><X size={15} /></button>
+          </div>
+        </div>
+      )}
+    </div>
   );
 }
 

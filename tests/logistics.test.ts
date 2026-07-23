@@ -266,6 +266,95 @@ describe('logistics.evaluateCargoRoute — konkrete Fahrt auf gezeichnetem Pfad'
     expect(ev.emptyTravelTiles).toBe(2);
     expect(ev.cargoValid).toBe(true);
   });
+
+  // § Overhaul 8.0 / §3.1 — Regression zum gemeldeten „4/5 Stopps"-Fehler.
+  it('beliefert ein leer passiertes Ziel nach dem Nachfüllen beim zweiten Kontakt', () => {
+    const plan = cargoPlan(100, [req('a', 100), req('b', 100)]);
+    const ev = evaluateCargoRoute(
+      plan,
+      { buildingId: 'farm', x: 0, y: 0 },
+      [
+        { buildingId: 'a', x: 2, y: 0 },
+        { buildingId: 'b', x: 4, y: 0 },
+      ],
+      [
+        { x: 0, y: 0 }, // laden (100)
+        { x: 1, y: 0 },
+        { x: 2, y: 0 }, // a liefern → leer
+        { x: 3, y: 0 },
+        { x: 4, y: 0 }, // b LEER passiert — früher dauerhaft „ungültig"
+        { x: 3, y: 0 },
+        { x: 2, y: 0 },
+        { x: 1, y: 0 },
+        { x: 0, y: 0 }, // Quelle: nachladen
+        { x: 1, y: 0 },
+        { x: 2, y: 0 },
+        { x: 3, y: 0 },
+        { x: 4, y: 0 }, // b jetzt wirklich liefern
+      ],
+    );
+    expect(ev.orderedTargetIds).toEqual(['a', 'b']);
+    expect(ev.deliveredAmount).toBe(200);
+    expect(ev.remainingAmount).toBe(0);
+    expect(ev.invalidTargetIds).toEqual([]);
+    expect(ev.cargoValid).toBe(true);
+    // Der erfolglose Kontakt bleibt als Hinweis sichtbar, entwertet die Route aber nicht.
+    expect(ev.stops.filter((stop) => stop.status === 'skipped')).toHaveLength(1);
+  });
+
+  it('zählt Lieferziele und Nachfüllstopps getrennt (§3.2)', () => {
+    const plan = cargoPlan(100, [req('a', 100), req('b', 100)]);
+    const ev = evaluateCargoRoute(
+      plan,
+      { buildingId: 'farm', x: 0, y: 0 },
+      [
+        { buildingId: 'a', x: 2, y: 0 },
+        { buildingId: 'b', x: 4, y: 0 },
+      ],
+      [
+        { x: 0, y: 0 },
+        { x: 1, y: 0 },
+        { x: 2, y: 0 }, // a
+        { x: 1, y: 0 },
+        { x: 0, y: 0 }, // nachladen
+        { x: 1, y: 0 },
+        { x: 2, y: 0 },
+        { x: 3, y: 0 },
+        { x: 4, y: 0 }, // b
+      ],
+    );
+    expect(ev.progress).toEqual({
+      deliveryTargetsCompleted: 2,
+      deliveryTargetsTotal: 2,
+      resupplyStopsCompleted: 1,
+      resupplyStopsTotal: 1,
+      returnRequired: false,
+      returnCompleted: false,
+    });
+  });
+
+  it('meldet ein wirklich unbeliefertes Ziel weiterhin als ungültig', () => {
+    const plan = cargoPlan(100, [req('a', 100), req('b', 100)]);
+    const ev = evaluateCargoRoute(
+      plan,
+      { buildingId: 'farm', x: 0, y: 0 },
+      [
+        { buildingId: 'a', x: 2, y: 0 },
+        { buildingId: 'b', x: 4, y: 0 },
+      ],
+      [
+        { x: 0, y: 0 },
+        { x: 1, y: 0 },
+        { x: 2, y: 0 }, // a liefern → leer
+        { x: 3, y: 0 },
+        { x: 4, y: 0 }, // b leer passiert, danach endet die Route
+      ],
+    );
+    expect(ev.invalidTargetIds).toEqual(['b']);
+    expect(ev.cargoValid).toBe(false);
+    expect(ev.progress.deliveryTargetsCompleted).toBe(1);
+    expect(ev.progress.deliveryTargetsTotal).toBe(2);
+  });
 });
 
 /** Echte Gebäude-Ids der platzierten Häuser (sortiert, deterministisch). */

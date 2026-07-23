@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { nearTownHall, newController, setLevel, flattenTerrain, T0 } from './helpers.ts';
-import { migrateAndValidate } from '../src/game/storage/migrations.ts';
+import { migrateAndValidate, WorldRebuildSaveError } from '../src/game/storage/migrations.ts';
 import { exportSave } from '../src/game/storage/exportImport.ts';
 import { SCHEMA_VERSION } from '../src/game/newGame.ts';
 
@@ -105,19 +105,15 @@ describe('Stadtarbeit-Logik 2.0 L3 — Save v13', () => {
     expect(loaded.activities.active?.reserved?.food).toBe(reserved);
   });
 
-  it('migriert einen v12-Save mit laufender Mission ohne Reserve verlustfrei', () => {
+  it('weist einen v12-Weltstand dem kontrollierten Welt-Backup zu', () => {
     const { controller } = deliveryCity();
     controller.startActivity('food_delivery');
     const raw = JSON.parse(exportSave(controller.state)) as Record<string, unknown>;
     // Alten v12-Stand nachbilden: Version zurück, Reserve-Feld entfernen.
     raw.schemaVersion = 12;
     const activities = raw.activities as { active?: Record<string, unknown> };
-    const targetCount = (activities.active!.targets as unknown[]).length;
     delete activities.active!.reserved;
-    const loaded = migrateAndValidate(raw);
-    expect(loaded.schemaVersion).toBe(13);
-    expect(loaded.activities.active?.reserved).toBeUndefined();
+    expect(() => migrateAndValidate(raw)).toThrow(WorldRebuildSaveError);
     // Die Mission bleibt gültig — es wird keine Reserve erfunden.
-    expect(loaded.activities.active?.targets).toHaveLength(targetCount);
   });
 });

@@ -1,12 +1,114 @@
-# Übergabe an Claude — Map Redesign 5.0 + Stadtarbeit 4.0 / v0.70
+# Übergabe an Claude — v0.79
 
-Stand: 21. Juli 2026
+Stand: 23. Juli 2026
 
-## Map Redesign 5.0 — zuerst lesen
+## AKTUELLER STAND: Active Operations 2.0 (v0.78–v0.79)
+
+Die laufende Arbeitsfront ist das **aktive Betriebssystem** (kein Passiv-Timer
+mehr). Reihenfolge zum Einlesen: `agents/ACTIVE_OPERATIONS_PLAN.md` →
+`agents/PROJECT_STATE.md` → `agents/OPEN_TASKS.md`. Ergänzend
+`agents/LOGISTICS_INTEGRATION.md`, `agents/DECISIONS.md` (D-031/D-032),
+`PATCHNOTES.md` (v0.78/v0.79).
+
+**Erledigt:**
+- **A1–A4 (v0.78):** Sägewerk aktiv — Arbeitsauftrag → Arbeiter fällen Bäume →
+  lokales Betriebslager; Voll-Stopp, Regeneration, Ressourcenknoten (`tree`),
+  Save **v17**. Reines Sim-Modul `src/game/operations/{nodes,operations}.ts`.
+- **A5 + A5-Reste (v0.79):** manueller **Lagertransport** ins Zentrallager über
+  Fahrzeug + Straßenroute (reine Sim `src/game/operations/transport.ts`,
+  verwendet `routeAnalysis.ts` + `logistics.ts` wieder — kein zweites System).
+  Mehrfachladungen/Nachfüllfahrten, Rückruf jederzeit, Betriebskosten je Fahrt,
+  Netzwerk-Übersicht global/lokal/reserviert/unterwegs. Save **v18** (additiv
+  `operations.transfers`, Migration `v17→v18`). **339 Tests grün.**
+
+**Offen (nicht vortäuschen, Details in `OPEN_TASKS.md`):**
+- **A6 Steinbruch** (nächster großer Schritt): `operations/nodes.ts` von `tree`
+  auf `rock`/Stein generalisieren **und** die Passiv-Produktionstests
+  (simulation/systems/upgrade) auf einen dauerhaft passiven Produzenten
+  migrieren — der Steinbruch ist heute deren Baseline, der „Standort-Bonus"-Test
+  ist steinspezifisch.
+- **A7 Farm, A8 Feuerwehr-Dispatch, A9 Aufforstung, A10 Automatisierung**
+  (wiederkehrende Transporte auf `createInventoryTransfer`), 3D-Fäll-/Trag-
+  Animationen + Einzelbaum-Raycast. A5-Rest: Zwischenlager-Puffer, Kraftstoff.
+
+Save-Schema steht bei **v18**. Verifikation (tsc/eslint/vitest/build/3D-Smoke)
+im obersten Abschnitt von `agents/HANDOFF_LOG.md`. Die folgenden Abschnitte
+(Wasserwege 7.0, neue Insel, Map Redesign, Stadtarbeit 4.0) sind **historische
+Grundlage**, nicht die aktuelle Front.
+
+## Historisch: Wasserwege 7.0
+
+Vor weiterer Welt-/Infrastrukturarbeit lesen:
+
+1. `agents/COAST_GEOMETRY_AUDIT.md`
+2. `agents/WATER_INFRASTRUCTURE_PLAN.md`
+3. `agents/HARBOR_SYSTEM_PLAN.md`
+4. `agents/SHIPPING_ROUTE_UI.md`
+5. `agents/OPEN_TASKS.md`
+
+Codex hat die sichtbaren Küstenkegel an ihrer Bake-Ursache behoben, den
+visuellen Reveal von echter Regionsprogression getrennt, den Ozeanabschluss
+radial/atmosphärisch gestaltet und straßenlose Gebäude als diagnostizierbaren
+Betriebszustand eingeführt. `dock_small` und `river_port` besitzen Land-/
+Wasser-Footprints, Tiefenprüfung, Küstensnapping, Fallbackmodelle und
+Config-Freigaben. Der abgeleitete Wassergraph umfasst 569 Nodes und 1.775
+landfreie Kanten; UI und Renderer lesen nur Controller-Projektionen.
+
+**Nicht vortäuschen:** Es gibt noch keine persistente `ShippingRoute`, keine
+Schiffsinstanzen, Warenkapazität, Hafenlager, Remote-Construction-Versorgung
+oder Brückendurchfahrtslogik. Diese Punkte sind `TODO(CLAUDE_LOGIC)` und müssen
+die bestehende Simulation/Aktivität erweitern. Save bleibt v15.
+
+## Zuerst lesen: neue Insel ist verbindlich
+
+`reference/world/island 3d new.glb` ersetzt die bisherige Geometrie vollständig.
+Die Source wird offline in 512² Terrain, 1025² Höhe, 40 Regionen sowie Bau-,
+Wasser- und Infrastrukturmasken gebacken und niemals zur Laufzeit geladen.
+Start ist Region 24 „Herzland“ nahe dem realen Landschwerpunkt bei
+Rathausanker (125,193). Küstenankunft `(222,206)`, Versorgungstrasse und
+Hafenkandidat sind nur geografische Hooks.
+
+Vor Weltarbeit in dieser Reihenfolge lesen:
+
+1. `agents/TERRAIN_VISUAL_AUDIT.md`
+2. `agents/TERRAIN_MATERIAL_MATRIX.md`
+3. `WORLD_REBUILD.md` und `WORLD_SCALE.md`
+4. `agents/REGION_VISUAL_REDESIGN.md` und `agents/NEW_ISLAND_REGION_PLAN.md`
+5. `SAVE_MIGRATION.md` und `agents/OPEN_TASKS.md`
+
+Save-Schema ist v15. v14 wird bewusst einmalig unter
+`cmb.save.backup.world-v14` gesichert und neu gestartet; keine
+Koordinatenprojektion vortäuschen. Die alte Source hat keinen
+Verbraucher, darf wegen der bestehenden Nutzeränderungen aber erst nach einem
+sauberen Git-Sicherungspunkt archiviert werden. Die folgenden v0.71-/v0.70-
+Abschnitte sind historische Renderergrundlage, nicht mehr Weltgeometriequelle.
+
+## Regions-Wolkenwand v0.71 — historische Renderergrundlage
+
+Gesperrte Regionen werden nicht mehr als niedrige Teaserfläche gerendert. Der
+bestehende `ThreeMapRenderer` setzt seine Decke oberhalb des höchsten
+Regionspunkts und kombiniert eine blickdichte Shape-Fläche, drei driftende
+`cloud_bank.webp`-Lagen sowie ein auf 168 Ellipsoide gedeckeltes
+`InstancedMesh`. Die alte Biom-/Gipfel-Silhouette im Nebel ist entfernt.
+
+Pro Region erzeugt der Renderer genau ein Canvas-Sprite mit Schloss,
+lokalisiertem Regionsnamen und dem echten `unlockLevel`. Der Marker bleibt vor
+Wetter und Wolken lesbar und öffnet per Raycast den bestehenden Regionsdialog.
+`WorldMiniMap` verdeckt dieselben gesperrten Regions-IDs vollständig und nutzt
+`BAKED_REGIONS` plus Regions-Config für kleine Schloss-/Level-Marker. Diese
+Darstellung ist rein visuell: keine zweite Regionslogik, keine neue Config und
+keine damalige Save-Migration; der heutige Weltstand ist Schema v15.
+
+Relevante Dateien: `src/renderer/three/ThreeMapRenderer.ts`,
+`src/components/hud/WorldMiniMap.tsx`, `src/i18n/de.json`. Bei weiterer Arbeit
+die vorhandene Unlock-Fade-Animation, Klickweiterleitung und prozeduralen
+Fallbacks erhalten.
+
+## Map Redesign 5.0 — historische Renderergrundlage
 
 Die vorhandene Inselgeometrie wurde **nicht** ersetzt. Die visuelle Welt liest
-weiterhin dieselbe Inselmaske, dasselbe Höhenfeld, dieselben Straßen und dieselben
-32 Gameplayregionen. Neu ist die reine Renderermatrix
+weiterhin die damalige Inselmaske, dasselbe Höhenfeld und damals 32
+Gameplayregionen. Die fortgeführte Renderermatrix
 `src/renderer/three/worldVisualProfiles.ts`: Sie ordnet jeder Region Palette,
 Splat-Gewichte, Vegetationscharakter und eine neutrale Landmarke zu.
 
@@ -24,11 +126,11 @@ Verbindliche Map-Dokumente:
 - `docs/agents/TERRAIN_MATERIAL_MATRIX.md`
 - `docs/agents/WORLD_ASSET_MANIFEST.md`
 
-Wichtig: Region 9 (Morgenküste) ist visuell rote Wüste, Region 29 (Westbucht)
-visuell Sumpf. Das ist **keine** neue Spielregel. Mögliche Wasserknappheit,
+Aktuell ist Region 16 „Sonnenkliff“ visuell rote Wüste, Region 40
+„Schilfdelta“ visuell Sumpf. Das ist **keine** neue Spielregel. Mögliche Wasserknappheit,
 Solar-/Nahrungseffekte, Feuchtgebietsboni oder Gesundheitsrisiken sind
 `TODO(CLAUDE_LOGIC)` und dürfen nur über validierte Game-Config eingeführt
-werden. Save-Schema bleibt v13.
+werden. Der aktuelle Weltstand nutzt Schema v15.
 
 ## Stadtarbeit Redesign 4.0 — weiterhin kanonisch
 

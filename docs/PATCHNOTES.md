@@ -1,5 +1,735 @@
 # Patch Notes
 
+## v0.79 — Lagertransport ins Zentrallager (Active Operations 2.0, Phase A5)
+
+### Was
+
+- **Neuer Transport-Loop:** Lokal geerntetes Holz ist nicht mehr für immer im
+  Betriebslager gefangen. Im Gebäudefenster planst du unter **„Transport"** eine
+  Fahrt zu einem Lagergebäude (Rathaus/Lagerhaus = Zentrallager): Ziel + Fahrzeug
+  wählen, Vorschau (Ladung, Strecke, Fahrzeit, Straßenanschluss) prüfen, starten.
+- **Fahrzeug fährt sichtbar:** Ein gepooltes 3D-Fahrzeug fährt entlang der Straße
+  von der Quelle zum Ziel; erst mit der **Einlagerung am Ziel** wird das Holz im
+  globalen Lager (obere HUD-Leiste) verfügbar.
+- **Reservierung & Voll-Loop:** Beim Anlegen wird die Ladung im Quell-Lager
+  reserviert; beim Beladen physisch aufs Fahrzeug übernommen; nach der Fahrt am
+  Ziel eingelagert.
+- **Mehrfachladung / Nachfüllfahrten:** Ein Transport darf das ganze Lager
+  umfassen — das Fahrzeug pendelt in mehreren Fahrten (leerer Rückweg), die
+  Vorschau zeigt Fahrtenzahl und Gesamtdauer.
+- **Rückruf jederzeit:** Ein laufender Transport lässt sich zurückrufen; die
+  bereits verladene Ladung kehrt ins Quell-Lager zurück, offene Reservierungen
+  werden gelöst (bereits gelieferte Teilmengen bleiben global).
+- **Betriebskosten:** Jede tatsächlich gefahrene Ladung kostet die
+  Fahrzeug-Betriebskosten (Geldsenke, §15) — sichtbar in der Vorschau.
+- **Ehrliche Warnungen:** kein Fahrzeug, kein Straßenanschluss (längere Fahrt),
+  mehrere Ladungen nötig.
+
+### Warum
+
+§7.2/§8 verlangen, dass lokal vorhandene Ressourcen **nicht automatisch** überall
+nutzbar sind — der Weg ins Zentrallager muss über echten Transport laufen. Damit
+wird der aktive Betriebs-Loop erst spielbar geschlossen: fällen → lokal lagern →
+transportieren → global bauen.
+
+### Architektur
+
+- Neues reines Simulationsmodul `src/game/operations/transport.ts` (kein
+  Renderer/React, CLAUDE.md §1). Es **verwendet die bestehende Logistik wieder**
+  (`activities/routeAnalysis.ts` für Route/Distanz/Verkehr/Fahrzeit,
+  `activities/logistics.ts` für Fahrzeugkapazität) — **kein zweites System** (§8).
+- Zustandsmaschine `loading → in_transit → unloading → delivered`, gefahren von
+  `advanceTransfers` in `advanceLiveEconomy`. Zeitfaktor/Pause/Offline erben das
+  `dtMin`-Verhalten automatisch (keine Offline-Fahrt). `derived.storageCaps`
+  deckelt die Einlagerung; `stats.produced` wird **nicht** doppelt gezählt.
+- **Netzwerk-Übersicht** (`getInventoryNetworkOverview`) schlüsselt jede Ressource
+  auf: global · lokal gebunden · reserviert · unterwegs (§7.2).
+- Save-Schema **v18**: additives, optionales `operations.transfers`. Migration
+  `v17→v18` ergänzt ein leeres `transfers`; **alte Saves bleiben ladbar**, keine
+  Weltänderung.
+- Renderer zeichnet Transporte **additiv** als gepoolte Fahrzeuge an ihrer aus der
+  Simulation interpolierten Position (konstante Draw-Calls, keine Logik). Die
+  Straßen-Polyline wird deterministisch rekonstruiert, nicht persistiert.
+
+### Auswirkung
+
+- Sägewerkholz wird spielbar/global — über echten Transport, nicht per Magie. Der
+  passive Steinbruch/Farm-Pfad bleibt unverändert (A6/A7 folgen).
+- **339 Tests grün** (davon 12 Transporttests), tsc/eslint/build sauber.
+
+### Zukunft
+
+- A6 Steinbruch, A7 Farm, A8 Feuerwehr-Dispatch, A9 Aufforstung, A10
+  Automatisierung (wiederkehrende Transporte auf Basis von
+  `createInventoryTransfer`). Offen bleiben Zwischenlager-Lagerhäuser als eigene
+  lokale Puffer. Siehe `docs/agents/LOGISTICS_INTEGRATION.md` und `OPEN_TASKS.md`.
+
+### Dateien / Assets
+
+- Neu: `src/game/operations/transport.ts`, `tests/transport.test.ts`.
+- Geändert: `types.ts`, `config/schemas.ts`, `operations/operations.ts`,
+  `simulation/tick.ts`, `commands/controller.ts`, `newGame.ts`,
+  `storage/migrations.ts`, `components/panels/FloatingBuildingSheet.tsx`,
+  `styles/components.css`, `i18n/de.json`, `renderer/three/ThreeMapRenderer.ts`,
+  `docs/agents/LOGISTICS_INTEGRATION.md`, `storage.test.ts` (v18).
+- Keine neuen Kunst-Assets nötig (Fahrzeug ist eine gepoolte Prozedurbox; echte
+  `.glb` sind Drop-in für später).
+
+## v0.78 — Aktive Betriebe: Sägewerk-Referenzschnitt (Active Operations 2.0)
+
+### Was
+
+- Das **Sägewerk erzeugt kein passives Holz mehr**. Stattdessen erteilt der
+  Spieler einen Arbeitsauftrag; **Arbeiter laufen sichtbar** zu Bäumen, fällen
+  sie, tragen das Holz zurück und lagern es im **lokalen Betriebslager** ein.
+- **Ressourcenknoten (Bäume)** sind echte Simulationsobjekte mit stabiler Id
+  (`"x,y"`), deterministisch aus Wald-Kacheln abgeleitet; nur Deltas (angearbeitet/
+  reserviert/erschöpft/nachwachsend) werden gespeichert. Gefällte Bäume wachsen
+  nach der Regenerationszeit nur auf gültigem Terrain nach.
+- **Lokales Lager** je Betrieb; ein **volles Lager stoppt die Arbeit**
+  nachvollziehbar. Holz erscheint **nicht** mehr automatisch im globalen Lager.
+- Neues Gebäudefenster: **Betriebsbereich** mit großem Aktionsbutton „Aktiv Holz
+  gewinnen", Arbeiter-, Auftrags- und Lageranzeige, Ertrags-/Dauervorschau und
+  ehrlichen Warnungen (Lager reicht nicht / keine Bäume in Reichweite).
+- **Höhere Ausbaustufen** verbessern Arbeiter, Tempo, Traglast und Lager statt
+  pauschal „+X/min".
+
+### Warum
+
+Der Auftrag verlangt einen aktiven Aufbau-/Logistik-Loop statt eines passiven
+Ressourcen-Timers: Arbeit planen, Menschen einsetzen, lokale Bestände verwalten
+(§0/§1). Das Sägewerk ist der vorgeschriebene vertikale Referenzschnitt (§27).
+
+### Architektur
+
+- Neues, reines Simulationsmodul `src/game/operations/**` (nodes + operations);
+  **kein** Renderer/React-Import (CLAUDE.md §1). Betriebe mit `BuildingDef.operation`
+  überspringen den passiven `produce`-Pfad in Tick **und** Derived.
+- Zeitfaktor/Pause/Offline erben automatisch das bestehende `dtMin`-Verhalten
+  (keine Offline-Produktion, §26.22/23).
+- Save-Schema **v17**: additives, optionales `operations`-Feld (lokale Lager,
+  Arbeiter, aktive Aufträge, Knoten-Deltas). Migration `v16→v17` ergänzt ein
+  leeres `operations`; **alte Saves bleiben ladbar**, globale Ressourcen bleiben
+  als Zentral-/Übergangsbestand erhalten (§21).
+- Renderer zeichnet Arbeiter **additiv** als gepoolte Figuren an ihrer Sim-Tile-
+  Position (konstante Draw-Calls) — er besitzt keinerlei Logik.
+
+### Auswirkung
+
+- Sägewerkholz ist bis Phase A5 (Transport) **bewusst lokal gebunden**; die übrige
+  Ökonomie (Steinbruch/Farm/Wasser/Handel) läuft unverändert. Betroffene
+  Passiv-Produktionstests wurden auf den weiterhin passiven Steinbruch umgestellt.
+- **327 Tests grün** (davon 9 neue Operationstests), tsc/eslint/build sauber.
+
+### Zukunft
+
+- A5 Transport/Lieferketten (Fahrzeug/Route/Straßenqualität → Zentrallager),
+  A6 Steinbruch, A7 Farm, A8 Feuerwehr-Dispatch, A9 Aufforstung/neue Vorkommen,
+  A10 Automatisierung. 3D-Arbeitsanimationen + Einzelbaum-Raycast im Arbeitsmodus.
+  Siehe `docs/agents/ACTIVE_OPERATIONS_PLAN.md` und `OPEN_TASKS.md`.
+
+### Dateien / Assets
+
+- Neu: `src/game/operations/nodes.ts`, `src/game/operations/operations.ts`,
+  `tests/operations.test.ts`, `docs/agents/ACTIVE_OPERATIONS_PLAN.md`,
+  `RESOURCE_NODE_SYSTEM.md`, `LOCAL_INVENTORY_SYSTEM.md`,
+  `WORKER_OPERATION_SYSTEM.md`, `LOGISTICS_INTEGRATION.md`.
+- Geändert: `types.ts`, `config/types.ts`, `config/schemas.ts`,
+  `config/buildings.config.ts` (Sägewerk-`operation`), `simulation/tick.ts`,
+  `simulation/derived.ts`, `commands/controller.ts`, `newGame.ts`,
+  `storage/migrations.ts`, `components/panels/FloatingBuildingSheet.tsx`,
+  `styles/components.css`, `i18n/de.json`, `renderer/three/ThreeMapRenderer.ts`,
+  re-baselinte Tests (simulation/systems/upgrade/activeplay/populationBalance/storage).
+- Keine neuen Kunst-Assets nötig (Arbeiter sind gepoolte Prozedur-Figuren;
+  echte `.glb`/Animationen sind Drop-in für später).
+
+## v0.77 — Vegetations-Performance & Grafikqualität (Säule B)
+
+### Was
+
+- **Vier Grafik-Qualitätsstufen** (Niedrig / Mittel / Hoch / Ultra), wählbar in
+  den Einstellungen. Jede Stufe hat konkrete Zahlen für Vegetationsdichte,
+  Sichtweiten, LOD-Grenzen, Schattenbudget, Tierbudget und Renderauflösung.
+- Die **Vegetationsmenge bleibt hoch** — nur ihre Darstellung wird mit der
+  Entfernung und der Stufe vereinfacht (echte Instanzreduktion über skalierte
+  Pro-Region-Budgets, nie unter der Hälfte auf „Niedrig").
+- **Striktes Schattenbudget**: Vegetationsschatten sind auf „Niedrig" aus und
+  sonst auf eine feste Zahl schattenwerfender Groß-Props gedeckelt.
+- Renderauflösung, Nahdetail-Distanz und die Zahl animierter Weidetiere folgen
+  jetzt der gewählten Stufe.
+- **Dev-Performance-Panel** (Debug): FPS, Draw-Calls, Dreiecke,
+  Vegetations-Instanzen/-Gruppen und aktive Stufe live — Optimierung an
+  Messwerten statt an einem Gefühl.
+
+### Warum
+
+Die Insel soll dicht bewachsen bleiben, aber auf schwächerer Hardware flüssig
+laufen. Statt die Vegetation auszudünnen, wird ihre technische Repräsentation
+mit Entfernung und Qualitätsstufe vereinfacht — die Kernszene bleibt erhalten.
+
+### Architektur
+
+- Neue reine, getestete Schicht: `graphicsQuality.ts` (vier Profile + LOD-
+  Funktion), `graphicsSettings.ts` (persistierter Store, kein Save-Bezug),
+  `perfStats.ts` (Renderer→HUD-Telemetrie). Alle ohne three/react-Import.
+- Der Renderer liest das aktive Profil in `rebuildVegetation` (Dichte, Schatten)
+  und im Frame (Nahdetail); ein Qualitätswechsel baut nur die Vegetationsgruppe
+  neu auf, nicht die ganze Welt. Der Nebel-Cheat erzwingt keine Maximalqualität.
+- Bereits vorhandene Grundlagen genutzt: InstancedMesh je Proptyp (konstante
+  Draw-Calls), deterministische Pro-Region-Budgets, Frustum-Culling.
+
+### Auswirkung
+
+- Kein Save-Schema-Bump (Grafikstufe liegt außerhalb des Saves). 318 Tests grün
+  (neu: `graphicsQuality.test.ts`). 3D-Screenshot-Smoke über alle vier Stufen
+  fehlerfrei.
+
+### Zukunft
+
+- Ausbaustufe mit bereitliegender LOD-Schicht (OPEN_TASKS P0): HLOD-Waldcluster,
+  Impostor-Billboards, Chunk-Streaming, Shader-Wind, Textur-Atlas-Merging,
+  Waldboden-Schattenmaske. Auf Zielhardware zu vermessen.
+
+### Dateien
+
+- `src/renderer/three/graphicsQuality.ts`, `graphicsSettings.ts`, `perfStats.ts`
+- `src/renderer/three/ThreeMapRenderer.ts` (Anbindung)
+- `src/components/panels/PerformancePanel.tsx`, `SettingsPanel.tsx`,
+  `DebugPanel.tsx`, `src/styles/components.css`, `src/i18n/de.json`
+- `docs/agents/WORLD_PERFORMANCE_AUDIT.md`, `tests/graphicsQuality.test.ts`
+
+### Assets
+
+- Keine neuen Assets.
+
+## v0.76 — Final World Compaction & 12-Regionen-Progression (Säule A)
+
+### Was
+
+- Die Insel wurde ein **zweites Mal** horizontal verdichtet: Quellspannweite
+  420 → 374 Kacheln (linearer Faktor 0,8905, Fläche −20,7 %). Die Gebirge bleiben
+  monumental — die Höhe wurde getrennt sogar leicht angehoben (Gipfel 50 → 52).
+  Gebäude, Straßen und Fahrzeuge wurden **nicht** mitskaliert.
+- Aus 40 kleinteiligen Regionen sind **eine zentrale Startregion plus zwölf
+  bedeutende Freischaltungen** geworden. Jede Erweiterung hat jetzt echten
+  Bauwert (Ø 2 622 statt ~1 120 bebaubare Kacheln) und eigenen Charakter.
+- Die **erste Erweiterung ab Level 3 ist gratis**: Der Spieler wählt eine seiner
+  beiden Nachbarlandschaften (Nordwald oder Westweiden) kostenlos — ohne Geld-,
+  XP- oder Bürgeranliegen-Nebenwirkung. Ein einmaliger Willkommenshinweis führt
+  hin, der Regionsdialog zeigt „🎁 Erste Erweiterung gratis".
+- Die Quellinsel ist ein **Archipel**: Regionen ohne Landanschluss verlangen
+  einen echten **Hafen** (`dock_small`/`river_port`) in einer erschlossenen
+  Region. Der Regionsdialog benennt „Hafen nötig" bzw. „grenzt an kein
+  erschlossenes Gebiet" ehrlich, statt nur den Knopf zu sperren.
+- **Regionspreise folgen einem nachvollziehbaren Faktormodell** (Baufläche,
+  Ressourcenwert, Erschließungsaufwand, strategischer Zugang, Biomseltenheit,
+  Progressionsstufe) — keine frei gegriffenen Fantasiewerte. Endgame-Region
+  (Kronengebirge, L20) kostet 6,69 Mio. im Auftragskorridor 5,5–8 Mio.
+- Neuer Startpunkt: Rathaus (137, 194), kompakter 820-Kachel-Startkern mit zwei
+  Expansionsrichtungen.
+
+### Warum
+
+Die 40-Regionen-Insel zersplitterte die Progression in zu viele folgenlose
+Mikroschritte, und die Karte war für die kurzen Wege eines Städtebauers zu groß.
+Die zweite Verdichtung macht Wege kürzer und die Karte dichter, ohne die für den
+Fernblick prägenden Gebirge zu opfern. Die Konsolidierung macht jede Erweiterung
+zu einer spürbaren, strategischen Entscheidung.
+
+### Architektur
+
+- Zweite Skalierung ausschließlich im Offline-Bake (`tools/bakeWorld.mjs`); die
+  GLB wird weiterhin nie zur Laufzeit geladen. Voller Rebake aller abgeleiteten
+  Grids.
+- Neues reines Domain-Modul `src/game/regions/regionCost.ts` (kein Renderer-/
+  React-/State-Bezug) leitet die sechs Preisfaktoren ab; `regions.config.ts` ist
+  die eine Wahrheit, gegen das Modell getestet.
+- Seeadjazenz (`seaAdjacent`) im Bake ergänzt; `regionUnlockBlocker` in
+  `map/world.ts` entscheidet Land- vs. Seeerschließung + Hafenpflicht.
+- Gratiserweiterung über `controller.isFreeRegionExpansionAvailable` /
+  `getFreeRegionExpansionOptions`; `FREE_EXPANSION_LEVEL` in der Progressions-
+  Schicht definiert.
+
+### Auswirkung
+
+- **Save-Schema v16.** `v15 → v16` sichert den alten Stand einmalig unter
+  `cmb.save.backup.world-v15` und startet transparent neu (§13-Ausnahme): Küste,
+  Regionen, Wasserlinie und Startanker ändern sich gleichzeitig, eine
+  Koordinatenprojektion wäre nicht verlustfrei.
+- 310 Tests grün (u. a. 17 Welt-/Regionstests auf die neue 13-Regionen-Welt
+  umgestellt, neue `regionCost.test.ts`).
+
+### Zukunft
+
+- Säule B (Vegetations-Performance) folgt separat: LOD/HLOD, Chunk-Streaming,
+  Schattenbudget, Shader-Wind, Qualitätsstufen, Dev-Performance-Panel.
+- Der §3.1-vs-§4-Zielkonflikt (1 800–2 800 Kacheln vs. nur 12 Regionen) ist
+  zugunsten der Regionsstruktur aufgelöst und dokumentiert.
+
+### Dateien
+
+- `tools/bakeWorld.mjs`, `src/game/config/world/*.gen.ts` (Rebake)
+- `src/game/config/regions.config.ts`, `src/game/regions/regionCost.ts`
+- `src/game/map/world.ts`, `src/game/commands/controller.ts`,
+  `src/game/progression/levels.ts`
+- `src/game/config/types.ts`, `schemas.ts` (`requiresHarbor`)
+- `src/game/newGame.ts` (v16), `src/game/storage/migrations.ts`,
+  `localStorageAdapter.ts`
+- `src/components/panels/RegionDialog.tsx`, `src/styles/components.css`,
+  `src/i18n/de.json`
+- `docs/agents/WORLD_COMPACTION_REPORT.md`,
+  `docs/agents/REGION_CONSOLIDATION_PLAN.md`, `docs/REGIONS.md` (generiert)
+
+### Assets
+
+- Keine neuen Assets. Hafenpflicht nutzt die vorhandenen Gebäude
+  `dock_small`/`river_port`; keine erfundene Fährmechanik.
+
+## v0.75 — Core Gameplay Overhaul 8.0, Phase G1 + Zeitvertrag
+
+### Was
+
+- Den gemeldeten „4/5 Stopps"-Fehler der Stadtarbeit an seiner Ursache behoben:
+  Ein Lieferziel bleibt jetzt offen, bis seine Menge wirklich übergeben wurde.
+  Wer leer daran vorbeifährt, nachfüllt und zurückkommt, beliefert es beim
+  zweiten Kontakt regulär.
+- Lieferziele und Nachfüllstopps werden getrennt gezählt und getrennt angezeigt
+  („Lieferziele 5/5", darunter „Nachladen 1/1") statt in einer unklaren Zahl.
+- Ein erfolglos angefahrenes Ziel erscheint als sichtbarer Hinweis-Stopp
+  („Leer vorbeigefahren"), statt die ganze Route still ungültig zu machen.
+- Die Verkehrslast wird bereits während der Planung berechnet — ab der ersten
+  gezeichneten Kachel, in vier Stufen (Niedrig/Mittel/Hoch/Kritisch) und mit
+  erwartetem Zeitverlust. „Wird geprüft" gibt es nicht mehr.
+- Das Abschlussfenster zeigt echte Werte: Gesamtzeit, Fahrzeit, Lade-/
+  Entladezeit, Strecke, Leerfahrtanteil, Auslastung, Verkehrseinfluss,
+  Qualitätsverlust, Nachfüllungen, gelieferte Ziele, Planungseffizienz und
+  Straßenanteil. Kennzahlen, die es für den Auftragstyp nicht gibt, entfallen —
+  keine „– %"-Platzhalter mehr.
+- Vegetation und Props verschwinden beim Freischalten einer Region nicht mehr.
+- Pause, 1×, 2× und 4× steuern jetzt die ECHTE Simulation statt nur die
+  Sonnenbahn. Pause hält Einkommen, Verbrauch, Produktion, Wachstum, Bauzeit,
+  Missionen, Verkehr und Tageszeit vollständig an; UI, Kamera und Planung
+  bleiben bedienbar.
+- Fünf Bürgeranliegen nannten im Text eine andere Einwohnerzahl als ihr echtes
+  Ziel („80 Einwohner" bei Fortschritt 1.600/1.600). Alle Texte korrigiert.
+
+### Warum
+
+Die betroffenen Systeme waren nicht nur unschön, sondern schlicht falsch: Eine
+korrekt gefahrene Tour ließ sich nicht abschließen, eine Kennzahl wurde nie
+berechnet, ein Ergebnisfenster zeigte Striche statt Leistung, und die
+prominenteste Bedienleiste des Spiels tat nichts. Zusammen erzeugten sie genau
+den Eindruck, das Spiel sei ein Wartesystem.
+
+### Architektur
+
+- `evaluateCargoRoute` merkt sich nur noch **erledigte** Ziele, nicht mehr
+  „schon einmal berührte". Neu: `ActivityStopStatus` und `ActivityProgress` als
+  kanonische Verträge; `CargoRouteStop` trägt einen echten Status.
+- Neue reine Funktion `forecastRouteTraffic(path, roads, busyness, vehicle?)` in
+  `routeAnalysis.ts`. Sie bewertet den gezeichneten Weg statt der Zielkette und
+  hängt deshalb nicht mehr an einer vollständigen Route. Controller-Zugang über
+  `getActivityTrafficForecast`; die Prognose liegt als `preview.traffic` an.
+- Neuer Vertrag `ActivityRunResult`; `buildActivityRunResult` sammelt die Werte
+  aus Routenanalyse, Infrastrukturbewertung, Cargo-Route und Verkehrsprognose.
+- Neues reines Modul `renderer/three/vegetationBudget.ts`. Die Prop-Deckelung
+  hing bisher am Arrayindex der weltweiten Kachelliste — wuchs sie beim Unlock,
+  änderte sich die Schrittweite und damit die überlebenden Kacheln.
+  `selectPropTiles` wählt über einen Positions-Hash, und `rebuildVegetation`
+  vergibt das Budget **pro Region**. Die Auswahl einer Region ist damit
+  unabhängig davon, welche anderen Regionen sichtbar sind (§16).
+- Neuer Zeitvertrag `GameController.advanceByRealTime(realDeltaMs, live)`:
+  reale Zeit × `SimulationSpeed` (0/1/2/4) ergibt Simulationszeit und läuft
+  durch denselben einen Tick-Pfad. Einnahmen, Verbrauch, Produktion und Bauzeit
+  können strukturell nicht mehr auseinanderlaufen. Im Renderer trennt
+  `simDt = dt × speed` die Weltanimation von Kamera und Eingabe.
+
+### Auswirkung
+
+- Stadtarbeit ist wieder abschließbar; die Planung zeigt durchgehend echte
+  Kennzahlen statt Platzhalter.
+- Die Welt bleibt beim Erschließen visuell stabil.
+- Die Geschwindigkeitsleiste ist eine echte Spielentscheidung: In der Pause
+  lassen sich Routen und Bauten in Ruhe planen, ohne dass die Stadt weiterläuft.
+- Save-Schema bleibt **v15** — dieser Durchgang persistiert nichts Neues. Die
+  Geschwindigkeit ist bewusst eine Sitzungseinstellung.
+
+### Zukunft
+
+`docs/agents/CORE_GAMEPLAY_OVERHAUL_PLAN.md` führt die Phasen G2–G7. Als
+Nächstes G2 und dort zwingend zuerst das Terrain-Picking: Der Cursor wird heute
+gegen eine flache Ebene bei y = 0 geraycastet statt gegen das Höhenfeld, weshalb
+Platzierungen auf erhöhtem Gelände sichtbar danebenliegen. Erst danach lohnen
+echter GLB-Ghost, Verschieben, Gebäuderadien und der Straßenentwurf.
+
+### Dateien
+
+- `src/game/activities/logistics.ts`, `src/game/activities/routeAnalysis.ts`
+- `src/game/commands/controller.ts`, `src/App.tsx`
+- `src/renderer/three/vegetationBudget.ts` (neu),
+  `src/renderer/three/ThreeMapRenderer.ts`
+- `src/components/citywork/TourOverview.tsx`,
+  `src/components/citywork/RouteSummary.tsx`,
+  `src/components/panels/ActivityRoutePlanner.tsx`,
+  `src/components/common/EventModal.tsx`,
+  `src/components/hud/CameraControls.tsx`
+- `src/styles/citywork-v4.css`, `src/i18n/de.json`
+- `tests/simulationSpeed.test.ts`, `tests/vegetationBudget.test.ts`,
+  `tests/questText.test.ts` (neu); `tests/logistics.test.ts`,
+  `tests/routeAnalysis.test.ts` erweitert
+- `docs/agents/CORE_GAMEPLAY_OVERHAUL_AUDIT.md`,
+  `docs/agents/CORE_GAMEPLAY_OVERHAUL_PLAN.md` (neu)
+
+### Assets
+
+Keine neuen Assets. Alle Drop-in-Verträge bleiben unverändert.
+
+## v0.74 — Waterways, Harbors & Infrastructure Overhaul 7.0
+
+### Was
+
+- Die großen Uferkegel technisch im World-Bake behoben: senkrechte, in der
+  Draufsicht degenerierte Source-Dreiecke erzeugen keine isolierten hohen
+  Heightfield-Proben mehr. Bake-Diagnosen und Tests verhindern Rückfälle.
+- Visuellen Regions-Reveal von echtem Unlock getrennt. Der Nebel-Cheat zeigt die
+  vollständige Insel einschließlich Vegetation und Props; ein separater
+  Controller-Cheat verändert ausschließlich regulär erschließbare Regionen.
+- Ozean als großes radiales Ringmesh ausgeführt und den Fernabschluss mit
+  Distanznebel, Wolkenlagen sowie unregelmäßigen kleinen Ferninseln aufgewertet.
+- Gebäude dürfen auf gültigem Terrain ohne Straße gebaut werden. Solange der
+  Anschluss fehlt, tragen sie keine reguläre Produktion, Kapazität, Lager- oder
+  Radiuswirkung und zeigen einen differenzierten Problemmarker.
+- Multimodalen Anschlussstatus für Straße/Wasser, Controller-Read-Helper und ein
+  optionales Infrastruktur-Overlay mit Netz-, Hafen-, Handels-, Versorgungs-
+  und Problemfiltern ergänzt.
+- 569 Wasser-Nodes und 1.775 Bake-geprüfte Kanten mit Tiefe, Breite, Clearance
+  und Region exportiert. Jede Kante wird gegen die Wasser-Maske geprüft; die
+  Hafen-zu-Hafen-Vorschau folgt dem Graphen statt einer Land schneidenden Linie.
+- `dock_small` und `river_port` als datengetriebene Gebäude ergänzt: getrennte
+  Land-/Wasser-Footprints, Mindesttiefe, automatische Kardinalausrichtung,
+  Wasser-Ghost, spätere Straßenwarnung, Baushop-/Sheetangaben und prozedurale
+  Low-Poly-Fallbacks.
+- Drop-in-Pfade, Anschlussknoten, Statusmarker sowie neun spätere Schiffsmodelle
+  im zentralen Manifest und den generierten Modellprompts dokumentiert.
+
+### Warum
+
+Die neue Insel besitzt strategisch wertvolle Flüsse, Seen und Buchten, wirkte
+aber durch Bake-Artefakte und den rechteckigen Weltabschluss unfertig. Zugleich
+verhinderte die harte Straßenpflicht den Aufbau entfernter Siedlungskerne. 7.0
+macht die Geografie technisch verlässlich und bereitet Wasser als echten
+Expansionsweg vor, ohne unfertige Waren- oder Schiffssimulation vorzutäuschen.
+
+### Architektur und Auswirkungen
+
+- Simulation und Renderer bleiben getrennt. Anschluss, Wassergraph und Dijkstra-
+  Preview leben in `src/game/`; Three.js zeichnet ausschließlich Snapshots.
+- React hält nur Filter/Platzierungszustand und sendet Commands. Visueller Reveal
+  mutiert keinen Spielstand.
+- Kein zweites Infrastruktur-, Regions- oder Missionssystem. Bestehende
+  `BuildingDef`, Platzierung, Diagnosen, Derived-Werte und Controller-Bridges
+  wurden erweitert.
+- Persistiert wird kein neuer Zustand; Save-Schema bleibt v15. Tiefe
+  Schifffahrts-, Hafenlager-, Remote-Construction- und Brückenlogik ist klar als
+  `TODO(CLAUDE_LOGIC)` übergeben.
+- Performance bleibt gebündelt: Bake-Graph, instanzierte Straßen/Hafenmarker,
+  `LineSegments`, ein Routenpfad, radiales Ozeanmesh und prozedurale Fallbacks.
+
+### Wichtige Dateien und Assets
+
+- Bake/Tests: `tools/bakeWorld.mjs`, `tests/newIslandBake.test.ts`,
+  `tests/waterInfrastructure.test.ts`, `tests/worldReveal.test.ts`.
+- Game: `buildings/placement.ts`, `infrastructure/buildingInfrastructure.ts`,
+  `infrastructure/waterNavigation.ts`, `commands/controller.ts`, Configs und
+  Diagnosen/Derived/Tick/Coverage.
+- Renderer/UI: `ThreeMapRenderer.ts`, `IMapRenderer.ts`, `MapView.tsx`,
+  `InfoLayerControl.tsx`, `BuildMenu.tsx`, `FloatingBuildingSheet.tsx`,
+  `DebugPanel.tsx` und `WorldMiniMap.tsx`.
+- Assets: optionale `dock_small.glb`, `river_port.glb`, drei
+  `marker_problem_*.glb` sowie die in `HARBOR_SYSTEM_PLAN.md` spezifizierte
+  Schiffsflotte. Alle besitzen ehrliche Fallbacks beziehungsweise bleiben bis
+  zur Simulation reine Authoringverträge.
+
+### Zukunft
+
+Persistente Schifffahrtsrouten, Schiffe, Kapazität/Kosten, Hafenlager,
+Remote-Construction, multimodale Stadtarbeit und Brückendurchfahrt werden als
+Erweiterung der bestehenden Systeme umgesetzt. Neue Save-Felder benötigen dann
+einen Schema-Bump mit linearer Migration.
+
+## v0.73 — Terrain Quality & World Scale Overhaul 6.1
+
+### Was
+
+- Die aktive Insel horizontal auf 420 statt 472 Kacheln Quellspannweite
+  verdichtet: Faktor 0,8898 je X/Z-Achse, rund 0,7918 Fläche. Die eigenständige
+  Y-Skalierung hebt den höchsten Gipfel auf rund 50 Welteinheiten.
+- Bebaubarkeit von 55.941 auf 44.757 Kacheln reduziert (−20,0 %), ohne
+  Gebäude-, Straßen- oder Simulationsmaßstab zu ändern.
+- Wasserlinie von 0,004 auf 0,0065 angehoben und sichtbare Wasseroberfläche auf
+  y = −0,04 gesetzt. 1.348 flache Meeresküsten-, 651 Flussufer-, 3 Seeufer- und
+  2.576 bewusste Steilküstenkacheln werden getrennt gebacken.
+- 569 direkt bebaubare Uferkacheln und 16 garantierte 5×5-Uferplattformen für
+  spätere Hafen-, Pumpen- und Wassergebäude ergänzt. Brückenkandidaten enthalten
+  Ufertyp und Rampensteigung.
+- Oststart entfernt. Der Bake bewertet reale Landschaftskandidaten nach
+  Flachheit, Zentralität, vier Expansionsrichtungen, Ressourcen,
+  Infrastruktur sowie Wasser-/Klippenrisiko. Ergebnis: Region 24 „Herzland“,
+  Rathaus `(125,193)`, 1.290 Startbaukacheln und 4.418 frühe Baukacheln.
+- Zwei verlängerbare Startstraßenachsen mit 16 Kacheln ergänzt. Historische
+  Küstenankunft `(222,206)`, eine 115 Kacheln lange Versorgungstrasse und ein
+  künftiger Hafenanker sind als geografische Hooks vorbereitet; noch keine
+  Story-/Missionslogik.
+- Vier neue Terrainvorlagen anhand der angehängten Screenshots im Modus
+  `generate` erstellt und zu einer 2048er Bibliothek verarbeitet: 9 Gebirgs-,
+  8 Gras-, 6 Wald-, 4 Ufer- und 3 regionale Bodentexturen. Ausgewählte
+  Normal-, Roughness- und AO-Maps liegen daneben.
+- Ground-Shader auf breite Weltkoordinaten-Makrostruktur umgestellt. Felsen
+  nutzen triplanare Projektion, Schichten/Grate Macro-Noise, Ufer echte
+  Bake-Masken, Regen Wetness und Nahdetails Distanz-LOD.
+- Instanziertes Mikrogras für Nahsicht ergänzt; Fallback-Felsen werden am
+  niedrigsten Punkt ihrer Grundfläche verankert und leicht eingegraben.
+- Regionsprofile und Namen auf die neue Geografie übertragen. Region 16 bleibt
+  visuelle Wüste, Region 40 visueller Sumpf; Gameplay weiterhin
+  `TODO(CLAUDE_LOGIC)`.
+- Save-Schema auf v15 erhöht. v14-Weltstände werden einmalig unter
+  `cmb.save.backup.world-v14` gesichert und transparent neu gestartet.
+
+### Warum
+
+Die 6.0-Welt war im Stadtmaßstab zu weitläufig; glatte graue Berge,
+gleichförmige Wiesen und überwiegend senkrechte Ufer wirkten wie Prototypen.
+Der neue Bake hält die verbindliche Inselkontur, rückt Entscheidungen dichter
+zusammen und macht Wasser zu einem erreichbaren Teil der Stadtlandschaft. Die
+Materialbibliothek übernimmt die klare Low-Poly-/Painterly-Formsprache der
+Referenzbilder, ohne fotografische Mikrounruhe.
+
+### Architektur und Auswirkungen
+
+- `src/game/**` bleibt Three-/React-frei. Ufertyp, Waterfront und Start-/
+  Ankunftspunkte sind synchron gebackene Configdaten.
+- Kein zweites Welt-, Biom-, Verkehrs- oder Missionssystem. Der bestehende
+  Offline-Bake, `samplePlacementSurface`, Regions-Config und Three-Renderer
+  wurden erweitert.
+- Drop-in-Garantie bleibt: fehlende Farb-/PBR-Dateien fallen auf Vertexfarben
+  und bestehende Materialwerte zurück.
+- Performance bleibt vorgegeben: 64 cullbare Terrainchunks, begrenzte
+  Shader-Sampler, Instancing, Kamera-LOD für Normaldetail und Mikrogras.
+- Die Koordinatenänderung wird nicht scheinbar migriert. Der typisierte
+  14→15-Schritt nutzt den bestehenden sicheren Backup-/Neustartpfad.
+
+### Wichtige Dateien und Assets
+
+- Bake/Reports: `tools/bakeWorld.mjs`, `tools/bake-report.md`,
+  `tools/bake-preview.png`, `tools/processTerrainTextures.ps1`.
+- Sim/Config: `island*.gen.ts`, `startRegion.config.ts`, `regions.config.ts`,
+  `map/world.ts`, `newGame.ts`, `storage/migrations.ts`.
+- Renderer: `ThreeMapRenderer.ts`, `terrainHeight.ts`, `CameraConfig.ts`,
+  `CameraController3D.ts`, `worldVisualProfiles.ts`.
+- Assets: `src/assets/textures/terrain/{mountain,grass,forest,coast,dryland,fertile,moorland}`.
+- Doku: `TERRAIN_VISUAL_AUDIT.md`, `TERRAIN_MATERIAL_MATRIX.md`,
+  `REGION_VISUAL_REDESIGN.md`, `WORLD_SCALE.md`, `WORLD_REBUILD.md`,
+  `SAVE_MIGRATION.md` und die generierte `TERRAIN_TEXTURES.md`.
+
+### Zukunft
+
+Ankunftstutorial, Hafen-/Schifffahrtsgameplay, Brücken-/Tunnelbau und
+Wüsten-/Sumpfeffekte müssen als Erweiterungen bestehender Config-/Commandpfade
+entworfen werden. Zielhardwaremessungen entscheiden, ob weitere PBR-Kanäle oder
+höhere Vegetationscaps sinnvoll sind.
+
+## v0.72 — World Rebuild 6.0: neue 512²-Insel
+
+### Was
+
+- `island 3d new.glb` vollständig analysiert: 78 Teile, 945.473 Vertices,
+  1.849.632 Dreiecke, transformierte Bounds, Topologie, Materialien, UVs,
+  Neigung und stabile Audit-IDs sind als JSON/Markdown dokumentiert.
+- Bestehenden Offline-Bake auf die neue Source umgestellt: 512×512 Terrain,
+  1025×1025 Höhe, Gipfel bei 48 Einheiten, 40 organische Regionen,
+  Bau-/Wasser-/Küstenmasken und drei konsistente UI-Karten.
+- Gründerküste im Osten als Start gewählt: Rathaus (364,346), 4.523
+  Baukacheln, Küstendistanz 17 und garantiertes 34×19-Gründungsfeld.
+- Große alte Gipfelmodule entfernt; die gesamte Hauptsilhouette kommt aus dem
+  neuen Bake. Terrain bleibt in 64 cullbaren Chunks.
+- Wasser um Tiefenmaske und Türkis→Tiefblau-Verlauf erweitert; vorhandene
+  ressourcensparende Wellen-/Schaumanimation bleibt erhalten.
+- Zentrale `samplePlacementSurface`-Abfrage für Höhe, Hang, Normale, Wasser,
+  Klippe, Region und Bebaubarkeit ergänzt. Gebäude bleiben waagerecht und
+  erhalten einen gemeinsamen Steinsockel; ungeeignete Footprints werden
+  abgelehnt.
+- 7 Brücken-, 24 Viadukt-, 7 Tunnel-, 16 Hafen- und 485
+  Wasserwegkandidaten gebacken, ohne eine zweite Verkehrslogik einzuführen.
+- Dev-Cheat „Gesamte Insel anzeigen“ ergänzt: Wolken und Minimap-Sperre werden
+  nur visuell deaktiviert; Freischaltungen und Saves bleiben unverändert.
+- Save-Schema auf v14 erhöht. Alte Weltstände werden nicht falsch projiziert,
+  sondern einmalig unter `cmb.save.backup.world-v13` gesichert und transparent
+  neu gestartet.
+
+### Warum
+
+Die alte 384²-Geografie war weder Form noch Maßstab der neuen, vom Nutzer
+vorgegebenen Insel. Ein direktes Runtime-Rendering der 45-MB-Source wäre zu
+teuer und hätte Simulationslogik an Three-Geometrie gekoppelt. Der gemeinsame
+Bake macht die neue Form stattdessen zur deterministischen Grundlage für
+Rendering, Bauen, Regionen, Karten und spätere Infrastruktur.
+
+### Architektur und Auswirkungen
+
+- Keine Three-/React-Imports in `src/game/**`; alle Geländeabfragen sind
+  synchron, serialisierbar und testbar.
+- Bestehende `island*.gen.ts`-/`world*.gen.ts`-Pfade wurden erweitert statt ein
+  paralleles Weltsystem aufzubauen.
+- Source-GLB liegt außerhalb der Runtime-Registry. Fehlende Detail-GLBs nutzen
+  weiter prozedurale/instanzierte Fallbacks.
+- Wüste und Sumpf bleiben visuell. Brücken, Tunnel, Bahn und Schifffahrt sind
+  Kandidaten/Hooks mit `TODO(CLAUDE_LOGIC)`, kein behauptetes Gameplay.
+- Die alte Source wird von keinem aktiven Pfad gelesen, bleibt wegen des bereits
+  veränderten Arbeitsbaums bis zu einem sauberen Git-Sicherungspunkt erhalten.
+
+### Wichtige Dateien und Assets
+
+- Analyse/Bake: `tools/analyzeNewIsland.mjs`, `tools/bakeWorld.mjs`,
+  `tools/new-island-report.*`, `tools/bake-report.md`.
+- Sim: `islandTerrain.gen.ts`, `islandRegions.gen.ts`,
+  `islandBuildability.gen.ts`, `islandInfrastructure.gen.ts`,
+  `startRegion.config.ts`, `map/world.ts`, `placement.ts`.
+- Renderer/UI: `worldHeight.gen.ts`, `worldMasks.gen.ts`,
+  `ThreeMapRenderer.ts`, `WorldMiniMap.tsx`, `DebugPanel.tsx`.
+- Karten: `new_island_overview.png`, `new_island_minimap.png`,
+  `new_island_planning.png`.
+- Dokumentation: `NEW_ISLAND_*.md`, `WORLD_SCALE.md`, `WORLD_REBUILD.md`,
+  `SAVE_MIGRATION.md`, Manifeste und Handoff.
+
+### Zukunft
+
+Nach visueller Zielhardware-Abnahme können echte Brücken-/Tunnelbauteile,
+Schifffahrt, Bahntrassen und weitere PBR-Texturkanäle in die vorhandenen
+Systeme eingehängt werden. Eine automatische Regionsbild-Serie aus festen
+3D-Kamerapresets ist weiterhin sinnvoll; generische Heroes bleiben bis dahin
+ein ehrlicher Fallback.
+
+## v0.71 — Wolkenwand und Sperrgebiets-Anzeige
+
+### Was
+
+Nicht freigeschaltete Regionen werden jetzt vollständig von einer dichten,
+animierten Wolkenwand verdeckt. Über jedem gesperrten Gebiet schwebt eine klar
+lesbare Navy-/Gold-Tafel mit Schloss, Regionsname und benötigtem Level. Die
+Minimap zeigt dort ebenfalls keine Landschaft mehr, sondern eine Wolkendecke mit
+kompakten Schloss-/Level-Markern.
+
+### Warum
+
+Der bisherige Regionsnebel lag bewusst niedrig und ließ Gipfel sowie
+Landmarken als Teaser durchscheinen. Das widersprach dem verbindlichen Mockup:
+Eine unbekannte Region muss aus Übersicht und Schrägsicht eindeutig als
+gesperrt erkennbar sein, ohne dass Terrainfarbe oder einzelne Objekte den Inhalt
+vorwegnehmen.
+
+### Architektur
+
+`ThreeMapRenderer` erweitert ausschließlich das vorhandene Regionsnebel-System.
+Die geglättete Regionskontur wird leicht nach außen verbreitert und erhält eine
+blickdichte Grunddecke oberhalb ihres höchsten Terrainpunkts, drei driftende
+Alpha-Lagen aus `cloud_bank.webp` und genau ein gedeckeltes `InstancedMesh` für
+die volumetrische Rand- und Oberseitenstruktur. Dadurch entstehen keine
+Einzel-Draw-Calls pro Wolke. Ein prozedural erzeugtes Canvas-Sprite verwendet die
+kanonischen Regionsnamen und `unlockLevel`-Werte; ein Klick führt weiterhin in
+den bestehenden Regionsdialog. `WorldMiniMap` liest dieselben gebackenen
+Regionszentren und dieselbe Config.
+
+### Auswirkung
+
+Die Grenze zwischen erschlossener und unbekannter Welt ist aus Hauptansicht,
+Schrägsicht und Minimap sofort verständlich. Beim Freischalten steigt die
+Wolkenwand weiterhin mit der bestehenden Fade-Animation auf und gibt das Gebiet
+frei. Simulation, Balancing und Inselbake sind unverändert; das Save-Schema
+bleibt v13.
+
+### Zukunft
+
+Auf Windows-Zielhardware müssen Dichte, Markergröße, Draw-Calls und
+Texturspeicher noch in Vollinsel- und Nahansicht gemessen werden. Weitere
+Wolkenvarianten dürfen den vorhandenen Asset-Slot erweitern, aber keine zweite
+Nebel- oder Regionslogik einführen.
+
+### Dateien
+
+- `src/renderer/three/ThreeMapRenderer.ts`
+- `src/components/hud/WorldMiniMap.tsx`
+- `src/i18n/de.json`
+- `docs/PATCHNOTES.md`
+- `docs/ARCHITECTURE.md`
+- `docs/ASSETS.md`
+- `docs/3D_WORLD_ASSETS.md`
+- `docs/HANDOFF_CLAUDE.md`
+- `docs/agents/README.md`
+- `docs/agents/PROJECT_STATE.md`
+- `docs/agents/HANDOFF_LOG.md`
+- `docs/agents/MAP_REDESIGN_AUDIT.md`
+- `docs/agents/MAP_REDESIGN_PLAN.md`
+- `docs/agents/WORLD_ASSET_MANIFEST.md`
+- `docs/agents/OPEN_TASKS.md`
+- `README.md`
+- `AGENTS.md`
+- `CLAUDE.md`
+
+### Assets
+
+Keine neue Pflichtdatei. Die Wolkenlagen verwenden das bereits registrierte
+`src/assets/environment/cloud_bank.webp`; fehlt es, bleiben blickdichte
+Material- und Instancing-Fallbacks aktiv. Schloss-/Level-Tafeln und
+Minimap-Wolken werden prozedural erzeugt.
+
+## v0.70.1 — Gebirgsobjekte schweben nicht mehr
+
+### Was
+
+Gestreute Gebirgs-Gipfel, Felscluster und die Silhouetten-Teaser gesperrter
+Regionen werden nicht mehr auf der Höhe ihres Mittelpunkts, sondern auf dem
+tiefsten Punkt ihrer eigenen Grundfläche geerdet und zusätzlich leicht in den
+Hang eingegraben.
+
+### Warum
+
+Ein starres Modell auf einer einzigen Höhenprobe zu setzen funktioniert nur auf
+ebenem Boden. Im Gebirge fällt das Gelände unter der Grundfläche stark ab, also
+saß der Sockel auf der Mittelhöhe und die bergab liegende Kante stand sichtbar
+frei in der Luft — besonders auffällig bei den bis zu neun Kacheln hohen
+Nebel-Silhouetten, deren Sockel rund acht Kacheln breit ist.
+
+### Architektur
+
+`terrainMinHeightAround(x, y, radius)` in `src/renderer/three/terrainHeight.ts`
+ist eine reine Ableitung aus `terrainHeightAt` (zwei Ringe à acht Richtungen,
+deterministisch) — es entsteht **keine** zweite Höhenquelle. `placeModelInstances`
+akzeptiert die neuen optionalen Optionen `groundRadius` und `sink`; ohne sie
+bleibt das Verhalten exakt wie bisher, sodass Bäume, Büsche und Bodenkacheln
+unverändert sind.
+
+### Auswirkung
+
+Rein visuell. Keine Simulation, keine Config, keine Save-Änderung; Schema bleibt
+v13. Drop-in-Gipfel aus `models/terrain/mountains/` und Felsen aus
+`models/props/nature/` stecken jetzt im Hang statt darüber zu schweben.
+
+### Zukunft
+
+Echte Hangneigung (Ausrichtung des Modells an der Geländenormalen) bleibt offen
+und braucht eine gemeinsame Entscheidung mit dem Gebäude-Platzierungspfad.
+
+### Dateien
+
+- `src/renderer/three/terrainHeight.ts`
+- `src/renderer/three/ThreeMapRenderer.ts`
+
+### Assets
+
+Keine neuen Assets. Die Gipfel-Slots `mountain_peak_medium`, `mountain_peak_large`,
+`mountain_peak` und `rock_large` in `src/assets/models/terrain/mountains/` sind
+weiterhin leer und damit rein prozedural.
+
 ## v0.70 — Insel- und Biom-Overhaul 5.0
 
 ### Was

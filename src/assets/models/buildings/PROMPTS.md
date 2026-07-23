@@ -572,6 +572,28 @@ Low-poly stylized 3D city-builder game asset, colorful cartoon look, clean shape
 **Spec:** Größenklasse `XL` — Groß-Areal (5 000–9 000 Tris, ≤ 1024², 3–4 Materialien) · Footprint 7×7 (fix über alle Stufen) · Pivot unten-mittig (X/Z zentriert, Unterkante Y = 0) · Front +Z (Eingang zur Straße) · Nodes: `rotor` (drehende Rotorblätter je Turbine) · Stufe 1/1 — Basis `wind_farm.glb`
 > Baustelle (Bau *und* Upgrade): `wind_farm_construction.glb`, sonst generisches Baustellen-Prop, sonst prozedurales Gerüst. Der Renderer skaliert jedes Modell automatisch auf den Footprint.
 
+### dock_small — 1 Stufe
+
+#### `dock_small.glb` — Stufe 1/1
+
+```text
+Low-poly stylized 3D city-builder game asset, colorful cartoon look, clean shapes, soft bevels, hand-painted feel, optimized for realtime rendering, embedded textures, no lights, no cameras, centered object, pivot at bottom center, +Y up, front facing +Z — a compact wooden and stone quay with two mooring bollards, a short pier, stacked crates and a tiny harbor office; split footprint with water on the -Z side and land access on +Z
+```
+
+**Spec:** Größenklasse `S` — kleines Gebäude (800–2 000 Tris, ≤ 512², 1–2 Materialien) · Footprint Land 2×2 + Wasser 2×2, Rotation im 2×2-Bauplot, Mindesttiefe 0.55 m · Pivot unten-mittig (X/Z zentriert, Unterkante Y = 0) · Front +Z (Eingang zur Straße) · Nodes: `water_access` (Mitte der Wasserseite), `land_access` (Mitte der Landseite) · Stufe 1/1 — Basis `dock_small.glb`
+> Baustelle (Bau *und* Upgrade): `dock_small_construction.glb`, sonst generisches Baustellen-Prop, sonst prozedurales Gerüst. Der Renderer skaliert jedes Modell automatisch auf den Footprint.
+
+### river_port — 1 Stufe
+
+#### `river_port.glb` — Stufe 1/1
+
+```text
+Low-poly stylized 3D city-builder game asset, colorful cartoon look, clean shapes, soft bevels, hand-painted feel, optimized for realtime rendering, embedded textures, no lights, no cameras, centered object, pivot at bottom center, +Y up, front facing +Z — a substantial river and coastal cargo port with a broad stone quay, warehouse, gantry crane, loading apron, bollards, crates and a navigation light; split footprint with water on the -Z side and road access on +Z
+```
+
+**Spec:** Größenklasse `L` — großes Gebäude (3 000–6 000 Tris, ≤ 1024², 2–3 Materialien) · Footprint Land 4×3 + Wasser 4×3, Rotation im 4×4-Bauplot, Mindesttiefe 0.7 m · Pivot unten-mittig (X/Z zentriert, Unterkante Y = 0) · Front +Z (Eingang zur Straße) · Nodes: `water_access` (Mitte der Kaikante), `land_access` (Tor zur Straßenseite), `crane` (optionaler Drehknoten) · Stufe 1/1 — Basis `river_port.glb`
+> Baustelle (Bau *und* Upgrade): `river_port_construction.glb`, sonst generisches Baustellen-Prop, sonst prozedurales Gerüst. Der Renderer skaliert jedes Modell automatisch auf den Footprint.
+
 ### park — 2 Stufen
 
 #### `park.glb` — Stufe 1/2

@@ -32,7 +32,7 @@ describe('terrain texture docs', () => {
 
   it('every texture name follows a documented terrain/biome naming convention', () => {
     const bad = TERRAIN_TEXTURES
-      .filter((t) => !/^(terrain|mountain|desert|swamp|coast|grass)_[a-z0-9_]+$/.test(t.name))
+      .filter((t) => !/^(terrain|mountain|desert|swamp|coast|grass|forest|dry|fertile|moor)_[a-z0-9_]+$/.test(t.name))
       .map((t) => t.name);
     expect(bad, `Non-conforming names: ${bad.join(', ')}`).toEqual([]);
   });

@@ -1,65 +1,80 @@
-# Bake-Report — Insel-Welt (MVP4 + Welt 2.0 Regionen)
+# Bake-Report — Terrain & World Scale Overhaul 6.1
 
 > **Auto-generiert** von `tools/bakeWorld.mjs`. Nicht von Hand editieren.
 
 ## Eckdaten
 
-- Quelle: `reference/stylized island map 3d model.glb` (1.875.966 Dreiecke gerastert)
-- Welt: 384×384 Kacheln, 32 organische Regionen (+ Ozean)
-- Ozeanrand: 12 Kacheln; Höhenfaktor: Gipfel ≈ 20 Welt-Einheiten
-- Wasserlinie (normalisiert): 0.006; Höhenbereich Welt: [-3.00, 20.00]
-- Glättung bebaubaren Landes: 10 Iterationen, max. Schritt 0.07/Sample
-- Regions-Parameter: Ziel ~3800 Kacheln, min. 1000 (sonst Merge), Kosten fremdes Biom +4 / Fluss +6 / Höhe ×4
+- Quelle: `reference/world/island 3d new.glb` (1.849.632 Dreiecke gerastert)
+- Source-SHA-256: `63cb339303f6694f51ead6d2bc91aaac9891faa261ad4d77270330181fd3c917`
+- Welt: 512×512 Kacheln, 13 organische Regionen (+ Ozean)
+- Horizontale Quellspannweite: 374 statt 420 Kacheln; Faktor 0.8905 (Fläche ≈ 0.7929)
+- Ozeanrand: 69 Kacheln; separate Y-Skalierung: Gipfel ≈ 52 Welt-Einheiten
+- Wasserlinie (normalisiert): 0.0065 → 0.0065; Höhenbereich Welt: [-2.40, 51.99]
+- Bebaubare Kacheln: 44.755 → 34.082 (76.2 %, Änderung -23.8 %)
+- Glättung bebaubaren Landes: 16 Iterationen, max. Schritt 0.25/Sample
+- Regions-Parameter: Ziel ~6200 Kacheln, min. 2400 (sonst Merge), Kosten fremdes Biom +4 / Fluss +6 / Höhe ×4
+- Infrastruktur-Hooks: 6 Brücken, 24 Viadukte, 17 Tunnel, 16 Häfen, 669 Wasserwegknoten
 
 ## Biomverteilung
 
-- water: 60.365 (40.9 %)
-- river: 549 (0.4 %)
-- sand: 3.753 (2.5 %)
-- fertile: 3.475 (2.4 %)
-- grass: 41.342 (28.0 %)
-- forest: 17.926 (12.2 %)
-- mountain: 20.046 (13.6 %)
+- water: 182.167 (69.5 %)
+- river: 818 (0.3 %)
+- sand: 5.061 (1.9 %)
+- fertile: 4.197 (1.6 %)
+- grass: 35.697 (13.6 %)
+- forest: 17.122 (6.5 %)
+- mountain: 17.082 (6.5 %)
 
-## Start (vom Bake gewählt & validiert)
+## Wasser und Ufer
 
-- **Startregion: 2** (forest) — 5.993 bebaubare Kacheln (Ziel ≥ 2500)
-- **Rathaus: (183,189)** (5×5, Anker links-oben; flachster 7×7-Gras-Block nahe Regionsmitte, ΔH=0.23)
-- Startstraßen: (183,194), (184,194), (185,194), (186,194), (187,194)
+- Flache Meeresküste: 938 Kacheln
+- Sanftes Flussufer: 443 Kacheln
+- Sanftes Seeufer: 5 Kacheln
+- Bewusste Steilküste: 2.672 Kacheln
+- Direkt wassernahe und bebaubare Uferkacheln: 815
+- Garantierte 5×5-Uferplattformen: 16
+
+## Zentraler Start (vom Bake gewählt und validiert)
+
+- Mathematischer Bounding-Box-Mittelpunkt: (256,256)
+- Flächenschwerpunkt der größten zusammenhängenden Landmasse: (167.65,225.84)
+- **Startregion: 13** (grass) — 820 bebaubare Kacheln (Ziel 650–950)
+- **Rathaus: (137,194)**, Gründungsmittelpunkt (139,196), ΔH=0.70
+- Frühe Fläche mit den nächsten Nachbarn: 5.999 Kacheln (Ziel 1.800–9.500)
+- Score: Gesamt 69.14 · Zentralität 0.782 · Flachheit 0.173 · Expansion 0.750 · Ressourcen 1.000 · Infrastruktur 0.979 · Wasser-/Klippenrisiko 0.000/0.000
+- Küstenankunft: (222,218); vorbereitete Versorgungstrasse 102 Kacheln bis zur südlichen Rathausachse
+- Startstraßen: 16 Kacheln auf zwei verlängerbaren Hauptachsen
+- TODO(CLAUDE_LOGIC): Arrival tutorial and founding journey
+
+### Top-10-Startflächen
+
+| Rang | Region | Mittelpunkt | Direkt bebaubar | Früh gesamt | Zentral | Flach | Richtungen | Ressourcen | Infrastruktur | Wasser-Risiko | Klippen-Risiko | Gesamt |
+| ---: | ---: | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| 1 | 13 | (139,196) | 820 | 5999 | 0.782 | 0.173 | 0.750 | 1.000 | 0.979 | 0.000 | 0.000 | 69.14 |
+| 2 | 13 | (140,197) | 820 | 5999 | 0.790 | 0.167 | 0.750 | 1.000 | 0.958 | 0.000 | 0.000 | 69.03 |
+| 3 | 13 | (141,198) | 820 | 5999 | 0.797 | 0.164 | 0.750 | 1.000 | 0.938 | 0.000 | 0.000 | 68.96 |
+| 4 | 13 | (139,197) | 820 | 5999 | 0.786 | 0.164 | 0.750 | 1.000 | 0.969 | 0.000 | 0.000 | 68.95 |
+| 5 | 13 | (140,198) | 820 | 5999 | 0.793 | 0.160 | 0.750 | 1.000 | 0.948 | 0.000 | 0.000 | 68.88 |
+| 6 | 13 | (141,199) | 820 | 5999 | 0.801 | 0.160 | 0.750 | 1.000 | 0.927 | 0.000 | 0.000 | 68.88 |
+| 7 | 13 | (141,200) | 820 | 5999 | 0.805 | 0.159 | 0.750 | 1.000 | 0.917 | 0.000 | 0.000 | 68.86 |
+| 8 | 13 | (138,196) | 820 | 5999 | 0.779 | 0.169 | 0.750 | 1.000 | 0.969 | 0.000 | 0.000 | 68.81 |
+| 9 | 13 | (139,198) | 820 | 5999 | 0.790 | 0.155 | 0.750 | 1.000 | 0.958 | 0.000 | 0.000 | 68.75 |
+| 10 | 13 | (140,199) | 820 | 5999 | 0.797 | 0.154 | 0.750 | 1.000 | 0.938 | 0.000 | 0.000 | 68.75 |
 
 ## Regionen (Grundlage für regions.config.ts)
 
-| Id | Dominant | Kacheln | Bebaubar | Zentrum | Nachbarn |
-| --- | --- | --- | --- | --- | --- |
-| 1 | mountain | 7889 | 346 | (119,115) | 2, 7, 12, 13, 15, 16, 20, 24, 25 |
-| 2 | forest | 6113 | 5993 | (200,176) | 1, 4, 7, 10, 12, 27 |
-| 3 | water | 5134 | 1324 | (153,287) | 4, 14, 17, 19, 22 |
-| 4 | grass | 5063 | 4738 | (217,291) | 2, 3, 11, 12, 14, 17, 27 |
-| 5 | grass | 4703 | 4544 | (315,99) | 6, 7, 8, 21 |
-| 6 | grass | 4437 | 3366 | (323,176) | 5, 7, 10 |
-| 7 | grass | 4298 | 4057 | (239,118) | 1, 2, 5, 6, 8, 10, 13, 21, 23 |
-| 8 | grass | 3677 | 3511 | (252,46) | 5, 7, 13, 21, 23 |
-| 9 | grass | 3580 | 3403 | (301,303) | 11, 26 |
-| 10 | grass | 3543 | 3452 | (251,190) | 2, 6, 7, 11, 26, 27 |
-| 11 | forest | 3531 | 3222 | (277,277) | 4, 9, 10, 26, 27 |
-| 12 | grass | 3293 | 3225 | (146,198) | 1, 2, 4, 17, 20 |
-| 13 | grass | 3154 | 3039 | (172,65) | 1, 7, 8, 23, 24 |
-| 14 | grass | 3030 | 2889 | (155,339) | 3, 4, 22 |
-| 15 | grass | 2637 | 2042 | (46,103) | 1, 16, 25, 28 |
-| 16 | grass | 2286 | 1617 | (82,52) | 1, 15, 24 |
-| 17 | forest | 2113 | 1942 | (134,230) | 3, 4, 12, 18, 19, 20 |
-| 18 | mountain | 2063 | 339 | (78,236) | 17, 19, 20, 28, 29, 30, 31 |
-| 19 | grass | 1936 | 1678 | (101,268) | 3, 17, 18, 22, 31 |
-| 20 | grass | 1868 | 1389 | (101,181) | 1, 12, 17, 18, 25, 28 |
-| 21 | water | 1801 | 923 | (261,91) | 5, 7, 8 |
-| 22 | forest | 1801 | 1588 | (99,324) | 3, 14, 19, 31 |
-| 23 | mountain | 1786 | 1095 | (209,65) | 7, 8, 13 |
-| 24 | mountain | 1777 | 356 | (142,58) | 1, 13, 16 |
-| 25 | mountain | 1735 | 173 | (71,156) | 1, 15, 20, 28 |
-| 26 | forest | 1462 | 1415 | (270,207) | 9, 10, 11 |
-| 27 | mountain | 1282 | 624 | (225,252) | 2, 4, 10, 11 |
-| 28 | forest | 1185 | 1143 | (49,182) | 15, 18, 20, 25, 30 |
-| 29 | grass | 1082 | 949 | (53,281) | 18, 31 |
-| 30 | grass | 984 | 748 | (45,206) | 18, 28 |
-| 31 | mountain | 984 | 503 | (68,298) | 18, 19, 22, 29 |
-| 32 | grass | 732 | 705 | (35,250) |  |
+| Id | Dominant | Kacheln | Bebaubar | Küstenkante | Zentrum | Nachbarn |
+| --- | --- | --- | --- | --- | --- | --- |
+| 1 | mountain | 16321 | 3833 | 715 | (311,202) |  |
+| 2 | grass | 9955 | 3361 | 546 | (218,168) | 10 |
+| 3 | grass | 6900 | 2955 | 337 | (148,314) | 7 |
+| 4 | grass | 6835 | 4663 | 296 | (169,384) | 5 |
+| 5 | grass | 6401 | 3889 | 210 | (281,389) | 4, 6, 12 |
+| 6 | grass | 6390 | 4178 | 229 | (357,332) | 5, 11 |
+| 7 | grass | 4535 | 2955 | 190 | (111,253) | 3, 10, 13 |
+| 8 | grass | 3657 | 794 | 289 | (245,102) |  |
+| 9 | grass | 3291 | 1098 | 225 | (386,221) |  |
+| 10 | forest | 3117 | 2224 | 140 | (141,181) | 2, 7, 13 |
+| 11 | forest | 2852 | 1636 | 202 | (403,280) | 6 |
+| 12 | forest | 2796 | 1676 | 119 | (296,420) | 5 |
+| 13 | grass | 821 | 820 | 0 | (141,201) | 7, 10 |

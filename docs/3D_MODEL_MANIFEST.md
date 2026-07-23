@@ -1,6 +1,6 @@
 # 3D-Modell-Manifest — Namens-Index (v0.40 — World Graphics V2)
 
-> **Statuskorrektur v0.70:** Es gibt ausschließlich die 3D-Karte und bereits
+> **Statuskorrektur v0.74:** Es gibt ausschließlich die 3D-Karte und bereits
 > mehrere aktive GLBs, unter anderem Baum-, Boot-, Windmühlen- und
 > Leuchtturmassets. Die unten stehenden historischen Aussagen zu drei Kartenmodi
 > oder „keinen GLBs“ sind überholt. Aktive und geplante Namen werden aus
@@ -78,6 +78,9 @@ passender Name gewinnt** (Präzis vor Alias). Alles ohne Modell bleibt prozedura
 | Marker Aufgabe/Ziel | `markers/…` | `marker_task` → `marker_activity` → `marker_target` | schwebt + rotiert |
 | Marker Bau | `markers/…` | `marker_construction` → `marker_build` | |
 | Marker Problem | `markers/…` | `marker_problem` → `marker_alert` | |
+| Marker Straßenproblem | `markers/…` | `marker_problem_road` → `marker_problem` | rotes Straßensymbol |
+| Marker Wasserproblem | `markers/…` | `marker_problem_water` → `marker_problem` | blaues Ankersymbol |
+| Marker Teilnetz | `markers/…` | `marker_problem_network` → `marker_problem` | gelbes Netzsymbol |
 | Marker Upgrade | `markers/…` | `marker_upgrade` → `marker_bonus` → `marker_arrow` | |
 | Effekt Rauch | `effects/…` | `smoke_chimney` → `smoke` → `steam` → `smoke_puff` | Schornstein aktiver Produktion |
 | Baustelle (Bau **&** Upgrade) | `buildings/…` bzw. `props/construction/…` | `<id>_construction` → `construction_site` → `construction_crane` → `scaffold` → `crane` | pro Gebäude eigen möglich; sonst generisch; sonst Gerüst |
@@ -158,6 +161,8 @@ fix (§3 in `docs/3D_WORLD_ASSETS.md`).
 | warehouse | `warehouse.glb` | L | 4×4 | 6 | 2 | |
 | depot | `depot.glb` | L | 5×5 | 7 | 2 | |
 | waterworks | `waterworks.glb` | L | 5×5 | 11 | 2 | grenzt an Fluss |
+| dock_small | `dock_small.glb` | S | Land 2×2 + Wasser 2×2 | 6 | 1 | `water_access`, `land_access` |
+| river_port | `river_port.glb` | L | Land 4×3 + Wasser 4×3 | 9 | 1 | rotationsstabiler 4×4-Bauplot; `water_access`, `land_access`, `crane` |
 
 ### Versorgung / Dienste — `buildings/services/`
 | ID | Datei | Klasse | Footprint | Ab Level | Stufen |

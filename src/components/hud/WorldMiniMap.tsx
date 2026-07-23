@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Crosshair, LockKeyhole, Map, Settings } from 'lucide-react';
-import { WORLD_TILES, regionIdAt, startRegionConfig, terrainAt } from '../../game/config/startRegion.config.ts';
+import { BAKED_REGIONS, WORLD_TILES, regionIdAt, startRegionConfig, terrainAt } from '../../game/config/startRegion.config.ts';
 import type { BuildingCategory, TerrainType } from '../../game/types.ts';
 import { getMapApi, useGame, useUiStore } from '../../state/store.ts';
 import { t } from '../../i18n/index.ts';
@@ -53,6 +53,7 @@ export function WorldMiniMap() {
   const draggingRef = useRef(false);
   const setCameraPreset = useUiStore((s) => s.setCameraPreset);
   const setPanel = useUiStore((s) => s.setPanel);
+  const revealLockedRegionsVisually = useUiStore((s) => s.revealLockedRegionsVisually);
   const [focusRegionId, setFocusRegionId] = useState(startRegionConfig.startRegionId);
 
   const unlockedKey = Object.values(game.state.world.regions)
@@ -94,15 +95,27 @@ export function WorldMiniMap() {
         const wx = Math.min(WORLD_TILES - 1, Math.floor((px / SIZE) * WORLD_TILES));
         const regionId = regionIdAt(wx, wy);
         const base = TERRAIN[terrainAt(wx, wy)];
-        const isUnlocked = regionId === 0 || unlocked.has(regionId);
-        const light = isUnlocked ? 1 : 0.34;
-        const blue = isUnlocked ? 0 : 18;
+        const isUnlocked = revealLockedRegionsVisually || regionId === 0 || unlocked.has(regionId);
         const offset = (py * SIZE + px) * 4;
+        if (!isUnlocked) {
+          // Gesperrte Landschaften zeigen auch auf der Minimap keine
+          // Terrain-Details. Mehrere weiche Frequenzen ergeben eine lesbare
+          // Wolkendecke, ohne ein zweites Kartenbild zu laden.
+          const cloudA = Math.sin(px * 0.19 + py * 0.13);
+          const cloudB = Math.sin(px * -0.08 + py * 0.23 + 1.7);
+          const cloudC = Math.sin((px + py) * 0.045 + regionId * 0.61);
+          const cloud = Math.round(150 + cloudA * 17 + cloudB * 13 + cloudC * 11);
+          image.data[offset] = Math.max(105, cloud - 10);
+          image.data[offset + 1] = Math.max(115, cloud);
+          image.data[offset + 2] = Math.min(220, cloud + 13);
+          image.data[offset + 3] = 255;
+          continue;
+        }
         const macro = ((px * 13 + py * 7 + wx * 3 + wy * 5) % 19) / 190 - 0.05;
         const relief = terrainAt(wx, wy) === 'mountain' ? 0.9 + ((wx + wy) % 9) / 32 : 1 + macro;
-        image.data[offset] = Math.round(base[0] * light * relief);
-        image.data[offset + 1] = Math.round(base[1] * light * relief);
-        image.data[offset + 2] = Math.min(255, Math.round(base[2] * light * relief) + blue);
+        image.data[offset] = Math.round(base[0] * relief);
+        image.data[offset + 1] = Math.round(base[1] * relief);
+        image.data[offset + 2] = Math.min(255, Math.round(base[2] * relief));
         image.data[offset + 3] = 255;
       }
     }
@@ -117,11 +130,11 @@ export function WorldMiniMap() {
         if (region === 0) continue;
         const edge = regionIdAt(wx + 2, wy) !== region || regionIdAt(wx, wy + 2) !== region;
         if (!edge) continue;
-        ctx.fillStyle = unlocked.has(region) ? 'rgba(255,202,82,.82)' : 'rgba(186,207,222,.26)';
+        ctx.fillStyle = revealLockedRegionsVisually || unlocked.has(region) ? 'rgba(255,202,82,.82)' : 'rgba(186,207,222,.26)';
         ctx.fillRect(px, py, 1, 1);
       }
     }
-  }, [unlocked]);
+  }, [revealLockedRegionsVisually, unlocked]);
 
   useEffect(() => {
     const canvas = overlayCanvasRef.current;
@@ -160,6 +173,42 @@ export function WorldMiniMap() {
       ctx.strokeStyle = '#fff4cc';
       ctx.stroke();
 
+      // Dieselben kanonischen Regionszentren wie im 3D-Renderer: Schloss plus
+      // Mindestlevel, damit die Minimap den Sperrstatus nicht nur durch Farbe
+      // kommuniziert. Die Teaser-Insel zeigt bewusst „…“ statt eines Fake-Levels.
+      for (const baked of BAKED_REGIONS) {
+        if (revealLockedRegionsVisually || unlocked.has(baked.id)) continue;
+        const def = game.config.regions.get(baked.id);
+        if (!def) continue;
+        const x = baked.centroid.x * scale;
+        const y = baked.centroid.y * scale;
+        ctx.save();
+        ctx.translate(x, y);
+        ctx.shadowColor = 'rgba(0,0,0,.75)';
+        ctx.shadowBlur = 3;
+        ctx.fillStyle = 'rgba(6,22,33,.94)';
+        ctx.strokeStyle = '#e2a72f';
+        ctx.lineWidth = 1.1;
+        ctx.beginPath();
+        ctx.roundRect(-6.5, -7.5, 13, 15, 3);
+        ctx.fill();
+        ctx.stroke();
+        ctx.shadowColor = 'transparent';
+        ctx.strokeStyle = '#f8edc9';
+        ctx.lineWidth = 1.4;
+        ctx.beginPath();
+        ctx.arc(0, -2.8, 2.5, Math.PI, 0);
+        ctx.stroke();
+        ctx.fillStyle = '#f8edc9';
+        ctx.fillRect(-3, -2.8, 6, 5);
+        ctx.font = '700 5px Inter, Arial, sans-serif';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillStyle = '#f2b43b';
+        ctx.fillText(def.unlockable ? `L${def.unlockLevel}` : '…', 0, 5.1);
+        ctx.restore();
+      }
+
       const view = getMapApi()?.getCameraView();
       if (!view) return;
       const region = regionIdAt(
@@ -191,7 +240,7 @@ export function WorldMiniMap() {
     draw();
     const timer = window.setInterval(draw, 120);
     return () => window.clearInterval(timer);
-  }, [markers]);
+  }, [game, markers, revealLockedRegionsVisually, unlocked]);
 
   const focusRegion = game.config.regions.get(focusRegionId);
   const focusRegionState = game.state.world.regions[String(focusRegionId)];

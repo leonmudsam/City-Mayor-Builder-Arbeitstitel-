@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { CameraController3D } from '../src/renderer/three/CameraController3D.ts';
+import { worldOverviewCenter } from '../src/game/config/startRegion.config.ts';
 import { CAMERA_LIMITS, worldCameraBounds } from '../src/renderer/three/CameraConfig.ts';
 import { DEFAULT_CAMERA_SETTINGS, type CameraSettings } from '../src/renderer/three/cameraSettings.ts';
 
@@ -51,9 +52,8 @@ describe('CameraController3D presets & focus', () => {
     cam.applyPreset('overview');
     const overview = cam.goals();
     const dist = overview.dist;
-    const bounds = worldCameraBounds();
-    expect(overview.targetX).toBeCloseTo((bounds.minX + bounds.maxX) / 2, 5);
-    expect(overview.targetZ).toBeCloseTo((bounds.minZ + bounds.maxZ) / 2, 5);
+    expect(overview.targetX).toBeCloseTo(worldOverviewCenter.x, 5);
+    expect(overview.targetZ).toBeCloseTo(worldOverviewCenter.y, 5);
     cam.applyPreset('city');
     expect(dist).toBeGreaterThan(cam.goals().dist);
   });

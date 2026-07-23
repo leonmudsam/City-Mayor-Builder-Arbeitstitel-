@@ -1,5 +1,5 @@
 import { loadConfig, type GameConfig } from '../src/game/config/index.ts';
-import { regionBounds, regionIdAt, startRegionConfig } from '../src/game/config/startRegion.config.ts';
+import { startRegionConfig, WORLD_TILES } from '../src/game/config/startRegion.config.ts';
 import { createNewGame } from '../src/game/newGame.ts';
 import { GameController } from '../src/game/commands/controller.ts';
 import { recomputeDerived } from '../src/game/simulation/derived.ts';
@@ -44,16 +44,18 @@ export function setLevel(controller: GameController, level: number): void {
 }
 
 /**
- * Flatten the START REGION's terrain to grass (§ v10/v11: via sparse overrides —
- * Terrain ist nicht mehr im Save), so location bonuses around the town hall are
- * 0 unless a test paints terrain explicitly.
+ * Flache Test-Arbeitsfläche um das Rathaus (§ v10/v11: via sparse Overrides —
+ * Terrain ist nicht mehr im Save). Die Fläche ist bewusst nicht an die Form
+ * einer gebackenen Region gekoppelt: Tests beschreiben Gameplay-Abstände relativ
+ * zum Rathaus und sollen bei einem reinen Welt-Rebake nicht neu angeordnet werden.
  */
 export function flattenTerrain(controller: GameController): void {
-  const b = regionBounds(START_REGION);
-  if (!b) throw new Error('helpers: Startregion ohne Bounds');
-  for (let y = b.minY; y <= b.maxY; y++) {
-    for (let x = b.minX; x <= b.maxX; x++) {
-      if (regionIdAt(x, y) !== START_REGION) continue;
+  const minX = Math.max(0, TOWN_HALL.x - 32);
+  const maxX = Math.min(WORLD_TILES - 1, TOWN_HALL.x + 56);
+  const minY = Math.max(0, TOWN_HALL.y - 32);
+  const maxY = Math.min(WORLD_TILES - 1, TOWN_HALL.y + 56);
+  for (let y = minY; y <= maxY; y++) {
+    for (let x = minX; x <= maxX; x++) {
       overrideTerrain(controller.state, x, y, 'grass');
     }
   }

@@ -1,8 +1,11 @@
 # Map Redesign 5.0 — Umsetzungsplan
 
-Stand: 21. Juli 2026 · v0.70 Referenzpass
+> Historischer v0.71-Plan. Für die aktive 512²-/40-Regionen-Welt gilt
+> `NEW_ISLAND_REBUILD_PLAN.md`.
 
-| Meilenstein | Inhalt | Status v0.70 | Abnahme |
+Stand: 21. Juli 2026 · v0.71 Referenzpass
+
+| Meilenstein | Inhalt | Status v0.71 | Abnahme |
 |---|---|---|---|
 | M1 Audit | Bake, Höhenquelle, Chunks, Shader, Wasser, Vegetation, Regionen und Registry prüfen | abgeschlossen | `MAP_REDESIGN_AUDIT.md` benennt Bestand, Defizite und Risiken |
 | M2 Materialkern | 12 Splat-Layer, neue Biomtexturen, weiche Regionsübergänge, Triplanar-Fels | abgeschlossen | keine harte technische Regionskante; Steilfels bleibt maßstäblich |
@@ -10,7 +13,7 @@ Stand: 21. Juli 2026 · v0.70 Referenzpass
 | M4 Gras & Wald | offene Wiese, Agrarprofil, Mischwald, große Kiefer, Solitärbaum | Referenzpass abgeschlossen | drei Baumfamilien und regionsabhängige Dichte |
 | M5 Wasser & Küste | Kies-/Sandküste, Ozean-Makrowellen, animierte Flussströmung, Seenprofil | Kern abgeschlossen | Ozean, Fluss und Seen besitzen unterschiedliche Lesbarkeit |
 | M6 Spezialbiome | rote Wüste und Sumpf auf vorhandenen Regionen | visuell abgeschlossen | Region 9/29 klar erkennbar; keine erfundenen Boni |
-| M7 Landmarken & Atmosphäre | neutrale Orientierungspunkte, Nebel-/Lichtintegration, Fallbacks | Referenzpass abgeschlossen | pro Region deterministische, nicht spielmechanische Motive |
+| M7 Landmarken & Atmosphäre | neutrale Orientierungspunkte, Nebel-/Lichtintegration, Fallbacks | inklusive blickdichter Regions-Wolkenwand abgeschlossen | pro Region deterministische Motive; gesperrte Gebiete vollständig verdeckt und mit Schloss/Level markiert |
 | M8 Produktionsabnahme | vollständige Matrix, Build, Screenshot-Smoke, GPU-Profiling | Build/Test abgeschlossen; Preview HTTP 200; Browserinstanz in dieser Sitzung nicht verfügbar | Referenzbilder und FPS/Draw-Calls auf Windows-Zielsystem dokumentieren |
 
 ## Nächste Qualitätsstufe
@@ -20,7 +23,8 @@ Stand: 21. Juli 2026 · v0.70 Referenzpass
 2. Die in `WORLD_ASSET_MANIFEST.md` aufgeführten Hero- und Vegetationsmodelle als
    optimierte GLBs einlegen; die vorhandenen Fallbacks bleiben bestehen.
 3. Screenshot-Smokes dauerhaft für Gebirge, Gras/Wald, Küste/Wasser,
-   Wüste/Sumpf sowie Morgen/Nebel/Nacht archivieren und vergleichen.
+   Wüste/Sumpf sowie Morgen/Nebel/Nacht archivieren und vergleichen; die
+   Regions-Wolkenwand zusätzlich aus Übersicht, Schrägsicht und Nähe abnehmen.
 4. Erst nach separater Designentscheidung biomeigene Gameplay-Effekte in der
    Config ergänzen. Rendererprofile sind dafür keine Datenquelle.
 

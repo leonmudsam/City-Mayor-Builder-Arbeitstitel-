@@ -211,6 +211,139 @@ export interface ActivitiesState {
   fulfilledContracts: string[];
 }
 
+// ---- Aktive Betriebe / Ressourcenknoten (§ Active Operations 2.0) ----------
+// Persistierte Zustände des aktiven Betriebssystems. Die eigentliche Logik lebt
+// in `src/game/operations/**`; diese Typen bleiben hier (wie `ActiveActivity`),
+// weil `types.ts` bewusst keine Nicht-Typ-Module importiert. Details:
+// docs/agents/ACTIVE_OPERATIONS_PLAN.md.
+
+/** Naturressourcen-Knotentyp. Referenzschnitt nutzt nur 'tree'. */
+export type ResourceNodeType = 'tree' | 'rock' | 'crop' | 'livestock' | 'water_source' | 'wild_plant';
+
+/**
+ * NUR die Abweichung eines Ressourcenknotens vom deterministisch abgeleiteten
+ * Grundzustand (Slim-Save wie Terrain/Belegung): verfügbare Knoten werden aus
+ * Welt + Positions-Hash rekonstruiert, hier stehen bloß angearbeitete,
+ * reservierte, erschöpfte oder nachwachsende Knoten. Key = `"x,y"` (NodeId).
+ */
+export interface ResourceNodeDelta {
+  /** Verbleibende Menge, falls angearbeitet (< maxAmount). */
+  remaining?: number;
+  /** Betrieb (buildingId), der den Knoten für einen Auftrag reserviert hat. */
+  reservedBy?: string;
+  /** Zeitpunkt der Erschöpfung (ms Simulationszeit). */
+  depletedAt?: number;
+  /** Zeitpunkt, ab dem der erschöpfte Knoten wieder verfügbar ist. */
+  regenerationAt?: number;
+}
+
+/** Lokales Betriebslager eines Gebäudes (§7.1). */
+export interface BuildingInventory {
+  capacity: number;
+  items: Partial<Record<ResourceId, number>>;
+  /** Für Aufträge/Transporte gebundene Menge (§7.1). */
+  reserved: Partial<Record<ResourceId, number>>;
+}
+
+export type BuildingWorkerStatus =
+  | 'idle'
+  | 'walking_to_target'
+  | 'working'
+  | 'returning'
+  | 'waiting'
+  | 'blocked';
+
+/**
+ * Logik-Zustand eines Betriebsarbeiters (§5). Bewusst OHNE Animationsposen — die
+ * exakte Laufanimation ist Rendererzustand (§4/§21). `x`/`y` ist die aktuelle
+ * Tile-Position (für Distanz und die additive Renderer-Darstellung),
+ * `progress` der Fortschritt der aktuellen Phase (0..1).
+ */
+export interface BuildingWorkerState {
+  id: string;
+  status: BuildingWorkerStatus;
+  targetNodeId?: string;
+  carriedAmount: number;
+  progress: number;
+  x: number;
+  y: number;
+}
+
+/**
+ * Ein aktiver Betriebsauftrag (§2). Ein Betrieb hat genau einen aktiven Auftrag;
+ * `targetNodeIds` ist die vom Spieler bestätigte Auswahl/Warteschlange (einzelne
+ * Knoten ODER ein Arbeitsgebiet). Reihenfolge = Bearbeitungsreihenfolge.
+ */
+export interface ActiveBuildingOperation {
+  buildingId: BuildingInstanceId;
+  type: 'harvest';
+  status: 'active' | 'paused';
+  targetNodeIds: string[];
+  startedAt: number;
+}
+
+/**
+ * Phasen eines Lagertransports (§ Active Operations 2.0, Phase A5). `loading`:
+ * das Fahrzeug lädt am Quellbetrieb (Ware ist im Quell-Lager reserviert, aber
+ * physisch noch da). `in_transit`: die Ladung ist auf dem Fahrzeug unterwegs
+ * (aus dem Quell-Lager entnommen, noch in keinem Ziel). `unloading`: am Ziel,
+ * kurz vor der Einlagerung. `delivered`: eingelagert (der Transport wird danach
+ * entfernt).
+ */
+export type InventoryTransferStatus = 'loading' | 'in_transit' | 'unloading' | 'returning' | 'delivered';
+
+/**
+ * Ein manueller Lagertransport vom lokalen Betriebslager zu einem Zielgebäude
+ * (Lagerhaus/Rathaus = Zentrallager). Baut auf demselben Logistikmodell wie die
+ * Stadtarbeit auf (`activities/logistics.ts` + `routeAnalysis.ts`) — KEIN zweites
+ * System (§8). Erst mit der Einlagerung am Ziel wird die Ware netzwerkweit/global
+ * verfügbar (§7.2: lokal vorhandene Ressourcen sind nicht automatisch überall
+ * nutzbar). Persistiert bewusst nur Skalare; die Straßen-Polyline für die
+ * 3D-Fahrt wird deterministisch aus dem Straßengraph rekonstruiert (Slim-Save).
+ */
+export interface InventoryTransfer {
+  id: string;
+  sourceBuildingId: BuildingInstanceId;
+  /** Physisches Ziel der Fahrt (Gebäude mit Lagerkapazität). */
+  targetBuildingId: BuildingInstanceId;
+  resource: ResourceId;
+  /** Gesamte reservierte Menge — ggf. über mehrere Fahrzeugladungen (§ A5). */
+  amount: number;
+  /** Bereits am Ziel eingelagerte Teilmenge (Mehrfachladungen). */
+  delivered?: number;
+  /** Aktuell auf dem Fahrzeug befindliche Menge. */
+  onboard?: number;
+  /** Gewähltes Fahrzeug (Config-Katalog). */
+  vehicleId?: DriveVehicle;
+  status: InventoryTransferStatus;
+  /** Fortschritt der aktuellen Phase 0..1. */
+  progress: number;
+  /** Startzeitpunkt (ms Simulationszeit). */
+  startedAt: number;
+  /** Reine Fahrdauer der Strecke in ms (bei Erstellung aus Route/Fahrzeug fixiert). */
+  travelMs: number;
+  /** Streckenlänge in Kacheln (Anzeige, bei Erstellung fixiert). */
+  distanceTiles: number;
+}
+
+/**
+ * Gesamtzustand des aktiven Betriebssystems (Save v17, optional/additiv). Alte
+ * Saves ohne dieses Feld bleiben gültig; der Controller initialisiert lazily.
+ * `transfers` kam mit Save v18 (Phase A5) hinzu und ist ebenfalls optional.
+ */
+export interface OperationsState {
+  /** Lokales Lager je Betrieb (Key = buildingId). */
+  inventories: Record<BuildingInstanceId, BuildingInventory>;
+  /** Arbeiterzustände je Betrieb. */
+  workers: Record<BuildingInstanceId, BuildingWorkerState[]>;
+  /** Aktiver Auftrag je Betrieb. */
+  active: Record<BuildingInstanceId, ActiveBuildingOperation>;
+  /** Abweichungen der Ressourcenknoten (Key = NodeId `"x,y"`). */
+  nodeDeltas: Record<string, ResourceNodeDelta>;
+  /** Laufende Lagertransporte (Key = transferId, Save v18). */
+  transfers?: Record<string, InventoryTransfer>;
+}
+
 export interface GameState {
   schemaVersion: number;
   meta: {
@@ -257,6 +390,11 @@ export interface GameState {
   buffs: ActiveBuff[];
   events: ActiveEvent[];
   activities: ActivitiesState;
+  /**
+   * Aktives Betriebssystem (§ Active Operations 2.0, Save v17). Optional/additiv:
+   * fehlt in Alt-Saves und wird lazily initialisiert. Siehe `OperationsState`.
+   */
+  operations?: OperationsState;
   stats: GameStats;
   nextId: number;
 }

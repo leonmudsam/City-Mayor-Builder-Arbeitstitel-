@@ -1,38 +1,34 @@
-# Terrain-Material-Matrix 5.0
+# Terrain Material Matrix 6.1
 
-Stand: 21. Juli 2026
+Alle Farbtexturen sind 2048×2048, kachelbar und über
+`terrainTextureUrl()` drop-in-fähig. Fehlt eine Datei, bleibt die
+Vertexfarbpalette aktiv. Zusatzmaps werden im linearen Farbraum geladen.
 
-Die aktive Pipeline mischt Base-Color-Texturen und Vertexfarben im vorhandenen
-Terrainmaterial. Berg-/Klippenflächen nutzen Weltkoordinaten-Triplanar. Eigene
-Normal-, Roughness-, AO- und Height-Maps sind als nächste Drop-in-Stufe offen;
-bis dahin liefert das bestehende `MeshStandardMaterial` robuste Standardwerte.
+| Zone | Aktive Basis | Übergänge/Varianten | Projektion | Zusatzmaps |
+|---|---|---|---|---|
+| Frische Wiese | `grass_meadow_fresh` | `grass_meadow_dark`, `grass_meadow_dry`, `grass_soft_ground`, `grass_wildflowers`, `grass_trampled`, `grass_wet` | World-space De-Tile | Normal, Roughness, AO |
+| Wald | `forest_floor_moss` | `forest_floor_needles`, `forest_floor_leaves`, `forest_floor_dark_soil`, `forest_floor_roots`, `forest_edge_grass` | World-space De-Tile | AO; Normal/Roughness vorhanden |
+| Fruchtbares Tal | `fertile_valley_ground` | `coast_mud_fertile` | World-space De-Tile | über Materialbibliothek vorbereitet |
+| Trockene Ebene | `dry_steppe` | `grass_meadow_dry` | World-space De-Tile | über Materialbibliothek vorbereitet |
+| Moor | `swamp_mud` | `moor_heather_ground`, `grass_mossy` | World-space De-Tile | vorhandenes visuelles Profil, kein Gameplayeffekt |
+| Flaches Ufer | `coast_shore_accessible` | `coast_sand_wet`, `coast_gravel_stylized`, `coast_mud_fertile` | World-space, Ufermaske | Normal, Roughness, AO |
+| Gebirgsfuß | `mountain_granite_base` | `mountain_scree`, `mountain_moss` | triplanar | Normal, Roughness, AO |
+| Steilflanke | `mountain_cliff_faceted` | `mountain_granite_dark`, `mountain_wet_rock` | triplanar, hanggewichtet | Normal, Roughness, AO |
+| Grat | `mountain_strata` | `mountain_granite_light` | triplanar, Höhe + Macro-Noise | Basis-PBR vorhanden |
+| Gipfel | `mountain_snow` | Fels bleibt an steilen Stellen sichtbar | World-space | vorhandene Materialbibliothek |
 
-| Biom / Schicht | Aktive Base Color | Normal | Roughness | Sekundärmaterial | Höhen-/Hangregel |
-|---|---|---|---|---|---|
-| Grasland | `grass/grass_meadow.png` | offen | Materialstandard | Blumen-/Trockenvariation | flach bis sanft; Makrorauschen bricht Wiederholung |
-| Wald | `forest/forest_floor.png` | offen | Materialstandard | Gras an Waldrändern | Terrain-ID plus Waldprofil; Vegetation erzeugt Lesbarkeit |
-| Fruchtbares Tal | `farm/farm_soil.png` | offen | Materialstandard | Wiese | auf fruchtbaren Terrain-IDs; warme Regionsfärbung |
-| Trockene Ebene | `grass/terrain_grass_dry.png` | offen | Materialstandard | Fels und Wiese | Profilgewicht auf vorhandenen Ebenen |
-| Rote Wüste | `desert/desert_sand_red.png` | offen | Materialstandard | trockene Ebene, Küste | weiches Profil Region 9; Vegetation stark reduziert |
-| Sumpf | `swamp/swamp_mud.png` | offen | Materialstandard | Waldboden, Ufer | weiches Profil Region 29; Schilf/Totholz bevorzugt |
-| Sandküste | bestehende Sandtextur | offen | Materialstandard | Kiesküste | Küstenmaske und Regionsprofil |
-| Kies-/Felsküste | `coast/coast_pebbles.png` | offen | Materialstandard | Sand, Stein | stärker an Kaps/Klippenprofilen |
-| Stein | bestehende Steintextur | offen | Materialstandard | Klippe | Terrain-/Höhengewicht |
-| Klippe | bestehende Klippentextur | offen | Materialstandard | Bergbasis | Weltkoordinaten-Triplanar bei steilen Normalen |
-| Bergfels | `mountain/mountain_rock_base.png` | offen | Materialstandard | Klippe, Schnee | Triplanar; alpine Profile erhöhen den Anteil |
-| Schnee | `mountain/mountain_snow.png` | offen | Materialstandard | Bergfels | Höhe/Alpinprofil und obere Hangzone |
-| Fluss | bestehendes Wasser + Flow-Overlay | nicht zutreffend | Wassermaterial | Ufer/Kies | gebündelte animierte Fläche folgt Nachbarachse |
-| See/Ozean | bestehendes Wassermaterial | shaderbasiert | shaderbasiert | Küstenschaum | drei Wellenrichtungen plus Makromodulation |
+## Shaderregeln
 
-## Importregeln
+- Küste: direkte `shoreTypeGrid`-/`waterfrontBuildableGrid`-Daten überstimmen
+  die großräumige Regionsfärbung.
+- Gebirge: Steigung blendet zuerst facettierte Klippe, danach Höhe Granit,
+  Schichten und erst auf den höchsten Flächen Schnee.
+- Wald: Waldboden folgt dem gebackenen Waldanteil; die AO-Map verstärkt nur
+  dezent die Tiefe, damit dunkle Flächen nicht zulaufen.
+- Distanz: Farbmuster bleiben mittel-/fernsichtbar. Normaldetail ist auf die
+  Nahsicht begrenzt; instanziertes Mikrogras endet bei Distanz 105.
+- Wetter: Regen setzt `uGroundWetness`, dunkelt um etwa 5–9 Prozent ab und
+  reduziert Roughness kontrolliert.
 
-- Ziel für neue Materialpakete: 2048×2048, nahtlos, ohne eingebrannte Schatten,
-  Schrift, Rahmen oder Perspektive.
-- Tatsächliche v0.70-KI-Quellen sind 1254×1254 und werden im
-  `WORLD_ASSET_MANIFEST.md` exakt so ausgewiesen.
-- Dateinamen und Kategorien stehen zentral in
-  `src/assets/terrainTextureManifest.ts`; fehlende Dateien dürfen den Renderer
-  nicht zum Absturz bringen.
-- PBR-Begleitmaps erst aktivieren, wenn Shader, Registry, Dokumentation und
-  Screenshot-Smoke gemeinsam angepasst wurden.
-
+Die vollständige, testgesicherte Dateiliste und die Bildprompts stehen in
+`docs/TERRAIN_TEXTURES.md`.

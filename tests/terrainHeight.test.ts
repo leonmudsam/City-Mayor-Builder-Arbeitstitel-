@@ -1,13 +1,13 @@
 import { describe, it, expect } from 'vitest';
 import { terrainHeightAt, WATER_LEVEL } from '../src/renderer/three/terrainHeight.ts';
-import { terrainAt } from '../src/game/config/startRegion.config.ts';
+import { bakedSurfaceAt, terrainAt } from '../src/game/config/startRegion.config.ts';
 
 // The height field is the single source of truth for placement, so guard its
 // shape: mountains tower, water dips below the shoreline, buildable land stays
 // gentle (so buildings sit cleanly), and the surface is continuous (no cliffs
 // between adjacent sample points on flat land).
 
-// Insel-Welt (v10): 384×384 Kacheln aus dem GLB-Bake — die Scans laufen über
+// Neue Insel-Welt: 512×512 Kacheln aus dem GLB-Bake — die Scans laufen über
 // das ganze Brett (Schrittweite 1 wäre 147k Iterationen; früh gefundene Treffer
 // halten die Laufzeit trotzdem klein).
 import { WORLD_TILES } from '../src/game/config/startRegion.config.ts';
@@ -31,7 +31,7 @@ function findOpenGrass(): { x: number; y: number } {
       let open = true;
       for (let dx = -2; dx <= 2 && open; dx++) {
         for (let dy = -2; dy <= 2; dy++) {
-          if (terrainAt(x + dx, y + dy) !== 'grass') {
+          if (terrainAt(x + dx, y + dy) !== 'grass' || !bakedSurfaceAt(x + dx, y + dy).buildable) {
             open = false;
             break;
           }

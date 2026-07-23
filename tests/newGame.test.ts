@@ -23,9 +23,9 @@ describe('new game (Insel-Welt v11, organische Regionen)', () => {
     const townHall = controller.state.buildings['b_townhall'];
     expect(townHall?.status).toBe('active');
     expect(controller.state.world.districts['main']?.centerBuildingId).toBe('b_townhall');
-    // 5 Startstraßen entlang der Rathaus-Südkante (§ Gebäudesystem 2.0).
-    expect(startRegionConfig.startRoads.length).toBe(5);
-    expect(controller.derived.roadNetwork.size).toBe(5);
+    // Zwei verlängerbare Achsen mit zusammen 16 Startstraßen (§ Welt 6.1).
+    expect(startRegionConfig.startRoads.length).toBe(16);
+    expect(controller.derived.roadNetwork.size).toBe(16);
   });
 
   it('starts with configured resources and no population', () => {

@@ -9,6 +9,7 @@ import {
   subscribeCameraSettings,
   type CameraSettings,
 } from '../../renderer/three/cameraSettings.ts';
+import { GraphicsQualityControl } from './PerformancePanel.tsx';
 import { t } from '../../i18n/index.ts';
 
 declare const __APP_VERSION__: string;
@@ -39,6 +40,8 @@ export function SettingsPanel({
       </div>
 
       <CameraSettingsControls />
+
+      <GraphicsQualityControl />
 
       <button
         className="btn-secondary"
@@ -98,7 +101,7 @@ export function SettingsPanel({
       >
         <Gift size={16} /> {t('ui.reset.bonus')}
       </button>
-      {debugTools && (
+      {import.meta.env.DEV && debugTools && (
         <button className="btn-secondary" onClick={() => setPanel('debug')}>
           <Bug size={16} /> {t('ui.debug.title')}
         </button>

@@ -1,4 +1,4 @@
-import { ArrowDownRight, ArrowUpRight, Building2, Lock, Ruler, Waves, X } from 'lucide-react';
+import { Anchor, ArrowDownRight, ArrowUpRight, Building2, Lock, Ruler, Waves, X } from 'lucide-react';
 import { useGame, useUiStore } from '../../state/store.ts';
 import { formatMoney, t } from '../../i18n/index.ts';
 import { eventImage, uiImage } from '../../assets/registry.ts';
@@ -37,12 +37,18 @@ export function RegionDialog() {
   if (regionDialog === undefined) return null;
   const def = game.config.regions.get(regionDialog);
   if (!def) return null;
-  const cost = game.getRegionCost(regionDialog);
+  const rawCost = game.getRegionCost(regionDialog);
   const levelOk = game.state.level.current >= def.unlockLevel;
   const prereqsMissing = (def.prerequisiteRegionIds ?? []).filter(
     (p) => game.state.world.regions[String(p)]?.status !== 'unlocked',
   );
-  const affordable = game.canAffordCost({ money: cost });
+  // § Final World Compaction 8.1 §6: die erste Erweiterung ab Level 3 ist gratis.
+  const isFree = game.isFreeRegionExpansionAvailable(regionDialog);
+  const cost = isFree ? 0 : rawCost;
+  // § Final World Compaction 8.1: Archipel-Erschließung — Land- oder Seezugang
+  // (letzterer verlangt einen aktiven Hafen). Nur relevant, wenn das Level passt.
+  const blocker = levelOk && prereqsMissing.length === 0 ? game.getRegionUnlockBlocker(regionDialog) : undefined;
+  const affordable = isFree || game.canAffordCost({ money: cost });
   // River district: only offered on a locked river landscape at the right level.
   const district = game.canFoundDistrict(regionDialog);
   const districtAffordable = game.canAffordCost(district.cost);
@@ -90,6 +96,22 @@ export function RegionDialog() {
             {t('ui.region.prereqs')}
             {': '}
             {prereqsMissing.map((p) => t(game.config.regions.get(p)?.nameKey ?? '')).join(', ')}
+          </p>
+        )}
+        {isFree && (
+          <p className="region-free-hint">
+            <span className="region-free-badge">🎁 {t('ui.region.free_badge')}</span>
+            {t('ui.region.free_hint')}
+          </p>
+        )}
+        {blocker === 'needs_harbor' && (
+          <p className="region-blocker-hint">
+            <Anchor size={14} /> {t('ui.region.needs_harbor')}
+          </p>
+        )}
+        {blocker === 'not_adjacent' && (
+          <p className="region-blocker-hint">
+            <Waves size={14} /> {t('ui.region.not_adjacent')}
           </p>
         )}
 
@@ -150,7 +172,14 @@ export function RegionDialog() {
         {def.unlockable && (
           <>
             <p className="sector-price">
-              {t('ui.cost')}: {formatMoney(cost)} {t('resource.money')}
+              {t('ui.cost')}:{' '}
+              {isFree ? (
+                <strong className="region-price-free">{t('ui.region.free_cost')}</strong>
+              ) : (
+                <>
+                  {formatMoney(cost)} {t('resource.money')}
+                </>
+              )}
             </p>
             <div className="dialog-buttons">
               <button className="btn-secondary" onClick={() => openRegionDialog(undefined)}>
@@ -158,7 +187,7 @@ export function RegionDialog() {
               </button>
               <button
                 className="btn-primary"
-                disabled={!levelOk || !affordable || prereqsMissing.length > 0}
+                disabled={!levelOk || !affordable || prereqsMissing.length > 0 || blocker !== undefined}
                 onClick={() => {
                   const result = game.unlockRegion(regionDialog);
                   if (result.ok) {

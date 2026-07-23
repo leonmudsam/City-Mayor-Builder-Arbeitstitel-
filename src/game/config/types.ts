@@ -5,6 +5,7 @@ import type {
   NeedId,
   QuestId,
   ResourceId,
+  ResourceNodeType,
   TerrainType,
   DriveVehicle,
 } from '../types.ts';
@@ -124,6 +125,58 @@ export interface LocationBonusDef {
  */
 export type BuildingSizeClass = 'XS' | 'S' | 'M' | 'L' | 'XL' | 'XXL';
 
+export type InfrastructureMode = 'road' | 'water' | 'rail' | 'air';
+
+/** Zweigeteilte Hafenfläche; das Gebäudemodell zeigt bei 0° mit +Z zum Land. */
+export interface WaterfrontFootprint {
+  landWidth: number;
+  landDepth: number;
+  waterWidth: number;
+  waterDepth: number;
+  shorelineTolerance: number;
+  minimumWaterDepth: number;
+}
+
+/**
+ * Werte einer aktiven Betriebs-Ausbaustufe (§ Active Operations 2.0, §5). Index
+ * im `BuildingOperationProfile.stages`-Array = `upgradeLevel`; fehlt der Index,
+ * gilt der letzte Eintrag. Höhere Stufen verbessern nicht pauschal „+X/min",
+ * sondern Arbeiter, Tempo, Traglast und lokales Lager.
+ */
+export interface BuildingOperationStage {
+  /** Anzahl gleichzeitiger Arbeiter. */
+  workerSlots: number;
+  /** Laufgeschwindigkeit in Kacheln pro Minute. */
+  movementSpeed: number;
+  /** Bearbeitungstempo in Ressourceneinheiten pro Minute je Arbeiter. */
+  workSpeed: number;
+  /** Maximal getragene Menge je Weg. */
+  carryCapacity: number;
+  /** Lokale Lagerkapazität des Betriebs. */
+  storageCapacity: number;
+}
+
+/**
+ * Macht ein Gebäude zu einem **aktiven Betrieb** (§2): sein passiver
+ * `produce`-Effekt wird abgeschaltet (Tick UND Derived), stattdessen gewinnen
+ * Arbeiter die Ressource an Ressourcenknoten und lagern sie im lokalen Lager ein.
+ * Config-only; die Logik lebt in `src/game/operations/**`.
+ */
+export interface BuildingOperationProfile {
+  /** Aktiv gewonnene Ressource (Referenzschnitt: 'wood'). */
+  resource: ResourceId;
+  /** Bearbeiteter Knotentyp (Referenzschnitt: 'tree'). */
+  nodeType: ResourceNodeType;
+  /** Terrain, das Ressourcenknoten trägt (tree ↔ forest). */
+  nodeTerrain: TerrainType;
+  /** Effizientes Arbeitsgebiet: Chebyshev-Radius um die Grundfläche. */
+  efficientRadius: number;
+  /** Maximale Einsatzentfernung (≥ efficientRadius). */
+  maxRadius: number;
+  /** Werte je Ausbaustufe (Index = upgradeLevel). */
+  stages: BuildingOperationStage[];
+}
+
 export interface BuildingDef {
   id: BuildingDefId;
   category: BuildingCategory;
@@ -132,12 +185,22 @@ export interface BuildingDef {
   /** Größenklasse (Pflicht, § Gebäudesystem 2.0) — muss zu `size` passen. */
   sizeClass: BuildingSizeClass;
   requiresRoad: boolean;
+  /** Unterstützte Netze. Aktuell werden Straße und Wasser ausgewertet. */
+  infrastructureModes?: InfrastructureMode[];
+  /** Zusätzlicher Wasser-Footprint für Anleger/Häfen. */
+  waterfront?: WaterfrontFootprint;
   unlockLevel: number;
   cost: Partial<Record<ResourceId, number>>;
   constructionSec: number;
   xpReward: number;
   effects: BuildingEffect[];
   upgrades?: BuildingUpgradeDef[];
+  /**
+   * Aktiver Betrieb (§ Active Operations 2.0): schaltet den passiven
+   * `produce`-Pfad ab und übergibt Produktion an Arbeiter + Ressourcenknoten +
+   * lokales Lager. Nur Gebäude MIT diesem Feld sind aktive Betriebe.
+   */
+  operation?: BuildingOperationProfile;
   locationBonus?: LocationBonusDef;
   /**
    * Per-level build cap (production buildings). Ascending breakpoints: the
@@ -585,6 +648,15 @@ export interface RegionDef {
    * Phase A4; 1/undefined = neutral.
    */
   roadCostFactor?: number;
+  /**
+   * § Final World Compaction 8.1: Die Region hängt NICHT über Land am
+   * bestehenden Stadtgebiet, sondern nur über eine schmale Wasserstraße
+   * (`BAKED_REGIONS[].seaAdjacent`). Sie lässt sich erst erschließen, wenn in
+   * einer bereits freigeschalteten, seebenachbarten Region ein echter Hafen
+   * steht. Nutzt die vorhandenen Gebäude `dock_small`/`river_port` — es gibt
+   * keine zweite Regions- oder Schifffahrtslogik.
+   */
+  requiresHarbor?: boolean;
 }
 
 // ---- Balancing ------------------------------------------------------------

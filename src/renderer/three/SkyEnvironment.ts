@@ -207,14 +207,14 @@ export class SkyEnvironment {
     sc.right = 140;
     sc.top = 140;
     sc.bottom = -140;
-    // § MVP4 P3: Auf der 384er-Insel folgt das ±140-Schatten-Fenster dem
+    // Das lokale ±140-Schatten-Fenster folgt auch auf der 512²-Welt dem
     // Kamera-Fokus (Sonne + Target werden je Frame mitgeführt) — vorher war es
     // fix am Ursprung verankert und die Stadt läge außerhalb.
     this.scene.add(this.hemi, this.ambient, this.sun, this.sun.target);
 
     // --- fog + background fallback (behind the dome, in case it is ever removed).
-    // § MVP4 P3: Distanzen auf die 384er-Insel skaliert — der Insel-Überblick
-    // (Kameradistanz ~480) bleibt klar, nur der Horizont hinter dem Ozean
+    // Distanzen auf die 512²-Welt skaliert — der Insel-Überblick
+    // (Kameradistanz ~620) bleibt lesbar, nur der Horizont hinter dem Ozean
     // verläuft atmosphärisch (kein "milchiges" Gesamtbild mehr).
     this.fog = new Fog(0x9fd0ef, 520, 1600);
     this.scene.fog = this.fog;

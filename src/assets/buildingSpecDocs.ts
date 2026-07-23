@@ -200,7 +200,7 @@ export function buildBuildingsSpec(buildings: readonly BuildingDef[], levels: re
     .filter((b) => b.category !== 'roads')
     .map(
       (b) =>
-        `| ${nameOf(b.nameKey)} | \`${b.id}\` | ${CATEGORY_LABEL[b.category] ?? b.category} | ${b.sizeClass} | ${b.size.w}×${b.size.h} | L${b.unlockLevel} | ${stageCount(b)} |`,
+        `| ${nameOf(b.nameKey)} | \`${b.id}\` | ${CATEGORY_LABEL[b.category] ?? b.category} | ${b.sizeClass} | ${b.waterfront ? `Land ${b.waterfront.landWidth}×${b.waterfront.landDepth} + Wasser ${b.waterfront.waterWidth}×${b.waterfront.waterDepth}` : `${b.size.w}×${b.size.h}`} | L${b.unlockLevel} | ${stageCount(b)} |`,
     )
     .join('\n');
 
@@ -218,7 +218,7 @@ export function buildBuildingsSpec(buildings: readonly BuildingDef[], levels: re
           const budget = BUILDING_SIZE_BUDGETS[b.sizeClass];
           return (
             `### ${nameOf(b.nameKey)} — \`${b.id}\`\n\n` +
-            `- **Größenklasse:** ${b.sizeClass} (${SIZE_LEGEND[b.sizeClass]}) · **Footprint:** ${b.size.w}×${b.size.h} (fix über alle Stufen)\n` +
+            `- **Größenklasse:** ${b.sizeClass} (${SIZE_LEGEND[b.sizeClass]}) · **Footprint:** ${b.waterfront ? `Land ${b.waterfront.landWidth}×${b.waterfront.landDepth} + Wasser ${b.waterfront.waterWidth}×${b.waterfront.waterDepth} (rotationsstabiler ${b.size.w}×${b.size.h}-Bauplot)` : `${b.size.w}×${b.size.h} (fix über alle Stufen)`}\n` +
             `- **Asset-Budget:** ${budget.triBudget}, ${budget.textureSize}, ${budget.materials}\n` +
             `- **Ab Level:** ${b.unlockLevel} · **Stufen:** ${stageCount(b)} · **Kategorie:** ${CATEGORY_LABEL[b.category] ?? b.category}\n` +
             `- **Benötigte GLBs:** ${requiredGlbs(b)}${nodeLine}\n` +
@@ -245,7 +245,7 @@ export function buildBuildingsSpec(buildings: readonly BuildingDef[], levels: re
   return (
     `# Gebäude — verbindliche Tabelle (Gebäudesystem 2.0)\n\n` +
     `${GEN_BANNER}\n\n` +
-    `Footprints sind **fix über alle Stufen** und **quadratisch** (Nutzer-Entscheidung) — eine Stufe ` +
+    `Bauplots sind **fix über alle Stufen** und grundsätzlich quadratisch; Waterfront-Gebäude deklarieren darin zusätzlich einen rechteckigen Land- und Wasser-Footprint für kardinale Rotation — eine Stufe ` +
     `verdichtet dasselbe Grundstück sichtbar, ändert aber nie die Fläche. Die 3D-Prompts je Stufe stehen ` +
     `generiert in \`src/assets/models/buildings/PROMPTS.md\`.\n\n` +
     `## Größenklassen & Asset-Budgets\n\n` +

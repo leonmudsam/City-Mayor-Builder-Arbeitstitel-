@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Clock, Hammer, Lock, Sparkles, X } from 'lucide-react';
+import { Anchor, Clock, Hammer, Lock, Sparkles, X } from 'lucide-react';
 import { useGame, useUiStore } from '../../state/store.ts';
 import type { BuildingCategory, NeedId, ResourceId } from '../../game/types.ts';
 import type { BuildingDef } from '../../game/config/types.ts';
@@ -157,9 +157,21 @@ export function BuildMenu() {
             <h3>{t(inspected.nameKey)}</h3>
             <div className="build-preview-meta">
               <span>{t(`category.${inspected.category}`)}</span>
-              <b>{inspected.size.w}×{inspected.size.h}</b>
+              <b>{inspected.waterfront
+                ? `${inspected.waterfront.landWidth}×${inspected.waterfront.landDepth}`
+                : `${inspected.size.w}×${inspected.size.h}`}</b>
             </div>
             <p>{effectSummary(inspected) || t('ui.build.site_hint')}</p>
+            {inspected.waterfront && (
+              <div className="build-preview-bonus">
+                <Anchor size={14} />
+                {t('ui.build.waterfront_requirement', {
+                  land: `${inspected.waterfront.landWidth}×${inspected.waterfront.landDepth}`,
+                  water: `${inspected.waterfront.waterWidth}×${inspected.waterfront.waterDepth}`,
+                  depth: inspected.waterfront.minimumWaterDepth,
+                })}
+              </div>
+            )}
             {(inspected.upgrades?.length ?? 0) > 0 && (
               <div className="build-preview-stages" aria-label="Gebäudestufen">
                 {Array.from({ length: (inspected.upgrades?.length ?? 0) + 1 }, (_, stage) => (
@@ -233,7 +245,9 @@ function BuildCard({
           never overlapped by text (text lives in the separate body below). */}
       <div className="build-card-media">
         <BuildingArt id={def.id} category={def.category} px={128} />
-        <span className="build-card-size">{def.size.w}×{def.size.h}</span>
+        <span className="build-card-size">{def.waterfront
+          ? `${def.waterfront.landWidth}×${def.waterfront.landDepth}`
+          : `${def.size.w}×${def.size.h}`}</span>
         {isNew && <span className="build-card-new">{t('ui.new')}</span>}
         {major && <span className="build-card-badge major">{t('ui.major_project')}</span>}
         {firstFree && !locked && <span className="build-card-badge free">{t('ui.first_build_free')}</span>}
@@ -262,6 +276,16 @@ function BuildCard({
           )}
         </div>
         {highlight && <div className="build-card-effect">{highlight}</div>}
+        {def.waterfront && (
+          <div className="build-card-bonus">
+            <Anchor size={12} />
+            {t('ui.build.water_footprint', {
+              width: def.waterfront.waterWidth,
+              depth: def.waterfront.waterDepth,
+              minimum: def.waterfront.minimumWaterDepth,
+            })}
+          </div>
+        )}
         {def.locationBonus && (
           <div className="build-card-bonus">
             <Sparkles size={12} />

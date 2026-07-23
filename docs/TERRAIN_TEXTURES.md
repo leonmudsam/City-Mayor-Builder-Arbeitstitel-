@@ -1,4 +1,4 @@
-# Terrain-Texturen — Splatmap-Materialsystem (v0.42, Terrain System V2)
+# Terrain-Texturen — Splatmap-Materialsystem (v0.73, Terrain 6.1)
 
 > **Auto-generiert** aus `src/assets/terrainTextureManifest.ts`. Nicht von Hand editieren.
 > Neue Texturen dazunehmen: Eintrag dort ergänzen, dann
@@ -7,7 +7,7 @@
 
 Ersetzt einzelne kleine 3D-Modelle (Gras, kleine Felsen, Erde) durch ein **Terrain-Materialsystem**: die Bodenoberfläche besteht aus nahtlos kachelbaren, weich ineinander überblendeten Texturen statt aneinandergereihten Objekten. 3D-Modelle bleiben für große, prägende Elemente reserviert (Bäume, Landmarken, große Felsen, Gebäude, Brücken — siehe `docs/3D_WORLD_ASSETS.md`).
 
-**Drop-in:** `.png`/`.webp`/`.jpg` in den unten angegebenen Ordner unter `src/assets/textures/terrain/…` legen, Dateiname exakt wie hier. Erkennung ist bereits vorbereitet (`terrainTextureUrl()`); die Renderer-Anbindung an den Splatmap-Shader folgt in einer eigenen Phase (siehe „Splatmap-Konzept" unten).
+**Drop-in:** `.png`/`.webp`/`.jpg` in den unten angegebenen Ordner unter `src/assets/textures/terrain/…` legen, Dateiname exakt wie hier. Erkennung ist zentral über `terrainTextureUrl()`; fehlende Dateien fallen auf die gebackene Vertexpalette zurück, ohne die Welt zu blockieren.
 
 ## Gras
 
@@ -17,7 +17,7 @@ Ersetzt einzelne kleine 3D-Modelle (Gras, kleine Felsen, Erde) durch ein **Terra
 Seamless tileable stylized terrain texture for a premium low-poly city-builder game. Soft painterly look, natural color variation, subtle height variation, no baked lighting, no shadows, top-down orthographic view, perfect seamless edges, PBR-ready — lush green meadow grass, subtle blade detail, small clover patches, gentle color variation, no dirt patches
 ```
 
-**Spec:** Ordner `textures/terrain/grass/` · 1024×1024 · nahtlos kachelbar · Stil: painterly, weich, leicht handgemalt · Palette: sattes Mittelgrün mit helleren/dunkleren Flecken · Einsatz: Standard-Bauland- und Grasland-Basis · Material: organisch, matt, leicht rau · Mischverhalten: Basis-Layer der Ebene (+0.3 bis +1.5); blendet mit terrain_earth_light/terrain_grass_dry an Rändern · Maps: Normal ✓ · Roughness ✓ · AO – · Height ✓ · Detailstufe: nah · Priorität: **Pflicht** · Biome: Grasland
+**Spec:** Ordner `textures/terrain/grass/` · 2048×2048 · nahtlos kachelbar · Stil: painterly, weich, leicht handgemalt · Palette: sattes Mittelgrün mit helleren/dunkleren Flecken · Einsatz: Standard-Bauland- und Grasland-Basis · Material: organisch, matt, leicht rau · Mischverhalten: Basis-Layer der Ebene (+0.3 bis +1.5); blendet mit terrain_earth_light/terrain_grass_dry an Rändern · Maps: Normal ✓ · Roughness ✓ · AO ✓ · Height ✓ · Detailstufe: nah–fern · Priorität: **Pflicht** · Biome: Grasland
 
 ### `terrain_grass_dark.png`
 
@@ -25,7 +25,7 @@ Seamless tileable stylized terrain texture for a premium low-poly city-builder g
 Seamless tileable stylized terrain texture for a premium low-poly city-builder game. Soft painterly look, natural color variation, subtle height variation, no baked lighting, no shadows, top-down orthographic view, perfect seamless edges, PBR-ready — shaded dark green forest-edge grass, cooler undertone, subtle moss speckles, no dirt patches
 ```
 
-**Spec:** Ordner `textures/terrain/grass/` · 1024×1024 · nahtlos kachelbar · Stil: painterly, schattig · Palette: dunkles Waldgrün, kühler Unterton · Einsatz: Waldrand, Nordhänge, beschattete Flächen · Material: organisch, matt · Mischverhalten: blendet in terrain_moss/terrain_forest_floor am Waldrand · Maps: Normal ✓ · Roughness ✓ · AO – · Height ✓ · Detailstufe: nah · Priorität: **Empfohlen** · Biome: Mischwald
+**Spec:** Ordner `textures/terrain/grass/` · 2048×2048 · nahtlos kachelbar · Stil: painterly, schattig · Palette: dunkles Waldgrün, kühler Unterton · Einsatz: Waldrand, Nordhänge, beschattete Flächen · Material: organisch, matt · Mischverhalten: blendet in terrain_moss/terrain_forest_floor am Waldrand · Maps: Normal ✓ · Roughness ✓ · AO ✓ · Height ✓ · Detailstufe: nah–fern · Priorität: **Empfohlen** · Biome: Mischwald
 
 ### `terrain_grass_dry.png`
 
@@ -33,7 +33,7 @@ Seamless tileable stylized terrain texture for a premium low-poly city-builder g
 Seamless tileable stylized terrain texture for a premium low-poly city-builder game. Soft painterly look, natural color variation, subtle height variation, no baked lighting, no shadows, top-down orthographic view, perfect seamless edges, PBR-ready — dry sun-bleached grass, straw-yellow to olive tones, sparse patchy coverage, subtle wind-swept strokes
 ```
 
-**Spec:** Ordner `textures/terrain/grass/` · 1024×1024 · nahtlos kachelbar · Stil: painterly, warm · Palette: gelbgrün bis strohfarben · Einsatz: trockene Hügel, sonnige Hänge, Sommerlook · Material: organisch, matt, leicht struppig · Mischverhalten: blendet mit terrain_grass_01 bei Übergängen, dominiert auf steileren sonnigen Hängen · Maps: Normal ✓ · Roughness ✓ · AO – · Height ✓ · Detailstufe: nah · Priorität: **Empfohlen** · Biome: Grasland
+**Spec:** Ordner `textures/terrain/grass/` · 2048×2048 · nahtlos kachelbar · Stil: painterly, warm · Palette: gelbgrün bis strohfarben · Einsatz: trockene Hügel, sonnige Hänge, Sommerlook · Material: organisch, matt, leicht struppig · Mischverhalten: blendet mit terrain_grass_01 bei Übergängen, dominiert auf steileren sonnigen Hängen · Maps: Normal ✓ · Roughness ✓ · AO ✓ · Height ✓ · Detailstufe: nah–fern · Priorität: **Empfohlen** · Biome: Grasland
 
 ### `terrain_meadow.png`
 
@@ -41,7 +41,7 @@ Seamless tileable stylized terrain texture for a premium low-poly city-builder g
 Seamless tileable stylized terrain texture for a premium low-poly city-builder game. Soft painterly look, natural color variation, subtle height variation, no baked lighting, no shadows, top-down orthographic view, perfect seamless edges, PBR-ready — wildflower meadow, small scattered white/yellow/red flowers over green grass, natural clustering
 ```
 
-**Spec:** Ordner `textures/terrain/grass/` · 1024×1024 · nahtlos kachelbar · Stil: painterly, verspielt · Palette: Grün mit bunten Blütentupfern (Weiß/Gelb/Rot) · Einsatz: Wiesen, Parks, dekorative Grünflächen · Material: organisch, matt · Mischverhalten: Detail-Overlay auf terrain_grass_01, kein eigener Höhenbereich · Maps: Normal ✓ · Roughness ✓ · AO – · Height ✓ · Detailstufe: nah · Priorität: **Empfohlen** · Biome: Grasland
+**Spec:** Ordner `textures/terrain/grass/` · 2048×2048 · nahtlos kachelbar · Stil: painterly, verspielt · Palette: Grün mit bunten Blütentupfern (Weiß/Gelb/Rot) · Einsatz: Wiesen, Parks, dekorative Grünflächen · Material: organisch, matt · Mischverhalten: Detail-Overlay auf terrain_grass_01, kein eigener Höhenbereich · Maps: Normal ✓ · Roughness ✓ · AO ✓ · Height ✓ · Detailstufe: nah–fern · Priorität: **Empfohlen** · Biome: Grasland
 
 ### `terrain_moss.png`
 
@@ -49,7 +49,7 @@ Seamless tileable stylized terrain texture for a premium low-poly city-builder g
 Seamless tileable stylized terrain texture for a premium low-poly city-builder game. Soft painterly look, natural color variation, subtle height variation, no baked lighting, no shadows, top-down orthographic view, perfect seamless edges, PBR-ready — soft dense moss patch, deep green, slightly damp look, small texture bumps
 ```
 
-**Spec:** Ordner `textures/terrain/grass/` · 1024×1024 · nahtlos kachelbar · Stil: painterly, feucht · Palette: dunkles Moosgrün · Einsatz: feuchte Waldstellen, Felsfüße, Schatten · Material: organisch, weich, leicht glänzend · Mischverhalten: blendet zwischen terrain_grass_dark und terrain_forest_floor/terrain_rock · Maps: Normal ✓ · Roughness ✓ · AO – · Height ✓ · Detailstufe: nah · Priorität: **Optional** · Biome: Mischwald
+**Spec:** Ordner `textures/terrain/grass/` · 2048×2048 · nahtlos kachelbar · Stil: painterly, feucht · Palette: dunkles Moosgrün · Einsatz: feuchte Waldstellen, Felsfüße, Schatten · Material: organisch, weich, leicht glänzend · Mischverhalten: blendet zwischen terrain_grass_dark und terrain_forest_floor/terrain_rock · Maps: Normal ✓ · Roughness ✓ · AO ✓ · Height ✓ · Detailstufe: nah–fern · Priorität: **Optional** · Biome: Mischwald
 
 ### `grass_meadow.png`
 
@@ -57,7 +57,87 @@ Seamless tileable stylized terrain texture for a premium low-poly city-builder g
 Seamless tileable stylized terrain texture for a premium low-poly city-builder game. Soft painterly look, natural color variation, subtle height variation, no baked lighting, no shadows, top-down orthographic view, perfect seamless edges, PBR-ready — natural medium-green meadow grass with broad painterly variation, sparse tiny wildflower flecks and open breathing areas
 ```
 
-**Spec:** Ordner `textures/terrain/grass/` · 1024×1024 · nahtlos kachelbar · Stil: painterly stylized realism, weich und natuerlich · Palette: Mittelgruen, Oliv und Moos mit sehr kleinen cremefarbenen und blauen Bluetentupfern · Einsatz: hochwertige Graslandbasis und offene Lichtungen · Material: kurzes Wiesengras, organische Cluster, geringe Mikrounruhe · Mischverhalten: Basis-Layer der Ebene; trockenes Gras, Waldboden und fruchtbare Erde ueberblenden regional · Maps: Normal ✓ · Roughness ✓ · AO – · Height ✓ · Detailstufe: nah · Priorität: **Pflicht** · Biome: Grasland, Hügelland
+**Spec:** Ordner `textures/terrain/grass/` · 2048×2048 · nahtlos kachelbar · Stil: painterly stylized realism, weich und natuerlich · Palette: Mittelgruen, Oliv und Moos mit sehr kleinen cremefarbenen und blauen Bluetentupfern · Einsatz: hochwertige Graslandbasis und offene Lichtungen · Material: kurzes Wiesengras, organische Cluster, geringe Mikrounruhe · Mischverhalten: Basis-Layer der Ebene; trockenes Gras, Waldboden und fruchtbare Erde ueberblenden regional · Maps: Normal ✓ · Roughness ✓ · AO ✓ · Height ✓ · Detailstufe: nah–fern · Priorität: **Pflicht** · Biome: Grasland, Hügelland
+
+### `grass_meadow_fresh.png`
+
+```text
+Seamless tileable stylized terrain texture for a premium low-poly city-builder game. Soft painterly look, natural color variation, subtle height variation, no baked lighting, no shadows, top-down orthographic view, perfect seamless edges, PBR-ready — frische wiesenbasis und bauland, broad painterly low-poly shapes, restrained micro detail
+```
+
+**Spec:** Ordner `textures/terrain/grass/` · 2048×2048 · nahtlos kachelbar · Stil: stilisiert, low-poly-kompatibel, malerische Makroformen · Palette: sattes Mittelgrün · Einsatz: Frische Wiesenbasis und Bauland · Material: matt bis natürlich feucht, breite Formen statt Foto-Mikrorauschen · Mischverhalten: weltkoordinatenbasiert nach Biom, Höhe, Neigung und Wassernähe; Nahdetail per LOD · Maps: Normal ✓ · Roughness ✓ · AO ✓ · Height ✓ · Detailstufe: nah–fern · Priorität: **Pflicht** · Biome: Grasland
+
+### `grass_meadow_dark.png`
+
+```text
+Seamless tileable stylized terrain texture for a premium low-poly city-builder game. Soft painterly look, natural color variation, subtle height variation, no baked lighting, no shadows, top-down orthographic view, perfect seamless edges, PBR-ready — beschattete wiesen und waldsäume, broad painterly low-poly shapes, restrained micro detail
+```
+
+**Spec:** Ordner `textures/terrain/grass/` · 2048×2048 · nahtlos kachelbar · Stil: stilisiert, low-poly-kompatibel, malerische Makroformen · Palette: dunkles Waldgrün · Einsatz: Beschattete Wiesen und Waldsäume · Material: matt bis natürlich feucht, breite Formen statt Foto-Mikrorauschen · Mischverhalten: weltkoordinatenbasiert nach Biom, Höhe, Neigung und Wassernähe; Nahdetail per LOD · Maps: Normal ✓ · Roughness ✓ · AO ✓ · Height ✓ · Detailstufe: nah–fern · Priorität: **Pflicht** · Biome: Grasland, Mischwald
+
+### `grass_meadow_dry.png`
+
+```text
+Seamless tileable stylized terrain texture for a premium low-poly city-builder game. Soft painterly look, natural color variation, subtle height variation, no baked lighting, no shadows, top-down orthographic view, perfect seamless edges, PBR-ready — trockene sonnige wiesen, broad painterly low-poly shapes, restrained micro detail
+```
+
+**Spec:** Ordner `textures/terrain/grass/` · 2048×2048 · nahtlos kachelbar · Stil: stilisiert, low-poly-kompatibel, malerische Makroformen · Palette: Gelbgrün und Stroh · Einsatz: Trockene sonnige Wiesen · Material: matt bis natürlich feucht, breite Formen statt Foto-Mikrorauschen · Mischverhalten: weltkoordinatenbasiert nach Biom, Höhe, Neigung und Wassernähe; Nahdetail per LOD · Maps: Normal ✓ · Roughness ✓ · AO ✓ · Height ✓ · Detailstufe: nah–fern · Priorität: **Pflicht** · Biome: Trockene Ebene
+
+### `grass_soft_ground.png`
+
+```text
+Seamless tileable stylized terrain texture for a premium low-poly city-builder game. Soft painterly look, natural color variation, subtle height variation, no baked lighting, no shadows, top-down orthographic view, perfect seamless edges, PBR-ready — weicher übergangsboden in mulden, broad painterly low-poly shapes, restrained micro detail
+```
+
+**Spec:** Ordner `textures/terrain/grass/` · 2048×2048 · nahtlos kachelbar · Stil: stilisiert, low-poly-kompatibel, malerische Makroformen · Palette: gedecktes Grünbraun · Einsatz: Weicher Übergangsboden in Mulden · Material: matt bis natürlich feucht, breite Formen statt Foto-Mikrorauschen · Mischverhalten: weltkoordinatenbasiert nach Biom, Höhe, Neigung und Wassernähe; Nahdetail per LOD · Maps: Normal ✓ · Roughness ✓ · AO ✓ · Height ✓ · Detailstufe: nah–fern · Priorität: **Pflicht** · Biome: Grasland
+
+### `grass_mossy.png`
+
+```text
+Seamless tileable stylized terrain texture for a premium low-poly city-builder game. Soft painterly look, natural color variation, subtle height variation, no baked lighting, no shadows, top-down orthographic view, perfect seamless edges, PBR-ready — feuchte moosige lichtungen, broad painterly low-poly shapes, restrained micro detail
+```
+
+**Spec:** Ordner `textures/terrain/grass/` · 2048×2048 · nahtlos kachelbar · Stil: stilisiert, low-poly-kompatibel, malerische Makroformen · Palette: Moosgrün · Einsatz: Feuchte moosige Lichtungen · Material: matt bis natürlich feucht, breite Formen statt Foto-Mikrorauschen · Mischverhalten: weltkoordinatenbasiert nach Biom, Höhe, Neigung und Wassernähe; Nahdetail per LOD · Maps: Normal ✓ · Roughness ✓ · AO ✓ · Height ✓ · Detailstufe: nah–fern · Priorität: **Pflicht** · Biome: Mischwald, Sumpf
+
+### `grass_wildflowers.png`
+
+```text
+Seamless tileable stylized terrain texture for a premium low-poly city-builder game. Soft painterly look, natural color variation, subtle height variation, no baked lighting, no shadows, top-down orthographic view, perfect seamless edges, PBR-ready — seltene blütencluster in nahsicht, broad painterly low-poly shapes, restrained micro detail
+```
+
+**Spec:** Ordner `textures/terrain/grass/` · 2048×2048 · nahtlos kachelbar · Stil: stilisiert, low-poly-kompatibel, malerische Makroformen · Palette: Grün mit kleinen Farbtupfern · Einsatz: Seltene Blütencluster in Nahsicht · Material: matt bis natürlich feucht, breite Formen statt Foto-Mikrorauschen · Mischverhalten: weltkoordinatenbasiert nach Biom, Höhe, Neigung und Wassernähe; Nahdetail per LOD · Maps: Normal ✓ · Roughness ✓ · AO ✓ · Height ✓ · Detailstufe: nah–fern · Priorität: **Pflicht** · Biome: Grasland
+
+### `grass_trampled.png`
+
+```text
+Seamless tileable stylized terrain texture for a premium low-poly city-builder game. Soft painterly look, natural color variation, subtle height variation, no baked lighting, no shadows, top-down orthographic view, perfect seamless edges, PBR-ready — genutzte flächen und wegränder, broad painterly low-poly shapes, restrained micro detail
+```
+
+**Spec:** Ordner `textures/terrain/grass/` · 2048×2048 · nahtlos kachelbar · Stil: stilisiert, low-poly-kompatibel, malerische Makroformen · Palette: Oliv und Erdbraun · Einsatz: Genutzte Flächen und Wegränder · Material: matt bis natürlich feucht, breite Formen statt Foto-Mikrorauschen · Mischverhalten: weltkoordinatenbasiert nach Biom, Höhe, Neigung und Wassernähe; Nahdetail per LOD · Maps: Normal ✓ · Roughness ✓ · AO ✓ · Height ✓ · Detailstufe: nah–fern · Priorität: **Pflicht** · Biome: Grasland
+
+### `grass_wet.png`
+
+```text
+Seamless tileable stylized terrain texture for a premium low-poly city-builder game. Soft painterly look, natural color variation, subtle height variation, no baked lighting, no shadows, top-down orthographic view, perfect seamless edges, PBR-ready — regennasse uferwiesen, broad painterly low-poly shapes, restrained micro detail
+```
+
+**Spec:** Ordner `textures/terrain/grass/` · 2048×2048 · nahtlos kachelbar · Stil: stilisiert, low-poly-kompatibel, malerische Makroformen · Palette: tiefes nasses Grün · Einsatz: Regennasse Uferwiesen · Material: matt bis natürlich feucht, breite Formen statt Foto-Mikrorauschen · Mischverhalten: weltkoordinatenbasiert nach Biom, Höhe, Neigung und Wassernähe; Nahdetail per LOD · Maps: Normal ✓ · Roughness ✓ · AO ✓ · Height ✓ · Detailstufe: nah–fern · Priorität: **Pflicht** · Biome: Küste, Flusstal
+
+### `forest_edge_grass.png`
+
+```text
+Seamless tileable stylized terrain texture for a premium low-poly city-builder game. Soft painterly look, natural color variation, subtle height variation, no baked lighting, no shadows, top-down orthographic view, perfect seamless edges, PBR-ready — weicher wald-wiesen-übergang, broad painterly low-poly shapes, restrained micro detail
+```
+
+**Spec:** Ordner `textures/terrain/grass/` · 2048×2048 · nahtlos kachelbar · Stil: stilisiert, low-poly-kompatibel, malerische Makroformen · Palette: Waldgrün zu Wiesengrün · Einsatz: Weicher Wald-Wiesen-Übergang · Material: matt bis natürlich feucht, breite Formen statt Foto-Mikrorauschen · Mischverhalten: weltkoordinatenbasiert nach Biom, Höhe, Neigung und Wassernähe; Nahdetail per LOD · Maps: Normal ✓ · Roughness ✓ · AO ✓ · Height ✓ · Detailstufe: nah–fern · Priorität: **Pflicht** · Biome: Mischwald, Grasland
+
+### `dry_steppe.png`
+
+```text
+Seamless tileable stylized terrain texture for a premium low-poly city-builder game. Soft painterly look, natural color variation, subtle height variation, no baked lighting, no shadows, top-down orthographic view, perfect seamless edges, PBR-ready — warme trockene regionalbasis, broad painterly low-poly shapes, restrained micro detail
+```
+
+**Spec:** Ordner `textures/terrain/grass/` · 2048×2048 · nahtlos kachelbar · Stil: stilisiert, low-poly-kompatibel, malerische Makroformen · Palette: Oliv, Ocker und Stroh · Einsatz: Warme trockene Regionalbasis · Material: matt bis natürlich feucht, breite Formen statt Foto-Mikrorauschen · Mischverhalten: weltkoordinatenbasiert nach Biom, Höhe, Neigung und Wassernähe; Nahdetail per LOD · Maps: Normal ✓ · Roughness ✓ · AO ✓ · Height ✓ · Detailstufe: nah–fern · Priorität: **Pflicht** · Biome: Trockene Ebene
 
 ## Erde
 
@@ -67,7 +147,7 @@ Seamless tileable stylized terrain texture for a premium low-poly city-builder g
 Seamless tileable stylized terrain texture for a premium low-poly city-builder game. Soft painterly look, natural color variation, subtle height variation, no baked lighting, no shadows, top-down orthographic view, perfect seamless edges, PBR-ready — light dry beige-brown earth, fine grain, small pebbles, natural patchy texture
 ```
 
-**Spec:** Ordner `textures/terrain/earth/` · 1024×1024 · nahtlos kachelbar · Stil: painterly, trocken · Palette: helles Beige-Braun · Einsatz: Wegränder, trockene Übergangsflächen, Bauplatz-Erdaushub · Material: körnig, matt · Mischverhalten: Übergang zwischen terrain_grass_01 und terrain_sand/terrain_path · Maps: Normal ✓ · Roughness ✓ · AO – · Height ✓ · Detailstufe: nah · Priorität: **Pflicht** · Biome: Grasland
+**Spec:** Ordner `textures/terrain/earth/` · 2048×2048 · nahtlos kachelbar · Stil: painterly, trocken · Palette: helles Beige-Braun · Einsatz: Wegränder, trockene Übergangsflächen, Bauplatz-Erdaushub · Material: körnig, matt · Mischverhalten: Übergang zwischen terrain_grass_01 und terrain_sand/terrain_path · Maps: Normal ✓ · Roughness ✓ · AO ✓ · Height ✓ · Detailstufe: nah–mittel · Priorität: **Pflicht** · Biome: Grasland
 
 ### `terrain_earth_dark.png`
 
@@ -75,7 +155,7 @@ Seamless tileable stylized terrain texture for a premium low-poly city-builder g
 Seamless tileable stylized terrain texture for a premium low-poly city-builder game. Soft painterly look, natural color variation, subtle height variation, no baked lighting, no shadows, top-down orthographic view, perfect seamless edges, PBR-ready — rich dark fertile soil, fine grain, subtle organic clumps, no plants
 ```
 
-**Spec:** Ordner `textures/terrain/earth/` · 1024×1024 · nahtlos kachelbar · Stil: painterly, fruchtbar · Palette: dunkles Schokoladenbraun · Einsatz: fruchtbares Land, Beete, Übergang zu Feldern · Material: körnig, leicht feucht wirkend · Mischverhalten: Basis für die Feld-Texturen (terrain_field_*), blendet mit terrain_grass_01 · Maps: Normal ✓ · Roughness ✓ · AO – · Height ✓ · Detailstufe: nah · Priorität: **Pflicht** · Biome: Fruchtbares Land
+**Spec:** Ordner `textures/terrain/earth/` · 2048×2048 · nahtlos kachelbar · Stil: painterly, fruchtbar · Palette: dunkles Schokoladenbraun · Einsatz: fruchtbares Land, Beete, Übergang zu Feldern · Material: körnig, leicht feucht wirkend · Mischverhalten: Basis für die Feld-Texturen (terrain_field_*), blendet mit terrain_grass_01 · Maps: Normal ✓ · Roughness ✓ · AO ✓ · Height ✓ · Detailstufe: nah–mittel · Priorität: **Pflicht** · Biome: Fruchtbares Land
 
 ### `terrain_earth_wet.png`
 
@@ -83,7 +163,7 @@ Seamless tileable stylized terrain texture for a premium low-poly city-builder g
 Seamless tileable stylized terrain texture for a premium low-poly city-builder game. Soft painterly look, natural color variation, subtle height variation, no baked lighting, no shadows, top-down orthographic view, perfect seamless edges, PBR-ready — wet muddy dark soil, small puddle highlights, subtle sheen, natural uneven surface
 ```
 
-**Spec:** Ordner `textures/terrain/earth/` · 1024×1024 · nahtlos kachelbar · Stil: painterly, feucht/matschig · Palette: dunkles Braun mit leichtem Glanz · Einsatz: Uferzonen, Flussnähe, Regenpfützen-Look · Material: glänzend-matt, leicht reflektierend · Mischverhalten: Splatmap-Feuchtigkeitsregel: ersetzt trockene Erde direkt an Fluss/See/Meer · Maps: Normal ✓ · Roughness ✓ · AO – · Height ✓ · Detailstufe: nah · Priorität: **Empfohlen** · Biome: Fluss/See/Meer
+**Spec:** Ordner `textures/terrain/earth/` · 2048×2048 · nahtlos kachelbar · Stil: painterly, feucht/matschig · Palette: dunkles Braun mit leichtem Glanz · Einsatz: Uferzonen, Flussnähe, Regenpfützen-Look · Material: glänzend-matt, leicht reflektierend · Mischverhalten: Splatmap-Feuchtigkeitsregel: ersetzt trockene Erde direkt an Fluss/See/Meer · Maps: Normal ✓ · Roughness ✓ · AO ✓ · Height ✓ · Detailstufe: nah–mittel · Priorität: **Empfohlen** · Biome: Fluss/See/Meer
 
 ### `terrain_forest_floor.png`
 
@@ -91,7 +171,7 @@ Seamless tileable stylized terrain texture for a premium low-poly city-builder g
 Seamless tileable stylized terrain texture for a premium low-poly city-builder game. Soft painterly look, natural color variation, subtle height variation, no baked lighting, no shadows, top-down orthographic view, perfect seamless edges, PBR-ready — forest floor with pine needles, scattered leaves, small roots and twigs, earthy brown base
 ```
 
-**Spec:** Ordner `textures/terrain/earth/` · 1024×1024 · nahtlos kachelbar · Stil: painterly, natürlich · Palette: braun mit grünen/roten Laubtupfern · Einsatz: Waldboden unter Baumkronen · Material: organisch, körnig · Mischverhalten: blendet mit terrain_moss/terrain_grass_dark am Waldrand · Maps: Normal ✓ · Roughness ✓ · AO – · Height ✓ · Detailstufe: nah · Priorität: **Pflicht** · Biome: Mischwald
+**Spec:** Ordner `textures/terrain/earth/` · 2048×2048 · nahtlos kachelbar · Stil: painterly, natürlich · Palette: braun mit grünen/roten Laubtupfern · Einsatz: Waldboden unter Baumkronen · Material: organisch, körnig · Mischverhalten: blendet mit terrain_moss/terrain_grass_dark am Waldrand · Maps: Normal ✓ · Roughness ✓ · AO ✓ · Height ✓ · Detailstufe: nah–mittel · Priorität: **Pflicht** · Biome: Mischwald
 
 ### `terrain_farmland.png`
 
@@ -99,7 +179,55 @@ Seamless tileable stylized terrain texture for a premium low-poly city-builder g
 Seamless tileable stylized terrain texture for a premium low-poly city-builder game. Soft painterly look, natural color variation, subtle height variation, no baked lighting, no shadows, top-down orthographic view, perfect seamless edges, PBR-ready — even brown farmland soil base, ready for crops, subtle texture, no furrows yet
 ```
 
-**Spec:** Ordner `textures/terrain/earth/` · 1024×1024 · nahtlos kachelbar · Stil: painterly, rural · Palette: mittelbraun, gleichmäßig · Einsatz: Acker-Basisboden vor der Bepflanzung · Material: körnig, matt · Mischverhalten: Basis unter terrain_field_plowed/terrain_field_wheat/terrain_field_harvest · Maps: Normal ✓ · Roughness ✓ · AO – · Height ✓ · Detailstufe: nah · Priorität: **Pflicht** · Biome: Fruchtbares Land
+**Spec:** Ordner `textures/terrain/earth/` · 2048×2048 · nahtlos kachelbar · Stil: painterly, rural · Palette: mittelbraun, gleichmäßig · Einsatz: Acker-Basisboden vor der Bepflanzung · Material: körnig, matt · Mischverhalten: Basis unter terrain_field_plowed/terrain_field_wheat/terrain_field_harvest · Maps: Normal ✓ · Roughness ✓ · AO ✓ · Height ✓ · Detailstufe: nah–mittel · Priorität: **Pflicht** · Biome: Fruchtbares Land
+
+### `forest_floor_needles.png`
+
+```text
+Seamless tileable stylized terrain texture for a premium low-poly city-builder game. Soft painterly look, natural color variation, subtle height variation, no baked lighting, no shadows, top-down orthographic view, perfect seamless edges, PBR-ready — nadelwaldboden, broad painterly low-poly shapes, restrained micro detail
+```
+
+**Spec:** Ordner `textures/terrain/earth/` · 2048×2048 · nahtlos kachelbar · Stil: stilisiert, low-poly-kompatibel, malerische Makroformen · Palette: Braun und dunkles Grün · Einsatz: Nadelwaldboden · Material: matt bis natürlich feucht, breite Formen statt Foto-Mikrorauschen · Mischverhalten: weltkoordinatenbasiert nach Biom, Höhe, Neigung und Wassernähe; Nahdetail per LOD · Maps: Normal ✓ · Roughness ✓ · AO ✓ · Height ✓ · Detailstufe: nah–mittel · Priorität: **Pflicht** · Biome: Mischwald
+
+### `forest_floor_moss.png`
+
+```text
+Seamless tileable stylized terrain texture for a premium low-poly city-builder game. Soft painterly look, natural color variation, subtle height variation, no baked lighting, no shadows, top-down orthographic view, perfect seamless edges, PBR-ready — moosiger waldboden-basislayer, broad painterly low-poly shapes, restrained micro detail
+```
+
+**Spec:** Ordner `textures/terrain/earth/` · 2048×2048 · nahtlos kachelbar · Stil: stilisiert, low-poly-kompatibel, malerische Makroformen · Palette: Moosgrün und Torfbraun · Einsatz: Moosiger Waldboden-Basislayer · Material: matt bis natürlich feucht, breite Formen statt Foto-Mikrorauschen · Mischverhalten: weltkoordinatenbasiert nach Biom, Höhe, Neigung und Wassernähe; Nahdetail per LOD · Maps: Normal ✓ · Roughness ✓ · AO ✓ · Height ✓ · Detailstufe: nah–mittel · Priorität: **Pflicht** · Biome: Mischwald
+
+### `forest_floor_leaves.png`
+
+```text
+Seamless tileable stylized terrain texture for a premium low-poly city-builder game. Soft painterly look, natural color variation, subtle height variation, no baked lighting, no shadows, top-down orthographic view, perfect seamless edges, PBR-ready — laubwaldboden, broad painterly low-poly shapes, restrained micro detail
+```
+
+**Spec:** Ordner `textures/terrain/earth/` · 2048×2048 · nahtlos kachelbar · Stil: stilisiert, low-poly-kompatibel, malerische Makroformen · Palette: Rotbraun und Oliv · Einsatz: Laubwaldboden · Material: matt bis natürlich feucht, breite Formen statt Foto-Mikrorauschen · Mischverhalten: weltkoordinatenbasiert nach Biom, Höhe, Neigung und Wassernähe; Nahdetail per LOD · Maps: Normal ✓ · Roughness ✓ · AO ✓ · Height ✓ · Detailstufe: nah–mittel · Priorität: **Pflicht** · Biome: Mischwald
+
+### `forest_floor_dark_soil.png`
+
+```text
+Seamless tileable stylized terrain texture for a premium low-poly city-builder game. Soft painterly look, natural color variation, subtle height variation, no baked lighting, no shadows, top-down orthographic view, perfect seamless edges, PBR-ready — dunkle feuchte walderde, broad painterly low-poly shapes, restrained micro detail
+```
+
+**Spec:** Ordner `textures/terrain/earth/` · 2048×2048 · nahtlos kachelbar · Stil: stilisiert, low-poly-kompatibel, malerische Makroformen · Palette: Schokoladenbraun · Einsatz: Dunkle feuchte Walderde · Material: matt bis natürlich feucht, breite Formen statt Foto-Mikrorauschen · Mischverhalten: weltkoordinatenbasiert nach Biom, Höhe, Neigung und Wassernähe; Nahdetail per LOD · Maps: Normal ✓ · Roughness ✓ · AO ✓ · Height ✓ · Detailstufe: nah–mittel · Priorität: **Pflicht** · Biome: Mischwald, Sumpf
+
+### `forest_floor_roots.png`
+
+```text
+Seamless tileable stylized terrain texture for a premium low-poly city-builder game. Soft painterly look, natural color variation, subtle height variation, no baked lighting, no shadows, top-down orthographic view, perfect seamless edges, PBR-ready — wurzelreiche waldränder, broad painterly low-poly shapes, restrained micro detail
+```
+
+**Spec:** Ordner `textures/terrain/earth/` · 2048×2048 · nahtlos kachelbar · Stil: stilisiert, low-poly-kompatibel, malerische Makroformen · Palette: Erdbraun und Grau · Einsatz: Wurzelreiche Waldränder · Material: matt bis natürlich feucht, breite Formen statt Foto-Mikrorauschen · Mischverhalten: weltkoordinatenbasiert nach Biom, Höhe, Neigung und Wassernähe; Nahdetail per LOD · Maps: Normal ✓ · Roughness ✓ · AO ✓ · Height ✓ · Detailstufe: nah–mittel · Priorität: **Pflicht** · Biome: Mischwald
+
+### `fertile_valley_ground.png`
+
+```text
+Seamless tileable stylized terrain texture for a premium low-poly city-builder game. Soft painterly look, natural color variation, subtle height variation, no baked lighting, no shadows, top-down orthographic view, perfect seamless edges, PBR-ready — fruchtbare tal- und ackerbasis, broad painterly low-poly shapes, restrained micro detail
+```
+
+**Spec:** Ordner `textures/terrain/earth/` · 2048×2048 · nahtlos kachelbar · Stil: stilisiert, low-poly-kompatibel, malerische Makroformen · Palette: sattes Grün und dunkle Erde · Einsatz: Fruchtbare Tal- und Ackerbasis · Material: matt bis natürlich feucht, breite Formen statt Foto-Mikrorauschen · Mischverhalten: weltkoordinatenbasiert nach Biom, Höhe, Neigung und Wassernähe; Nahdetail per LOD · Maps: Normal ✓ · Roughness ✓ · AO ✓ · Height ✓ · Detailstufe: nah–mittel · Priorität: **Pflicht** · Biome: Fruchtbares Land
 
 ## Stein
 
@@ -150,6 +278,158 @@ Seamless tileable stylized terrain texture for a premium low-poly city-builder g
 ```
 
 **Spec:** Ordner `textures/terrain/stone/` · 2048×2048 · nahtlos kachelbar · Stil: painterly, klein-teilig · Palette: graubraun, gemischte Korngröße · Einsatz: Schotter/Geröll, Wegbeläge, Straßenränder · Material: körnig, unregelmäßig · Mischverhalten: blendet mit terrain_path/terrain_road_edge und am Gebirgsfuß mit terrain_rock · Maps: Normal ✓ · Roughness ✓ · AO ✓ · Height ✓ · Detailstufe: nah–mittel · Priorität: **Empfohlen** · Biome: Gebirge, Straßen/Wege
+
+## Gebirge 5.0
+
+### `mountain_rock_base.png`
+
+```text
+Seamless tileable stylized terrain texture for a premium low-poly city-builder game. Soft painterly look, natural color variation, subtle height variation, no baked lighting, no shadows, top-down orthographic view, perfect seamless edges, PBR-ready — light warm-grey alpine bedrock with broad angular strata, restrained moss traces and no mirrored pattern
+```
+
+**Spec:** Ordner `textures/terrain/mountain/` · 2048×2048 · nahtlos kachelbar · Stil: painterly stylized realism, helle alpine Makroformen · Palette: warmes Hellgrau, Steinbeige und dezente moosgruene Fugen · Einsatz: triplanare Felsbasis fuer Mittel- und Hochgebirge · Material: breite Schichtungen, kantige Platten, geringe Mikrokörnung · Mischverhalten: hoehen- und hangabhaengig; triplanar mit cliff, Geröll und Schnee · Maps: Normal ✓ · Roughness ✓ · AO ✓ · Height ✓ · Detailstufe: nah–fern · Priorität: **Pflicht** · Biome: Gebirge, Hochland
+
+### `mountain_snow.png`
+
+```text
+Seamless tileable stylized terrain texture for a premium low-poly city-builder game. Soft painterly look, natural color variation, subtle height variation, no baked lighting, no shadows, top-down orthographic view, perfect seamless edges, PBR-ready — clean compact wind-swept alpine snow with broad soft drifts and restrained pale-blue mineral seams
+```
+
+**Spec:** Ordner `textures/terrain/mountain/` · 2048×2048 · nahtlos kachelbar · Stil: painterly stylized realism, kompakt und windgeformt · Palette: warmes Off-White mit sehr hellem Blaugrau · Einsatz: Gipfelzone oberhalb der Felsbaender · Material: weiche breite Verwehungen, dezente Eiskrusten · Mischverhalten: nur in grosser Hoehe; Alpine-Profil verstaerkt, Hang reduziert · Maps: Normal ✓ · Roughness ✓ · AO ✓ · Height ✓ · Detailstufe: nah–fern · Priorität: **Pflicht** · Biome: Gebirge
+
+### `mountain_granite_base.png`
+
+```text
+Seamless tileable stylized terrain texture for a premium low-poly city-builder game. Soft painterly look, natural color variation, subtle height variation, no baked lighting, no shadows, top-down orthographic view, perfect seamless edges, PBR-ready — triplanare alpine felsbasis, broad painterly low-poly shapes, restrained micro detail
+```
+
+**Spec:** Ordner `textures/terrain/mountain/` · 2048×2048 · nahtlos kachelbar · Stil: stilisiert, low-poly-kompatibel, malerische Makroformen · Palette: warmes Granitgrau und Beige · Einsatz: Triplanare alpine Felsbasis · Material: matt bis natürlich feucht, breite Formen statt Foto-Mikrorauschen · Mischverhalten: weltkoordinatenbasiert nach Biom, Höhe, Neigung und Wassernähe; Nahdetail per LOD · Maps: Normal ✓ · Roughness ✓ · AO ✓ · Height ✓ · Detailstufe: nah–fern · Priorität: **Pflicht** · Biome: Gebirge
+
+### `mountain_granite_light.png`
+
+```text
+Seamless tileable stylized terrain texture for a premium low-poly city-builder game. Soft painterly look, natural color variation, subtle height variation, no baked lighting, no shadows, top-down orthographic view, perfect seamless edges, PBR-ready — sonnenflächen und helle grate, broad painterly low-poly shapes, restrained micro detail
+```
+
+**Spec:** Ordner `textures/terrain/mountain/` · 2048×2048 · nahtlos kachelbar · Stil: stilisiert, low-poly-kompatibel, malerische Makroformen · Palette: helles Steingrau · Einsatz: Sonnenflächen und helle Grate · Material: matt bis natürlich feucht, breite Formen statt Foto-Mikrorauschen · Mischverhalten: weltkoordinatenbasiert nach Biom, Höhe, Neigung und Wassernähe; Nahdetail per LOD · Maps: Normal ✓ · Roughness ✓ · AO ✓ · Height ✓ · Detailstufe: nah–fern · Priorität: **Pflicht** · Biome: Gebirge
+
+### `mountain_granite_dark.png`
+
+```text
+Seamless tileable stylized terrain texture for a premium low-poly city-builder game. Soft painterly look, natural color variation, subtle height variation, no baked lighting, no shadows, top-down orthographic view, perfect seamless edges, PBR-ready — nordflanken und tiefe fugen, broad painterly low-poly shapes, restrained micro detail
+```
+
+**Spec:** Ordner `textures/terrain/mountain/` · 2048×2048 · nahtlos kachelbar · Stil: stilisiert, low-poly-kompatibel, malerische Makroformen · Palette: Anthrazit und kühles Grau · Einsatz: Nordflanken und tiefe Fugen · Material: matt bis natürlich feucht, breite Formen statt Foto-Mikrorauschen · Mischverhalten: weltkoordinatenbasiert nach Biom, Höhe, Neigung und Wassernähe; Nahdetail per LOD · Maps: Normal ✓ · Roughness ✓ · AO ✓ · Height ✓ · Detailstufe: nah–fern · Priorität: **Pflicht** · Biome: Gebirge
+
+### `mountain_cliff_faceted.png`
+
+```text
+Seamless tileable stylized terrain texture for a premium low-poly city-builder game. Soft painterly look, natural color variation, subtle height variation, no baked lighting, no shadows, top-down orthographic view, perfect seamless edges, PBR-ready — steile kantige klippenflächen, broad painterly low-poly shapes, restrained micro detail
+```
+
+**Spec:** Ordner `textures/terrain/mountain/` · 2048×2048 · nahtlos kachelbar · Stil: stilisiert, low-poly-kompatibel, malerische Makroformen · Palette: Schiefergrau mit warmen Kanten · Einsatz: Steile kantige Klippenflächen · Material: matt bis natürlich feucht, breite Formen statt Foto-Mikrorauschen · Mischverhalten: weltkoordinatenbasiert nach Biom, Höhe, Neigung und Wassernähe; Nahdetail per LOD · Maps: Normal ✓ · Roughness ✓ · AO ✓ · Height ✓ · Detailstufe: nah–fern · Priorität: **Pflicht** · Biome: Gebirge, Küste
+
+### `mountain_strata.png`
+
+```text
+Seamless tileable stylized terrain texture for a premium low-poly city-builder game. Soft painterly look, natural color variation, subtle height variation, no baked lighting, no shadows, top-down orthographic view, perfect seamless edges, PBR-ready — breite geologische schichtbänder, broad painterly low-poly shapes, restrained micro detail
+```
+
+**Spec:** Ordner `textures/terrain/mountain/` · 2048×2048 · nahtlos kachelbar · Stil: stilisiert, low-poly-kompatibel, malerische Makroformen · Palette: Grau, Beige und Ocker · Einsatz: Breite geologische Schichtbänder · Material: matt bis natürlich feucht, breite Formen statt Foto-Mikrorauschen · Mischverhalten: weltkoordinatenbasiert nach Biom, Höhe, Neigung und Wassernähe; Nahdetail per LOD · Maps: Normal ✓ · Roughness ✓ · AO ✓ · Height ✓ · Detailstufe: nah–fern · Priorität: **Pflicht** · Biome: Gebirge
+
+### `mountain_scree.png`
+
+```text
+Seamless tileable stylized terrain texture for a premium low-poly city-builder game. Soft painterly look, natural color variation, subtle height variation, no baked lighting, no shadows, top-down orthographic view, perfect seamless edges, PBR-ready — geröllfächer am gebirgsfuß, broad painterly low-poly shapes, restrained micro detail
+```
+
+**Spec:** Ordner `textures/terrain/mountain/` · 2048×2048 · nahtlos kachelbar · Stil: stilisiert, low-poly-kompatibel, malerische Makroformen · Palette: gemischtes Steingrau · Einsatz: Geröllfächer am Gebirgsfuß · Material: matt bis natürlich feucht, breite Formen statt Foto-Mikrorauschen · Mischverhalten: weltkoordinatenbasiert nach Biom, Höhe, Neigung und Wassernähe; Nahdetail per LOD · Maps: Normal ✓ · Roughness ✓ · AO ✓ · Height ✓ · Detailstufe: nah–fern · Priorität: **Pflicht** · Biome: Gebirge
+
+### `mountain_moss.png`
+
+```text
+Seamless tileable stylized terrain texture for a premium low-poly city-builder game. Soft painterly look, natural color variation, subtle height variation, no baked lighting, no shadows, top-down orthographic view, perfect seamless edges, PBR-ready — moosige untere felshänge, broad painterly low-poly shapes, restrained micro detail
+```
+
+**Spec:** Ordner `textures/terrain/mountain/` · 2048×2048 · nahtlos kachelbar · Stil: stilisiert, low-poly-kompatibel, malerische Makroformen · Palette: Moosgrün und Graubraun · Einsatz: Moosige untere Felshänge · Material: matt bis natürlich feucht, breite Formen statt Foto-Mikrorauschen · Mischverhalten: weltkoordinatenbasiert nach Biom, Höhe, Neigung und Wassernähe; Nahdetail per LOD · Maps: Normal ✓ · Roughness ✓ · AO ✓ · Height ✓ · Detailstufe: nah–fern · Priorität: **Pflicht** · Biome: Gebirge, Mischwald
+
+### `mountain_wet_rock.png`
+
+```text
+Seamless tileable stylized terrain texture for a premium low-poly city-builder game. Soft painterly look, natural color variation, subtle height variation, no baked lighting, no shadows, top-down orthographic view, perfect seamless edges, PBR-ready — nasse felsen an wasserfällen und küsten, broad painterly low-poly shapes, restrained micro detail
+```
+
+**Spec:** Ordner `textures/terrain/mountain/` · 2048×2048 · nahtlos kachelbar · Stil: stilisiert, low-poly-kompatibel, malerische Makroformen · Palette: dunkles Graphitgrau · Einsatz: Nasse Felsen an Wasserfällen und Küsten · Material: matt bis natürlich feucht, breite Formen statt Foto-Mikrorauschen · Mischverhalten: weltkoordinatenbasiert nach Biom, Höhe, Neigung und Wassernähe; Nahdetail per LOD · Maps: Normal ✓ · Roughness ✓ · AO ✓ · Height ✓ · Detailstufe: nah–fern · Priorität: **Pflicht** · Biome: Gebirge, Küste
+
+## Wüste 5.0
+
+### `desert_sand_red.png`
+
+```text
+Seamless tileable stylized terrain texture for a premium low-poly city-builder game. Soft painterly look, natural color variation, subtle height variation, no baked lighting, no shadows, top-down orthographic view, perfect seamless edges, PBR-ready — burnt-sienna desert ground with compact sand, eroded sandstone plates and shallow cracked-earth seams
+```
+
+**Spec:** Ordner `textures/terrain/desert/` · 2048×2048 · nahtlos kachelbar · Stil: painterly stylized realism, warm und erosionsgepraegt · Palette: Terrakotta, Rostorange, Ocker und dunkles Rotbraun · Einsatz: visuelle Wueste der roten Suedostkueste · Material: kompakter Sand, breite Sandsteinplatten, flache Trockenrisse · Mischverhalten: organisch mit trockenem Gras, Kuestensand und Fels; keine Gameplaywirkung · Maps: Normal ✓ · Roughness ✓ · AO ✓ · Height ✓ · Detailstufe: nah–fern · Priorität: **Pflicht** · Biome: Wüste, Trockene Ebene
+
+## Sumpf 5.0
+
+### `swamp_mud.png`
+
+```text
+Seamless tileable stylized terrain texture for a premium low-poly city-builder game. Soft painterly look, natural color variation, subtle height variation, no baked lighting, no shadows, top-down orthographic view, perfect seamless edges, PBR-ready — dark wet peat and olive-brown mud with broad mossy patches and shallow water-darkened seams
+```
+
+**Spec:** Ordner `textures/terrain/swamp/` · 2048×2048 · nahtlos kachelbar · Stil: painterly stylized realism, feucht und moosig · Palette: Torfbraun, gedämpftes Oliv, Moosgruen und nasses Anthrazit · Einsatz: Moorboden der westlichen Sumpfbucht · Material: gesaettigter Schlamm, Torf, Moosinseln und flache feuchte Adern · Mischverhalten: niedrige Lagen; weich mit Waldboden, Feuchterde und Schilfufer · Maps: Normal ✓ · Roughness ✓ · AO ✓ · Height ✓ · Detailstufe: nah–mittel · Priorität: **Pflicht** · Biome: Sumpf
+
+### `moor_heather_ground.png`
+
+```text
+Seamless tileable stylized terrain texture for a premium low-poly city-builder game. Soft painterly look, natural color variation, subtle height variation, no baked lighting, no shadows, top-down orthographic view, perfect seamless edges, PBR-ready — moor- und heideboden, broad painterly low-poly shapes, restrained micro detail
+```
+
+**Spec:** Ordner `textures/terrain/swamp/` · 2048×2048 · nahtlos kachelbar · Stil: stilisiert, low-poly-kompatibel, malerische Makroformen · Palette: Torfbraun, Violett und Oliv · Einsatz: Moor- und Heideboden · Material: matt bis natürlich feucht, breite Formen statt Foto-Mikrorauschen · Mischverhalten: weltkoordinatenbasiert nach Biom, Höhe, Neigung und Wassernähe; Nahdetail per LOD · Maps: Normal ✓ · Roughness ✓ · AO ✓ · Height ✓ · Detailstufe: nah–mittel · Priorität: **Pflicht** · Biome: Sumpf
+
+## Küste 5.0
+
+### `coast_pebbles.png`
+
+```text
+Seamless tileable stylized terrain texture for a premium low-poly city-builder game. Soft painterly look, natural color variation, subtle height variation, no baked lighting, no shadows, top-down orthographic view, perfect seamless edges, PBR-ready — rounded slate and granite coastal pebbles mixed with muted damp sand and natural size variation
+```
+
+**Spec:** Ordner `textures/terrain/coast/` · 2048×2048 · nahtlos kachelbar · Stil: painterly stylized realism, rund gewaschene Kuestensteine · Palette: Blaugrau, warmes Steingrau, Beige und dezentes Seegruen · Einsatz: Kiesbuchten, Felskuesten und Flussmuendungen · Material: runde Kiesel, feuchter Schotter und wenig Sand · Mischverhalten: niedrige Kuestenlagen; mischt Sand, Fels und den tuerkisen Flachwassersaum · Maps: Normal ✓ · Roughness ✓ · AO ✓ · Height ✓ · Detailstufe: nah–mittel · Priorität: **Pflicht** · Biome: Küste, Flusstal
+
+### `coast_shore_accessible.png`
+
+```text
+Seamless tileable stylized terrain texture for a premium low-poly city-builder game. Soft painterly look, natural color variation, subtle height variation, no baked lighting, no shadows, top-down orthographic view, perfect seamless edges, PBR-ready — baubare flache uferzone, broad painterly low-poly shapes, restrained micro detail
+```
+
+**Spec:** Ordner `textures/terrain/coast/` · 2048×2048 · nahtlos kachelbar · Stil: stilisiert, low-poly-kompatibel, malerische Makroformen · Palette: Nassgrün, Sand und Kies · Einsatz: Baubare flache Uferzone · Material: matt bis natürlich feucht, breite Formen statt Foto-Mikrorauschen · Mischverhalten: weltkoordinatenbasiert nach Biom, Höhe, Neigung und Wassernähe; Nahdetail per LOD · Maps: Normal ✓ · Roughness ✓ · AO ✓ · Height ✓ · Detailstufe: nah–mittel · Priorität: **Pflicht** · Biome: Küste, Flusstal
+
+### `coast_sand_wet.png`
+
+```text
+Seamless tileable stylized terrain texture for a premium low-poly city-builder game. Soft painterly look, natural color variation, subtle height variation, no baked lighting, no shadows, top-down orthographic view, perfect seamless edges, PBR-ready — nasser sand direkt am wassersaum, broad painterly low-poly shapes, restrained micro detail
+```
+
+**Spec:** Ordner `textures/terrain/coast/` · 2048×2048 · nahtlos kachelbar · Stil: stilisiert, low-poly-kompatibel, malerische Makroformen · Palette: Beige und dunkles Ocker · Einsatz: Nasser Sand direkt am Wassersaum · Material: matt bis natürlich feucht, breite Formen statt Foto-Mikrorauschen · Mischverhalten: weltkoordinatenbasiert nach Biom, Höhe, Neigung und Wassernähe; Nahdetail per LOD · Maps: Normal ✓ · Roughness ✓ · AO ✓ · Height ✓ · Detailstufe: nah–mittel · Priorität: **Pflicht** · Biome: Küste
+
+### `coast_gravel_stylized.png`
+
+```text
+Seamless tileable stylized terrain texture for a premium low-poly city-builder game. Soft painterly look, natural color variation, subtle height variation, no baked lighting, no shadows, top-down orthographic view, perfect seamless edges, PBR-ready — stilisierter uferkies, broad painterly low-poly shapes, restrained micro detail
+```
+
+**Spec:** Ordner `textures/terrain/coast/` · 2048×2048 · nahtlos kachelbar · Stil: stilisiert, low-poly-kompatibel, malerische Makroformen · Palette: Blaugrau und Beige · Einsatz: Stilisierter Uferkies · Material: matt bis natürlich feucht, breite Formen statt Foto-Mikrorauschen · Mischverhalten: weltkoordinatenbasiert nach Biom, Höhe, Neigung und Wassernähe; Nahdetail per LOD · Maps: Normal ✓ · Roughness ✓ · AO ✓ · Height ✓ · Detailstufe: nah–mittel · Priorität: **Pflicht** · Biome: Küste, Flusstal
+
+### `coast_mud_fertile.png`
+
+```text
+Seamless tileable stylized terrain texture for a premium low-poly city-builder game. Soft painterly look, natural color variation, subtle height variation, no baked lighting, no shadows, top-down orthographic view, perfect seamless edges, PBR-ready — fruchtbarer schlamm an flussauen, broad painterly low-poly shapes, restrained micro detail
+```
+
+**Spec:** Ordner `textures/terrain/coast/` · 2048×2048 · nahtlos kachelbar · Stil: stilisiert, low-poly-kompatibel, malerische Makroformen · Palette: dunkles Braun und Oliv · Einsatz: Fruchtbarer Schlamm an Flussauen · Material: matt bis natürlich feucht, breite Formen statt Foto-Mikrorauschen · Mischverhalten: weltkoordinatenbasiert nach Biom, Höhe, Neigung und Wassernähe; Nahdetail per LOD · Maps: Normal ✓ · Roughness ✓ · AO ✓ · Height ✓ · Detailstufe: nah–mittel · Priorität: **Pflicht** · Biome: Flusstal, Sumpf
 
 ## Sand
 
@@ -319,13 +599,13 @@ Welche Texturen pro Biom im Splatmap-Mix zur Auswahl stehen; die Höhen-/Neigung
 
 | Biom | Texturen |
 |---|---|
-| Grasland | `grass_meadow`, `terrain_grass_01`, `terrain_grass_dry`, `terrain_meadow`, `terrain_earth_light` |
-| Mischwald | `terrain_grass_dark`, `terrain_moss`, `terrain_forest_floor`, `terrain_rock` |
-| Fruchtbares Land | `terrain_earth_dark`, `terrain_farmland`, `terrain_field_plowed`, `terrain_field_wheat`, `terrain_field_harvest` |
-| Gebirge | `mountain_rock_base`, `mountain_snow`, `terrain_rock`, `terrain_mountain`, `terrain_cliff`, `terrain_rock_granite`, `terrain_gravel`, `terrain_snow`, `terrain_snow_rock`, `terrain_snow_drift` |
+| Grasland | `grass_meadow_fresh`, `grass_meadow_dark`, `grass_wildflowers`, `grass_trampled`, `grass_wet` |
+| Mischwald | `forest_floor_moss`, `forest_floor_needles`, `forest_floor_leaves`, `forest_floor_roots`, `forest_edge_grass` |
+| Fruchtbares Land | `fertile_valley_ground`, `coast_mud_fertile`, `terrain_field_plowed`, `terrain_field_wheat`, `terrain_field_harvest` |
+| Gebirge | `mountain_granite_base`, `mountain_cliff_faceted`, `mountain_strata`, `mountain_scree`, `mountain_moss`, `mountain_snow`, `mountain_wet_rock` |
 | Wüste | `desert_sand_red`, `terrain_sand_dune`, `terrain_earth_light`, `terrain_rock_granite` |
-| Sumpf | `swamp_mud`, `terrain_earth_wet`, `terrain_moss`, `terrain_swamp` |
-| Küste | `coast_pebbles`, `terrain_sand_coast`, `terrain_coast`, `terrain_rock`, `terrain_shallow_water` |
+| Sumpf | `moor_heather_ground`, `swamp_mud`, `forest_floor_dark_soil`, `grass_mossy` |
+| Küste | `coast_shore_accessible`, `coast_sand_wet`, `coast_gravel_stylized`, `coast_mud_fertile` |
 | Fluss/See/Meer | `terrain_deep_water`, `terrain_shallow_water`, `terrain_riverbed`, `terrain_river_delta`, `terrain_swamp`, `terrain_ice` |
 | Straßen/Wege | `terrain_path`, `terrain_road_edge`, `terrain_gravel`, `terrain_stone` |
 
@@ -359,4 +639,4 @@ Jede Terrainfläche trägt künftig **Materialgewichte statt eines einzelnen Typ
 | 1–2 Kacheln entfernt | leichte Beimischung von `terrain_earth_dark`/`terrain_moss`, abklingend |
 | weiter entfernt | keine Feuchtigkeits-Beimischung, reine Höhen-/Neigungs-Regel |
 
-**Umsetzungsstand:** Diese Regeln sind die Spezifikation für den künftigen Ground-Shader — der Renderer nutzt aktuell weiterhin das vertex-gefärbte Höhenfeld (v0.39, `ThreeMapRenderer.buildGroundMesh`). Der Shader selbst ist eine eigene Code-Phase, sobald reale Texturen zum Verifizieren vorliegen — die Drop-in-Ordner und der Loader (`terrainTextureUrl()` in `src/assets/registry.ts`) sind aber bereits vorbereitet.
+**Umsetzungsstand:** Der Three-Renderer wertet diese Regeln aktiv aus: world-space De-Tiling für Ebenen, triplanare Projektion für Fels, ausgewählte Normal-/Roughness-/AO-Maps, Regen-Wetness sowie kameraabhängiges Nahdetail. Vertexfarben bleiben der sichere Fallback.

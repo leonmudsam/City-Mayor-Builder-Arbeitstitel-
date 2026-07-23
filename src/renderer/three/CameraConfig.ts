@@ -32,11 +32,10 @@ export interface CameraPresetDef {
 export type CameraPreset = 'city' | 'build' | 'overview' | 'center';
 
 /** Pitch/zoom limits. Pitch stays below 90° so picking & billboards stay sane.
- *  maxDist 480 (§ MVP4 P3, docs/WORLD_SCALE.md): die 384er-Insel braucht einen
- *  echten Insel-Überblick — 200 zeigte nur noch einen Ausschnitt. */
+ *  maxDist 680 (World Rebuild 6.0): vollständiger Überblick der 512²-Welt. */
 export const CAMERA_LIMITS = {
   minDist: 10,
-  maxDist: 480,
+  maxDist: 600,
   minPitch: 28 * DEG,
   maxPitch: 84 * DEG, // near top-down, but never fully overhead
 } as const;
@@ -52,8 +51,8 @@ export const CAMERA_LIMITS = {
 export const CAMERA_PRESETS: Record<CameraPreset, CameraPresetDef> = {
   city: { pitch: 52 * DEG, dist: 62 },
   build: { pitch: 78 * DEG, dist: 46 },
-  // Insel-Überblick (§ MVP4 P3): weit genug für die ganze 384er-Insel.
-  overview: { pitch: 56 * DEG, dist: 420, focusWorld: true },
+  // Insel-Überblick: weit genug für die vollständige 512²-Welt.
+  overview: { pitch: 58 * DEG, dist: 540, focusWorld: true },
   center: { pitch: 52 * DEG, dist: 70, focusCity: true },
 };
 

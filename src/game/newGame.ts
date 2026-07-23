@@ -4,13 +4,27 @@ import type { GameState } from './types.ts';
 import { allRegionIds, createRegionStub, occupyTiles } from './map/world.ts';
 
 /**
+ * v18 (Active Operations 2.0, A5 Transport): additiver `operations.transfers`-
+ * Katalog laufender Lagertransporte. Alte Saves bleiben ladbar (Migration
+ * v17→v18 ergänzt ein leeres `transfers`); keine Weltänderung.
+ * v17 (Active Operations 2.0): additive lokale Betriebslager, Arbeiterzustände,
+ * aktive Aufträge und Ressourcenknoten-Deltas (`GameState.operations`). Alte
+ * Saves bleiben ladbar (Migration v16→v17 ergänzt ein leeres `operations`).
+ * v16 (Final World Compaction 8.1): zweite horizontale Verdichtung, 13-Regionen-
+ * Struktur, Save-Neustart aus v10–v15.
+ * v15 (Terrain & World Scale Overhaul 6.1): kompaktere Insel, zentraler Start,
+ * angehobene Wasserlinie und neue Ufer-/Regionskoordinaten. v14 wird vor dem
+ * kontrollierten Weltneustart einmalig gesichert.
+ * v14 (World Rebuild 6.0): neue 512er-Insel, neue Regions- und Weltkoordinaten.
+ * v13-Saves werden vor einem sanktionierten Weltneustart einmalig gesichert;
+ * eine Koordinatenprojektion wäre nicht zuverlässig genug.
  * v13 (§ Stadtarbeit-Logik 2.0): eine laufende Fahrmission kann die an der
  * Quelle reservierte Ladung (`ActiveActivity.reserved`) speichern. v12-Saves
  * bleiben gültig; ihre Missionen ziehen die Lieferkosten wie bisher pro Ziel.
  * v12 (§ Stadtarbeit 2D): laufende Fahrmissionen speichern Fahrzeugklasse und
  * manuell gezeichnete Straßenkette.
  */
-export const SCHEMA_VERSION = 13;
+export const SCHEMA_VERSION = 18;
 
 export function createNewGame(config: GameConfig, cityName: string, now: number): GameState {
   const state: GameState = {
@@ -44,6 +58,9 @@ export function createNewGame(config: GameConfig, cityName: string, now: number)
     buffs: [],
     events: [],
     activities: { cooldowns: {}, fulfilledContracts: [] },
+    // § Active Operations 2.0: leeres Betriebssystem; Betriebslager/Arbeiter/
+    // Knoten-Deltas entstehen erst mit dem ersten Arbeitsauftrag.
+    operations: { inventories: {}, workers: {}, active: {}, nodeDeltas: {}, transfers: {} },
     stats: {
       built: {},
       produced: { money: 0, wood: 0, stone: 0, food: 0, freshwater: 0 },

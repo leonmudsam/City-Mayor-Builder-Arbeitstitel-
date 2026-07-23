@@ -5,45 +5,24 @@
 > `WRITE_BUILDING_DOCS=1 npx vitest run tests/buildingDocs.test.ts`.
 > Der Test schlägt fehl, sobald diese Datei von der Config abweicht.
 
-32 gebackene Regionen ersetzen die alten Quadrat-Sektoren. Geometrie/Nachbarschaft kommen aus dem Bake (`src/game/config/world/islandRegions.gen.ts`, `tools/bake-report.md`); diese Tabelle gibt jeder Region Namen, Charakter, Vor-/Nachteile und Freischaltbedingungen.
+13 gebackene Regionen ersetzen die alten Quadrat-Sektoren. Geometrie/Nachbarschaft kommen aus dem Bake (`src/game/config/world/islandRegions.gen.ts`, `tools/bake-report.md`); diese Tabelle gibt jeder Region Namen, Charakter, Vor-/Nachteile und Freischaltbedingungen.
 
-**Startregion:** Lichtungsland (Region 2) — bewusst NEUTRAL (keine Modifikatoren) als Bezugspunkt.
-
-**Nie freischaltbar (Teaser):** Nebelinsel (32) — am Horizont sichtbares Versprechen für spätere Inhalte.
+**Startregion:** Zentralland (Region 13) — bewusst NEUTRAL (keine Modifikatoren) als Bezugspunkt.
 
 | Id | Name | Biom | Freischaltung | Voraussetzungen | Bebaubare Kacheln | Produktion | Nachteil |
 |---|---|---|---|---|---|---|---|
-| 1 | Hochgebirgskern | Gebirge | L18 · 1.800.000 Geld | 24, 25 | 346 | Stein ×1.8, Nahrung ×0.6 | Straßen ×2 |
-| 2 | Lichtungsland | Zentrum | L1 · 0 Geld | — | 5.993 | — | — |
-| 3 | Südsee-Becken | Seenland | L11 · 850.000 Geld | — | 1.324 | Wasser ×1.4, Nahrung ×1.1 | — |
-| 4 | Fruchtdelta | Fruchtbares Land | L5 · 320.000 Geld | — | 4.738 | Nahrung ×1.35, Wasser ×1.1 | — |
-| 5 | Ostweiden | Ebene | L10 · 750.000 Geld | — | 4.544 | Nahrung ×1.2 | — |
-| 6 | Ostkap | Küste | L12 · 950.000 Geld | — | 3.366 | Nahrung ×1.15 | — |
-| 7 | Nordfelder | Ebene | L6 · 380.000 Geld | — | 4.057 | Nahrung ×1.1 | — |
-| 8 | Nordstrand | Küste | L13 · 1.050.000 Geld | — | 3.511 | Nahrung ×1.2 | — |
-| 9 | Morgenküste | Küste | L14 · 1.150.000 Geld | — | 3.403 | Nahrung ×1.2 | — |
-| 10 | Mittelland | Ebene | L7 · 420.000 Geld | — | 3.452 | Nahrung ×1.1 | — |
-| 11 | Südostwald | Wald | L9 · 600.000 Geld | — | 3.222 | Holz ×1.5 | — |
-| 12 | Westanger | Ebene | L8 · 480.000 Geld | — | 3.225 | Nahrung ×1.1, Holz ×1.1 | — |
-| 13 | Hochweiden | Hügelland | L10 · 700.000 Geld | — | 3.039 | Stein ×1.2, Energie ×1.15 | — |
-| 14 | Südküste | Küste | L12 · 900.000 Geld | — | 2.889 | Nahrung ×1.2 | — |
-| 15 | Westklippen | Küste | L15 · 1.250.000 Geld | — | 2.042 | Nahrung ×1.15, Wasser ×1.1 | — |
-| 16 | Nebelkap | Küste | L16 · 1.350.000 Geld | — | 1.617 | Nahrung ×1.15 | — |
-| 17 | Spiegelwald | Wald | L8 · 520.000 Geld | — | 1.942 | Holz ×1.5 | — |
-| 18 | Westgrat | Gebirge | L14 · 1.200.000 Geld | — | 339 | Stein ×1.6, Nahrung ×0.7 | Straßen ×1.8 |
-| 19 | Mühlental | Flusstal | L12 · 850.000 Geld | — | 1.678 | Nahrung ×1.3, Wasser ×1.2 | — |
-| 20 | Hügelland | Hügelland | L11 · 800.000 Geld | — | 1.389 | Stein ×1.25, Energie ×1.15 | — |
-| 21 | Spiegelsee | Seenland | L11 · 800.000 Geld | — | 923 | Wasser ×1.3, Holz ×1.1 | — |
-| 22 | Südwestwald | Wald | L13 · 1.000.000 Geld | — | 1.588 | Holz ×1.5 | — |
-| 23 | Nordkamm | Gebirge | L12 · 900.000 Geld | — | 1.095 | Stein ×1.5 | Straßen ×1.5 |
-| 24 | Graue Zinnen | Gebirge | L13 · 1.000.000 Geld | — | 356 | Stein ×1.5, Nahrung ×0.7 | Straßen ×1.7 |
-| 25 | Sturmspitzen | Gebirge | L14 · 1.100.000 Geld | 20 | 173 | Stein ×1.7, Nahrung ×0.6 | Straßen ×2 |
-| 26 | Ostwald | Wald | L10 · 700.000 Geld | — | 1.415 | Holz ×1.4 | — |
-| 27 | Wachtberge | Gebirge | L9 · 650.000 Geld | — | 624 | Stein ×1.5, Nahrung ×0.7 | Straßen ×1.6 |
-| 28 | Kliffwald | Wald | L15 · 1.200.000 Geld | — | 1.143 | Holz ×1.4 | — |
-| 29 | Westbucht | Küste | L15 · 1.250.000 Geld | — | 949 | Nahrung ×1.2 | — |
-| 30 | Schmugglerbucht | Küste | L16 · 1.300.000 Geld | — | 748 | Nahrung ×1.15 | — |
-| 31 | Südgrat | Gebirge | L16 · 1.400.000 Geld | — | 503 | Stein ×1.6 | Straßen ×1.8 |
-| 32 | Nebelinsel | Vorgelagerte Insel | nie | — | 705 | — | — |
+| 1 | Kronengebirge | Gebirge | L20 · 6.690.000 Geld | — | 3.833 | Stein ×1.9, Energie ×1.2, Nahrung ×0.7 | Straßen ×1.9 |
+| 2 | Nordostküste | Küste | L7 · 315.000 Geld | — | 3.361 | Nahrung ×1.2, Stein ×1.2 | Straßen ×1.15 |
+| 3 | Südterrassen | Hügelland | L6 · 215.000 Geld | — | 2.955 | Stein ×1.3, Nahrung ×1.15 | Straßen ×1.25 |
+| 4 | Südplateau | Ebene | L9 · 400.000 Geld | — | 4.663 | Nahrung ×1.3 | — |
+| 5 | Flussgarten | Flusstal | L10 · 655.000 Geld | — | 3.889 | Nahrung ×1.3, Wasser ×1.25 | — |
+| 6 | Ostebene | Ebene | L12 · 810.000 Geld | — | 4.178 | Nahrung ×1.2, Energie ×1.15 | — |
+| 7 | Westweiden | Ebene | L3 · 90.000 Geld | — | 2.955 | Nahrung ×1.25 | — |
+| 8 | Nordinsel | Vorgelagerte Insel | L18 · 2.775.000 Geld | — | 794 | Stein ×1.4, Nahrung ×1.15 | Straßen ×1.4 |
+| 9 | Sonneninsel | Küste | L16 · 1.495.000 Geld | — | 1.098 | Energie ×1.35, Nahrung ×1.1, Wasser ×0.85 | Straßen ×1.3 |
+| 10 | Nordwald | Wald | L3 · 95.000 Geld | — | 2.224 | Holz ×1.45 | — |
+| 11 | Ostforst | Wald | L14 · 1.130.000 Geld | — | 1.636 | Holz ×1.6 | Straßen ×1.2 |
+| 12 | Südforst | Wald | L11 · 545.000 Geld | — | 1.676 | Holz ×1.55 | Straßen ×1.2 |
+| 13 | Zentralland | Zentrum | L1 · 0 Geld | — | 820 | — | — |
 
 **Produktion** = Multiplikatoren auf den Gebäude-Output in dieser Region (ab A4 wirksam). **Nachteil** = Malus (z. B. teurere Straßen im Gebirge). Neutral (Startregion) hat bewusst beides nicht.

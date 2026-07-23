@@ -12,8 +12,10 @@
 import {
   BAKED_REGIONS,
   WORLD_TILES,
+  bakedSurfaceAt,
   regionBounds,
   regionIdAt,
+  startRegionConfig,
   terrainAt,
 } from '../config/startRegion.config.ts';
 import type { GameConfig } from '../config/index.ts';
@@ -93,8 +95,116 @@ export function tileAt(state: GameState, x: number, y: number): TileState | unde
 
 const UNBUILDABLE: ReadonlySet<string> = new Set(['river', 'water', 'mountain']);
 
+/**
+ * Sparse Terrain-Overrides sind ein expliziter Debug-/Testkanal. Ein bebaubarer
+ * Override bildet deshalb eine ebene virtuelle Arbeitsfläche und entkoppelt
+ * Gameplay-Tests von der jeweils neu gebackenen Inselgeometrie. Normales Spiel
+ * und Saves ohne Overrides lesen weiterhin ausschließlich die Bake-Daten.
+ */
+function isFlatDebugSurface(state: GameState, x: number, y: number): boolean {
+  const terrain = state.world.terrainOverrides?.[`${x},${y}`];
+  return terrain !== undefined && !UNBUILDABLE.has(terrain);
+}
+
+function placementHeightAt(state: GameState, x: number, y: number): number {
+  return isFlatDebugSurface(state, x, y) ? 0 : bakedSurfaceAt(x, y).height;
+}
+
 export function isTerrainBuildable(t: TileState): boolean {
   return !UNBUILDABLE.has(t.terrain);
+}
+
+export interface Vector3Like {
+  x: number;
+  y: number;
+  z: number;
+}
+
+/** Zentrale, rendererfreie Footprint-Abfrage für Bauvorschau und Commands. */
+export interface PlacementSurfaceSample {
+  minHeight: number;
+  maxHeight: number;
+  averageHeight: number;
+  /** Größtes gebackenes Höhendelta zu einer orthogonalen Nachbarkachel. */
+  slope: number;
+  normal: Vector3Like;
+  terrainType: TerrainType;
+  /** Häufigste Region im Footprint; 0 bei Ozean/außerhalb. */
+  regionId: RegionId;
+  waterOverlap: number;
+  cliffOverlap: number;
+  waterfrontRatio: number;
+  shoreTypes: ReadonlySet<string>;
+  buildableRatio: number;
+}
+
+export function samplePlacementSurface(
+  state: GameState,
+  x: number,
+  y: number,
+  width: number,
+  height: number,
+): PlacementSurfaceSample {
+  let minHeight = Infinity;
+  let maxHeight = -Infinity;
+  let heightSum = 0;
+  let slope = 0;
+  let water = 0;
+  let cliff = 0;
+  let buildable = 0;
+  let waterfront = 0;
+  let samples = 0;
+  const terrainCounts = new Map<TerrainType, number>();
+  const regionCounts = new Map<RegionId, number>();
+  const shoreTypes = new Set<string>();
+
+  for (let dy = 0; dy < height; dy++) {
+    for (let dx = 0; dx < width; dx++) {
+      const tx = x + dx;
+      const ty = y + dy;
+      const surface = bakedSurfaceAt(tx, ty);
+      const terrain = worldTerrainAt(state, tx, ty);
+      const terrainBuildable = !UNBUILDABLE.has(terrain);
+      const flatDebugSurface = isFlatDebugSurface(state, tx, ty);
+      const regionId = flatDebugSurface ? startRegionConfig.startRegionId : regionIdAt(tx, ty);
+      const sampleHeight = flatDebugSurface ? 0 : surface.height;
+      minHeight = Math.min(minHeight, sampleHeight);
+      maxHeight = Math.max(maxHeight, sampleHeight);
+      heightSum += sampleHeight;
+      slope = Math.max(slope, flatDebugSurface ? 0 : surface.slope);
+      if ((!flatDebugSurface && surface.water) || terrain === 'water' || terrain === 'river') water++;
+      if ((!flatDebugSurface && surface.cliff) || terrain === 'mountain') cliff++;
+      if (!flatDebugSurface && surface.waterfront) waterfront++;
+      if (!flatDebugSurface && surface.shoreType !== 'none') shoreTypes.add(surface.shoreType);
+      if ((flatDebugSurface || surface.buildable) && terrainBuildable && regionId !== 0) buildable++;
+      terrainCounts.set(terrain, (terrainCounts.get(terrain) ?? 0) + 1);
+      regionCounts.set(regionId, (regionCounts.get(regionId) ?? 0) + 1);
+      samples++;
+    }
+  }
+
+  const dominantTerrain = [...terrainCounts].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))[0]?.[0] ?? 'water';
+  const dominantRegion = [...regionCounts].sort((a, b) => b[1] - a[1] || a[0] - b[0])[0]?.[0] ?? 0;
+  const centerX = x + width / 2;
+  const centerY = y + height / 2;
+  const dx = placementHeightAt(state, Math.floor(centerX + 1), Math.floor(centerY)) - placementHeightAt(state, Math.floor(centerX - 1), Math.floor(centerY));
+  const dz = placementHeightAt(state, Math.floor(centerX), Math.floor(centerY + 1)) - placementHeightAt(state, Math.floor(centerX), Math.floor(centerY - 1));
+  const length = Math.hypot(dx * 0.5, 1, dz * 0.5);
+
+  return {
+    minHeight: samples > 0 ? minHeight : -3,
+    maxHeight: samples > 0 ? maxHeight : -3,
+    averageHeight: samples > 0 ? heightSum / samples : -3,
+    slope,
+    normal: { x: (-dx * 0.5) / length, y: 1 / length, z: (-dz * 0.5) / length },
+    terrainType: dominantTerrain,
+    regionId: dominantRegion,
+    waterOverlap: samples > 0 ? water / samples : 1,
+    cliffOverlap: samples > 0 ? cliff / samples : 0,
+    waterfrontRatio: samples > 0 ? waterfront / samples : 0,
+    shoreTypes,
+    buildableRatio: samples > 0 ? buildable / samples : 0,
+  };
 }
 
 // ---- Regionen (§ Welt 2.0: Landschaften statt Quadrat-Sektoren) -------------
@@ -111,7 +221,7 @@ export function createRegionStub(id: RegionId): RegionState {
 
 /** Region-Fortschritt der Kachel (`undefined` auf Ozean/außerhalb). */
 export function regionOfTile(state: GameState, x: number, y: number): RegionState | undefined {
-  const id = regionIdAt(x, y);
+  const id = isFlatDebugSurface(state, x, y) ? startRegionConfig.startRegionId : regionIdAt(x, y);
   return id === 0 ? undefined : state.world.regions[String(id)];
 }
 
@@ -120,6 +230,48 @@ export function isRegionAdjacentToUnlocked(state: GameState, id: RegionId): bool
   const baked = BAKED_REGIONS[id - 1];
   if (!baked) return false;
   return baked.adjacent.some((n) => state.world.regions[String(n)]?.status === 'unlocked');
+}
+
+/** Grenzt die Region über eine schmale Wasserstraße an eine freigeschaltete an? */
+export function isRegionSeaAdjacentToUnlocked(state: GameState, id: RegionId): boolean {
+  const baked = BAKED_REGIONS[id - 1];
+  if (!baked) return false;
+  return baked.seaAdjacent.some((n) => state.world.regions[String(n)]?.status === 'unlocked');
+}
+
+/** Gebäude-Ids, die als betriebsbereiter Hafen für eine Seeerschließung zählen. */
+const HARBOR_DEF_IDS = new Set(['dock_small', 'river_port']);
+
+/**
+ * Besitzt die Stadt einen fertigen Hafen in einer freigeschalteten Region?
+ * § Final World Compaction 8.1: Seeerschließungen verlangen echte
+ * Hafeninfrastruktur — kein erfundener Fährdienst, sondern die vorhandenen
+ * Gebäude `dock_small`/`river_port` im aktiven Zustand.
+ */
+export function hasOperationalHarbor(state: GameState): boolean {
+  for (const building of Object.values(state.buildings)) {
+    if (!HARBOR_DEF_IDS.has(building.defId) || building.status !== 'active') continue;
+    const region = regionOfTile(state, building.x, building.y);
+    if (region?.status === 'unlocked') return true;
+  }
+  return false;
+}
+
+/** Warum eine Region gerade nicht erschlossen werden kann (oder `undefined`). */
+export type RegionUnlockBlocker = 'not_adjacent' | 'needs_harbor';
+
+/**
+ * Erschließbarkeit einer Region aus Geografie und Infrastruktur.
+ *
+ * Die final verdichtete Insel ist ein Archipel: Fünf Regionen hängen über Land
+ * zusammen, alle übrigen nur über eine schmale Wasserstraße. Eine seeseitige
+ * Nachbarschaft allein genügt deshalb nicht — die Stadt braucht zusätzlich einen
+ * betriebsbereiten Hafen. Reine Leseprüfung ohne State-Mutation.
+ */
+export function regionUnlockBlocker(state: GameState, id: RegionId): RegionUnlockBlocker | undefined {
+  if (isRegionAdjacentToUnlocked(state, id)) return undefined;
+  if (!isRegionSeaAdjacentToUnlocked(state, id)) return 'not_adjacent';
+  return hasOperationalHarbor(state) ? undefined : 'needs_harbor';
 }
 
 /** Freischaltkosten einer Region aus ihrer Definition (§ Welt 2.0). */

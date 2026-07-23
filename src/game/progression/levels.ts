@@ -6,6 +6,14 @@ import { newId } from '../engine/rng.ts';
 import { isRegionAdjacentToUnlocked } from '../map/world.ts';
 import { BAKED_REGIONS, startRegionConfig } from '../config/startRegion.config.ts';
 
+/**
+ * § Final World Compaction 8.1 §6: Ab diesem Level ist die erste Erweiterung
+ * nach der Startregion kostenlos. In der Progressions-Schicht definiert (kein
+ * Renderer-/State-Bezug), damit sowohl der Level-Hinweis als auch der Controller
+ * dieselbe Wahrheit nutzen.
+ */
+export const FREE_EXPANSION_LEVEL = 3;
+
 /** Kurzcharakter einer Region als Bürger-Hinweis-Schlüssel (§4 Auftrag B). */
 function regionBoonKey(mods: Partial<Record<string, number>> | undefined, roadCostFactor: number | undefined, buildable: number): string {
   // Stärksten Vorteil hervorheben; sonst „viel Platz" oder — bei teurem
@@ -53,6 +61,17 @@ function hintNewlyReachableRegions(state: GameState, config: GameConfig): void {
         name: def.nameKey,
         boon: regionBoonKey(def.productionModifiers, def.roadCostFactor, def.buildableTiles),
       },
+      kind: 'info',
+      createdAt: state.meta.lastSimTime,
+    });
+  }
+  // § Final World Compaction 8.1 §6: Genau beim Erreichen der Gratis-Stufe (L3)
+  // und solange noch keine Erweiterung erfolgt ist, ein einmaliger Tutorial-
+  // Hinweis, dass die erste Nachbarlandschaft kostenlos gewählt werden darf.
+  if (state.level.current === FREE_EXPANSION_LEVEL && state.stats.regionsUnlocked === 0) {
+    state.mayor.messages.unshift({
+      id: newId(state, 'msg'),
+      textKey: 'message.free_expansion_hint',
       kind: 'info',
       createdAt: state.meta.lastSimTime,
     });

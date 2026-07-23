@@ -15,10 +15,10 @@ export const levelsConfig: LevelDef[] = [
   { level: 3, xpRequired: 130, unlocks: ['well', 'mayor_house'], rewards: { money: 20_000, gold: 10 } },
   { level: 4, xpRequired: 310, unlocks: ['farm', 'quarry'], rewards: { money: 30_000 } },
   { level: 5, xpRequired: 620, unlocks: ['market', 'trading_post'], rewards: { money: 47_000, gold: 15 } },
-  { level: 6, xpRequired: 1120, unlocks: ['shop_small', 'warehouse'], rewards: { money: 85_000 } },
+  { level: 6, xpRequired: 1120, unlocks: ['shop_small', 'warehouse', 'dock_small'], rewards: { money: 85_000 } },
   { level: 7, xpRequired: 1780, unlocks: ['park', 'playground', 'water_pump', 'depot', 'deco_tree', 'deco_flowerbed', 'deco_fountain', 'deco_bench'], rewards: { money: 130_000, gold: 20 } },
   { level: 8, xpRequired: 2680, unlocks: ['fire_station', 'office'], rewards: { money: 200_000 } },
-  { level: 9, xpRequired: 3950, unlocks: ['bakery'], rewards: { money: 300_000, gold: 25 } },
+  { level: 9, xpRequired: 3950, unlocks: ['bakery', 'river_port'], rewards: { money: 300_000, gold: 25 } },
   // L10: keine neuen Gebäude — die Stufen-Gates (Ladenzeile, Hochregallager)
   // tragen das Band; das Level-Up finanziert den Ausbau.
   { level: 10, xpRequired: 5700, unlocks: [], rewards: { money: 500_000, gold: 50 } },

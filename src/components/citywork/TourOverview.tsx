@@ -1,6 +1,6 @@
-import { ArrowDownToLine, Flag, RotateCcw, Warehouse } from 'lucide-react';
+import { AlertTriangle, ArrowDownToLine, Flag, RotateCcw, Warehouse } from 'lucide-react';
 import { BuildingArt } from '../art/index.ts';
-import type { CargoRouteStop } from '../../game/activities/logistics.ts';
+import type { ActivityProgress, CargoRouteStop } from '../../game/activities/logistics.ts';
 import type { ActivityVehicleDef } from '../../game/config/types.ts';
 import type { BuildingCategory } from '../../game/types.ts';
 
@@ -18,43 +18,60 @@ export function TourOverview({
   targets,
   orderedTargetIds,
   cargoStops,
+  progress,
   vehicle,
 }: {
   source: TourDisplayPoint;
   targets: TourDisplayPoint[];
   orderedTargetIds: string[];
   cargoStops?: CargoRouteStop[];
+  progress?: ActivityProgress;
   vehicle?: ActivityVehicleDef;
 }) {
   const targetMap = new Map(targets.map((target) => [target.id, target]));
-  const stops = cargoStops?.length
+  const stops: CargoRouteStop[] = cargoStops?.length
     ? cargoStops
     : [
-        { type: 'source' as const, buildingId: source.id, pathIndex: 0, amount: 0, cargoAfter: 0 },
+        { type: 'source', buildingId: source.id, pathIndex: 0, amount: 0, cargoAfter: 0, status: 'completed' },
         ...orderedTargetIds.map((buildingId, index) => ({
           type: 'delivery' as const,
           buildingId,
           pathIndex: index + 1,
           amount: 0,
           cargoAfter: 0,
+          status: 'completed' as const,
         })),
       ];
+  // §3.2: Lieferziele und Nachfüllstopps werden NIE in einer Zahl vermischt.
+  const deliveriesDone = progress?.deliveryTargetsCompleted ?? orderedTargetIds.length;
+  const deliveriesTotal = progress?.deliveryTargetsTotal ?? targets.length;
+  const resupplyDone = progress?.resupplyStopsCompleted ?? 0;
+  const resupplyTotal = progress?.resupplyStopsTotal ?? 0;
 
   return (
     <section className="citywork-v4-tour">
       <div className="citywork-v4-section-head">
         <div><small>Live aus deiner Route</small><strong>Tourübersicht</strong></div>
-        <span>{orderedTargetIds.length}/{targets.length} Stopps</span>
+        <span>Lieferziele {deliveriesDone}/{deliveriesTotal}</span>
       </div>
+      {resupplyTotal > 0 && (
+        <p className="citywork-v4-tour-resupply">Nachladen {resupplyDone}/{resupplyTotal}</p>
+      )}
       <div className="citywork-v4-tour-list">
         {stops.map((stop, index) => {
           const point = stop.type === 'delivery' ? targetMap.get(stop.buildingId) : source;
           if (!point) return null;
           const next = stops[index + 1];
           const distanceTiles = next ? Math.max(0, next.pathIndex - stop.pathIndex) : 0;
-          const meta = stopMeta(stop.type);
+          const skipped = stop.status === 'skipped';
+          const meta = skipped
+            ? { label: 'Zu wenig Ladung', icon: <AlertTriangle size={12} /> }
+            : stopMeta(stop.type);
           return (
-            <article key={`${stop.type}-${stop.buildingId}-${stop.pathIndex}`} className={`citywork-v4-tour-stop ${stop.type}`}>
+            <article
+              key={`${stop.type}-${stop.buildingId}-${stop.pathIndex}`}
+              className={`citywork-v4-tour-stop ${stop.type}${skipped ? ' skipped' : ''}`}
+            >
               <span className="citywork-v4-tour-line"><i>{index + 1}</i></span>
               <span className="citywork-v4-tour-art">
                 <BuildingArt id={point.buildingDefId} category={point.category} stage={point.upgradeLevel} px={48} />
@@ -62,7 +79,13 @@ export function TourOverview({
               <div>
                 <small>{meta.icon}{meta.label}</small>
                 <strong>{point.label}</strong>
-                <span>{stop.amount > 0 ? `${stop.amount.toLocaleString('de-DE')} laden/liefern` : point.subtitle}</span>
+                <span>
+                  {skipped
+                    ? 'Leer vorbeigefahren — fülle nach und fahre erneut vorbei.'
+                    : stop.amount > 0
+                      ? `${stop.amount.toLocaleString('de-DE')} laden/liefern`
+                      : point.subtitle}
+                </span>
               </div>
               <dl>
                 <div><dt>Ladung danach</dt><dd>{stop.amount > 0 ? stop.cargoAfter.toLocaleString('de-DE') : '–'}</dd></div>
@@ -72,10 +95,10 @@ export function TourOverview({
             </article>
           );
         })}
-        {orderedTargetIds.length < targets.length && (
+        {deliveriesDone < deliveriesTotal && (
           <div className="citywork-v4-tour-open">
             <Flag size={18} />
-            <span><strong>{targets.length - orderedTargetIds.length} Ziele offen</strong><small>Führe die Route über die blauen Liefermarker.</small></span>
+            <span><strong>{deliveriesTotal - deliveriesDone} Ziele offen</strong><small>Führe die Route über die blauen Liefermarker.</small></span>
           </div>
         )}
       </div>

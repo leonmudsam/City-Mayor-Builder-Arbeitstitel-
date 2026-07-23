@@ -6,6 +6,12 @@ Langzeitdokumente; er ersetzt weder `AGENTS.md` noch `docs/ARCHITECTURE.md`.
 
 ## Lesereihenfolge
 
+Für World Rebuild 6.0 zuerst `NEW_ISLAND_AUDIT.md`,
+`NEW_ISLAND_REBUILD_PLAN.md`, `NEW_ISLAND_PART_MAP.md`,
+`NEW_ISLAND_REGION_PLAN.md`, `NEW_ISLAND_MATERIAL_MATRIX.md` und
+`NEW_ISLAND_INFRASTRUCTURE.md` lesen. Diese Dokumente überstimmen die
+historischen 384²-/32-Regionen-Angaben der älteren Map-Redesign-Berichte.
+
 1. `PROJECT_STATE.md` — was aktuell wirklich läuft.
 2. `OWNERSHIP.md` — welche Schicht welche Verantwortung besitzt.
 3. `MAP_REDESIGN_AUDIT.md`, `MAP_REDESIGN_PLAN.md` und
@@ -21,7 +27,7 @@ Langzeitdokumente; er ersetzt weder `AGENTS.md` noch `docs/ARCHITECTURE.md`.
 11. `VISUAL_ROADMAP.md` — erledigte und spätere Mockup-Bausteine.
 
 Für Map und Stadtarbeit zusätzlich zuerst `../HANDOFF_CLAUDE.md` lesen; dort
-stehen die v0.70-Renderergrenzen, v0.69-Read-Verträge und alle exakt benannten
+stehen die v0.71-Renderergrenzen, v0.69-Read-Verträge und alle exakt benannten
 `TODO(CLAUDE_LOGIC)`-Lücken.
 
 ## Verbindliche Hauptquellen

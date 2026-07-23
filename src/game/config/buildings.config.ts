@@ -369,6 +369,24 @@ export const buildingsConfig: BuildingDef[] = [
         ],
       },
     ],
+    // § Active Operations 2.0 (Referenzschnitt): Das Sägewerk erzeugt Holz NICHT
+    // mehr passiv (der `produce`-Effekt oben wird für Betriebe mit diesem Profil
+    // abgeschaltet). Stattdessen fällen Arbeiter markierte Bäume und lagern das
+    // Holz ins lokale Betriebslager. Höhere Stufen = mehr Arbeiter, Tempo,
+    // Traglast, Lager. Werte sind Startbalance und werden auf Zielhardware
+    // feinjustiert (docs/agents/ACTIVE_OPERATIONS_PLAN.md §4).
+    operation: {
+      resource: 'wood',
+      nodeType: 'tree',
+      nodeTerrain: 'forest',
+      efficientRadius: 8,
+      maxRadius: 14,
+      stages: [
+        { workerSlots: 2, movementSpeed: 7, workSpeed: 30, carryCapacity: 12, storageCapacity: 120 },
+        { workerSlots: 4, movementSpeed: 8, workSpeed: 40, carryCapacity: 18, storageCapacity: 260 },
+        { workerSlots: 7, movementSpeed: 9, workSpeed: 55, carryCapacity: 26, storageCapacity: 600 },
+      ],
+    },
     locationBonus: { terrain: 'forest', radius: 3, perTilePct: 5, maxPct: 50 },
     buildLimit: [{ level: 2, max: 2 }, { level: 5, max: 3 }, { level: 8, max: 5 }],
   },
@@ -1178,6 +1196,68 @@ export const buildingsConfig: BuildingDef[] = [
       { type: 'ambience', amount: 1, radius: 5 },
     ],
     buildLimit: [{ level: 11, max: 3 }, { level: 14, max: 6 }, { level: 17, max: 9 }],
+  },
+
+  // ---- Wasser-Infrastruktur (Overhaul 7.0) ----
+  // Straße ist Betriebsanforderung, aber keine Platzierungssperre. Der
+  // zusätzliche Wasser-Footprint wird in buildings/placement.ts validiert.
+  {
+    id: 'dock_small',
+    category: 'infrastructure',
+    nameKey: 'building.dock_small',
+    size: { w: 2, h: 2 },
+    sizeClass: 'S',
+    requiresRoad: true,
+    infrastructureModes: ['road', 'water'],
+    waterfront: {
+      landWidth: 2,
+      landDepth: 2,
+      waterWidth: 2,
+      waterDepth: 2,
+      shorelineTolerance: 0,
+      minimumWaterDepth: 0.55,
+    },
+    unlockLevel: 6,
+    cost: { money: 95_000, wood: 140, stone: 25 },
+    constructionSec: 75,
+    xpReward: 35,
+    effects: [
+      { type: 'storage', resource: 'wood', amount: 180 },
+      { type: 'storage', resource: 'food', amount: 120 },
+      { type: 'jobs', amount: 5 },
+      { type: 'upkeep', resource: 'money', perMinute: 420 },
+    ],
+    buildLimit: [{ level: 6, max: 2 }, { level: 9, max: 5 }, { level: 13, max: 10 }],
+  },
+  {
+    id: 'river_port',
+    category: 'infrastructure',
+    nameKey: 'building.river_port',
+    size: { w: 4, h: 4 },
+    sizeClass: 'L',
+    requiresRoad: true,
+    infrastructureModes: ['road', 'water'],
+    waterfront: {
+      landWidth: 4,
+      landDepth: 3,
+      waterWidth: 4,
+      waterDepth: 3,
+      shorelineTolerance: 0,
+      minimumWaterDepth: 0.7,
+    },
+    unlockLevel: 9,
+    cost: { money: 360_000, wood: 320, stone: 220 },
+    constructionSec: 210,
+    xpReward: 90,
+    effects: [
+      { type: 'storage', resource: 'wood', amount: 650 },
+      { type: 'storage', resource: 'stone', amount: 650 },
+      { type: 'storage', resource: 'food', amount: 420 },
+      { type: 'jobs', amount: 18 },
+      { type: 'logistics', boostPct: 12, radius: 8 },
+      { type: 'upkeep', resource: 'money', perMinute: 1_650 },
+    ],
+    buildLimit: [{ level: 9, max: 2 }, { level: 12, max: 4 }, { level: 16, max: 8 }],
   },
 
   // ---- Freizeit ----

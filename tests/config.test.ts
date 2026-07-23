@@ -31,8 +31,15 @@ describe('config', () => {
       const m = Math.max(def.size.w, def.size.h);
       expect(m, `${def.id}: ${def.sizeClass} vs ${def.size.w}×${def.size.h}`).toBeGreaterThanOrEqual(min);
       expect(m, `${def.id}: ${def.sizeClass} vs ${def.size.w}×${def.size.h}`).toBeLessThanOrEqual(max);
-      // Footprints sind quadratisch (Rotation bleibt rein visuell).
+      // Der belegte Bauplot bleibt quadratisch. Waterfront-Gebäude dürfen darin
+      // einen rechteckigen Land-Footprint deklarieren und so kardinal drehen.
       expect(def.size.w, `${def.id}: Footprint muss quadratisch sein`).toBe(def.size.h);
+      if (def.waterfront) {
+        expect(def.infrastructureModes).toContain('water');
+        expect(def.waterfront.landWidth).toBeLessThanOrEqual(def.size.w);
+        expect(def.waterfront.landDepth).toBeLessThanOrEqual(def.size.h);
+        expect(def.waterfront.waterWidth).toBeLessThanOrEqual(def.size.w);
+      }
     }
   });
 

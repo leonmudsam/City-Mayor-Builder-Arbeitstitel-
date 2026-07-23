@@ -10,20 +10,22 @@ import { loadConfig } from '../src/game/config/index.ts';
 // einem Rebake, zuerst tools/bake-report.md prüfen.
 
 describe('baked island world', () => {
-  it('has the binding dimensions (384×384 tiles, organische Regionen)', () => {
-    expect(WORLD_TILES).toBe(384);
+  it('has the binding dimensions (512×512 tiles, konsolidierte Regionen)', () => {
+    expect(WORLD_TILES).toBe(512);
     expect(terrainGrid.length).toBe(WORLD_TILES * WORLD_TILES);
     expect(regionGrid.length).toBe(WORLD_TILES * WORLD_TILES);
-    // Zielkorridor des Auftrags: ~24–32 benannte Landschaften.
-    expect(REGION_COUNT).toBeGreaterThanOrEqual(24);
-    expect(REGION_COUNT).toBeLessThanOrEqual(40);
+    // § Final World Compaction 8.1: aus 40 kleinteiligen Landschaften wurden
+    // EINE zentrale Startregion und ZWÖLF bedeutende Freischaltungen.
+    expect(REGION_COUNT).toBe(13);
     expect(BAKED_REGIONS.length).toBe(REGION_COUNT);
   });
 
   it('contains only valid terrain ids and every biome exists on the island', () => {
     const seen = new Set<number>();
     for (const id of terrainGrid) {
-      expect(id).toBeLessThan(TERRAIN_IDS.length);
+      if (id >= TERRAIN_IDS.length) {
+        throw new Error(`Ungültige Terrain-ID ${id} im 512²-Bake`);
+      }
       seen.add(id);
     }
     // Alle 7 Terrain-Typen kommen vor (water/river/sand/fertile/grass/forest/mountain).
@@ -35,13 +37,19 @@ describe('baked island world', () => {
     // Fluss-Mündungen und winzige, vom Festland abgeschnittene Küsten-Splitter
     // (Sandbänke) — die sind nie erschließbar und damit nie bebaubar.
     let strayLand = 0;
+    let maxRegionId = 0;
     for (let i = 0; i < regionGrid.length; i++) {
       const rid = regionGrid[i]!;
-      expect(rid).toBeLessThanOrEqual(REGION_COUNT);
+      maxRegionId = Math.max(maxRegionId, rid);
       const terrain = TERRAIN_IDS[terrainGrid[i]!];
       if (rid === 0 && terrain !== 'water' && terrain !== 'river') strayLand++;
     }
-    expect(strayLand).toBeLessThan(400);
+    expect(maxRegionId).toBeLessThanOrEqual(REGION_COUNT);
+    // § Final World Compaction 8.1: Die Quellinsel ist ein Archipel. Die 13
+    // Gameplayregionen decken alle erschließbaren Landmassen ab; übrig bleiben
+    // nur kleine, vom Regionsnetz abgeschnittene Küsten-/Insel-Splitter, die nie
+    // bebaubar sind. Der relative Grenzwert bleibt bei Rebakes skalierbar.
+    expect(strayLand / regionGrid.length).toBeLessThan(0.03);
     // Die Weltgrenze ist reiner Ozean ohne Region (Insel-Garantie).
     for (let i = 0; i < WORLD_TILES; i += 3) {
       expect(terrainAt(i, 0)).toBe('water');
@@ -64,10 +72,15 @@ describe('baked island world', () => {
     }
   });
 
-  it('guarantees the start: ≥2500 buildable tiles, 7×7 grass town-hall block and 5 roads', () => {
+  it('guarantees the compact central 650–950 start, 7×7 grass reserve and two road axes', () => {
     expect(startRegionConfig.startRegionId).toBe(BAKED_START.regionId);
     const startBaked = BAKED_REGIONS[BAKED_START.regionId - 1]!;
-    expect(startBaked.buildable).toBeGreaterThanOrEqual(2500);
+    // § Final World Compaction 8.1 §3.1: bewusst kompakter, ausgeschnittener
+    // Startkern (650–950 bebaubare Kacheln) — nicht mehr die gesamte Zentralebene.
+    expect(startBaked.buildable).toBeGreaterThanOrEqual(650);
+    expect(startBaked.buildable).toBeLessThanOrEqual(950);
+    expect(BAKED_START.score.earlyBuildableTiles).toBeGreaterThanOrEqual(4000);
+    expect(BAKED_START.score.earlyBuildableTiles).toBeLessThanOrEqual(9500);
     // Rathaus-5×5 inkl. 1 Kachel Rand und die Startstraßen liegen auf Gras.
     const th = startRegionConfig.townHall;
     for (let dy = -1; dy <= 5; dy++) {
@@ -77,17 +90,23 @@ describe('baked island world', () => {
       }
     }
     for (const r of startRegionConfig.startRoads) expect(terrainAt(r.x, r.y)).toBe('grass');
+    expect(startRegionConfig.startRoads).toHaveLength(16);
+    expect(new Set(startRegionConfig.startRoads.map((r) => r.x)).size).toBeGreaterThan(1);
+    expect(new Set(startRegionConfig.startRoads.map((r) => r.y)).size).toBeGreaterThan(1);
   });
 
-  it('keeps regions.config aligned with the bake (alle Ids, Start frei, Teaser-Insel gesperrt)', () => {
+  it('keeps regions.config aligned with the bake (alle Ids, Start frei, jede Region erreichbar)', () => {
     const config = loadConfig(); // wirft bei Config↔Bake-Abweichungen (Ids, Prereq-Adjazenz)
     expect(config.regionList.length).toBe(REGION_COUNT);
     const start = config.regions.get(BAKED_START.regionId)!;
     expect(start.biome).toBe('zentrum');
     expect(start.unlockCost).toBe(0);
-    // Regionen ohne Bake-Nachbarn (vorgelagerte Inseln) sind nie freischaltbar.
-    for (const baked of BAKED_REGIONS) {
-      if (baked.adjacent.length === 0) expect(config.regions.get(baked.id)!.unlockable).toBe(false);
-    }
+    // § Final World Compaction 8.1 §4: keine bedeutungslosen Mini-Regionen und
+    // keine dauerhaften Teaser mehr — jede der 13 Regionen ist erreichbar (1
+    // Start + 12 Freischaltungen). Die Archipel-Erreichbarkeit über See wird
+    // durch `requiresHarbor` + `seaAdjacent` sichergestellt.
+    expect(config.regionList.every((region) => region.unlockable)).toBe(true);
+    expect(config.regionList.filter((region) => region.unlockLevel <= 1)).toHaveLength(1);
+    expect(config.regionList.filter((region) => region.unlockable && region.unlockLevel > 1)).toHaveLength(12);
   });
 });

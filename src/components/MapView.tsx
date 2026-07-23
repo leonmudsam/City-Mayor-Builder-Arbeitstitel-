@@ -25,6 +25,8 @@ function makeMapApi(r: IMapRenderer): MapApi {
     getCameraView: () => r.getCameraView(),
     focusGround: (x, z, dist) => r.focusGround(x, z, dist),
     setInfoLayer: (mode) => r.setInfoLayer(mode),
+    setInfrastructureLayer: (mode) => r.setInfrastructureLayer(mode),
+    setWorldReveal: (state) => r.setWorldReveal(state),
     canDrive: () => r.canDrive(),
     enterDrive: () => r.enterDrive(),
     exitDrive: () => r.exitDrive(),
@@ -127,6 +129,15 @@ export function MapView() {
     setMapApi(makeMapApi(renderer));
     renderer.applyPreset(ui.cameraPreset);
     renderer.setInfoLayer(ui.infoLayerMode);
+    renderer.setInfrastructureLayer(ui.infrastructureLayerMode);
+    const syncWorldReveal = (state = useUiStore.getState()) => renderer.setWorldReveal({
+      fogDisabled: state.fogDisabled,
+      revealLockedRegionsVisually: state.revealLockedRegionsVisually,
+      unlockAllRegionsGameplay: [...controller.config.regions.values()]
+        .filter((region) => region.unlockable)
+        .every((region) => controller.state.world.regions[String(region.id)]?.status === 'unlocked'),
+    });
+    syncWorldReveal(ui);
 
     // Mirror UI state into the renderer.
     const unsubscribe = useUiStore.subscribe((s) => {
@@ -135,7 +146,10 @@ export function MapView() {
       renderer.setMoving(s.movingBuildingId);
       renderer.setSelected(s.selectedBuildingId);
       renderer.setInfoLayer(s.infoLayerMode);
+      renderer.setInfrastructureLayer(s.infrastructureLayerMode);
+      syncWorldReveal(s);
     });
+    const unsubscribeController = controller.subscribe(() => syncWorldReveal());
 
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
@@ -154,6 +168,7 @@ export function MapView() {
     return () => {
       window.removeEventListener('keydown', onKey);
       unsubscribe();
+      unsubscribeController();
       setMapApi(undefined);
       renderer.destroy();
       rendererRef.current = undefined;
@@ -258,7 +273,12 @@ function PlacementBanner({ info, moving }: { info: HoverInfo | undefined; moving
   } else if (info) {
     className += ' banner-ok';
     icon = <CheckCircle2 size={18} />;
-    text = `${defName}: ${moving ? t('ui.move.valid') : t('ui.placement.valid')}`;
+    text = info.waterfront
+      ? `${defName}: ${t('ui.placement.waterfront_valid', {
+          depth: info.waterfront.minimumDepth.toFixed(1),
+          road: info.waterfront.roadAccess ? t('ui.yes') : t('ui.not_yet'),
+        })}`
+      : `${defName}: ${moving ? t('ui.move.valid') : t('ui.placement.valid')}`;
   }
 
   return (
@@ -273,7 +293,7 @@ function PlacementBanner({ info, moving }: { info: HoverInfo | undefined; moving
           title={t('ui.placement.rotate_hint')}
         >
           <RotateCw size={16} />
-          {placingRotation}°
+          {info?.rotation ?? placingRotation}°
         </button>
       )}
       <span className="banner-sub">{t('ui.placement.cancel_hint')}</span>

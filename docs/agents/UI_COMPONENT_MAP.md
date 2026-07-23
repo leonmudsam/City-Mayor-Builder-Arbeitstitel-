@@ -12,8 +12,12 @@
 | Bürger-Inbox + Detail | `panels/CitizenRequestsPanel.tsx` | Quest-Snapshot, `claimQuest` |
 | Live-Minimap | `hud/WorldMiniMap.tsx` | Welt-Bake, Gebäude, Diagnosen, `MapApi` |
 | 3D-Info-Layer | `hud/InfoLayerControl.tsx` | UI-Store → `MapApi.setInfoLayer` |
+| Infrastruktur-Layer | `hud/InfoLayerControl.tsx` | UI-Store → `MapApi.setInfrastructureLayer`; Renderer liest Controller-Graph/Diagnosen |
 | Gebäudekatalog | `panels/BuildMenu.tsx` | Building-Config, Buildkosten, `startPlacing` |
-| Gebäudedetail | `panels/FloatingBuildingSheet.tsx` | Gebäude-Snapshot, Diagnosen, Commands |
+| Gebäudedetail / Hafenanschlüsse | `panels/FloatingBuildingSheet.tsx` | Gebäude-Snapshot, Diagnosen, `getBuildingInfrastructureStatus`, `getAvailableHarborConnections` |
+| Hafen-Ghost | `renderer/three/ThreeMapRenderer.ts` | `getWaterfrontPlacementPreview`; Land-/Wasserzellen und automatische Rotation |
+| Schifffahrtsvorschau | `renderer/three/ThreeMapRenderer.ts` | `getShippingRoutePreview`; reine gestrichelte Graphprojektion |
+| Dev-Reveal | `panels/DebugPanel.tsx` | UI-only `toggleRegionFog` getrennt von `debugUnlockAllRegions` |
 | Region freischalten | `panels/RegionDialog.tsx` | Regions-Config, `unlockRegion` |
 | Stadtarbeit-Board | `panels/ActivityPanel.tsx` | `getActivityBoard`, Aktivitäts-Commands |
 | Stadtarbeit kompakt | `citywork/ActivityExecutionWidget.tsx` | aktive Activity, `MapApi.setMissionFollow`, Abbruch |
@@ -36,6 +40,9 @@
   Klick-/Ziehfokus; sie rendert keine zweite 3D-Welt.
 - `InfoLayerControl` hält nur Filterzustand. `ThreeMapRenderer` liest vorhandene
   Marker-/Effektdaten und verändert niemals Simulationswerte.
+- Der Infrastruktur-Layer ist ebenfalls Präsentation. Wassererreichbarkeit,
+  Gebäudeanschluss und Routenvorschau kommen ausschließlich aus Controller-
+  Read-Helpern; React und Three.js mutieren keinen Gameplayzustand.
 - `ActivityRoutePlanner` hält nur Fahrzeug, Filter und gezeichneten UI-Draft.
   Die Reihenfolge kommt aus `controller.getActivityRoutePreview(...)`; es gibt
   keine Drag-&-Drop-Reihenfolge und keine lokale Routenvorlage. Beim Start

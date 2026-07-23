@@ -6,7 +6,7 @@
 // frame and writes them into the three.js camera. Being pure makes the whole of
 // the navigation logic unit-testable (see tests/camera.test.ts).
 
-import { startRegionConfig, WORLD_TILES } from '../../game/config/startRegion.config.ts';
+import { startRegionConfig, worldOverviewCenter } from '../../game/config/startRegion.config.ts';
 import {
   CAMERA_DEFAULTS,
   CAMERA_PRESETS,
@@ -157,7 +157,7 @@ export class CameraController3D {
   applyPreset(preset: CameraPreset): void {
     const p = CAMERA_PRESETS[preset];
     if (p.focusCity) this.focusCity();
-    if (p.focusWorld) this.focusGround(WORLD_TILES / 2, WORLD_TILES / 2);
+    if (p.focusWorld) this.focusGround(worldOverviewCenter.x, worldOverviewCenter.y);
     if (p.pitch !== undefined) this.gPitch = clamp(p.pitch, this.bounds.minPitch, this.bounds.maxPitch);
     if (p.dist !== undefined) this.gDist = clamp(p.dist, this.bounds.minDist, this.bounds.maxDist);
     if (p.yaw !== undefined) this.gYaw = p.yaw;

@@ -1,5 +1,6 @@
-import { Bug, CheckCheck, Coins, Hammer, PackageOpen, X } from 'lucide-react';
+import { Bug, CheckCheck, CloudOff, Coins, Hammer, MapPinned, PackageOpen, X } from 'lucide-react';
 import { useGame, useUiStore } from '../../state/store.ts';
+import { GraphicsQualityControl, PerfReadout } from './PerformancePanel.tsx';
 import { t } from '../../i18n/index.ts';
 
 // Prototype cheats (§10): a clearly-labelled debug area for balancing tests,
@@ -8,9 +9,9 @@ import { t } from '../../i18n/index.ts';
 // here bypasses the normal state flow — it just skips the wait/cost.
 export function DebugPanel() {
   const game = useGame();
-  const { setPanel, pushToast } = useUiStore();
+  const { fogDisabled, setPanel, pushToast, toggleRegionFog } = useUiStore();
 
-  if (!game.config.features.debugTools) return null;
+  if (!import.meta.env.DEV || !game.config.features.debugTools) return null;
 
   const done = (label: string) => pushToast(label, 'success');
 
@@ -26,6 +27,27 @@ export function DebugPanel() {
       </div>
 
       <p className="debug-banner">{t('ui.debug.banner')}</p>
+
+      <button
+        className="btn-secondary"
+        aria-pressed={fogDisabled}
+        onClick={() => {
+          toggleRegionFog();
+          done(t(fogDisabled ? 'ui.debug.reveal_regions_off_done' : 'ui.debug.reveal_regions_on_done'));
+        }}
+      >
+        <CloudOff size={16} /> {t(fogDisabled ? 'ui.debug.reveal_regions_off' : 'ui.debug.reveal_regions_on')}
+      </button>
+
+      <button
+        className="btn-secondary"
+        onClick={() => {
+          const result = game.debugUnlockAllRegions();
+          if (result.ok) done(t('ui.debug.unlock_regions_done'));
+        }}
+      >
+        <MapPinned size={16} /> {t('ui.debug.unlock_regions')}
+      </button>
 
       <button
         className="btn-secondary"
@@ -72,6 +94,11 @@ export function DebugPanel() {
       >
         <CheckCheck size={16} /> {t('ui.debug.finish_upgrades')}
       </button>
+
+      {/* § Säule B: Live-Messwerte + Qualitätsstufe zum Vermessen der
+          Vegetations-Performance (keine „Optimierung nach Gefühl"). */}
+      <PerfReadout />
+      <GraphicsQualityControl />
     </aside>
   );
 }

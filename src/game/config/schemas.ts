@@ -43,6 +43,15 @@ export const buildingDefSchema = z.object({
   size: z.object({ w: z.number().int().min(1).max(12), h: z.number().int().min(1).max(12) }),
   sizeClass: z.enum(['XS', 'S', 'M', 'L', 'XL', 'XXL']),
   requiresRoad: z.boolean(),
+  infrastructureModes: z.array(z.enum(['road', 'water', 'rail', 'air'])).optional(),
+  waterfront: z.object({
+    landWidth: z.number().int().positive(),
+    landDepth: z.number().int().positive(),
+    waterWidth: z.number().int().positive(),
+    waterDepth: z.number().int().positive(),
+    shorelineTolerance: z.number().min(0).max(1),
+    minimumWaterDepth: z.number().positive(),
+  }).optional(),
   unlockLevel: z.number().int().min(1),
   cost: z.record(resourceId, z.number().nonnegative()),
   constructionSec: z.number().nonnegative(),
@@ -50,6 +59,28 @@ export const buildingDefSchema = z.object({
   effects: z.array(buildingEffect),
   upgrades: z
     .array(z.object({ cost: z.record(resourceId, z.number().nonnegative()), constructionSec: z.number().nonnegative(), effects: z.array(buildingEffect), xpReward: z.number().nonnegative(), unlockLevel: z.number().int().min(1).optional(), nameKey: z.string().optional() }))
+    .optional(),
+  // Aktiver Betrieb (§ Active Operations 2.0) — schaltet passive Produktion ab.
+  operation: z
+    .object({
+      resource: resourceId,
+      nodeType: z.enum(['tree', 'rock', 'crop', 'livestock', 'water_source', 'wild_plant']),
+      nodeTerrain: terrainType,
+      efficientRadius: z.number().int().positive(),
+      maxRadius: z.number().int().positive(),
+      stages: z
+        .array(
+          z.object({
+            workerSlots: z.number().int().positive(),
+            movementSpeed: z.number().positive(),
+            workSpeed: z.number().positive(),
+            carryCapacity: z.number().positive(),
+            storageCapacity: z.number().positive(),
+          }),
+        )
+        .min(1),
+    })
+    .refine((op) => op.maxRadius >= op.efficientRadius, { message: 'operation: maxRadius < efficientRadius' })
     .optional(),
   locationBonus: z
     .object({ terrain: terrainType, radius: z.number().positive(), perTilePct: z.number().positive(), maxPct: z.number().positive() })
@@ -92,6 +123,7 @@ export const regionDefSchema = z.object({
     .record(z.enum(['wood', 'stone', 'food', 'water', 'energy']), z.number().positive())
     .optional(),
   roadCostFactor: z.number().positive().optional(),
+  requiresHarbor: z.boolean().optional(),
 });
 
 export const questDefSchema = z.object({
@@ -346,6 +378,76 @@ export const saveGameSchema = z.object({
     cooldowns: z.record(z.string(), z.number()),
     fulfilledContracts: z.array(z.string()),
   }),
+  // § Active Operations 2.0 (Save v17): lokale Betriebslager, Arbeiterzustände,
+  // aktive Aufträge und Ressourcenknoten-Deltas. Optional/additiv — Alt-Saves
+  // ohne das Feld bleiben gültig; der Controller initialisiert lazily.
+  operations: z
+    .object({
+      inventories: z.record(
+        z.string(),
+        z.object({
+          capacity: z.number().nonnegative(),
+          items: z.record(resourceId, z.number()),
+          reserved: z.record(resourceId, z.number()),
+        }),
+      ),
+      workers: z.record(
+        z.string(),
+        z.array(
+          z.object({
+            id: z.string(),
+            status: z.enum(['idle', 'walking_to_target', 'working', 'returning', 'waiting', 'blocked']),
+            targetNodeId: z.string().optional(),
+            carriedAmount: z.number().nonnegative(),
+            progress: z.number(),
+            x: z.number(),
+            y: z.number(),
+          }),
+        ),
+      ),
+      active: z.record(
+        z.string(),
+        z.object({
+          buildingId: z.string(),
+          type: z.literal('harvest'),
+          status: z.enum(['active', 'paused']),
+          targetNodeIds: z.array(z.string()),
+          startedAt: z.number(),
+        }),
+      ),
+      nodeDeltas: z.record(
+        z.string(),
+        z.object({
+          remaining: z.number().optional(),
+          reservedBy: z.string().optional(),
+          depletedAt: z.number().optional(),
+          regenerationAt: z.number().optional(),
+        }),
+      ),
+      // A5 Transport (Save v18): laufende Lagertransporte. Optional/additiv —
+      // v17-Saves ohne das Feld bleiben gültig (Migration ergänzt es lazily).
+      transfers: z
+        .record(
+          z.string(),
+          z.object({
+            id: z.string(),
+            sourceBuildingId: z.string(),
+            targetBuildingId: z.string(),
+            resource: resourceId,
+            amount: z.number().nonnegative(),
+            delivered: z.number().nonnegative().optional(),
+            onboard: z.number().nonnegative().optional(),
+            vehicleId: driveVehicle.optional(),
+            status: z.enum(['loading', 'in_transit', 'unloading', 'returning', 'delivered']),
+            progress: z.number(),
+            startedAt: z.number(),
+            travelMs: z.number().nonnegative(),
+            distanceTiles: z.number().nonnegative(),
+          }),
+        )
+        .optional(),
+    })
+    .optional(),
   stats: z.object({
     built: z.record(z.string(), z.number()),
     produced: z.record(resourceId, z.number()),

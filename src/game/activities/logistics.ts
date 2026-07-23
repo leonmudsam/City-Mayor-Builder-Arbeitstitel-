@@ -67,12 +67,52 @@ export interface CargoPlan {
   needsReload: boolean;
 }
 
+/**
+ * Eindeutiger Zustand eines Missionsstopps (§ Overhaul 8.0 / §3.2). Die
+ * Planungsprojektion kennt nur die Zustände, die sie ehrlich ableiten kann:
+ * `completed` (Menge vollständig übergeben), `partially_completed` (Kontakt mit
+ * Teilmenge), `skipped` (berührt, aber zu wenig Ladung) und `planned` (noch nie
+ * berührt). `approaching`/`loading`/`unloading`/`failed` beschreiben die
+ * LAUFENDE Fahrt und werden von der Ausführung gesetzt — die Planung erfindet
+ * sie nicht.
+ */
+export type ActivityStopStatus =
+  | 'planned'
+  | 'approaching'
+  | 'loading'
+  | 'unloading'
+  | 'completed'
+  | 'partially_completed'
+  | 'skipped'
+  | 'failed';
+
 export interface CargoRouteStop {
   type: 'source' | 'delivery' | 'resupply';
   buildingId: string;
   pathIndex: number;
   amount: number;
   cargoAfter: number;
+  /** §3.2: Ein Lieferziel ist erst `completed`, wenn seine Menge komplett übergeben wurde. */
+  status: ActivityStopStatus;
+}
+
+/**
+ * Getrennte Fortschrittszählung (§3.2). Lieferziele, Nachfüllstopps und eine
+ * eventuelle Rückkehr werden NIE in einer gemeinsamen Zahl vermischt — genau
+ * diese Vermischung erzeugte die falsche „4/5 Stopps"-Anzeige.
+ */
+export interface ActivityProgress {
+  deliveryTargetsCompleted: number;
+  deliveryTargetsTotal: number;
+  resupplyStopsCompleted: number;
+  resupplyStopsTotal: number;
+  /**
+   * Das aktuelle Missionsmodell kennt keine Pflichtrückkehr zum Depot. Das Feld
+   * existiert als kanonischer Vertrag für die spätere Leg-Planung und ist
+   * deshalb heute immer `false` — es wird nichts vorgetäuscht.
+   */
+  returnRequired: boolean;
+  returnCompleted: boolean;
 }
 
 /**
@@ -83,6 +123,12 @@ export interface CargoRouteStop {
 export interface CargoRouteEvaluation {
   stops: CargoRouteStop[];
   orderedTargetIds: string[];
+  /**
+   * Ziele, die der Weg berührt hat, die aber bis zum Ende NICHT vollständig
+   * beliefert wurden. Ein Kontakt mit zu wenig Ladung macht ein Ziel nicht
+   * dauerhaft ungültig: Führt der Weg nach dem Nachfüllen erneut hin, zählt
+   * dieser spätere Kontakt (§3.1 — Ursache des „4/5"-Fehlers).
+   */
   invalidTargetIds: string[];
   plannedResupplies: number;
   requiredResupplies: number;
@@ -92,6 +138,8 @@ export interface CargoRouteEvaluation {
   emptyTravelTiles: number;
   emptyTravelRatio: number;
   cargoValid: boolean;
+  /** §3.2: getrennte Zählung von Lieferzielen und Nachfüllstopps. */
+  progress: ActivityProgress;
 }
 
 export interface CargoRouteAnchor {
@@ -451,10 +499,15 @@ export function evaluateInfrastructure(input: InfrastructureEvalInput): Infrastr
 
 /**
  * Simuliert ausschließlich die Ladung auf einer bereits manuell gezeichneten
- * Route. Startladung und Nachfüllen geschehen nur am echten Quellanker. Ein
- * Ziel gilt erst dann als eingeplant, wenn beim ersten ausreichend beladenen
- * Kontakt seine komplette Menge ausgeladen werden kann. Dadurch bleiben
- * Kapazität, Leerfahrt und Nachfüllbedarf deterministisch und testbar.
+ * Route. Startladung und Nachfüllen geschehen nur am echten Quellanker.
+ *
+ * § Overhaul 8.0 / §3.1 — Der frühere Fehler „4/5 Stopps": Ein Ziel wurde beim
+ * ERSTEN Kontakt dauerhaft abgehakt. Fuhr der Spieler leer daran vorbei, zur
+ * Quelle zurück, füllte nach und kam wieder — der zweite, gültige Kontakt wurde
+ * ignoriert und das Ziel blieb für immer „ungültig". Jetzt bleibt ein Ziel offen,
+ * bis seine Menge wirklich übergeben wurde; jeder spätere Kontakt zählt erneut.
+ * Ein erfolgloser Kontakt wird als `skipped`-Stopp sichtbar dokumentiert, statt
+ * die Route still zu entwerten.
  */
 export function evaluateCargoRoute(
   plan: CargoPlan,
@@ -465,8 +518,7 @@ export function evaluateCargoRoute(
   const requirements = new Map(plan.requirements.map((requirement) => [requirement.targetId, requirement.amount]));
   const targetByTile = new Map(targets.map((target) => [`${target.x},${target.y}`, target]));
   const delivered = new Set<string>();
-  const encountered = new Set<string>();
-  const invalidTargetIds: string[] = [];
+  const touched = new Set<string>();
   const stops: CargoRouteStop[] = [];
   let remainingAmount = plan.totalRequired;
   let cargo = Math.min(plan.capacity, remainingAmount);
@@ -480,6 +532,7 @@ export function evaluateCargoRoute(
       pathIndex: 0,
       amount: cargo,
       cargoAfter: cargo,
+      status: 'completed',
     });
   }
 
@@ -498,19 +551,33 @@ export function evaluateCargoRoute(
           pathIndex: index,
           amount,
           cargoAfter: cargo,
+          status: 'completed',
         });
       }
       continue;
     }
 
     const target = targetByTile.get(`${point.x},${point.y}`);
-    if (!target || encountered.has(target.buildingId)) continue;
-    encountered.add(target.buildingId);
+    // Bereits vollständig beliefert: erneutes Vorbeifahren ist Durchfahrt.
+    if (!target || delivered.has(target.buildingId)) continue;
     const amount = requirements.get(target.buildingId) ?? 0;
     if (amount <= 0 || cargo < amount) {
-      invalidTargetIds.push(target.buildingId);
+      // Zu wenig Ladung: der Kontakt wird EINMAL als übersprungen dokumentiert,
+      // das Ziel bleibt aber offen und kann nach dem Nachfüllen bedient werden.
+      if (!touched.has(target.buildingId)) {
+        touched.add(target.buildingId);
+        stops.push({
+          type: 'delivery',
+          buildingId: target.buildingId,
+          pathIndex: index,
+          amount: 0,
+          cargoAfter: cargo,
+          status: 'skipped',
+        });
+      }
       continue;
     }
+    touched.add(target.buildingId);
     cargo -= amount;
     remainingAmount -= amount;
     deliveredAmount += amount;
@@ -521,22 +588,37 @@ export function evaluateCargoRoute(
       pathIndex: index,
       amount,
       cargoAfter: cargo,
+      status: 'completed',
     });
   }
 
   const plannedResupplies = stops.filter((stop) => stop.type === 'resupply').length;
+  const requiredResupplies = Math.max(0, plan.loadsRequired - 1);
   const travelTiles = Math.max(0, roadPath.length - 1);
+  // Nur wirklich berührte, aber unbeliefert gebliebene Ziele sind ein Problem;
+  // nie angefahrene Ziele fehlen schlicht noch in der Route.
+  const invalidTargetIds = [...touched].filter((id) => !delivered.has(id));
   return {
     stops,
-    orderedTargetIds: stops.filter((stop) => stop.type === 'delivery').map((stop) => stop.buildingId),
+    orderedTargetIds: stops
+      .filter((stop) => stop.type === 'delivery' && stop.status === 'completed')
+      .map((stop) => stop.buildingId),
     invalidTargetIds,
     plannedResupplies,
-    requiredResupplies: Math.max(0, plan.loadsRequired - 1),
+    requiredResupplies,
     deliveredAmount,
     remainingAmount,
     cargoAtEnd: cargo,
     emptyTravelTiles,
     emptyTravelRatio: travelTiles > 0 ? emptyTravelTiles / travelTiles : 0,
     cargoValid: invalidTargetIds.length === 0 && delivered.size === targets.length && remainingAmount === 0,
+    progress: {
+      deliveryTargetsCompleted: delivered.size,
+      deliveryTargetsTotal: targets.length,
+      resupplyStopsCompleted: plannedResupplies,
+      resupplyStopsTotal: Math.max(plannedResupplies, requiredResupplies),
+      returnRequired: false,
+      returnCompleted: false,
+    },
   };
 }

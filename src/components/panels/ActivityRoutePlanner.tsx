@@ -279,6 +279,7 @@ export function ActivityRoutePlanner({ defId }: { defId: string }) {
             targets={targets}
             orderedTargetIds={preview?.orderedTargetIds ?? []}
             {...(preview?.cargoRoute ? { cargoStops: preview.cargoRoute.stops } : {})}
+            {...(preview?.progress ? { progress: preview.progress } : {})}
             {...(selectedVehicleDef ? { vehicle: selectedVehicleDef } : {})}
           />
           <section className={`citywork-v4-confirm${routeComplete ? ' ready' : ''}`}>

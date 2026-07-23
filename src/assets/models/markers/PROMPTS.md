@@ -35,6 +35,30 @@ Low-poly stylized 3D city-builder game asset, colorful cartoon look, clean shape
 
 **Spec:** Größenklasse `marker` — Marker / Welt-UI (< 200 Tris, ≤ 128² (oder Canvas), 1 Material, emissiv) · Pivot zentriert, schwebt · Front +Z · **live** (bereits verdrahtet)
 
+### `marker_problem_road.glb` — ~1 Kachel hoch
+
+```text
+Low-poly stylized 3D city-builder game asset, colorful cartoon look, clean shapes, soft bevels, hand-painted feel, optimized for realtime rendering, embedded textures, no lights, no cameras, centered object, pivot at bottom center, +Y up, front facing +Z — a floating red road-connection problem marker: a broken road icon in a rounded pin
+```
+
+**Spec:** Größenklasse `marker` — Marker / Welt-UI (< 200 Tris, ≤ 128² (oder Canvas), 1 Material, emissiv) · Pivot zentriert, schwebt · Front +Z · **live** (bereits verdrahtet)
+
+### `marker_problem_water.glb` — ~1 Kachel hoch
+
+```text
+Low-poly stylized 3D city-builder game asset, colorful cartoon look, clean shapes, soft bevels, hand-painted feel, optimized for realtime rendering, embedded textures, no lights, no cameras, centered object, pivot at bottom center, +Y up, front facing +Z — a floating blue waterway problem marker: a blocked anchor icon in a rounded pin
+```
+
+**Spec:** Größenklasse `marker` — Marker / Welt-UI (< 200 Tris, ≤ 128² (oder Canvas), 1 Material, emissiv) · Pivot zentriert, schwebt · Front +Z · **live** (bereits verdrahtet)
+
+### `marker_problem_network.glb` — ~1 Kachel hoch
+
+```text
+Low-poly stylized 3D city-builder game asset, colorful cartoon look, clean shapes, soft bevels, hand-painted feel, optimized for realtime rendering, embedded textures, no lights, no cameras, centered object, pivot at bottom center, +Y up, front facing +Z — a floating amber partial-network marker: two disconnected link nodes in a rounded pin
+```
+
+**Spec:** Größenklasse `marker` — Marker / Welt-UI (< 200 Tris, ≤ 128² (oder Canvas), 1 Material, emissiv) · Pivot zentriert, schwebt · Front +Z · **live** (bereits verdrahtet)
+
 ### `marker_upgrade.glb` — ~1 Kachel hoch
 
 ```text

@@ -6,21 +6,21 @@ import {
 } from '../src/renderer/three/worldVisualProfiles.ts';
 
 describe('visuelle Regionsprofile', () => {
-  it('deckt jede der 32 gebackenen Regionen genau einmal ab', () => {
+  it('deckt jede der 40 gebackenen Regionen genau einmal ab', () => {
     const ids = REGION_VISUAL_PROFILES.map((entry) => entry.regionId);
-    expect(ids).toEqual(Array.from({ length: 32 }, (_, index) => index + 1));
-    expect(new Set(ids).size).toBe(32);
+    expect(ids).toEqual(Array.from({ length: 40 }, (_, index) => index + 1));
+    expect(new Set(ids).size).toBe(40);
   });
 
   it('weist Wüste und Sumpf klar vorhandenen Regionen zu', () => {
-    expect(regionVisualProfile(9)?.biome).toBe('wueste');
-    expect(regionVisualProfile(9)?.splat.desert).toBe(1);
-    expect(regionVisualProfile(29)?.biome).toBe('sumpf');
-    expect(regionVisualProfile(29)?.splat.swamp).toBe(1);
+    expect(regionVisualProfile(16)?.biome).toBe('wueste');
+    expect(regionVisualProfile(16)?.splat.desert).toBe(1);
+    expect(regionVisualProfile(40)?.biome).toBe('sumpf');
+    expect(regionVisualProfile(40)?.splat.swamp).toBe(1);
   });
 
   it('mischt technische Regionsgrenzen ohne Gewichte ausserhalb 0..1', () => {
-    const mixed = blendedVisualSplat([8, 9, 9, 10]);
+    const mixed = blendedVisualSplat([15, 16, 16, 17]);
     expect(mixed.desert).toBeCloseTo(0.5, 6);
     for (const value of Object.values(mixed)) {
       expect(value).toBeGreaterThanOrEqual(0);

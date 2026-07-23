@@ -1,12 +1,12 @@
 #!/usr/bin/env node
-// bakeWorld.mjs — Offline-Bake der verbindlichen Welt-GLB (§ MVP4 Welt-Neuaufbau).
+// bakeWorld.mjs — Offline-Bake der verbindlichen Welt-GLB (World Rebuild 6.1).
 //
-// Liest `reference/stylized island map 3d model.glb` (44 Meshes, reine Geometrie)
+// Liest `reference/world/island 3d new.glb` (78 Meshes, reine Geometrie)
 // und erzeugt daraus deterministisch die committeten Laufzeit-Daten:
 //
-//   src/game/config/world/islandTerrain.gen.ts   — 384×384 Terrain-Typ-Grid (Sim)
-//   src/game/config/world/islandRegions.gen.ts   — 384×384 Region-Id-Grid + Statistik (Sim)
-//   src/renderer/three/worldHeight.gen.ts        — 769×769 Höhen-Grid (Renderer)
+//   src/game/config/world/islandTerrain.gen.ts   — 512×512 Terrain-Typ-Grid (Sim)
+//   src/game/config/world/islandRegions.gen.ts   — 512×512 Region-Id-Grid + Statistik (Sim)
+//   src/renderer/three/worldHeight.gen.ts        — 1025×1025 Höhen-Grid (Renderer)
 //   tools/bake-report.md                         — Statistik + gewählter Start
 //   tools/bake-preview.png                       — visuelle Kontrolle (Hypsometrie + Regionsgrenzen)
 //
@@ -23,55 +23,111 @@
 // entlang natürlicher Grenzen, kleine Regionen mergen) → Startregion wählen und
 // validieren (≥ MIN_START_BUILDABLE bebaubare Kacheln) → Ausgaben schreiben.
 
-import { readFileSync, writeFileSync } from 'node:fs';
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
+import { createHash } from 'node:crypto';
 import zlib from 'node:zlib';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
-const GLB_PATH = join(ROOT, 'reference', 'stylized island map 3d model.glb');
+const GLB_PATH = join(ROOT, 'reference', 'world', 'island 3d new.glb');
+const round = (value, digits = 3) => Number(value.toFixed(digits));
+const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
 
 // ---------------------------------------------------------------------------
 // Verbindliche Maßstabs-Konstanten (siehe docs/WORLD_SCALE.md)
 // ---------------------------------------------------------------------------
-const WORLD_TILES = 384;          // Weltbreite/-tiefe in Kacheln (1 Kachel ≈ 4 m)
+const WORLD_TILES = 512;          // Weltbreite/-tiefe in Kacheln (1 Kachel ≈ 4 m)
 const SAMPLES_PER_TILE = 2;       // Höhen-Samples je Kachelkante
-const GRID = WORLD_TILES * SAMPLES_PER_TILE + 1; // 769 — Höhen-Grid-Knoten je Achse
-const OCEAN_MARGIN_TILES = 12;    // Ozean-Ring: Insel wird in [margin, TILES-margin] einbeschrieben
-const PEAK_WORLD_HEIGHT = 20;     // künstlerischer Höhenfaktor: höchster Gipfel in Welt-Einheiten
-const WATERLINE_N = 0.006;        // normalisierte GLB-Höhe der Wasserlinie (aus Histogramm kalibriert)
+const GRID = WORLD_TILES * SAMPLES_PER_TILE + 1; // 1025 — Höhen-Grid-Knoten je Achse
+// § Final World Compaction 8.1 — ZWEITE Verkleinerung. Die 6.1-Insel spannte 420
+// Kacheln (Rand 46). 420 × 0,89 ≈ 374 ⇒ Rand (512 − 374) / 2 = 69. Der Faktor ist
+// bewusst 0,89 je Achse und NICHT 0,8: 0,89² ≈ 0,79 ergibt die gewünschten
+// ca. −21 % FLÄCHE, während 0,8² = 0,64 die Insel um 36 % beschnitten hätte.
+const PREVIOUS_OCEAN_MARGIN_TILES = 46;
+const OCEAN_MARGIN_TILES = 69;    // 374 statt 420 Kacheln Spannweite => X/Z 0,8905, Fläche ca. -21 %
+// Y wird ausdrücklich GETRENNT abgestimmt (Auftrag §1.3): Bei kompakterem X/Z
+// würde eine proportionale Höhenreduktion die Gebirge flachdrücken. 52 statt 50
+// entspricht Faktor 1,04 — innerhalb des zulässigen Korridors 0,98–1,08 — und
+// hält Gipfel, Täler und Plateaus relativ zur Grundfläche monumentaler als zuvor.
+const PEAK_WORLD_HEIGHT = 52;
+const PREVIOUS_WATERLINE_N = 0.0065;
+const WATERLINE_N = 0.0065;       // unverändert: die Küstenlinie ist in 6.1 abgenommen
+const BASELINE_BUILDABLE_TILES = 44_755; // verbindlicher 6.1-Report vor diesem Rebake
+
+// Uferprofil 6.1: etwa drei Viertel der niedrigen Küsten werden als sanfter,
+// bebaubarer Saum interpretiert. Hohe Originalkanten bleiben gezielt Steilküste.
+const SHORE_BLEND_TILES = 6;
+const SHORE_PLATFORM_HEIGHT = 0.38;
+const SHORE_RISE_PER_TILE = 0.42;
+const SHORE_CLIFF_HEIGHT = 7.2;
 
 // Klassifikations-Schwellen (Welt-Einheiten / Kacheln)
-const MOUNTAIN_HEIGHT = 5.5;      // ab dieser Höhe: Gebirge
-const MOUNTAIN_SLOPE = 1.1;       // ODER ab diesem Höhendelta je Kachelschritt
-const SAND_MAX_HEIGHT = 1.0;      // Strandband: niedrig …
+const MOUNTAIN_HEIGHT = 13;       // ab dieser Höhe: Gebirge
+const MOUNTAIN_SLOPE = 1.8;       // ODER ab diesem Höhendelta je Kachelschritt
+const SAND_MAX_HEIGHT = 1.4;      // Strandband: niedrig …
 const SAND_WATER_DIST = 2;        // … und ≤ 2 Kacheln vom Wasser
-const FERTILE_MAX_HEIGHT = 2.4;   // fruchtbares Land: tief, flach, gewässernah
-const FERTILE_MAX_SLOPE = 0.4;
-const FERTILE_WATER_DIST = 7;
-const FOREST_MIN_HEIGHT = 0.5;    // Wald-Patches: mittleres Band, per Noise
-const FOREST_MAX_HEIGHT = 5.5;
-const FOREST_MAX_SLOPE = 0.9;
+const FERTILE_MAX_HEIGHT = 4.5;   // fruchtbares Land: tief, flach, gewässernah
+const FERTILE_MAX_SLOPE = 0.65;
+const FERTILE_WATER_DIST = 9;
+const FOREST_MIN_HEIGHT = 0.7;    // Wald-Patches: mittleres Band, per Noise
+const FOREST_MAX_HEIGHT = 13;
+const FOREST_MAX_SLOPE = 1.35;
 const RIVER_WIDTH_WINDOW = 2;     // 5×5-Fenster für die Fluss-Breiten-Heuristik
 const RIVER_MAX_NEIGHBORS = 14;   // < 14 Wasser-Nachbarn im Fenster ⇒ schmale Rinne ⇒ Fluss
-const LAKE_MIN_TILES = 24;        // eingeschlossene Wasserflächen ab dieser Größe = See
+const LAKE_MIN_TILES = 36;        // eingeschlossene Wasserflächen ab dieser Größe = See
 
 // Glättung bebaubaren Landes (grass/fertile/sand/forest)
-const SMOOTH_ITERATIONS = 10;
-const SMOOTH_BLEND = 0.55;        // Anteil 4-Nachbar-Mittel je Iteration
-const MAX_BUILDABLE_STEP = 0.07;  // max. Höhendelta zwischen Nachbar-Samples (≈ 0.14/Kachel — Gebäude sitzen sauber, ohne lokale Einebnung)
+// § Final World Compaction 8.1: Die zweite horizontale Verdichtung macht dieselbe
+// Geografie automatisch steiler (gleiche Höhe auf weniger Kacheln), zusätzlich
+// steigt die Gipfelhöhe auf 52. Ohne Nachjustierung fällt die BEBAUBARE Fläche
+// deutlich stärker als die Landfläche. Mehr Glättungsdurchgänge und eine leicht
+// tolerantere Hangschwelle halten den Bauflächenverlust nahe der Zielmarke von
+// ~20 %, ohne die Gebirge anzutasten (die bleiben über MOUNTAIN_HEIGHT hart).
+const SMOOTH_ITERATIONS = 16;
+const SMOOTH_BLEND = 0.6;         // Anteil 4-Nachbar-Mittel je Iteration
+const MAX_BUILDABLE_STEP = 0.25;  // max. Höhendelta je Halbkachel (≈ 2 m pro Kachel)
+const MAX_BUILDABLE_TILE_SLOPE = 0.82; // kompakter X/Z-Maßstab; Bake glättet anschließend hart auf 0,25/Sample
 
-// Organische Regionen (§ Welt 2.0 — ersetzen die 36 Quadrat-Sektoren)
-const REGION_TARGET_TILES = 3800; // Zielgröße einer Region (steuert Seed-Anzahl je Biom-Cluster)
-const REGION_MIN_COMPONENT = 200; // Biom-Cluster kleiner als das bekommen keinen eigenen Seed
-const REGION_MIN_TILES = 1000;    // kleinere Regionen werden in den Nachbarn mit längster Grenze gemerged
-const REGION_MAX_SEEDS = 32;      // hartes Seed-Limit (Region-Ids passen in Uint8, Ozean = 0)
+// Organische Regionen (§ Welt 2.0 / § Final World Compaction 8.1 §4).
+// Ziel ist NICHT mehr eine feingliedrige Landschaftskarte, sondern genau eine
+// zentrale Startregion + ungefähr zwölf bedeutende Freischaltungen. Jede Region
+// muss eigene Identität und spürbaren Nutzen haben; Kleinstregionen, deren
+// Freischaltung nur ein paar Kacheln liefert, werden konsequent gemerged.
+const REGION_TARGET_TILES = 6200; // ~79k Landkacheln / 13 Regionen
+const REGION_MIN_COMPONENT = 400; // Biom-Cluster kleiner als das bekommen keinen eigenen Seed
+const REGION_MIN_TILES = 2400;    // alles darunter wandert in den Nachbarn mit längster Grenze
+const REGION_MAX_SEEDS = 12;      // + 1 ausgeschnittene Startregion = 13 (zulässig 12–14)
+/** Bauflächen-Budget der ausgeschnittenen zentralen Startregion (§3.1: 650–950). */
+const START_REGION_TARGET_BUILDABLE = 820;
+// Zusammenhängende, vollständig bebaubare Gründungsreserve um das Rathaus.
+const RESERVE_X0 = -5, RESERVE_Y0 = -3, RESERVE_W = 20, RESERVE_H = 16;
 const COST_FOREIGN_BIOME = 4;     // Wachstums-Mehrkosten beim Betreten eines fremden Bioms
 const COST_CROSS_RIVER = 6;       // Zusatzkosten, einen Fluss zu queren (Flüsse = natürliche Grenzen)
 const COST_HEIGHT_FACTOR = 4;     // Zusatzkosten je Höhendelta (Gebirgskämme = natürliche Grenzen)
 
-// Start-Validierung (§ Auftrag: 2.500–4.000 nutzbare Kacheln in der Startregion)
-const MIN_START_BUILDABLE = 2500;
+// Zentraler Start 8.1 (Auftrag §3.1): Die Startregion soll Level 1–3 tragen und
+// eine kleine, dichte Stadt ermöglichen — aber ausdrücklich NICHT bis Level 8
+// reichen. Der Spieler soll Platzmangel früh spüren.
+const MIN_START_BUILDABLE = 650;
+const MAX_START_BUILDABLE = 950;
+// Startregion + die ersten beiden Erweiterungen zusammen.
+//
+// ZIELKONFLIKT (dokumentiert, bewusst aufgelöst): Der Auftrag nennt in §3.1
+// „1.800–2.800 Kacheln nach zwei Erweiterungen" UND in §4 nur zwölf
+// Freischaltungen. Beides zusammen geht rechnerisch nicht auf: Nach der zweiten
+// Verkleinerung bleiben rund 35.400 bebaubare Kacheln; abzüglich der 820er
+// Startregion sind das ~2.880 je Region. Start + zwei Erweiterungen sind damit
+// zwangsläufig ~6.600. Für 1.800–2.800 bräuchte es ~35–40 Kleinregionen —
+// also genau die Struktur, die §4 abschafft.
+//
+// Priorisiert wird die REGIONSSTRUKTUR (Akzeptanzkriterien 6–8). Der untere
+// Wert bleibt als echte Mindestanforderung erhalten (die frühe Stadt muss
+// wachsen können), der obere Wert folgt der tatsächlichen Regionsgröße.
+const MIN_EARLY_BUILDABLE = 1800;
+const MAX_EARLY_BUILDABLE = 9500;
+/** Angestrebte Bauflächensumme aus Start + früher Erweiterung (Feinauswahl). */
+const EARLY_BUILDABLE_SWEET_SPOT = 6200;
 
 // Terrain-IDs (Encoding im Gen-Grid; Reihenfolge = TERRAIN_IDS im Gen-File)
 const T = { water: 0, river: 1, sand: 2, fertile: 3, grass: 4, forest: 5, mountain: 6 };
@@ -83,6 +139,7 @@ const BUILDABLE = new Set([T.sand, T.fertile, T.grass, T.forest]);
 // ---------------------------------------------------------------------------
 console.log('— GLB lesen:', GLB_PATH);
 const glb = readFileSync(GLB_PATH);
+const SOURCE_SHA256 = createHash('sha256').update(glb).digest('hex');
 if (glb.readUInt32LE(0) !== 0x46546c67) throw new Error('kein GLB');
 const jsonLen = glb.readUInt32LE(12);
 const gltf = JSON.parse(glb.slice(20, 20 + jsonLen).toString('utf8'));
@@ -119,6 +176,7 @@ const toGx = (x) => gMin + ((x - minX) / (maxX - minX)) * gSpan;
 const toGz = (z) => gMin + ((z - minZ) / (maxZ - minZ)) * gSpan;
 
 let triCount = 0;
+let projectedDegenerateTrianglesSkipped = 0;
 console.log('— Dreiecke rastern …');
 for (const m of gltf.meshes) for (const p of m.primitives) {
   const pos = accessorInfo(p.attributes.POSITION);
@@ -145,13 +203,13 @@ for (const m of gltf.meshes) for (const p of m.primitives) {
     const z0 = Math.max(0, Math.floor(Math.min(gaz, gbz, gcz)));
     const z1 = Math.min(GRID - 1, Math.ceil(Math.max(gaz, gbz, gcz)));
     const d = (gbx - gax) * (gcz - gaz) - (gcx - gax) * (gbz - gaz);
-    if (Math.abs(d) < 1e-12) { // degeneriert in der Draufsicht (senkrechte Wand) → Eckknoten setzen
-      for (const [gx, gz, y] of [[gax, gaz, ay], [gbx, gbz, by], [gcx, gcz, cy]]) {
-        const xi = Math.round(gx), zi = Math.round(gz);
-        if (xi < 0 || zi < 0 || xi >= GRID || zi >= GRID) continue;
-        const o = zi * GRID + xi;
-        if (!(H[o] >= y)) H[o] = Math.max(Number.isNaN(H[o]) ? -Infinity : H[o], y);
-      }
+    if (Math.abs(d) < 1e-12) {
+      // Senkrechte Fels-/Uferwände besitzen in der Draufsicht keine Fläche und
+      // dürfen deshalb keine Heightfield-Probe schreiben. Der frühere
+      // Eckknoten-Fallback setzte jeweils nur den oberen Wandpunkt. Das
+      // regelmäßige Renderer-Grid verband diesen isolierten Hochpunkt mit vier
+      // niedrigen Nachbarn und erzeugte dadurch die riesigen Küstenkegel.
+      projectedDegenerateTrianglesSkipped++;
       triCount++;
       continue;
     }
@@ -172,6 +230,7 @@ for (const m of gltf.meshes) for (const p of m.primitives) {
 let covered = 0;
 for (let i = 0; i < H.length; i++) if (!Number.isNaN(H[i])) covered++;
 console.log(`  ${triCount.toLocaleString('de-DE')} Dreiecke, Abdeckung ${(100 * covered / H.length).toFixed(1)} % der Knoten`);
+console.log(`  ${projectedDegenerateTrianglesSkipped.toLocaleString('de-DE')} senkrechte/degenerierte Dreiecke ohne Heightfield-Probe`);
 
 // ---------------------------------------------------------------------------
 // 3. Wasser auf Kachel-Ebene klassifizieren
@@ -211,6 +270,28 @@ const oceanMask = new Uint8Array(WORLD_TILES * WORLD_TILES);
       if (nx < 0 || ny < 0 || nx >= WORLD_TILES || ny >= WORLD_TILES) continue;
       const no = ny * WORLD_TILES + nx;
       if (isWaterCand[no] && !oceanMask[no]) { oceanMask[no] = 1; q.push(no); }
+    }
+  }
+}
+
+// Entfernung jeder Kachel zum offenen Ozean. Sie ist Bake-Metadatum für
+// Ufer-/Hafenmasken und den separaten Küstenankunftspunkt; der Stadtstart
+// selbst wird weiter unten aus der realen Hauptlandmasse zentral bewertet.
+const distToOcean = new Int32Array(WORLD_TILES * WORLD_TILES).fill(-1);
+{
+  const q = [];
+  for (let o = 0; o < oceanMask.length; o++) {
+    if (oceanMask[o]) { distToOcean[o] = 0; q.push(o); }
+  }
+  let head = 0;
+  while (head < q.length) {
+    const c = q[head++];
+    const tx = c % WORLD_TILES, ty = (c / WORLD_TILES) | 0;
+    for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+      const nx = tx + dx, ny = ty + dy;
+      if (nx < 0 || ny < 0 || nx >= WORLD_TILES || ny >= WORLD_TILES) continue;
+      const no = ny * WORLD_TILES + nx;
+      if (distToOcean[no] < 0) { distToOcean[no] = distToOcean[c] + 1; q.push(no); }
     }
   }
 }
@@ -262,6 +343,39 @@ const distToLand = new Int32Array(WORLD_TILES * WORLD_TILES).fill(-1);
   }
 }
 
+// Entfernung jeder Landkachel zu irgendeinem Wasser (Meer, See oder Fluss).
+// Anders als distToOcean steuert dieses Feld auch Binnen-Ufer und wird später
+// unverändert als Küsten-/Wasserbau-Metadatum ausgegeben.
+const distToWaterRaw = new Int32Array(WORLD_TILES * WORLD_TILES).fill(-1);
+{
+  const q = [];
+  for (let o = 0; o < isWaterCand.length; o++) {
+    if (isWaterCand[o]) { distToWaterRaw[o] = 0; q.push(o); }
+  }
+  let head = 0;
+  while (head < q.length) {
+    const c = q[head++];
+    const tx = c % WORLD_TILES, ty = (c / WORLD_TILES) | 0;
+    for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+      const nx = tx + dx, ny = ty + dy;
+      if (nx < 0 || ny < 0 || nx >= WORLD_TILES || ny >= WORLD_TILES) continue;
+      const no = ny * WORLD_TILES + nx;
+      if (distToWaterRaw[no] < 0) { distToWaterRaw[no] = distToWaterRaw[c] + 1; q.push(no); }
+    }
+  }
+}
+
+// Grobkörniger, deterministischer Küstencharakter. Er entscheidet nicht pro
+// Kachel zufällig, sondern in zusammenhängenden 18×18-Zonen: niedrige Bereiche
+// werden Uferplattform, hohe Originalformen bleiben markante Steilküste.
+function shoreHash(tx, ty) {
+  const ix = Math.floor(tx / 18), iy = Math.floor(ty / 18);
+  let h = (Math.imul(ix, 374761393) + Math.imul(iy, 668265263)) ^ 0x71ab92d5;
+  h = Math.imul(h ^ (h >>> 13), 1274126177);
+  return ((h ^ (h >>> 16)) >>> 0) / 0xffffffff;
+}
+const accessibleShoreZone = new Uint8Array(WORLD_TILES * WORLD_TILES);
+
 // Welt-Höhen-Grid: bedeckt = (h - Wasserlinie) · Faktor; unbedeckt = Tiefenrampe.
 const HW = new Float32Array(GRID * GRID);
 for (let gz = 0; gz < GRID; gz++) {
@@ -271,12 +385,26 @@ for (let gz = 0; gz < GRID; gz++) {
     const ty = Math.min(WORLD_TILES - 1, (gz / SAMPLES_PER_TILE) | 0);
     const to = ty * WORLD_TILES + tx;
     if (!Number.isNaN(H[o])) {
-      HW[o] = (H[o] - WATERLINE_N) * HEIGHT_SCALE;
+      const rawHeight = (H[o] - WATERLINE_N) * HEIGHT_SCALE;
+      const waterDistance = distToWaterRaw[to];
+      const enclosedWaterNear = enclosedLabel[to] >= 0;
+      const accessible = waterDistance > 0 && waterDistance <= SHORE_BLEND_TILES
+        && rawHeight < SHORE_CLIFF_HEIGHT
+        && (enclosedWaterNear || shoreHash(tx, ty) >= 0.24);
+      if (accessible) {
+        accessibleShoreZone[to] = 1;
+        const target = SHORE_PLATFORM_HEIGHT + Math.max(0, waterDistance - 1) * SHORE_RISE_PER_TILE;
+        const blend = Math.pow((SHORE_BLEND_TILES - waterDistance + 1) / SHORE_BLEND_TILES, 1.25);
+        HW[o] = rawHeight + (target - rawHeight) * blend;
+      } else {
+        HW[o] = rawHeight;
+      }
     } else {
       const d = Math.max(1, distToLand[to]);
       const enclosed = enclosedLabel[to] >= 0;
-      // Seen flacher als offener Ozean; sanfte Rampe zur Küste.
-      HW[o] = enclosed ? -0.8 : -Math.min(3.0, 0.45 + d * 0.28);
+      // Höherer Wasserspiegel + flachere Becken: Wasser liest sich als Teil der
+      // Landschaft statt als tiefer Graben. Tiefe bleibt für die Ozeanfarbe.
+      HW[o] = enclosed ? -0.42 : -Math.min(2.4, 0.24 + d * 0.22);
     }
   }
 }
@@ -355,6 +483,25 @@ function bfsDistance(isSource) {
 const distWater = bfsDistance((o) => isWaterCand[o] === 1);
 const distFresh = bfsDistance((o) => terrain[o] === T.river || (terrain[o] === T.water && enclosedLabel[o] >= 0));
 
+// 0 = kein Ufer, 1 = flache Meeresküste, 2 = Flussufer, 3 = Seeufer,
+// 4 = bewusste Steilküste. Die Typisierung ist Bake-Wahrheit für Renderer,
+// Brückenkandidaten und künftige wasserbezogene Gebäude.
+const shoreTypeGrid = new Uint8Array(WORLD_TILES * WORLD_TILES);
+for (let ty = 1; ty < WORLD_TILES - 1; ty++) {
+  for (let tx = 1; tx < WORLD_TILES - 1; tx++) {
+    const o = ty * WORLD_TILES + tx;
+    if (isWaterCand[o] || distWater[o] !== 1) continue;
+    const neighbors = [[1, 0], [-1, 0], [0, 1], [0, -1]]
+      .map(([dx, dy]) => (ty + dy) * WORLD_TILES + tx + dx)
+      .filter((no) => isWaterCand[no]);
+    const isAccessible = accessibleShoreZone[o] && tileH(tx, ty) < 3.2 && tileSlope(tx, ty) <= 0.9;
+    if (!isAccessible) { shoreTypeGrid[o] = 4; continue; }
+    if (neighbors.some((no) => terrain[no] === T.river)) shoreTypeGrid[o] = 2;
+    else if (neighbors.some((no) => enclosedLabel[no] >= 0)) shoreTypeGrid[o] = 3;
+    else shoreTypeGrid[o] = 1;
+  }
+}
+
 // 5c. Land-Biome.
 for (let ty = 0; ty < WORLD_TILES; ty++) {
   for (let tx = 0; tx < WORLD_TILES; tx++) {
@@ -380,12 +527,92 @@ for (let ty = 0; ty < WORLD_TILES; ty++) {
 // ---------------------------------------------------------------------------
 // 6. Bebaubares Land glätten (Sim hat keine Hangprüfung)
 // ---------------------------------------------------------------------------
+// Nicht jedes optisch grüne Hangstück ist eine Baufläche. Erst flache
+// Terrainkacheln markieren, dann den Maskenrand um eine Kachel erodieren, damit
+// kein Footprint über eine Plateaukante ragt. Diese Maske wird später direkt an
+// die Simulation ausgegeben und ist damit dieselbe Wahrheit wie der Bake.
+const prelimBuildable = new Uint8Array(WORLD_TILES * WORLD_TILES);
+const buildableMask = new Uint8Array(WORLD_TILES * WORLD_TILES);
+for (let ty = 0; ty < WORLD_TILES; ty++) {
+  for (let tx = 0; tx < WORLD_TILES; tx++) {
+    const o = ty * WORLD_TILES + tx;
+    const slope = tileSlope(tx, ty);
+    const gentleWaterfront = shoreTypeGrid[o] >= 1 && shoreTypeGrid[o] <= 3 && slope <= 1.2;
+    if (BUILDABLE.has(terrain[o]) && (slope <= MAX_BUILDABLE_TILE_SLOPE || gentleWaterfront)) prelimBuildable[o] = 1;
+  }
+}
+for (let ty = 1; ty < WORLD_TILES - 1; ty++) {
+  for (let tx = 1; tx < WORLD_TILES - 1; tx++) {
+    const o = ty * WORLD_TILES + tx;
+    if (!prelimBuildable[o]) continue;
+    let safe = 1, buildableNeighbors = 0, landNeighbors = 0;
+    for (let dy = -1; dy <= 1; dy++) {
+      for (let dx = -1; dx <= 1; dx++) {
+        const no = (ty + dy) * WORLD_TILES + tx + dx;
+        if (!isWaterCand[no]) landNeighbors++;
+        if (prelimBuildable[no]) buildableNeighbors++;
+        if ((dx === 0 || dy === 0) && !prelimBuildable[no]) safe = 0;
+      }
+    }
+    // Direkte flache Uferkacheln dürfen die sonst richtige Erosion bewusst
+    // durchbrechen. So kann ein 3×3/5×5-Footprint bis ans Wasser reichen, ohne
+    // dass Steilküsten oder unsichere Einzelkacheln freigegeben werden.
+    const waterfrontSafe = shoreTypeGrid[o] >= 1 && shoreTypeGrid[o] <= 3
+      && buildableNeighbors >= 4 && landNeighbors >= 4 && tileSlope(tx, ty) <= 1.2;
+    buildableMask[o] = safe || waterfrontSafe ? 1 : 0;
+  }
+}
+
+// Wenige echte 5×5-Uferplattformen garantieren ausreichend Tiefe für Hafen-,
+// Pumpen- und spätere Wassergebäude. Sie werden aus bereits als flach
+// klassifizierten Uferzonen gewählt, bleiben weit auseinander und erweitern
+// ausschließlich bestehendes Land — niemals Wasser oder Gebirge.
+const waterfrontAprons = [];
+for (let ty = 4; ty < WORLD_TILES - 5; ty++) {
+  for (let tx = 4; tx < WORLD_TILES - 5; tx++) {
+    const o = ty * WORLD_TILES + tx;
+    if (shoreTypeGrid[o] < 1 || shoreTypeGrid[o] > 3) continue;
+    if (waterfrontAprons.some((apron) => Math.hypot(apron.center.x - tx, apron.center.y - ty) < 28)) continue;
+    const waterDirection = [[1, 0], [-1, 0], [0, 1], [0, -1]]
+      .find(([dx, dy]) => isWaterCand[(ty + dy) * WORLD_TILES + tx + dx]);
+    if (!waterDirection) continue;
+    const [wx, wy] = waterDirection;
+    const lx = -wx, ly = -wy;
+    const px = -ly, py = lx;
+    const cells = [];
+    let valid = true;
+    for (let depth = 0; depth < 5 && valid; depth++) {
+      for (let side = -2; side <= 2; side++) {
+        const x = tx + lx * depth + px * side;
+        const y = ty + ly * depth + py * side;
+        const co = y * WORLD_TILES + x;
+        if (isWaterCand[co] || !BUILDABLE.has(terrain[co]) || distWater[co] > SHORE_BLEND_TILES || tileH(x, y) >= 5.5) {
+          valid = false;
+          break;
+        }
+        cells.push(co);
+      }
+    }
+    if (!valid) continue;
+    for (const co of cells) {
+      prelimBuildable[co] = 1;
+      buildableMask[co] = 1;
+    }
+    waterfrontAprons.push({ center: { x: tx, y: ty }, cells });
+    if (waterfrontAprons.length >= 16) break;
+  }
+  if (waterfrontAprons.length >= 16) break;
+}
+const waterfrontBuildableMask = new Uint8Array(WORLD_TILES * WORLD_TILES);
+for (let o = 0; o < waterfrontBuildableMask.length; o++) {
+  if (buildableMask[o] && shoreTypeGrid[o] >= 1 && shoreTypeGrid[o] <= 3) waterfrontBuildableMask[o] = 1;
+}
 const nodeBuildable = new Uint8Array(GRID * GRID);
 for (let gz = 0; gz < GRID; gz++) {
   for (let gx = 0; gx < GRID; gx++) {
     const tx = Math.min(WORLD_TILES - 1, (gx / SAMPLES_PER_TILE) | 0);
     const ty = Math.min(WORLD_TILES - 1, (gz / SAMPLES_PER_TILE) | 0);
-    if (BUILDABLE.has(terrain[ty * WORLD_TILES + tx])) nodeBuildable[gz * GRID + gx] = 1;
+    if (buildableMask[ty * WORLD_TILES + tx]) nodeBuildable[gz * GRID + gx] = 1;
   }
 }
 for (let it = 0; it < SMOOTH_ITERATIONS; it++) {
@@ -404,7 +631,7 @@ for (let it = 0; it < SMOOTH_ITERATIONS; it++) {
       const a = gz * GRID + gx, b = a + 1;
       if (!nodeBuildable[a] || !nodeBuildable[b]) continue;
       const d = HW[b] - HW[a];
-      if (Math.abs(d) > MAX_BUILDABLE_STEP) {
+      if (Math.abs(d) > MAX_BUILDABLE_STEP + 1e-5) {
         const ex = (Math.abs(d) - MAX_BUILDABLE_STEP) / 2 * Math.sign(d);
         HW[a] += ex; HW[b] -= ex;
       }
@@ -415,7 +642,7 @@ for (let it = 0; it < SMOOTH_ITERATIONS; it++) {
       const a = gz * GRID + gx, b = a + GRID;
       if (!nodeBuildable[a] || !nodeBuildable[b]) continue;
       const d = HW[b] - HW[a];
-      if (Math.abs(d) > MAX_BUILDABLE_STEP) {
+      if (Math.abs(d) > MAX_BUILDABLE_STEP + 1e-5) {
         const ex = (Math.abs(d) - MAX_BUILDABLE_STEP) / 2 * Math.sign(d);
         HW[a] += ex; HW[b] -= ex;
       }
@@ -426,14 +653,14 @@ for (let it = 0; it < SMOOTH_ITERATIONS; it++) {
 // Durchlauf je Iteration lässt an Klippenrändern Rest-Verletzungen stehen —
 // hier wird die Bebaubar-Garantie (max. Schritt) hart erzwungen.
 let lastViolations = -1;
-for (let sweep = 0; sweep < 400; sweep++) {
+for (let sweep = 0; sweep < 800; sweep++) {
   let violations = 0;
   for (let gz = 0; gz < GRID; gz++) {
     for (let gx = 0; gx < GRID - 1; gx++) {
       const a = gz * GRID + gx, b = a + 1;
       if (!nodeBuildable[a] || !nodeBuildable[b]) continue;
       const d = HW[b] - HW[a];
-      if (Math.abs(d) > MAX_BUILDABLE_STEP) {
+      if (Math.abs(d) > MAX_BUILDABLE_STEP + 1e-5) {
         const ex = (Math.abs(d) - MAX_BUILDABLE_STEP) / 2 * Math.sign(d);
         HW[a] += ex; HW[b] -= ex; violations++;
       }
@@ -444,7 +671,7 @@ for (let sweep = 0; sweep < 400; sweep++) {
       const a = gz * GRID + gx, b = a + GRID;
       if (!nodeBuildable[a] || !nodeBuildable[b]) continue;
       const d = HW[b] - HW[a];
-      if (Math.abs(d) > MAX_BUILDABLE_STEP) {
+      if (Math.abs(d) > MAX_BUILDABLE_STEP + 1e-5) {
         const ex = (Math.abs(d) - MAX_BUILDABLE_STEP) / 2 * Math.sign(d);
         HW[a] += ex; HW[b] -= ex; violations++;
       }
@@ -453,9 +680,64 @@ for (let sweep = 0; sweep < 400; sweep++) {
   lastViolations = violations;
   if (violations === 0) break;
 }
-if (lastViolations > 0) console.warn(`  WARNUNG: ${lastViolations} Kappungs-Verletzungen nach 400 Sweeps übrig`);
+if (lastViolations > 0) console.warn(`  WARNUNG: ${lastViolations} Kappungs-Verletzungen nach 800 Sweeps übrig`);
 // Bebaubares Land darf nach der Glättung nicht unter die Wasserlinie rutschen.
 for (let o = 0; o < HW.length; o++) if (nodeBuildable[o] && HW[o] < 0.05) HW[o] = 0.05;
+
+// Konservativer Sicherheitsgurt für sehr schmale, nicht exakt senkrechte
+// Quellpolygone: ausschließlich im direkten Küstenband und ausschließlich,
+// wenn ein Hochpunkt von höchstens einem seiner acht Nachbarn gestützt wird.
+// Zusammenhängende Klippen und Berggrate bleiben damit unangetastet.
+let coastIsolatedPeaksRepaired = 0;
+{
+  const source = HW.slice();
+  for (let gz = 1; gz < GRID - 1; gz++) {
+    for (let gx = 1; gx < GRID - 1; gx++) {
+      const o = gz * GRID + gx;
+      const tx = Math.min(WORLD_TILES - 1, (gx / SAMPLES_PER_TILE) | 0);
+      const ty = Math.min(WORLD_TILES - 1, (gz / SAMPLES_PER_TILE) | 0);
+      if (distToWaterRaw[ty * WORLD_TILES + tx] > 2) continue;
+      const neighbors = [
+        source[o - GRID - 1], source[o - GRID], source[o - GRID + 1],
+        source[o - 1], source[o + 1],
+        source[o + GRID - 1], source[o + GRID], source[o + GRID + 1],
+      ];
+      const ordered = neighbors.slice().sort((a, b) => a - b);
+      const median = (ordered[3] + ordered[4]) / 2;
+      const supportingNeighbors = neighbors.filter((height) => height >= source[o] - 2.5).length;
+      if (source[o] <= median + 6 || supportingNeighbors > 1) continue;
+      HW[o] = median;
+      coastIsolatedPeaksRepaired++;
+    }
+  }
+}
+
+// Regression-Diagnose für den ursprünglichen Küstenkegel-Fehler. Ein echter
+// Grat/Kliff wird von mehreren hohen Nachbarn getragen; ein einzelner Peak mehr
+// als 6 Weltmeter über dem Median seiner acht Nachbarn ist im regelmäßigen
+// Heightfield dagegen geometrisch unplausibel. Dieser Wert wird mitgebacken und
+// in tests/newIslandBake.test.ts hart auf 0 geprüft.
+let coastIsolatedPeakCount = 0;
+let coastMaxNeighborStep = 0;
+for (let gz = 1; gz < GRID - 1; gz++) {
+  for (let gx = 1; gx < GRID - 1; gx++) {
+    const o = gz * GRID + gx;
+    const tx = Math.min(WORLD_TILES - 1, (gx / SAMPLES_PER_TILE) | 0);
+    const ty = Math.min(WORLD_TILES - 1, (gz / SAMPLES_PER_TILE) | 0);
+    if (distToWaterRaw[ty * WORLD_TILES + tx] > 2) continue;
+    const neighbors = [
+      HW[o - GRID - 1], HW[o - GRID], HW[o - GRID + 1],
+      HW[o - 1], HW[o + 1],
+      HW[o + GRID - 1], HW[o + GRID], HW[o + GRID + 1],
+    ];
+    const ordered = neighbors.slice().sort((a, b) => a - b);
+    const median = (ordered[3] + ordered[4]) / 2;
+    const supportingNeighbors = neighbors.filter((height) => height >= HW[o] - 2.5).length;
+    if (HW[o] > median + 6 && supportingNeighbors <= 1) coastIsolatedPeakCount++;
+    for (const height of neighbors) coastMaxNeighborStep = Math.max(coastMaxNeighborStep, Math.abs(HW[o] - height));
+  }
+}
+console.log(`  Küstengeometrie: ${coastIsolatedPeakCount} isolierte Peaks, max. Nachbarschritt ${coastMaxNeighborStep.toFixed(2)} m`);
 
 // ---------------------------------------------------------------------------
 // 7. Organische Regionen segmentieren (§ Welt 2.0)
@@ -613,6 +895,139 @@ for (;;) {
   for (let o = 0; o < SIZE; o++) if (regionOf[o] === smallest.r) regionOf[o] = target.r;
 }
 
+// 7d-bis. § Final World Compaction 8.1 (§3.1, §12) — KOMPAKTE ZENTRALE STARTREGION.
+//
+// Die kostenbasierte Segmentierung erzeugt bewusst gleichwertig große
+// Landschaften (~6.200 Kacheln). Die Startregion darf aber gerade NICHT so groß
+// sein: Sie soll Level 1–3 tragen, eine kleine dichte Stadt ermöglichen und den
+// Spieler früh Platzmangel spüren lassen. Deshalb wird nach der Segmentierung
+// aus der zentralen Region ein kompakter, zusammenhängender Kern mit rund
+// START_REGION_TARGET_BUILDABLE bebaubaren Kacheln herausgelöst und zur eigenen
+// Region gemacht. Der Rest bleibt bei der Wirtsregion — sie wird dadurch die
+// erste natürliche Erweiterungsrichtung.
+const startCarve = (() => {
+  // Größte zusammenhängende Landmasse und ihr Flächenschwerpunkt.
+  const seen = new Uint8Array(SIZE);
+  let mainland = [];
+  for (let o = 0; o < SIZE; o++) {
+    if (seen[o] || isWaterCand[o]) continue;
+    const component = [o];
+    seen[o] = 1;
+    for (let head = 0; head < component.length; head++) {
+      const c = component[head];
+      const tx = c % WORLD_TILES, ty = (c / WORLD_TILES) | 0;
+      for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+        const nx = tx + dx, ny = ty + dy;
+        if (nx < 0 || ny < 0 || nx >= WORLD_TILES || ny >= WORLD_TILES) continue;
+        const no = ny * WORLD_TILES + nx;
+        if (!seen[no] && !isWaterCand[no]) { seen[no] = 1; component.push(no); }
+      }
+    }
+    if (component.length > mainland.length) mainland = component;
+  }
+  let cx = 0, cy = 0;
+  for (const o of mainland) { cx += o % WORLD_TILES; cy += (o / WORLD_TILES) | 0; }
+  cx /= mainland.length; cy /= mainland.length;
+  const onMainland = new Uint8Array(SIZE);
+  for (const o of mainland) onMainland[o] = 1;
+
+  // Kernkachel: Die Startregion wird bewusst UM eine gültige Gründungsreserve
+  // herum ausgeschnitten. Sonst kann die spätere Startsuche (§8) in der kleinen,
+  // organisch geformten Startregion kein zusammenhängendes 20×16-Baufeld mehr
+  // finden. Es werden deshalb genau dieselben zwei Bedingungen geprüft, die dort
+  // gelten: eine vollständig bebaubare Reserve und ein 7×7-Grasblock fürs Rathaus.
+  const prefixOf = (predicate) => {
+    const stride = WORLD_TILES + 1;
+    const prefix = new Int32Array(stride * stride);
+    for (let y = 0; y < WORLD_TILES; y++) {
+      let row = 0;
+      for (let x = 0; x < WORLD_TILES; x++) {
+        row += predicate(y * WORLD_TILES + x) ? 1 : 0;
+        prefix[(y + 1) * stride + x + 1] = prefix[y * stride + x + 1] + row;
+      }
+    }
+    return prefix;
+  };
+  const sumOf = (prefix, x0, y0, x1, y1) => {
+    const stride = WORLD_TILES + 1;
+    return prefix[y1 * stride + x1] - prefix[y0 * stride + x1] - prefix[y1 * stride + x0] + prefix[y0 * stride + x0];
+  };
+  const buildPrefix = prefixOf((o) => buildableMask[o]);
+  const grassPrefix = prefixOf((o) => buildableMask[o] && terrain[o] === T.grass);
+
+  let core = -1, coreScore = -Infinity;
+  for (let ty = 11; ty < WORLD_TILES - 16; ty++) {
+    for (let tx = 11; tx < WORLD_TILES - 27; tx++) {
+      const centerX = tx + 2, centerY = ty + 2;
+      const centerOffset = centerY * WORLD_TILES + centerX;
+      if (!onMainland[centerOffset] || !buildableMask[centerOffset]) continue;
+      const reserveX = tx + RESERVE_X0, reserveY = ty + RESERVE_Y0;
+      if (sumOf(buildPrefix, reserveX, reserveY, reserveX + RESERVE_W, reserveY + RESERVE_H) !== RESERVE_W * RESERVE_H) continue;
+      if (sumOf(grassPrefix, tx - 1, ty - 1, tx + 6, ty + 6) !== 49) continue;
+      // Die Reserve muss vollständig in EINER Segmentierungsregion liegen, sonst
+      // zerschneidet der Ausschnitt sie und die Startsuche scheitert erneut.
+      const hostSeed = regionOf[centerOffset];
+      let uniform = true;
+      for (let y = reserveY; y < reserveY + RESERVE_H && uniform; y++) {
+        for (let x = reserveX; x < reserveX + RESERVE_W; x++) {
+          if (regionOf[y * WORLD_TILES + x] !== hostSeed) { uniform = false; break; }
+        }
+      }
+      if (!uniform) continue;
+      const centrality = 1 - Math.min(1, Math.hypot(centerX - cx, centerY - cy) / 150);
+      // Umliegendes Bauland als Reserve für die spätere Verdichtung.
+      const around = sumOf(buildPrefix, centerX - 14, centerY - 14, centerX + 15, centerY + 15) / (29 * 29);
+      const score = centrality * 3 + around - tileSlope(centerX, centerY) * 0.5;
+      if (score > coreScore + 1e-9 || (Math.abs(score - coreScore) < 1e-9 && centerOffset < core)) {
+        coreScore = score;
+        core = centerOffset;
+      }
+    }
+  }
+  if (core < 0) { console.warn('  ! keine zentrale Startkachel mit Gründungsreserve gefunden — Startregion wird nicht ausgeschnitten'); return null; }
+
+  const host = regionOf[core];
+  // Kompaktes Wachstum NUR innerhalb der Wirtsregion und auf der Hauptinsel:
+  // billigste Kachel zuerst (Distanz + Strafaufschlag für nicht bebaubares
+  // Gelände), bis das Bauflächen-Budget erreicht ist. Ergebnis ist rund und
+  // zusammenhängend, folgt aber weiterhin dem echten Gelände.
+  const carved = [];
+  const inCarve = new Uint8Array(SIZE);
+  const dist = new Float64Array(SIZE).fill(Infinity);
+  const queue = [[0, core]];
+  dist[core] = 0;
+  let buildableCount = 0;
+  while (queue.length > 0 && buildableCount < START_REGION_TARGET_BUILDABLE) {
+    queue.sort((a, b) => a[0] - b[0] || a[1] - b[1]);
+    const [cost, tile] = queue.shift();
+    if (inCarve[tile]) continue;
+    inCarve[tile] = 1;
+    carved.push(tile);
+    if (buildableMask[tile]) buildableCount++;
+    const tx = tile % WORLD_TILES, ty = (tile / WORLD_TILES) | 0;
+    for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+      const nx = tx + dx, ny = ty + dy;
+      if (nx < 0 || ny < 0 || nx >= WORLD_TILES || ny >= WORLD_TILES) continue;
+      const no = ny * WORLD_TILES + nx;
+      if (inCarve[no] || regionOf[no] !== host || !onMainland[no]) continue;
+      // Bauland wächst billig, Gebirge/Wasserkanten teuer ⇒ die Startregion
+      // greift zuerst die zusammenhängende Bauebene ab.
+      const step = buildableMask[no] ? 1 : 5;
+      const nc = cost + step;
+      if (nc < dist[no]) { dist[no] = nc; queue.push([nc, no]); }
+    }
+  }
+  if (buildableCount < MIN_START_BUILDABLE) {
+    console.warn(`  ! zentraler Kern liefert nur ${buildableCount} Bauflächen — Startregion wird nicht ausgeschnitten`);
+    return null;
+  }
+  const startSeedIdx = seeds.length;
+  seeds.push({ tile: core, cls: terrain[core] });
+  for (const o of carved) regionOf[o] = startSeedIdx;
+  console.log(`  Startregion ausgeschnitten: ${carved.length} Kacheln, ${buildableCount} bebaubar (Wirt: Seed ${host})`);
+  return { seedIdx: startSeedIdx, core, tiles: carved.length, buildable: buildableCount };
+})();
+
 // 7e. Finale Ids 1..N (0 = Ozean), Reihenfolge deterministisch nach Größe.
 const finalIds = new Map(); // seedIdx → finale Id
 {
@@ -640,14 +1055,15 @@ for (let ty = 0; ty < WORLD_TILES; ty++) {
     if (id === 0) continue;
     let s = regionStats.get(id);
     if (!s) {
-      s = { id, tiles: 0, buildable: 0, terrain: Object.fromEntries(T_NAMES.map((n) => [n, 0])), cx: 0, cy: 0, adjacent: new Set() };
+      s = { id, tiles: 0, buildable: 0, coastTiles: 0, terrain: Object.fromEntries(T_NAMES.map((n) => [n, 0])), cx: 0, cy: 0, adjacent: new Set() };
       regionStats.set(id, s);
     }
     s.tiles++;
     s.cx += tx; s.cy += ty;
     const t = terrain[o];
     s.terrain[T_NAMES[t]]++;
-    if (BUILDABLE.has(t)) s.buildable++;
+    if (buildableMask[o]) s.buildable++;
+    if (!oceanMask[o] && distToOcean[o] === 1) s.coastTiles++;
     for (const [dx, dy] of [[1, 0], [0, 1]]) {
       const nx = tx + dx, ny = ty + dy;
       if (nx >= WORLD_TILES || ny >= WORLD_TILES) continue;
@@ -658,67 +1074,602 @@ for (let ty = 0; ty < WORLD_TILES; ty++) {
 }
 // Adjazenz symmetrisch machen (oben nur Vorwärts-Kanten gesammelt).
 for (const s of regionStats.values()) for (const a of s.adjacent) regionStats.get(a).adjacent.add(s.id);
+
+// 7f-bis. § Final World Compaction 8.1 — SEEADJAZENZ.
+//
+// Die Quellinsel ist ein Archipel: Nach der Konsolidierung auf 13 große Regionen
+// zerfällt die Landadjazenz in mehrere Komponenten, und ein Teil der Regionen
+// wäre über Land NIE erreichbar. Statt künstlich Landbrücken zu erfinden, wird
+// hier ausgemessen, welche Regionen nur durch eine SCHMALE WASSERSTRASSE
+// getrennt sind. Das Gameplay verlangt dafür später einen echten Hafen in einer
+// bereits erschlossenen Region — es entsteht keine zweite Regionslogik.
+const MAX_SEA_GAP_TILES = 26; // ~104 m offene See zwischen zwei Landkanten
+for (const s of regionStats.values()) s.seaAdjacent = new Set();
+{
+  for (const source of regionStats.values()) {
+    // BFS ausschließlich über Wasser, ausgehend von den Küstenkacheln.
+    const depth = new Int32Array(SIZE).fill(-1);
+    let frontier = [];
+    for (let o = 0; o < SIZE; o++) {
+      if (regionGrid[o] !== source.id) continue;
+      const tx = o % WORLD_TILES, ty = (o / WORLD_TILES) | 0;
+      for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+        const nx = tx + dx, ny = ty + dy;
+        if (nx < 0 || ny < 0 || nx >= WORLD_TILES || ny >= WORLD_TILES) continue;
+        const no = ny * WORLD_TILES + nx;
+        if (isWaterCand[no] && depth[no] < 0) { depth[no] = 1; frontier.push(no); }
+      }
+    }
+    for (let step = 1; step <= MAX_SEA_GAP_TILES && frontier.length > 0; step++) {
+      const next = [];
+      for (const c of frontier) {
+        const tx = c % WORLD_TILES, ty = (c / WORLD_TILES) | 0;
+        for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+          const nx = tx + dx, ny = ty + dy;
+          if (nx < 0 || ny < 0 || nx >= WORLD_TILES || ny >= WORLD_TILES) continue;
+          const no = ny * WORLD_TILES + nx;
+          const target = regionGrid[no];
+          if (target !== 0 && target !== source.id) {
+            source.seaAdjacent.add(target);
+            continue; // Land beendet den Strahl
+          }
+          if (!isWaterCand[no] || depth[no] >= 0) continue;
+          depth[no] = step + 1;
+          next.push(no);
+        }
+      }
+      frontier = next;
+    }
+  }
+  // Symmetrisch machen und echte Landnachbarn nicht doppelt führen.
+  for (const s of regionStats.values()) for (const a of s.seaAdjacent) regionStats.get(a).seaAdjacent.add(s.id);
+  for (const s of regionStats.values()) for (const a of s.adjacent) s.seaAdjacent.delete(a);
+}
 const regions = [...regionStats.values()].sort((a, b) => a.id - b.id).map((s) => ({
   id: s.id,
   tiles: s.tiles,
   buildable: s.buildable,
+  coastTiles: s.coastTiles,
   terrain: s.terrain,
   dominant: T_NAMES.reduce((best, n) => (s.terrain[n] > s.terrain[best] ? n : best), 'water'),
   centroid: { x: Math.round(s.cx / s.tiles), y: Math.round(s.cy / s.tiles) },
   adjacent: [...s.adjacent].sort((a, b) => a - b),
+  seaAdjacent: [...s.seaAdjacent].sort((a, b) => a - b),
 }));
 console.log(`  ${regions.length} Regionen (${regions.map((r) => r.tiles).reduce((a, b) => a + b, 0).toLocaleString('de-DE')} Landkacheln)`);
 
 // ---------------------------------------------------------------------------
-// 8. Startregion wählen + Rathaus-Spot (5×5) suchen + validieren
+// 8. Zentralen Gründungsort per nachvollziehbarem Flächen-Score wählen
 // ---------------------------------------------------------------------------
-// Zentrums-Bonus: zentrale, bebaubare Grasland-Region bevorzugt (Start in der Inselmitte).
-const startRegion = regions
-  .map((r) => {
-    const centrality = 1 - Math.hypot(r.centroid.x - WORLD_TILES / 2, r.centroid.y - WORLD_TILES / 2) / (WORLD_TILES / 2);
-    return { r, score: r.buildable + r.terrain.grass * 0.5 + centrality * 1500 };
-  })
-  .sort((a, b) => b.score - a.score)[0].r;
-if (startRegion.buildable < MIN_START_BUILDABLE) {
-  console.error(`FEHLER: beste Startregion ${startRegion.id} hat nur ${startRegion.buildable} bebaubare Kacheln (< ${MIN_START_BUILDABLE}).`);
+// Der mathematische Mittelpunkt der Bounding Box wäre häufig Wasser oder ein
+// Berg. Deshalb wird zuerst die größte zusammenhängende Landmasse bestimmt und
+// deren Flächenschwerpunkt als geografisches Inselzentrum verwendet.
+const mainlandMask = new Uint8Array(SIZE);
+let mainlandTiles = [];
+{
+  const seen = new Uint8Array(SIZE);
+  for (let o = 0; o < SIZE; o++) {
+    if (seen[o] || isWaterCand[o]) continue;
+    const component = [o];
+    seen[o] = 1;
+    for (let head = 0; head < component.length; head++) {
+      const c = component[head];
+      const tx = c % WORLD_TILES, ty = (c / WORLD_TILES) | 0;
+      for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+        const nx = tx + dx, ny = ty + dy;
+        if (nx < 0 || ny < 0 || nx >= WORLD_TILES || ny >= WORLD_TILES) continue;
+        const no = ny * WORLD_TILES + nx;
+        if (!seen[no] && !isWaterCand[no]) { seen[no] = 1; component.push(no); }
+      }
+    }
+    if (component.length > mainlandTiles.length) mainlandTiles = component;
+  }
+  for (const o of mainlandTiles) mainlandMask[o] = 1;
+}
+const islandCenter = mainlandTiles.reduce(
+  (sum, o) => ({ x: sum.x + o % WORLD_TILES, y: sum.y + ((o / WORLD_TILES) | 0) }),
+  { x: 0, y: 0 },
+);
+islandCenter.x /= mainlandTiles.length;
+islandCenter.y /= mainlandTiles.length;
+
+function prefixGrid(predicate) {
+  const stride = WORLD_TILES + 1;
+  const prefix = new Int32Array(stride * stride);
+  for (let y = 0; y < WORLD_TILES; y++) {
+    let row = 0;
+    for (let x = 0; x < WORLD_TILES; x++) {
+      row += predicate(y * WORLD_TILES + x) ? 1 : 0;
+      prefix[(y + 1) * stride + x + 1] = prefix[y * stride + x + 1] + row;
+    }
+  }
+  return prefix;
+}
+function rectSum(prefix, x0, y0, x1, y1) {
+  const stride = WORLD_TILES + 1;
+  return prefix[y1 * stride + x1] - prefix[y0 * stride + x1] - prefix[y1 * stride + x0] + prefix[y0 * stride + x0];
+}
+const buildablePrefix = prefixGrid((o) => buildableMask[o]);
+const grassBuildablePrefix = prefixGrid((o) => buildableMask[o] && terrain[o] === T.grass);
+const waterPrefix = prefixGrid((o) => isWaterCand[o]);
+const mountainPrefix = prefixGrid((o) => terrain[o] === T.mountain);
+
+function expansionDirectionScore(cx, cy) {
+  const occupied = [0, 0, 0, 0];
+  for (let y = Math.max(1, cy - 56); y <= Math.min(WORLD_TILES - 2, cy + 56); y += 3) {
+    for (let x = Math.max(1, cx - 56); x <= Math.min(WORLD_TILES - 2, cx + 56); x += 3) {
+      const dx = x - cx, dy = y - cy;
+      if (Math.abs(dx) < 10 || Math.abs(dy) < 10 || dx * dx + dy * dy > 56 * 56) continue;
+      if (!buildableMask[y * WORLD_TILES + x]) continue;
+      occupied[(dy >= 0 ? 2 : 0) + (dx >= 0 ? 1 : 0)]++;
+    }
+  }
+  return occupied.filter((count) => count >= 18).length / 4;
+}
+
+function resourceAccessScore(cx, cy) {
+  const found = new Set();
+  for (let y = Math.max(1, cy - 64); y <= Math.min(WORLD_TILES - 2, cy + 64); y += 4) {
+    for (let x = Math.max(1, cx - 64); x <= Math.min(WORLD_TILES - 2, cx + 64); x += 4) {
+      if (Math.hypot(x - cx, y - cy) > 64) continue;
+      const o = y * WORLD_TILES + x;
+      if (terrain[o] === T.forest) found.add('wood');
+      if (terrain[o] === T.fertile) found.add('food');
+      if (terrain[o] === T.mountain) found.add('stone');
+      if (distWater[o] <= 2) found.add('water');
+    }
+  }
+  return found.size / 4;
+}
+
+function infrastructureScore(cx, cy) {
+  let open = 0;
+  for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+    for (let step = 1; step <= 24; step++) {
+      const x = cx + dx * step, y = cy + dy * step;
+      if (!buildableMask[y * WORLD_TILES + x]) break;
+      open++;
+    }
+  }
+  return open / 96;
+}
+
+const eligibleStartRegionIds = new Set(
+  regions
+    .filter((r) => r.buildable >= MIN_START_BUILDABLE && r.buildable <= MAX_START_BUILDABLE)
+    .map((r) => r.id),
+);
+if (eligibleStartRegionIds.size === 0) {
+  console.error(`FEHLER: keine Region liegt im Startziel ${MIN_START_BUILDABLE}–${MAX_START_BUILDABLE} bebaubare Kacheln.`);
   process.exit(1);
 }
 
-// Rathaus: flachster Gras-Block für das 5×5-Rathaus (§ Gebäudesystem 2.0) nahe
-// der Regionsmitte. Validiert wird 7×7 Gras (5×5 + 1 Rand) PLUS die
-// Startstraßen-Zeile (y+5). Anker (x,y) = linke obere Rathaus-Kachel.
-let townHall = null;
-{
-  const cx0 = startRegion.centroid.x;
-  const cy0 = startRegion.centroid.y;
-  let best = null;
-  for (let r = 0; r < WORLD_TILES / 2 && !((best && best.flat < 0.25) && r > 8); r++) {
-    for (let ty = cy0 - r; ty <= cy0 + r; ty++) {
-      for (let tx = cx0 - r; tx <= cx0 + r; tx++) {
-        if (Math.max(Math.abs(tx - cx0), Math.abs(ty - cy0)) !== r) continue;
-        if (tx < 1 || ty < 1 || tx + 5 >= WORLD_TILES || ty + 5 >= WORLD_TILES) continue;
-        let ok = true, hMin = Infinity, hMax = -Infinity;
-        for (let dy = -1; dy <= 5 && ok; dy++) {
-          for (let dx = -1; dx <= 5; dx++) {
-            const o = (ty + dy) * WORLD_TILES + tx + dx;
-            if (terrain[o] !== T.grass || regionGrid[o] !== startRegion.id) { ok = false; break; }
-            const h = tileH(tx + dx, ty + dy);
-            hMin = Math.min(hMin, h); hMax = Math.max(hMax, h);
-          }
-        }
-        if (!ok) continue;
-        const flat = hMax - hMin;
-        if (!best || flat < best.flat) best = { x: tx, y: ty, flat };
+const startAreaCandidates = [];
+const startSearchStats = { eligibleCenters: 0, reserveFits: 0, grassFits: 0, sameRegionFits: 0 };
+for (let ty = 11; ty < WORLD_TILES - 16; ty++) {
+  for (let tx = 11; tx < WORLD_TILES - 27; tx++) {
+    const centerX = tx + 2, centerY = ty + 2;
+    const centerOffset = centerY * WORLD_TILES + centerX;
+    const regionId = regionGrid[centerOffset];
+    if (!eligibleStartRegionIds.has(regionId) || !mainlandMask[centerOffset]) continue;
+    startSearchStats.eligibleCenters++;
+    const reserveX = tx + RESERVE_X0, reserveY = ty + RESERVE_Y0;
+    if (rectSum(buildablePrefix, reserveX, reserveY, reserveX + RESERVE_W, reserveY + RESERVE_H) !== RESERVE_W * RESERVE_H) continue;
+    startSearchStats.reserveFits++;
+    if (rectSum(grassBuildablePrefix, tx - 1, ty - 1, tx + 6, ty + 6) !== 49) continue;
+    startSearchStats.grassFits++;
+    let sameRegion = true;
+    for (let y = reserveY; y < reserveY + RESERVE_H && sameRegion; y++) {
+      for (let x = reserveX; x < reserveX + RESERVE_W; x++) {
+        if (regionGrid[y * WORLD_TILES + x] !== regionId) { sameRegion = false; break; }
+      }
+    }
+    if (!sameRegion) continue;
+    startSearchStats.sameRegionFits++;
+
+    let hMin = Infinity, hMax = -Infinity, slopeSum = 0;
+    for (let y = ty - 1; y <= ty + 5; y++) {
+      for (let x = tx - 1; x <= tx + 5; x++) {
+        hMin = Math.min(hMin, tileH(x, y));
+        hMax = Math.max(hMax, tileH(x, y));
+        slopeSum += tileSlope(x, y);
+      }
+    }
+    const flatDelta = hMax - hMin;
+    const flatnessScore = clamp(1 - flatDelta / 0.85, 0, 1);
+    const centralityScore = clamp(1 - Math.hypot(centerX - islandCenter.x, centerY - islandCenter.y) / 190, 0, 1);
+    const expansionScore = expansionDirectionScore(centerX, centerY);
+    const resourceScore = resourceAccessScore(centerX, centerY);
+    const infraScore = infrastructureScore(centerX, centerY);
+    const waterRisk = rectSum(waterPrefix, centerX - 8, centerY - 8, centerX + 9, centerY + 9) / (17 * 17);
+    const cliffRisk = rectSum(mountainPrefix, centerX - 12, centerY - 12, centerX + 13, centerY + 13) / (25 * 25);
+    const region = regions[regionId - 1];
+    const neighboring = region.adjacent
+      .map((id) => regions[id - 1])
+      .sort((a, b) => Math.hypot(a.centroid.x - centerX, a.centroid.y - centerY) - Math.hypot(b.centroid.x - centerX, b.centroid.y - centerY));
+    let earlyBuildable = region.buildable;
+    let earlyRegionIds = [];
+    let earlyFitness = Infinity;
+    const subsetCount = 1 << neighboring.length;
+    for (let mask = 1; mask < subsetCount; mask++) {
+      let sum = region.buildable;
+      const ids = [];
+      let distancePenalty = 0;
+      for (let index = 0; index < neighboring.length; index++) {
+        if ((mask & (1 << index)) === 0) continue;
+        const neighbor = neighboring[index];
+        sum += neighbor.buildable;
+        ids.push(neighbor.id);
+        distancePenalty += Math.hypot(neighbor.centroid.x - centerX, neighbor.centroid.y - centerY) * 0.02;
+      }
+      const rangePenalty = sum < MIN_EARLY_BUILDABLE ? MIN_EARLY_BUILDABLE - sum
+        : sum > MAX_EARLY_BUILDABLE ? sum - MAX_EARLY_BUILDABLE : Math.abs(sum - EARLY_BUILDABLE_SWEET_SPOT) * 0.08;
+      const fitness = rangePenalty + distancePenalty + ids.length * 4;
+      if (fitness < earlyFitness) { earlyFitness = fitness; earlyBuildable = sum; earlyRegionIds = ids; }
+    }
+    const earlyPenalty = earlyBuildable > MAX_EARLY_BUILDABLE ? (earlyBuildable - MAX_EARLY_BUILDABLE) / MAX_EARLY_BUILDABLE : 0;
+    const totalScore = centralityScore * 34 + flatnessScore * 22 + expansionScore * 20
+      + resourceScore * 12 + infraScore * 12 - waterRisk * 18 - cliffRisk * 18 - earlyPenalty * 14;
+    startAreaCandidates.push({
+      x: tx, y: ty, center: { x: centerX, y: centerY }, regionId,
+      buildableTiles: region.buildable,
+      flatnessScore, centralityScore, expansionDirectionScore: expansionScore,
+      resourceAccessScore: resourceScore, infrastructureScore: infraScore,
+      waterRisk, cliffRisk, totalScore, flatDelta, averageSlope: slopeSum / 49,
+      earlyBuildable, earlyRegionIds,
+    });
+  }
+}
+startAreaCandidates.sort((a, b) => b.totalScore - a.totalScore || a.y - b.y || a.x - b.x);
+const townHall = startAreaCandidates.find(
+  (candidate) => candidate.earlyBuildable >= MIN_EARLY_BUILDABLE && candidate.earlyBuildable <= MAX_EARLY_BUILDABLE,
+);
+if (!townHall) {
+  console.error('Startsuche:', startSearchStats, 'geeignete Regionsgrößen:', regions.filter((r) => eligibleStartRegionIds.has(r.id)).map((r) => ({ id: r.id, buildable: r.buildable, center: r.centroid })));
+  console.error(`FEHLER: keine zentrale ${RESERVE_W}×${RESERVE_H}-Gründungsreserve in einer ${MIN_START_BUILDABLE}–${MAX_START_BUILDABLE}-Kachel-Region gefunden.`);
+  process.exit(1);
+}
+const startRegion = regions[townHall.regionId - 1];
+
+// Zwei von Beginn an verlängerbare Hauptachsen: eine Ost-West-Tangente südlich
+// des Rathauses und ein Nord-Süd-Ast. Keine Sackgasse direkt am Stadtzentrum.
+const startRoads = [];
+for (let x = townHall.x - 5; x <= townHall.x + 4; x++) startRoads.push({ x, y: townHall.y + 5 });
+for (let y = townHall.y + 6; y <= townHall.y + 11; y++) startRoads.push({ x: townHall.x - 5, y });
+for (const road of startRoads) {
+  const o = road.y * WORLD_TILES + road.x;
+  if (!buildableMask[o] || regionGrid[o] !== startRegion.id) {
+    console.error('FEHLER: zentrale Startstraße liegt außerhalb der validierten Gründungsreserve.');
+    process.exit(1);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// 8b. Reine Infrastruktur-Kandidaten (noch kein zweites Gameplay-System)
+// ---------------------------------------------------------------------------
+const inWorld = (x, y) => x >= 0 && y >= 0 && x < WORLD_TILES && y < WORLD_TILES;
+const tileOffset = (x, y) => y * WORLD_TILES + x;
+const roadSurface = (x, y) => {
+  if (!inWorld(x, y)) return false;
+  const o = tileOffset(x, y);
+  return !isWaterCand[o] && terrain[o] !== T.mountain
+    && (tileSlope(x, y) <= 0.8 || (waterfrontBuildableMask[o] && tileSlope(x, y) <= 1.2))
+    && (buildableMask[o] || waterfrontBuildableMask[o]);
+};
+const tunnelApproachSurface = (x, y) => {
+  if (!inWorld(x, y)) return false;
+  const o = tileOffset(x, y);
+  return !isWaterCand[o] && terrain[o] !== T.mountain && tileSlope(x, y) <= 1.25;
+};
+const spacedPush = (list, candidate, minimumDistance, limit) => {
+  if (list.length >= limit) return;
+  if (list.every((other) => Math.hypot(other.midX - candidate.midX, other.midY - candidate.midY) >= minimumDistance)) {
+    list.push(candidate);
+  }
+};
+
+const bridgePool = [];
+for (let y = 2; y < WORLD_TILES - 2; y += 2) {
+  for (let x = 2; x < WORLD_TILES - 2; x += 2) {
+    if (!roadSurface(x, y)) continue;
+    for (const [dx, dy] of [[1, 0], [0, 1]]) {
+      const crossed = [];
+      for (let step = 1; step <= 14; step++) {
+        const nx = x + dx * step, ny = y + dy * step;
+        if (!inWorld(nx, ny)) break;
+        const no = tileOffset(nx, ny);
+        if (isWaterCand[no]) { crossed.push(no); continue; }
+        if (crossed.length < 2 || !roadSurface(nx, ny)) break;
+        const elevationDelta = Math.abs(tileH(nx, ny) - tileH(x, y));
+        if (elevationDelta > 2.5) break;
+        const allRiver = crossed.every((offset) => terrain[offset] === T.river);
+        const anyOcean = crossed.some((offset) => oceanMask[offset]);
+        const waterType = allRiver ? 'river' : anyOcean ? 'coast' : 'lake';
+        bridgePool.push({
+          start: { x, y }, end: { x: nx, y: ny }, span: crossed.length,
+          elevationDelta, waterType,
+          startShoreType: shoreTypeGrid[tileOffset(x, y)],
+          endShoreType: shoreTypeGrid[tileOffset(nx, ny)],
+          rampGrade: round(elevationDelta / Math.max(2, crossed.length), 3),
+          clearanceRequired: waterType === 'coast' || crossed.length >= 6,
+          supportedRoadClasses: crossed.length <= 8 ? ['local', 'collector', 'arterial'] : ['collector', 'arterial'],
+          midX: (x + nx) / 2, midY: (y + ny) / 2,
+          score: crossed.length * 4 + elevationDelta * 10
+            - (shoreTypeGrid[tileOffset(x, y)] >= 1 && shoreTypeGrid[tileOffset(x, y)] <= 3 ? 8 : 0)
+            - (shoreTypeGrid[tileOffset(nx, ny)] >= 1 && shoreTypeGrid[tileOffset(nx, ny)] <= 3 ? 8 : 0),
+        });
+        break;
       }
     }
   }
-  if (!best) { console.error('FEHLER: kein 7×7-Gras-Spot für das 5×5-Rathaus in der Startregion gefunden.'); process.exit(1); }
-  townHall = best;
 }
-// Startstraßen: 5 Kacheln entlang der Rathaus-Südkante (x..x+4, y+5).
-const startRoads = [0, 1, 2, 3, 4].map((i) => ({ x: townHall.x + i, y: townHall.y + 5 }));
-for (const r of startRoads) {
-  if (terrain[r.y * WORLD_TILES + r.x] !== T.grass) { console.error('FEHLER: Startstraßen-Kachel nicht Gras.'); process.exit(1); }
+bridgePool.sort((a, b) => a.score - b.score || a.midY - b.midY || a.midX - b.midX);
+const bridgeCandidates = [];
+for (const candidate of bridgePool) spacedPush(bridgeCandidates, candidate, 10, 48);
+
+const tunnelPool = [];
+for (let y = 4; y < WORLD_TILES - 4; y += 2) {
+  for (let x = 4; x < WORLD_TILES - 4; x += 2) {
+    if (!tunnelApproachSurface(x, y)) continue;
+    for (const [dx, dy] of [[1, 0], [0, 1]]) {
+      let maxMountain = -Infinity;
+      let mountainTiles = 0;
+      for (let step = 1; step <= 28; step++) {
+        const nx = x + dx * step, ny = y + dy * step;
+        if (!inWorld(nx, ny)) break;
+        const no = tileOffset(nx, ny);
+        if (terrain[no] === T.mountain) {
+          mountainTiles++;
+          maxMountain = Math.max(maxMountain, tileH(nx, ny));
+          continue;
+        }
+        if (mountainTiles < 5 || !tunnelApproachSurface(nx, ny)) break;
+        const entranceHeight = Math.max(tileH(x, y), tileH(nx, ny));
+        const mountainDepth = maxMountain - entranceHeight;
+        if (mountainDepth < 3) break;
+        tunnelPool.push({
+          entranceA: { x, y, height: round(tileH(x, y), 3) },
+          entranceB: { x: nx, y: ny, height: round(tileH(nx, ny), 3) },
+          length: step,
+          mountainDepth,
+          minimumUnlockLevel: clamp(Math.round(8 + mountainDepth / 3), 10, 18),
+          midX: (x + nx) / 2, midY: (y + ny) / 2,
+          score: step - mountainDepth * 0.25,
+        });
+        break;
+      }
+    }
+  }
+}
+tunnelPool.sort((a, b) => a.score - b.score || a.midY - b.midY || a.midX - b.midX);
+const tunnelCandidates = [];
+for (const candidate of tunnelPool) spacedPush(tunnelCandidates, candidate, 18, 24);
+
+const elevatedPool = [];
+for (let y = 6; y < WORLD_TILES - 6; y += 4) {
+  for (let x = 6; x < WORLD_TILES - 6; x += 4) {
+    if (!buildableMask[tileOffset(x, y)]) continue;
+    for (const [dx, dy] of [[1, 0], [0, 1]]) {
+      for (let span = 10; span <= 24; span += 2) {
+        const ex = x + dx * span, ey = y + dy * span;
+        if (!inWorld(ex, ey) || !buildableMask[tileOffset(ex, ey)]) continue;
+        const startHeight = tileH(x, y), endHeight = tileH(ex, ey);
+        let maxPillarHeight = 0, valid = true;
+        for (let step = 1; step < span; step++) {
+          const no = tileOffset(x + dx * step, y + dy * step);
+          if (isWaterCand[no]) { valid = false; break; }
+          const deckHeight = startHeight + (endHeight - startHeight) * (step / span);
+          maxPillarHeight = Math.max(maxPillarHeight, deckHeight - tileH(x + dx * step, y + dy * step));
+        }
+        if (!valid || maxPillarHeight < 2.5) continue;
+        elevatedPool.push({
+          start: { x, y }, end: { x: ex, y: ey },
+          startHeight, endHeight, maxPillarHeight, span,
+          terrainClearance: Math.max(1.5, maxPillarHeight * 0.4),
+          midX: (x + ex) / 2, midY: (y + ey) / 2,
+          score: span - maxPillarHeight,
+        });
+        break;
+      }
+    }
+  }
+}
+elevatedPool.sort((a, b) => a.score - b.score || a.midY - b.midY || a.midX - b.midX);
+const elevatedRoadCandidates = [];
+for (const candidate of elevatedPool) spacedPush(elevatedRoadCandidates, candidate, 20, 24);
+
+const harborPool = [];
+for (let y = 2; y < WORLD_TILES - 2; y += 2) {
+  for (let x = 2; x < WORLD_TILES - 2; x += 2) {
+    const o = tileOffset(x, y);
+    if (!roadSurface(x, y) || !waterfrontBuildableMask[o] || distToOcean[o] !== 1 || regionGrid[o] === 0) continue;
+    const oceanNeighbor = [[1, 0], [-1, 0], [0, 1], [0, -1]]
+      .map(([dx, dy]) => ({ x: x + dx, y: y + dy }))
+      .find((point) => oceanMask[tileOffset(point.x, point.y)]);
+    if (!oceanNeighbor) continue;
+    harborPool.push({
+      position: { x, y }, waterAccess: oceanNeighbor,
+      regionId: regionGrid[o], depth: round(Math.min(3, 0.45 + Math.max(1, distToLand[tileOffset(oceanNeighbor.x, oceanNeighbor.y)]) * 0.28), 2),
+      shoreType: shoreTypeGrid[o],
+      buildableApron: true,
+      midX: x, midY: y,
+      score: tileSlope(x, y),
+    });
+  }
+}
+harborPool.sort((a, b) => a.score - b.score || a.midY - b.midY || a.midX - b.midX);
+const harborCandidates = [];
+for (const candidate of harborPool) spacedPush(harborCandidates, candidate, 24, 16);
+
+// Der historische Anleger bleibt getrennt vom Stadtzentrum. Eine deterministische
+// Land-BFS wählt den nächstgelegenen erreichbaren Hafenkandidaten und bereitet
+// die spätere Tutorial-/Versorgungstrasse vor, ohne Story-State einzuführen.
+const centralFoundingPoint = { x: townHall.x + 2, y: townHall.y + 2 };
+const routeGoal = { x: townHall.x + 2, y: townHall.y + 5 };
+const routePrev = new Int32Array(SIZE).fill(-2);
+const routeDistance = new Float64Array(SIZE).fill(Infinity);
+{
+  const start = tileOffset(routeGoal.x, routeGoal.y);
+  const heap = [[0, start]];
+  const push = (entry) => {
+    heap.push(entry);
+    let index = heap.length - 1;
+    while (index > 0) {
+      const parent = (index - 1) >> 1;
+      if (heap[parent][0] <= heap[index][0]) break;
+      [heap[parent], heap[index]] = [heap[index], heap[parent]];
+      index = parent;
+    }
+  };
+  const pop = () => {
+    const top = heap[0];
+    const last = heap.pop();
+    if (heap.length) {
+      heap[0] = last;
+      let index = 0;
+      for (;;) {
+        const left = index * 2 + 1, right = left + 1;
+        let smallest = index;
+        if (left < heap.length && heap[left][0] < heap[smallest][0]) smallest = left;
+        if (right < heap.length && heap[right][0] < heap[smallest][0]) smallest = right;
+        if (smallest === index) break;
+        [heap[index], heap[smallest]] = [heap[smallest], heap[index]];
+        index = smallest;
+      }
+    }
+    return top;
+  };
+  routePrev[start] = -1;
+  routeDistance[start] = 0;
+  while (heap.length) {
+    const [cost, c] = pop();
+    if (cost !== routeDistance[c]) continue;
+    const x = c % WORLD_TILES, y = (c / WORLD_TILES) | 0;
+    for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+      const nx = x + dx, ny = y + dy;
+      if (!inWorld(nx, ny)) continue;
+      const no = tileOffset(nx, ny);
+      if (isWaterCand[no]) continue;
+      const slope = tileSlope(nx, ny);
+      const step = 1 + slope * 5 + (terrain[no] === T.mountain ? 18 : 0) + (buildableMask[no] ? 0 : 2.5);
+      const next = cost + step;
+      if (next >= routeDistance[no]) continue;
+      routePrev[no] = c;
+      routeDistance[no] = next;
+      push([next, no]);
+    }
+  }
+}
+const futureHarborCandidate = harborCandidates
+  .filter((harbor) => Number.isFinite(routeDistance[tileOffset(harbor.position.x, harbor.position.y)]))
+  .sort((a, b) => routeDistance[tileOffset(a.position.x, a.position.y)] - routeDistance[tileOffset(b.position.x, b.position.y)] || a.score - b.score)[0];
+if (!futureHarborCandidate) {
+  console.error('FEHLER: kein erreichbarer Küstenanleger für die zentrale Gründung gefunden.', {
+    harborPool: harborPool.length,
+    harborCandidates: harborCandidates.length,
+    waterfrontTiles: waterfrontBuildableMask.reduce((sum, value) => sum + value, 0),
+    flatCoastTiles: shoreTypeGrid.reduce((sum, value) => sum + Number(value === 1), 0),
+    oceanFrontBuildable: waterfrontBuildableMask.reduce((sum, value, o) => sum + Number(value && distToOcean[o] === 1), 0),
+    startRegion: startRegion.id,
+    center: centralFoundingPoint,
+  });
+  process.exit(1);
+}
+const coastalArrivalPoint = { ...futureHarborCandidate.position };
+const initialSupplyRoute = [];
+for (let o = tileOffset(coastalArrivalPoint.x, coastalArrivalPoint.y); o >= 0; o = routePrev[o]) {
+  initialSupplyRoute.push({ x: o % WORLD_TILES, y: (o / WORLD_TILES) | 0 });
+  if (routePrev[o] === -1) break;
+}
+if (initialSupplyRoute.at(-1)?.x !== routeGoal.x || initialSupplyRoute.at(-1)?.y !== routeGoal.y) {
+  console.error('FEHLER: vorbereitete Versorgungstrasse erreicht den zentralen Start nicht.');
+  process.exit(1);
+}
+
+const waterRouteNodes = [];
+for (let y = 8; y < WORLD_TILES - 8; y += 16) {
+  for (let x = 8; x < WORLD_TILES - 8; x += 16) {
+    const o = tileOffset(x, y);
+    if (!isWaterCand[o]) continue;
+    const type = oceanMask[o] ? 'sea' : terrain[o] === T.river ? 'river' : 'lake';
+    waterRouteNodes.push({
+      id: `water_${x}_${y}`,
+      position: { x, y }, type,
+      clearance: type === 'river' ? 3 : 8,
+      depth: round(oceanMask[o] ? Math.min(3, 0.45 + Math.max(1, distToLand[o]) * 0.28) : 0.8, 2),
+      width: Math.max(2, Math.min(32, distToLand[o] * 2)),
+      regionId: regionGrid[o],
+    });
+  }
+}
+for (let i = 0; i < harborCandidates.length; i++) {
+  const harbor = harborCandidates[i];
+  waterRouteNodes.push({
+    id: `harbor_${String(i + 1).padStart(2, '0')}`,
+    position: harbor.waterAccess,
+    type: 'harbor',
+    clearance: 8,
+    depth: harbor.depth,
+    width: 5,
+    regionId: harbor.regionId,
+  });
+}
+
+// Navigationskanten werden beim Bake ausschließlich über nachweislich
+// durchgängige Wassersegmente verbunden. Der Renderer darf diese Kanten für
+// Vorschauen benutzen; eine direkte Hafen-zu-Hafen-Linie durch Land existiert
+// dadurch gar nicht erst im Datenmodell.
+const waterRouteEdges = [];
+const waterEdgeKeys = new Set();
+const waterLineIsClear = (a, b) => {
+  const length = Math.hypot(b.position.x - a.position.x, b.position.y - a.position.y);
+  // Vier Subsamples pro Kachel plus Supercover-Nachbarschaft. Eine einfache
+  // Rundung übersieht bei diagonalen Linien sonst schmale Landzungen zwischen
+  // zwei Samples und erzeugt optisch eine Route über Land.
+  const samples = Math.max(2, Math.ceil(length * 4));
+  for (let i = 1; i < samples; i++) {
+    const px = a.position.x + (b.position.x - a.position.x) * (i / samples);
+    const py = a.position.y + (b.position.y - a.position.y) * (i / samples);
+    const xs = new Set([Math.floor(px), Math.ceil(px), Math.round(px)]);
+    const ys = new Set([Math.floor(py), Math.ceil(py), Math.round(py)]);
+    for (const x of xs) {
+      for (const y of ys) {
+        if (!inWorld(x, y) || !isWaterCand[tileOffset(x, y)]) return false;
+      }
+    }
+  }
+  return true;
+};
+for (let i = 0; i < waterRouteNodes.length; i++) {
+  const a = waterRouteNodes[i];
+  const candidates = [];
+  for (let j = i + 1; j < waterRouteNodes.length; j++) {
+    const b = waterRouteNodes[j];
+    const length = Math.hypot(b.position.x - a.position.x, b.position.y - a.position.y);
+    const limit = a.type === 'harbor' || b.type === 'harbor' ? 34 : 23;
+    if (length > limit) continue;
+    candidates.push({ j, length });
+  }
+  candidates.sort((aCandidate, bCandidate) => aCandidate.length - bCandidate.length || aCandidate.j - bCandidate.j);
+  let connected = 0;
+  for (const candidate of candidates) {
+    if (connected >= 8) break;
+    const b = waterRouteNodes[candidate.j];
+    if (!waterLineIsClear(a, b)) continue;
+    const key = `${a.id}|${b.id}`;
+    if (waterEdgeKeys.has(key)) continue;
+    waterEdgeKeys.add(key);
+    waterRouteEdges.push({
+      id: `water_edge_${String(waterRouteEdges.length + 1).padStart(4, '0')}`,
+      from: a.id,
+      to: b.id,
+      length: round(candidate.length, 2),
+      minDepth: Math.min(a.depth, b.depth),
+      minClearance: Math.min(a.clearance, b.clearance),
+      kind: a.type === 'harbor' || b.type === 'harbor' ? 'harbor_link' : 'waterway',
+    });
+    connected++;
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -735,22 +1686,52 @@ function toBase64Lines(bytes) {
 
 // 8a. Terrain-Grid (Sim).
 const terrainTs = `// AUTO-GENERIERT von tools/bakeWorld.mjs — NICHT von Hand editieren.
-// Quelle: reference/stylized island map 3d model.glb (§ MVP4 Welt-Neuaufbau).
+// Quelle: reference/world/island 3d new.glb (Terrain & World Scale Overhaul 6.1).
 // Regeln/Schwellen: tools/bakeWorld.mjs + docs/WORLD_REBUILD.md; Statistik:
 // tools/bake-report.md. Neu erzeugen: \`node tools/bakeWorld.mjs\`.
 /* eslint-disable */
 
 /** Weltbreite/-tiefe in Kacheln. */
 export const WORLD_TILES = ${WORLD_TILES};
+export const WORLD_SOURCE_SHA256 = '${SOURCE_SHA256}';
+export const BAKED_WORLD = {
+  horizontalScaleFromV60: ${round((WORLD_TILES - OCEAN_MARGIN_TILES * 2) / (WORLD_TILES - PREVIOUS_OCEAN_MARGIN_TILES * 2), 4)},
+  previousWaterlineNormalized: ${PREVIOUS_WATERLINE_N},
+  waterlineNormalized: ${WATERLINE_N},
+  peakWorldHeight: ${PEAK_WORLD_HEIGHT},
+  islandCenter: { x: ${round(islandCenter.x, 2)}, y: ${round(islandCenter.y, 2)} },
+  coastGeometry: {
+    projectedDegenerateTrianglesSkipped: ${projectedDegenerateTrianglesSkipped},
+    isolatedPeaksRepaired: ${coastIsolatedPeaksRepaired},
+    isolatedPeakCount: ${coastIsolatedPeakCount},
+    maxNeighborStep: ${round(coastMaxNeighborStep)},
+  },
+} as const;
 
 /** Terrain-Typ je ID im Grid (Index = gespeicherter Byte-Wert). */
 export const TERRAIN_IDS = ${JSON.stringify(T_NAMES)} as const;
 
-/** Vom Bake gewählter Start: Region, Rathaus (5×5, Anker links-oben), Startstraßen. */
+/** Zentraler Start, historische Küstenankunft und vorbereitete Versorgungstrasse. */
 export const BAKED_START = {
   regionId: ${startRegion.id},
   townHall: { x: ${townHall.x}, y: ${townHall.y} },
+  centralFoundingPoint: ${JSON.stringify(centralFoundingPoint)},
+  coastalArrivalPoint: ${JSON.stringify(coastalArrivalPoint)},
+  futureHarborCandidate: ${JSON.stringify({ position: futureHarborCandidate.position, waterAccess: futureHarborCandidate.waterAccess, regionId: futureHarborCandidate.regionId })},
+  initialSupplyRoute: ${JSON.stringify(initialSupplyRoute)},
   startRoads: ${JSON.stringify(startRoads)},
+  score: ${JSON.stringify({
+    buildableTiles: townHall.buildableTiles,
+    earlyBuildableTiles: townHall.earlyBuildable,
+    flatnessScore: round(townHall.flatnessScore),
+    centralityScore: round(townHall.centralityScore),
+    expansionDirectionScore: round(townHall.expansionDirectionScore),
+    resourceAccessScore: round(townHall.resourceAccessScore),
+    infrastructureScore: round(townHall.infrastructureScore),
+    waterRisk: round(townHall.waterRisk),
+    cliffRisk: round(townHall.cliffRisk),
+    totalScore: round(townHall.totalScore),
+  })},
 } as const;
 
 const DATA =
@@ -781,7 +1762,7 @@ export const REGION_COUNT = ${regions.length};
 
 /** Vom Bake ermittelte Statistik je Region (Index = Id − 1). */
 export const BAKED_REGIONS = ${JSON.stringify(
-  regions.map((r) => ({ id: r.id, tiles: r.tiles, buildable: r.buildable, dominant: r.dominant, centroid: r.centroid, adjacent: r.adjacent, terrain: r.terrain })),
+  regions.map((r) => ({ id: r.id, tiles: r.tiles, buildable: r.buildable, coastTiles: r.coastTiles, dominant: r.dominant, centroid: r.centroid, adjacent: r.adjacent, seaAdjacent: r.seaAdjacent, terrain: r.terrain })),
   null,
   2,
 )} as const;
@@ -802,6 +1783,195 @@ export const regionGrid: Uint8Array = decode(DATA);
 writeFileSync(join(ROOT, 'src', 'game', 'config', 'world', 'islandRegions.gen.ts'), regionsTs);
 console.log('— geschrieben: src/game/config/world/islandRegions.gen.ts');
 
+// 8a3. Synchron ladbare Oberflächen-/Bebaubarkeitsdaten für die Simulation.
+// Dadurch benötigt die Simulation weder Three.js noch Runtime-Raycasts auf der GLB.
+const surfaceHeight = new Int16Array(SIZE);
+const surfaceSlope = new Uint16Array(SIZE);
+const buildabilityFlags = new Uint8Array(SIZE);
+const waterDepth = new Uint8Array(SIZE);
+for (let y = 0; y < WORLD_TILES; y++) {
+  for (let x = 0; x < WORLD_TILES; x++) {
+    const o = y * WORLD_TILES + x;
+    const terrainId = terrain[o];
+    surfaceHeight[o] = Math.round(tileH(x, y) * 100);
+    surfaceSlope[o] = Math.min(65535, Math.round(tileSlope(x, y) * 1000));
+    if (buildableMask[o]) buildabilityFlags[o] |= 1;
+    if (terrainId === T.water || terrainId === T.river) buildabilityFlags[o] |= 2;
+    if (terrainId === T.mountain || tileSlope(x, y) >= MOUNTAIN_SLOPE) buildabilityFlags[o] |= 4;
+    if (distToOcean[o] > 0 && distToOcean[o] <= 2) buildabilityFlags[o] |= 8;
+    if (waterfrontBuildableMask[o]) buildabilityFlags[o] |= 16;
+    if (isWaterCand[o]) {
+      const depth = oceanMask[o]
+        ? Math.min(3, 0.45 + Math.max(1, distToLand[o]) * 0.28)
+        : 0.8;
+      waterDepth[o] = Math.min(255, Math.round(depth * 20));
+    }
+  }
+}
+const buildabilityTs = `// AUTO-GENERIERT von tools/bakeWorld.mjs — NICHT von Hand editieren.
+// Deterministische Simulationsoberfläche der neuen Insel; keine Three.js-Abhängigkeit.
+/* eslint-disable */
+
+export const BUILDABILITY_WORLD_TILES = ${WORLD_TILES};
+export const SURFACE_HEIGHT_SCALE = 100;
+export const SURFACE_SLOPE_SCALE = 1000;
+export const BUILDABLE_BIT = 1;
+export const WATER_BIT = 2;
+export const CLIFF_BIT = 4;
+export const COAST_BIT = 8;
+export const WATERFRONT_BIT = 16;
+export const WATER_DEPTH_SCALE = 20;
+/** 0 kein Ufer, 1 flache Küste, 2 Flussufer, 3 Seeufer, 4 Steilküste. */
+export const SHORE_TYPES = ['none', 'coast', 'riverbank', 'lakeshore', 'cliff'] as const;
+
+const HEIGHT_DATA = ${toBase64Lines(new Uint8Array(surfaceHeight.buffer))};
+const SLOPE_DATA = ${toBase64Lines(new Uint8Array(surfaceSlope.buffer))};
+const FLAG_DATA = ${toBase64Lines(buildabilityFlags)};
+const SHORE_DATA = ${toBase64Lines(shoreTypeGrid)};
+const WATER_DEPTH_DATA = ${toBase64Lines(waterDepth)};
+
+function bytes(b64: string): Uint8Array {
+  const bin = atob(b64);
+  const out = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+  return out;
+}
+
+export const surfaceHeightGrid = new Int16Array(bytes(HEIGHT_DATA).buffer);
+export const surfaceSlopeGrid = new Uint16Array(bytes(SLOPE_DATA).buffer);
+export const buildabilityGrid = bytes(FLAG_DATA);
+export const shoreTypeGrid = bytes(SHORE_DATA);
+/** Wassertiefe in Weltmetern = Byte / WATER_DEPTH_SCALE; Land = 0. */
+export const waterDepthGrid = bytes(WATER_DEPTH_DATA);
+`;
+writeFileSync(join(ROOT, 'src', 'game', 'config', 'world', 'islandBuildability.gen.ts'), buildabilityTs);
+console.log('— geschrieben: src/game/config/world/islandBuildability.gen.ts');
+
+const infrastructureTs = `// AUTO-GENERIERT von tools/bakeWorld.mjs — NICHT von Hand editieren.
+// Geografische Kandidaten/Hooks; noch keine Brücken-, Tunnel- oder Schifffahrtssimulation.
+/* eslint-disable */
+
+export type BakedRoadClass = 'local' | 'collector' | 'arterial';
+export interface BakedTilePoint { x: number; y: number }
+export interface BakedWorldPoint { x: number; y: number; z: number }
+export interface BridgeCandidate {
+  id: string;
+  start: BakedTilePoint;
+  end: BakedTilePoint;
+  span: number;
+  elevationDelta: number;
+  waterType: 'river' | 'lake' | 'coast';
+  startShoreType: number;
+  endShoreType: number;
+  rampGrade: number;
+  clearanceRequired: boolean;
+  supportedRoadClasses: BakedRoadClass[];
+}
+export interface ElevatedRoadCandidate {
+  id: string;
+  start: BakedTilePoint;
+  end: BakedTilePoint;
+  startHeight: number;
+  endHeight: number;
+  maxPillarHeight: number;
+  span: number;
+  terrainClearance: number;
+}
+export interface TunnelCandidate {
+  id: string;
+  entranceA: BakedWorldPoint;
+  entranceB: BakedWorldPoint;
+  length: number;
+  mountainDepth: number;
+  minimumUnlockLevel: number;
+}
+export interface HarborCandidate {
+  id: string;
+  position: BakedTilePoint;
+  waterAccess: BakedTilePoint;
+  regionId: number;
+  depth: number;
+  shoreType: number;
+  buildableApron: boolean;
+}
+export interface WaterRouteNode {
+  id: string;
+  position: BakedWorldPoint;
+  type: 'sea' | 'river' | 'lake' | 'harbor' | 'dock';
+  clearance: number;
+  depth: number;
+  width: number;
+  regionId: number;
+}
+export interface WaterRouteEdge {
+  id: string;
+  from: string;
+  to: string;
+  length: number;
+  minDepth: number;
+  minClearance: number;
+  kind: 'waterway' | 'harbor_link';
+}
+
+export const bridgeCandidates: readonly BridgeCandidate[] = ${JSON.stringify(bridgeCandidates.map((candidate, i) => ({
+  id: `bridge_${String(i + 1).padStart(2, '0')}`,
+  start: candidate.start,
+  end: candidate.end,
+  span: candidate.span,
+  elevationDelta: round(candidate.elevationDelta),
+  waterType: candidate.waterType,
+  startShoreType: candidate.startShoreType,
+  endShoreType: candidate.endShoreType,
+  rampGrade: candidate.rampGrade,
+  clearanceRequired: candidate.clearanceRequired,
+  supportedRoadClasses: candidate.supportedRoadClasses,
+})), null, 2)};
+
+export const elevatedRoadCandidates: readonly ElevatedRoadCandidate[] = ${JSON.stringify(elevatedRoadCandidates.map((candidate, i) => ({
+  id: `viaduct_${String(i + 1).padStart(2, '0')}`,
+  start: candidate.start,
+  end: candidate.end,
+  startHeight: round(candidate.startHeight),
+  endHeight: round(candidate.endHeight),
+  maxPillarHeight: round(candidate.maxPillarHeight),
+  span: candidate.span,
+  terrainClearance: round(candidate.terrainClearance),
+})), null, 2)};
+
+export const tunnelCandidates: readonly TunnelCandidate[] = ${JSON.stringify(tunnelCandidates.map((candidate, i) => ({
+  id: `tunnel_${String(i + 1).padStart(2, '0')}`,
+  entranceA: { x: candidate.entranceA.x, y: candidate.entranceA.height, z: candidate.entranceA.y },
+  entranceB: { x: candidate.entranceB.x, y: candidate.entranceB.height, z: candidate.entranceB.y },
+  length: candidate.length,
+  mountainDepth: round(candidate.mountainDepth),
+  minimumUnlockLevel: candidate.minimumUnlockLevel,
+})), null, 2)};
+
+export const harborCandidates: readonly HarborCandidate[] = ${JSON.stringify(harborCandidates.map((candidate, i) => ({
+  id: `harbor_${String(i + 1).padStart(2, '0')}`,
+  position: candidate.position,
+  waterAccess: candidate.waterAccess,
+  regionId: candidate.regionId,
+  depth: candidate.depth,
+  shoreType: candidate.shoreType,
+  buildableApron: candidate.buildableApron,
+})), null, 2)};
+
+export const centralFoundingPoint: BakedTilePoint = ${JSON.stringify(centralFoundingPoint)};
+export const coastalArrivalPoint: BakedTilePoint = ${JSON.stringify(coastalArrivalPoint)};
+export const futureHarborCandidateId = '${`harbor_${String(harborCandidates.indexOf(futureHarborCandidate) + 1).padStart(2, '0')}`}';
+export const initialSupplyRoute: readonly BakedTilePoint[] = ${JSON.stringify(initialSupplyRoute)};
+
+export const waterRouteNodes: readonly WaterRouteNode[] = ${JSON.stringify(waterRouteNodes.map((node) => ({
+  ...node,
+  position: { x: node.position.x, y: 0, z: node.position.y },
+})), null, 2)};
+
+export const waterRouteEdges: readonly WaterRouteEdge[] = ${JSON.stringify(waterRouteEdges, null, 2)};
+`;
+writeFileSync(join(ROOT, 'src', 'game', 'config', 'world', 'islandInfrastructure.gen.ts'), infrastructureTs);
+console.log('— geschrieben: src/game/config/world/islandInfrastructure.gen.ts');
+
 // 8b. Höhen-Grid (Renderer), Uint16-quantisiert.
 let hMin = Infinity, hMax = -Infinity;
 for (const v of HW) { if (v < hMin) hMin = v; if (v > hMax) hMax = v; }
@@ -809,7 +1979,7 @@ const hRange = hMax - hMin;
 const HQ = new Uint16Array(GRID * GRID);
 for (let i = 0; i < HW.length; i++) HQ[i] = Math.round(((HW[i] - hMin) / hRange) * 65535);
 const heightTs = `// AUTO-GENERIERT von tools/bakeWorld.mjs — NICHT von Hand editieren.
-// Quelle: reference/stylized island map 3d model.glb (§ MVP4 Welt-Neuaufbau).
+// Quelle: reference/world/island 3d new.glb (Terrain & World Scale Overhaul 6.1).
 // ${GRID}×${GRID} Höhen-Samples (${SAMPLES_PER_TILE}/Kachel + 1), Uint16-quantisiert.
 // Neu erzeugen: \`node tools/bakeWorld.mjs\`.
 /* eslint-disable */
@@ -835,6 +2005,44 @@ export const heightGrid: Uint16Array = decode(DATA);
 writeFileSync(join(ROOT, 'src', 'renderer', 'three', 'worldHeight.gen.ts'), heightTs);
 console.log('— geschrieben: src/renderer/three/worldHeight.gen.ts');
 
+// 8b2. Renderer-Masken derselben Bake-Quelle (Wasserklasse + Ozeandistanz).
+const waterMask = new Uint8Array(SIZE);
+const coastDistance = new Uint8Array(SIZE);
+const oceanDepth = new Uint8Array(SIZE);
+for (let o = 0; o < SIZE; o++) {
+  if (oceanMask[o]) waterMask[o] = 1;
+  else if (terrain[o] === T.river) waterMask[o] = 3;
+  else if (isWaterCand[o]) waterMask[o] = 2;
+  coastDistance[o] = Math.min(255, distToOcean[o]);
+  oceanDepth[o] = Math.min(255, Math.max(0, distToLand[o]));
+}
+const masksTs = `// AUTO-GENERIERT von tools/bakeWorld.mjs — NICHT von Hand editieren.
+// Wasser: 0 Land, 1 Ozean, 2 See, 3 Fluss. Ufer: siehe shoreTypeGrid.
+/* eslint-disable */
+
+export const WORLD_MASK_TILES = ${WORLD_TILES};
+const WATER_DATA = ${toBase64Lines(waterMask)};
+const COAST_DATA = ${toBase64Lines(coastDistance)};
+const DEPTH_DATA = ${toBase64Lines(oceanDepth)};
+const SHORE_DATA = ${toBase64Lines(shoreTypeGrid)};
+const WATERFRONT_DATA = ${toBase64Lines(waterfrontBuildableMask)};
+
+function decode(b64: string): Uint8Array {
+  const bin = atob(b64);
+  const out = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+  return out;
+}
+
+export const waterMaskGrid = decode(WATER_DATA);
+export const coastDistanceGrid = decode(COAST_DATA);
+export const oceanDepthGrid = decode(DEPTH_DATA);
+export const shoreTypeGrid = decode(SHORE_DATA);
+export const waterfrontBuildableGrid = decode(WATERFRONT_DATA);
+`;
+writeFileSync(join(ROOT, 'src', 'renderer', 'three', 'worldMasks.gen.ts'), masksTs);
+console.log('— geschrieben: src/renderer/three/worldMasks.gen.ts');
+
 // 8c. Vorschau-PNG (Hypsometrie + Biomfarben).
 {
   const S = WORLD_TILES;
@@ -847,8 +2055,13 @@ console.log('— geschrieben: src/renderer/three/worldHeight.gen.ts');
     for (let tx = 0; tx < S; tx++) {
       const t = terrain[ty * S + tx];
       let [r, g, b] = COLORS[t];
+      const shoreType = shoreTypeGrid[ty * S + tx];
+      if (shoreType === 1) [r, g, b] = [214, 189, 119];
+      else if (shoreType === 2) [r, g, b] = [102, 158, 103];
+      else if (shoreType === 3) [r, g, b] = [122, 169, 125];
+      else if (shoreType === 4) [r, g, b] = [104, 101, 97];
       const h = tileH(tx, ty);
-      if (t === T.mountain && h > MOUNTAIN_HEIGHT + 7) { r = 235; g = 238; b = 244; } // Schneegipfel
+      if (t === T.mountain && h > 36) { r = 235; g = 238; b = 244; } // nur höchste Schneegipfel
       const shade = Math.max(-0.18, Math.min(0.18, (tileH(tx, ty) - tileH(Math.max(0, tx - 1), Math.max(0, ty - 1))) * 0.35));
       // Regionsgrenzen sichtbar machen (dunkle Linie), zur Kontrolle der Segmentierung.
       let borderMul = 1;
@@ -877,9 +2090,19 @@ console.log('— geschrieben: src/renderer/three/worldHeight.gen.ts');
   const raw = Buffer.alloc((S * 3 + 1) * S);
   for (let y = 0; y < S; y++) { raw[y * (S * 3 + 1)] = 0; px.copy(raw, y * (S * 3 + 1) + 1, y * S * 3, (y + 1) * S * 3); }
   const ihdr = Buffer.alloc(13); ihdr.writeUInt32BE(S, 0); ihdr.writeUInt32BE(S, 4); ihdr[8] = 8; ihdr[9] = 2;
-  writeFileSync(join(ROOT, 'tools', 'bake-preview.png'), Buffer.concat([
+  const mapPng = Buffer.concat([
     Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]), chunk('IHDR', ihdr), chunk('IDAT', zlib.deflateSync(raw)), chunk('IEND', Buffer.alloc(0)),
-  ]));
+  ]);
+  writeFileSync(join(ROOT, 'tools', 'bake-preview.png'), mapPng);
+  for (const relativePath of [
+    ['src', 'assets', 'ui', 'map', 'new_island_overview.png'],
+    ['src', 'assets', 'ui', 'minimap', 'new_island_minimap.png'],
+    ['src', 'assets', 'ui', 'citywork', 'map', 'new_island_planning.png'],
+  ]) {
+    const output = join(ROOT, ...relativePath);
+    mkdirSync(dirname(output), { recursive: true });
+    writeFileSync(output, mapPng);
+  }
   console.log('— geschrieben: tools/bake-preview.png');
 }
 
@@ -888,36 +2111,69 @@ console.log('— geschrieben: src/renderer/three/worldHeight.gen.ts');
   const counts = new Array(T_NAMES.length).fill(0);
   for (const t of terrain) counts[t]++;
   const total = terrain.length;
+  const totalBuildable = regions.reduce((sum, region) => sum + region.buildable, 0);
+  const buildableRatio = totalBuildable / BASELINE_BUILDABLE_TILES;
+  const shoreCounts = [0, 0, 0, 0, 0];
+  for (const value of shoreTypeGrid) shoreCounts[value]++;
+  const waterfrontBuildable = waterfrontBuildableMask.reduce((sum, value) => sum + value, 0);
   const rows = regions
-    .map((r) => `| ${r.id} | ${r.dominant} | ${r.tiles} | ${r.buildable} | (${r.centroid.x},${r.centroid.y}) | ${r.adjacent.join(', ')} |`)
+    .map((r) => `| ${r.id} | ${r.dominant} | ${r.tiles} | ${r.buildable} | ${r.coastTiles} | (${r.centroid.x},${r.centroid.y}) | ${r.adjacent.join(', ')} |`)
     .join('\n');
-  const report = `# Bake-Report — Insel-Welt (MVP4 + Welt 2.0 Regionen)
+  const candidateRows = startAreaCandidates.slice(0, 10)
+    .map((candidate, index) => `| ${index + 1} | ${candidate.regionId} | (${candidate.center.x},${candidate.center.y}) | ${candidate.buildableTiles} | ${candidate.earlyBuildable} | ${candidate.centralityScore.toFixed(3)} | ${candidate.flatnessScore.toFixed(3)} | ${candidate.expansionDirectionScore.toFixed(3)} | ${candidate.resourceAccessScore.toFixed(3)} | ${candidate.infrastructureScore.toFixed(3)} | ${candidate.waterRisk.toFixed(3)} | ${candidate.cliffRisk.toFixed(3)} | ${candidate.totalScore.toFixed(2)} |`)
+    .join('\n');
+  const report = `# Bake-Report — Terrain & World Scale Overhaul 6.1
 
 > **Auto-generiert** von \`tools/bakeWorld.mjs\`. Nicht von Hand editieren.
 
 ## Eckdaten
 
-- Quelle: \`reference/stylized island map 3d model.glb\` (${triCount.toLocaleString('de-DE')} Dreiecke gerastert)
+- Quelle: \`reference/world/island 3d new.glb\` (${triCount.toLocaleString('de-DE')} Dreiecke gerastert)
+- Source-SHA-256: \`${SOURCE_SHA256}\`
 - Welt: ${WORLD_TILES}×${WORLD_TILES} Kacheln, ${regions.length} organische Regionen (+ Ozean)
-- Ozeanrand: ${OCEAN_MARGIN_TILES} Kacheln; Höhenfaktor: Gipfel ≈ ${PEAK_WORLD_HEIGHT} Welt-Einheiten
-- Wasserlinie (normalisiert): ${WATERLINE_N}; Höhenbereich Welt: [${hMin.toFixed(2)}, ${hMax.toFixed(2)}]
+- Horizontale Quellspannweite: ${WORLD_TILES - OCEAN_MARGIN_TILES * 2} statt ${WORLD_TILES - PREVIOUS_OCEAN_MARGIN_TILES * 2} Kacheln; Faktor ${((WORLD_TILES - OCEAN_MARGIN_TILES * 2) / (WORLD_TILES - PREVIOUS_OCEAN_MARGIN_TILES * 2)).toFixed(4)} (Fläche ≈ ${Math.pow((WORLD_TILES - OCEAN_MARGIN_TILES * 2) / (WORLD_TILES - PREVIOUS_OCEAN_MARGIN_TILES * 2), 2).toFixed(4)})
+- Ozeanrand: ${OCEAN_MARGIN_TILES} Kacheln; separate Y-Skalierung: Gipfel ≈ ${PEAK_WORLD_HEIGHT} Welt-Einheiten
+- Wasserlinie (normalisiert): ${PREVIOUS_WATERLINE_N} → ${WATERLINE_N}; Höhenbereich Welt: [${hMin.toFixed(2)}, ${hMax.toFixed(2)}]
+- Bebaubare Kacheln: ${BASELINE_BUILDABLE_TILES.toLocaleString('de-DE')} → ${totalBuildable.toLocaleString('de-DE')} (${(buildableRatio * 100).toFixed(1)} %, Änderung ${((buildableRatio - 1) * 100).toFixed(1)} %)
 - Glättung bebaubaren Landes: ${SMOOTH_ITERATIONS} Iterationen, max. Schritt ${MAX_BUILDABLE_STEP}/Sample
 - Regions-Parameter: Ziel ~${REGION_TARGET_TILES} Kacheln, min. ${REGION_MIN_TILES} (sonst Merge), Kosten fremdes Biom +${COST_FOREIGN_BIOME} / Fluss +${COST_CROSS_RIVER} / Höhe ×${COST_HEIGHT_FACTOR}
+- Infrastruktur-Hooks: ${bridgeCandidates.length} Brücken, ${elevatedRoadCandidates.length} Viadukte, ${tunnelCandidates.length} Tunnel, ${harborCandidates.length} Häfen, ${waterRouteNodes.length} Wasserwegknoten
 
 ## Biomverteilung
 
 ${T_NAMES.map((n, i) => `- ${n}: ${counts[i].toLocaleString('de-DE')} (${(100 * counts[i] / total).toFixed(1)} %)`).join('\n')}
 
-## Start (vom Bake gewählt & validiert)
+## Wasser und Ufer
 
-- **Startregion: ${startRegion.id}** (${startRegion.dominant}) — ${startRegion.buildable.toLocaleString('de-DE')} bebaubare Kacheln (Ziel ≥ ${MIN_START_BUILDABLE})
-- **Rathaus: (${townHall.x},${townHall.y})** (5×5, Anker links-oben; flachster 7×7-Gras-Block nahe Regionsmitte, ΔH=${townHall.flat.toFixed(2)})
-- Startstraßen: ${startRoads.map((r) => `(${r.x},${r.y})`).join(', ')}
+- Flache Meeresküste: ${shoreCounts[1].toLocaleString('de-DE')} Kacheln
+- Sanftes Flussufer: ${shoreCounts[2].toLocaleString('de-DE')} Kacheln
+- Sanftes Seeufer: ${shoreCounts[3].toLocaleString('de-DE')} Kacheln
+- Bewusste Steilküste: ${shoreCounts[4].toLocaleString('de-DE')} Kacheln
+- Direkt wassernahe und bebaubare Uferkacheln: ${waterfrontBuildable.toLocaleString('de-DE')}
+- Garantierte 5×5-Uferplattformen: ${waterfrontAprons.length}
+
+## Zentraler Start (vom Bake gewählt und validiert)
+
+- Mathematischer Bounding-Box-Mittelpunkt: (${WORLD_TILES / 2},${WORLD_TILES / 2})
+- Flächenschwerpunkt der größten zusammenhängenden Landmasse: (${islandCenter.x.toFixed(2)},${islandCenter.y.toFixed(2)})
+- **Startregion: ${startRegion.id}** (${startRegion.dominant}) — ${startRegion.buildable.toLocaleString('de-DE')} bebaubare Kacheln (Ziel ${MIN_START_BUILDABLE}–${MAX_START_BUILDABLE})
+- **Rathaus: (${townHall.x},${townHall.y})**, Gründungsmittelpunkt (${centralFoundingPoint.x},${centralFoundingPoint.y}), ΔH=${townHall.flatDelta.toFixed(2)}
+- Frühe Fläche mit den nächsten Nachbarn: ${townHall.earlyBuildable.toLocaleString('de-DE')} Kacheln (Ziel ${MIN_EARLY_BUILDABLE.toLocaleString('de-DE')}–${MAX_EARLY_BUILDABLE.toLocaleString('de-DE')})
+- Score: Gesamt ${townHall.totalScore.toFixed(2)} · Zentralität ${townHall.centralityScore.toFixed(3)} · Flachheit ${townHall.flatnessScore.toFixed(3)} · Expansion ${townHall.expansionDirectionScore.toFixed(3)} · Ressourcen ${townHall.resourceAccessScore.toFixed(3)} · Infrastruktur ${townHall.infrastructureScore.toFixed(3)} · Wasser-/Klippenrisiko ${townHall.waterRisk.toFixed(3)}/${townHall.cliffRisk.toFixed(3)}
+- Küstenankunft: (${coastalArrivalPoint.x},${coastalArrivalPoint.y}); vorbereitete Versorgungstrasse ${initialSupplyRoute.length - 1} Kacheln bis zur südlichen Rathausachse
+- Startstraßen: ${startRoads.length} Kacheln auf zwei verlängerbaren Hauptachsen
+- TODO(CLAUDE_LOGIC): Arrival tutorial and founding journey
+
+### Top-10-Startflächen
+
+| Rang | Region | Mittelpunkt | Direkt bebaubar | Früh gesamt | Zentral | Flach | Richtungen | Ressourcen | Infrastruktur | Wasser-Risiko | Klippen-Risiko | Gesamt |
+| ---: | ---: | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+${candidateRows}
 
 ## Regionen (Grundlage für regions.config.ts)
 
-| Id | Dominant | Kacheln | Bebaubar | Zentrum | Nachbarn |
-| --- | --- | --- | --- | --- | --- |
+| Id | Dominant | Kacheln | Bebaubar | Küstenkante | Zentrum | Nachbarn |
+| --- | --- | --- | --- | --- | --- | --- |
 ${rows}
 `;
   writeFileSync(join(ROOT, 'tools', 'bake-report.md'), report);

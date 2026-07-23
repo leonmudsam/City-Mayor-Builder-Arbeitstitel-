@@ -1,5 +1,18 @@
 # UI-/Welt-Asset-Manifest v0.62
 
+## World Rebuild 6.0 — gebackene Karten
+
+| Datei | Größe | Verwendung | Quelle/Fallback |
+|---|---:|---|---|
+| `src/assets/ui/map/new_island_overview.png` | 512×512 | Inselübersicht/Regionskontext | `tools/bakeWorld.mjs`; dynamische Welt bleibt funktional |
+| `src/assets/ui/minimap/new_island_minimap.png` | 512×512 | Minimap-Basis/Referenz | gleicher Bake; Live-Minimap zeichnet Terrain und Nebel aus Daten |
+| `src/assets/ui/citywork/map/new_island_planning.png` | 512×512 | topografische Stadtarbeitsbasis | gleicher Bake; Straßen/Gebäude/Ziele bleiben dynamisch |
+
+Alle drei Bilder stammen aus exakt demselben Höhen-, Terrain- und Wasserstand.
+Sie enthalten keine dynamischen Gebäude oder Freischaltungen. Regionsvorschauen
+nutzen reale Rendereransichten beziehungsweise die dokumentierten generischen
+Heroes, bis ein automatischer Kamera-Batchrenderer ergänzt wird.
+
 Alle Assets sind Drop-in-Dateien. Fehlt eine Datei, muss der vorhandene
 Code-/Three-Fallback ohne Absturz übernehmen.
 

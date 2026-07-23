@@ -67,15 +67,17 @@ describe('logistics & workplaces', () => {
     setLevel(controller, 7);
     flattenTerrain(controller); // isolate the logistics boost from terrain bonus
     controller.state.resources = { money: 500_000, wood: 1_000, stone: 1_000, food: 1_000, freshwater: 0 };
-    for (let dx = 5; dx <= 10; dx++) controller.placeBuilding('road', at(dx, 5).x, at(dx, 5).y);
-    expect(controller.placeBuilding('sawmill', at(1, 6).x, at(1, 6).y)).toEqual({ ok: true });
-    const sawmill = Object.values(controller.state.buildings).find((b) => b.defId === 'sawmill')!;
-    controller.update(T0 + 40_000); // sawmill active, no depot yet
-    expect(controller.derived.productionBonus[sawmill.id] ?? 0).toBe(0);
+    for (let dx = 5; dx <= 13; dx++) controller.placeBuilding('road', at(dx, 5).x, at(dx, 5).y);
+    // § Active Operations 2.0: Logistik-Boost am passiven Steinbruch geprüft (das
+    // Sägewerk produziert nicht mehr passiv und taucht in productionPerMin nicht auf).
+    expect(controller.placeBuilding('quarry', at(1, 6).x, at(1, 6).y)).toEqual({ ok: true });
+    const quarry = Object.values(controller.state.buildings).find((b) => b.defId === 'quarry')!;
+    controller.update(T0 + 95_000); // quarry active, no depot yet
+    expect(controller.derived.productionBonus[quarry.id] ?? 0).toBe(0);
     expect(controller.placeBuilding('depot', at(6, 6).x, at(6, 6).y)).toEqual({ ok: true }); // within radius 6
-    controller.update(T0 + 300_000); // depot finishes
-    expect(controller.derived.productionBonus[sawmill.id]).toBe(25); // +25 % throughput
-    expect(controller.derived.productionPerMin.wood).toBeCloseTo(45 * 1.25, 5);
+    controller.update(T0 + 400_000); // depot finishes
+    expect(controller.derived.productionBonus[quarry.id]).toBe(25); // +25 % throughput
+    expect(controller.derived.productionPerMin.stone).toBeCloseTo(38 * 1.25, 5);
   });
 
   it('an office supplies a large block of jobs (§ Arbeitsversorgung)', () => {

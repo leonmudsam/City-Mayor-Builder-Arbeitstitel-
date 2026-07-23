@@ -1,58 +1,75 @@
-# WORLD_SCALE — Verbindliche Maßstäbe der Insel-Welt (MVP4)
+# WORLD_SCALE — Verbindliche Maße der Insel 6.1
 
-> Gültig ab Schema v10 / Patch v0.48. Quelle der Zahlen: Nutzer-Entscheidung
-> (AskUserQuestion, 384×384/36 Sektoren) + `tools/bake-report.md` (Bake-Ergebnis).
-> Änderungen hier erfordern einen Rebake (`node tools/bakeWorld.mjs`) und die
-> Anpassung von `docs/WORLD_REBUILD.md`.
+> Gültig ab Schema v15. Autoritative Quellen: `tools/bakeWorld.mjs`,
+> `tools/bake-report.md` und die gemeinsam generierten Weltdateien.
 
-## Welt
+## Welt und Quelle
+
+| Größe | Verbindlicher Wert |
+|---|---:|
+| Authoring-Quelle | `reference/world/island 3d new.glb` |
+| Source-SHA-256 | `63cb339303f6694f51ead6d2bc91aaac9891faa261ad4d77270330181fd3c917` |
+| Kachelmaß | 1 Kachel = 1 Welt-Einheit ≈ 4 m |
+| Logisches Raster | 512 × 512 Kacheln |
+| Quellspannweite X/Z | 420 statt 472 Kacheln |
+| Horizontalfaktor | 0,8898 je Achse; Flächenfaktor 0,7918 |
+| Höhenraster | 1025 × 1025 Samples |
+| Ozeanrand | 46 Kacheln |
+| Wasserlinie | y = 0; Source-Schwelle 0,0065; sichtbare Fläche y = −0,04 |
+| Höhenbereich | −2,40 bis 49,98 Welt-Einheiten |
+| Höchster Gipfel | ≈ 50 Einheiten ≈ 200 m |
+
+X/Z und Y sind absichtlich getrennt. Die Spiel-/Gebäudegröße bleibt
+unverändert; nur die Landschaft rückt dichter zusammen. Die Quell-GLB mit rund
+1,85 Millionen Dreiecken wird niemals zur Laufzeit geladen.
+
+## Flächenbilanz
+
+| Klasse | Kacheln | Anteil |
+|---|---:|---:|
+| Wasser | 161.481 | 61,6 % |
+| Fluss | 927 | 0,4 % |
+| Sand | 6.446 | 2,5 % |
+| Fruchtbar | 5.752 | 2,2 % |
+| Gras | 47.849 | 18,3 % |
+| Wald | 20.911 | 8,0 % |
+| Gebirge | 18.778 | 7,2 % |
+
+Die Baufläche sinkt von der 6.0-Baseline 55.941 auf 44.757 Kacheln, also
+exakt um rund 20 %. Wasser, Klippen, starke Hänge und Sicherheitskanten bleiben
+ausgeschlossen. 569 direkte Uferkacheln und 16 gebackene 5×5-Plattformen sind
+bewusst wasserbaunah.
+
+## Zentraler Start
 
 | Größe | Wert |
-| --- | --- |
-| Kachel | 1 Welt-Einheit ≈ **4 m** (unverändert seit v0.39) |
-| Welt | **384 × 384 Kacheln** ≈ 1,54 × 1,54 km |
-| Sektoren | **6 × 6 = 36** à **64 × 64** Kacheln (`SECTOR_SIZE = 64`) |
-| Ozeanrand | 12 Kacheln rings um die einbeschriebene Insel |
-| Landanteil | ~59 % (≈ 87.000 Land-Kacheln, davon ~66.500 bebaubar) |
+|---|---:|
+| Startregion | Region 24 „Herzland“ |
+| Bebaubare Kacheln | 1.290 |
+| Rathausanker | (125, 193), Footprint 5 × 5 |
+| Gründungsmittelpunkt | (127, 195) |
+| Hauptland-Schwerpunkt | (156,93; 222,11) |
+| Frühe Fläche | 4.418 Kacheln |
+| Startstraßen | 16 Kacheln auf zwei Achsen |
+| Küstenankunft | (222, 206) |
+| Versorgungstrasse | 115 Kacheln |
 
-## Höhen
+Der Start wird aus real bebaubaren Landschaften bewertet: Flachheit,
+Zentralität, Expansion in vier Richtungen, Ressourcen, Infrastruktur sowie
+Wasser-/Klippenrisiko. Der mathematische Rastermittelpunkt `(256,256)` ist
+nicht die Mitte der Hauptlandmasse und wird deshalb nicht als Start gewählt.
 
-| Größe | Wert |
-| --- | --- |
-| Wasserlinie | y = 0 (Referenz); `WATER_LEVEL` (Renderer) leicht darunter |
-| Höchster Gipfel | ≈ **20 Welt-Einheiten** (~80 m visuell; künstlerischer Faktor, nicht GLB-proportional — proportional wären ~88 Einheiten und unlesbar) |
-| Ozeantiefe | Rampe bis −3,0; Seen −0,8 |
-| Bebaubares Land | geglättet: max. ΔH ≈ 0,32/Kachel (Bake-Glättung, 8 Iterationen) — die Sim hat keine Hangprüfung, deshalb garantiert der **Bake** sanfte Bauflächen |
-| Höhen-Grid | 769 × 769 Samples (2/Kachel + 1), Uint16-quantisiert |
+## Kamera und Laufzeit
 
-## Gebäude & Objekte (unverändert)
+| Ansicht | Richtwert |
+|---|---:|
+| Nah | Distanz 25–70 |
+| Stadt | 70–180 |
+| Region | 180–340 |
+| Insel | 340–540 |
+| Maximale Distanz | 600 |
+| Terrain-Chunks | 8 × 8 Chunks à 64 × 64 Kacheln |
 
-| Größe | Wert |
-| --- | --- |
-| Gebäude-Footprints | 1×1 … 4×2 (Rathaus 3×3) — **unverändert** |
-| Straßenbreite | 1 Kachel |
-| Fahrzeuge/Bäume | bestehende Maßstäbe (fitObject-Normalisierung) |
-
-## Start (vom Bake gewählt & validiert)
-
-| Größe | Wert |
-| --- | --- |
-| Startsektor | **(2,3)** — 3.933 bebaubare Kacheln (Ziel: 2.500–4.000 ✓) |
-| Rathaus | Kachel **(157,221)**, 3×3, flachster 5×5-Gras-Block nahe Sektormitte |
-| Startstraßen | (156,223), (157,223), (158,223) |
-
-## Kamera (ab P3)
-
-| Größe | Wert |
-| --- | --- |
-| `maxDist` | 200 → **480** |
-| Overview-Preset | ~420 |
-| Far plane | 4000 (unverändert, reicht) |
-| Schatten | Frustum folgt Kamera-Target (statt fix ±140) |
-
-## Empfohlene Zoomstufen
-
-- **Nah** (Dist ~25–60): Stadtdetail, Bau/Platzierung.
-- **Stadt** (~60–150): Quartiersübersicht.
-- **Region** (~150–300): Sektor-Entscheidungen, Nachbarbiome.
-- **Insel** (~300–480): Gesamtüberblick, Expansion planen.
+Das Übersichtspreset fokussiert den echten Hauptland-Schwerpunkt. Culling,
+gemeinsame Materialien, Instancing und distanzabhängiges Nahdetail gelten in
+Browser und Tauri identisch.

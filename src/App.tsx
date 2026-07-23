@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { Eye } from 'lucide-react';
 import { loadConfig } from './game/config/index.ts';
 import { createNewGame } from './game/newGame.ts';
-import { GameController } from './game/commands/controller.ts';
+import { GameController, type ActivityRunResult } from './game/commands/controller.ts';
 import type { GameState } from './game/types.ts';
 import { LocalStorageSaveAdapter } from './game/storage/localStorageAdapter.ts';
 import { DEFAULT_SLOT } from './game/storage/saveAdapter.ts';
@@ -38,6 +38,34 @@ import { t } from './i18n/index.ts';
 
 const adapter = new LocalStorageSaveAdapter();
 
+/**
+ * Übersetzt den Abschlussbericht einer Stadtarbeit in Anzeigeparameter
+ * (§ Overhaul 8.0 / §3.3). Ein Parameter entsteht nur, wenn die Simulation für
+ * diesen Auftragstyp wirklich einen Wert hat — das Popup blendet fehlende
+ * Kennzahlen aus, statt sie mit „–" vorzutäuschen.
+ */
+function activityResultParams(result: ActivityRunResult): Record<string, string | number> {
+  const percent = (value: number): string => `${Math.round(value * 100)} %`;
+  const params: Record<string, string | number> = { elapsed: formatDuration(result.elapsedMs) };
+  if (result.drivingDurationMs !== undefined) params.drivingTime = formatDuration(result.drivingDurationMs);
+  if (result.handlingDurationMs !== undefined) params.handlingTime = formatDuration(result.handlingDurationMs);
+  if (result.distanceTiles !== undefined) {
+    params.distance = `${((result.distanceTiles * 4) / 1000).toFixed(2).replace('.', ',')} km`;
+  }
+  if (result.emptyTravelRatio !== undefined) params.emptyTravel = percent(result.emptyTravelRatio);
+  if (result.loadUtilisation !== undefined) params.utilisation = percent(result.loadUtilisation);
+  if (result.trafficLoad !== undefined) params.traffic = percent(result.trafficLoad);
+  if (result.spoilageRisk !== undefined && result.spoilageRisk > 0) params.spoilage = percent(result.spoilageRisk);
+  if (result.resupplyStops !== undefined) params.resupplies = result.resupplyStops;
+  if (result.deliveryTargetsCompleted !== undefined && result.deliveryTargetsTotal !== undefined) {
+    params.deliveries = `${result.deliveryTargetsCompleted} / ${result.deliveryTargetsTotal}`;
+  }
+  if (result.efficiencyScore !== undefined) params.efficiency = `${result.efficiencyScore} %`;
+  if (result.roadCoverage !== undefined) params.roadCoverage = percent(result.roadCoverage);
+  if (result.vehicle) params.vehicle = t(`vehicle.${result.vehicle}`);
+  return params;
+}
+
 /** Optional "how to start over" flavour for the reset button (§10). */
 export type ResetVariant = 'normal' | 'bonus';
 
@@ -58,9 +86,12 @@ export function App() {
     const save = () => {
       if (controller) void adapter.save(DEFAULT_SLOT, controller.state);
     };
+    // §26: Beim Zurückkehren wird NICHT mehr auf die Wanduhr gesprungen — der
+    // reguläre Tick meldet die real verstrichene Zeit ohnehin als ein großes
+    // Delta und rechnet sie mit der aktiven Geschwindigkeit um. Ein zusätzlicher
+    // Sprung auf `Date.now()` würde Pause und Zeitfaktor still übergehen.
     const onVisibility = () => {
       if (document.visibilityState === 'hidden') save();
-      else controller?.update(Date.now());
     };
 
     (async () => {
@@ -124,23 +155,11 @@ export function App() {
                 money: formatMoney(event.money),
                 xp: event.xp,
                 ...(quality ? { quality: t(`activity.quality.${quality}`) } : {}),
-                ...(event.result
-                  ? {
-                      elapsed: formatDuration(event.result.elapsedMs),
-                      distance:
-                        event.result.distanceTiles !== undefined
-                          ? `${((event.result.distanceTiles * 4) / 1000).toFixed(2).replace('.', ',')} km`
-                          : '–',
-                      efficiency: event.result.efficiencyScore ?? '–',
-                      roadCoverage:
-                        event.result.roadCoverage !== undefined
-                          ? `${Math.round(event.result.roadCoverage * 100)} %`
-                          : '–',
-                      vehicle: event.result.vehicle
-                        ? t(`vehicle.${event.result.vehicle}`)
-                        : t('ui.route.vehicle.van'),
-                    }
-                  : {}),
+                // §3.3: Jede Kennzahl kommt aus der echten Simulation. Fehlt
+                // ein Wert für diesen Auftragstyp, wird der Parameter NICHT
+                // gesetzt — das Popup lässt die Zeile dann weg, statt „–" zu
+                // zeigen.
+                ...(event.result ? activityResultParams(event.result) : {}),
               },
             });
             save();
@@ -151,10 +170,20 @@ export function App() {
         // Foreground tick. The economy only runs while the tab is actually
         // visible (§ no AFK farming) — a hidden tab still advances build
         // timers via non-live ticks, same as offline catch-up.
-        tickTimer = setInterval(
-          () => controller?.update(Date.now(), document.visibilityState === 'visible'),
-          1000,
-        );
+        //
+        // § Overhaul 8.0 / §26: Der Tick liefert REALE verstrichene Zeit; der
+        // Controller rechnet sie mit der gewählten Geschwindigkeit in
+        // Simulationszeit um. Dadurch skalieren Einnahmen, Verbrauch,
+        // Produktion und Bauzeit zwingend gemeinsam, und Pause hält alles an.
+        // Die Länge des Intervalls beeinflusst die Wirtschaft nicht — nur wie
+        // fein sie aufgelöst wird.
+        let lastRealTick = Date.now();
+        tickTimer = setInterval(() => {
+          const now = Date.now();
+          const realDelta = now - lastRealTick;
+          lastRealTick = now;
+          controller?.advanceByRealTime(realDelta, document.visibilityState === 'visible');
+        }, 1000);
         saveTimer = setInterval(save, 30_000);
         document.addEventListener('visibilitychange', onVisibility);
         window.addEventListener('beforeunload', save);

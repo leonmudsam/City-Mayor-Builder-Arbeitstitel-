@@ -301,6 +301,79 @@ const migrateV12ToV13: Migration = (raw) => {
 };
 
 /**
+ * v13 → v14 ist absichtlich kein Koordinaten-Raten: Küste, Gebirge, 40 Regionen
+ * und Startpunkt wurden vollständig ersetzt. Der Adapter sichert den Rohsave
+ * einmalig und startet anschließend eine saubere v14-Welt.
+ */
+const migrateV13ToV14: Migration = (raw) => {
+  throw new WorldRebuildSaveError(typeof raw.schemaVersion === 'number' ? raw.schemaVersion : 13);
+};
+
+/** v14 → v15: die Inselgeometrie bleibt wiedererkennbar, ihre gesamte X/Z-
+ * Projektion, Startregion und Wasserlinie ändern sich jedoch. Gebäude einzeln
+ * zu projizieren wäre bei Küsten, Brücken und Bezirken nicht verlustfrei. */
+const migrateV14ToV15: Migration = (raw) => {
+  throw new WorldRebuildSaveError(typeof raw.schemaVersion === 'number' ? raw.schemaVersion : 14);
+};
+
+/**
+ * v15 → v16: § Final World Compaction 8.1. Die Insel wurde ein zweites Mal
+ * horizontal verdichtet (Spannweite 420 → 374 Kacheln) und die Regionsstruktur
+ * von 40 Landschaften auf eine zentrale Startregion plus zwölf Freischaltungen
+ * konsolidiert. Damit ändern sich GLEICHZEITIG:
+ *
+ *   - jede Weltkoordinate (anderer Ozeanrand, andere Projektion),
+ *   - jede Region-Id und ihr Zuschnitt,
+ *   - Terrain, Wasserlinie, Bebaubarkeit und Küstenverlauf,
+ *   - Rathausanker und Startstraßen.
+ *
+ * Eine Koordinatenprojektion wäre zwar rechenbar, aber nicht verlustfrei: Unter
+ * einem projizierten Gebäude liegt in der neuen Welt regelmäßig Wasser, Gebirge
+ * oder eine noch gesperrte Region. Der Auftrag lässt für genau diesen Fall
+ * ausdrücklich den transparenten Weltneustart zu (§13). Der alte Stand wird
+ * deshalb EINMALIG unter `cmb.save.backup.world-v15` gesichert und der Slot
+ * geräumt — kein stiller Verlust, keine erfundene Projektion.
+ */
+const migrateV15ToV16: Migration = (raw) => {
+  throw new WorldRebuildSaveError(typeof raw.schemaVersion === 'number' ? raw.schemaVersion : 15);
+};
+
+/**
+ * v16 → v17: § Active Operations 2.0. Rein additiv — ein leeres
+ * `operations`-Objekt (lokale Betriebslager, Arbeiter, aktive Aufträge,
+ * Ressourcenknoten-Deltas). Bestehende globale Ressourcen bleiben unangetastet
+ * und dienen weiter als Zentral-/Übergangsbestand (§21); Betriebe legen ihr
+ * lokales Lager beim ersten Auftrag an. Der Sägewerk-Passivpfad entfällt ab
+ * dieser Version durch den Tick-Guard, nicht durch eine Save-Änderung. Kein
+ * Weltneustart, keine Datenverluste.
+ */
+const migrateV16ToV17: Migration = (raw) => {
+  if (typeof raw.operations !== 'object' || raw.operations === null) {
+    raw.operations = { inventories: {}, workers: {}, active: {}, nodeDeltas: {} };
+  }
+  raw.schemaVersion = 17;
+  return raw;
+};
+
+/**
+ * v17 → v18: § Active Operations 2.0, Phase A5 (Transport). Rein additiv — ein
+ * leerer `operations.transfers`-Katalog laufender Lagertransporte. Bestehende
+ * Betriebslager, Reservierungen und globale Ressourcen bleiben unangetastet;
+ * keine Weltänderung, kein Datenverlust.
+ */
+const migrateV17ToV18: Migration = (raw) => {
+  const ops = raw.operations;
+  if (typeof ops === 'object' && ops !== null) {
+    const opsRecord = ops as Record<string, unknown>;
+    if (typeof opsRecord.transfers !== 'object' || opsRecord.transfers === null) {
+      opsRecord.transfers = {};
+    }
+  }
+  raw.schemaVersion = 18;
+  return raw;
+};
+
+/**
  * Migration chain: migrations[n] upgrades a save from schemaVersion n to n+1.
  * Beginnt bei v10 (Insel-Basis).
  */
@@ -308,6 +381,11 @@ const migrations: Record<number, Migration> = {
   10: migrateV10ToV11,
   11: migrateV11ToV12,
   12: migrateV12ToV13,
+  13: migrateV13ToV14,
+  14: migrateV14ToV15,
+  15: migrateV15ToV16,
+  16: migrateV16ToV17,
+  17: migrateV17ToV18,
 };
 
 export class SaveValidationError extends Error {}
@@ -321,6 +399,9 @@ export class LegacyWorldSaveError extends Error {
     super(`Save schemaVersion ${version} stammt aus der Vor-Insel-Welt (< v${ISLAND_BASE_VERSION})`);
   }
 }
+
+/** Gültiger Save der ersetzten v10–v13-Insel: Backup + transparenter Neustart. */
+export class WorldRebuildSaveError extends LegacyWorldSaveError {}
 
 export function migrateAndValidate(rawInput: unknown): SaveGame {
   if (typeof rawInput !== 'object' || rawInput === null) {
@@ -342,6 +423,7 @@ export function migrateAndValidate(rawInput: unknown): SaveGame {
     try {
       raw = migrate(raw);
     } catch (error) {
+      if (error instanceof LegacyWorldSaveError) throw error;
       // A migration crashing means the save is structurally broken.
       throw new SaveValidationError(`Migration from v${version} failed: ${String(error)}`);
     }

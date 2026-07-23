@@ -5,7 +5,7 @@
 > `WRITE_BUILDING_DOCS=1 npx vitest run tests/buildingDocs.test.ts`.
 > Der Test schlägt fehl, sobald diese Datei von der Config abweicht.
 
-Footprints sind **fix über alle Stufen** und **quadratisch** (Nutzer-Entscheidung) — eine Stufe verdichtet dasselbe Grundstück sichtbar, ändert aber nie die Fläche. Die 3D-Prompts je Stufe stehen generiert in `src/assets/models/buildings/PROMPTS.md`.
+Bauplots sind **fix über alle Stufen** und grundsätzlich quadratisch; Waterfront-Gebäude deklarieren darin zusätzlich einen rechteckigen Land- und Wasser-Footprint für kardinale Rotation — eine Stufe verdichtet dasselbe Grundstück sichtbar, ändert aber nie die Fläche. Die 3D-Prompts je Stufe stehen generiert in `src/assets/models/buildings/PROMPTS.md`.
 
 ## Größenklassen & Asset-Budgets
 
@@ -46,6 +46,8 @@ Footprints sind **fix über alle Stufen** und **quadratisch** (Nutzer-Entscheidu
 | Kleines Büro | `office` | Wirtschaft | L | 4×4 | L8 | 4 |
 | Kohlekraftwerk | `power_plant` | Energie | XXL | 8×8 | L11 | 2 |
 | Windpark | `wind_farm` | Energie | XL | 7×7 | L11 | 1 |
+| Kleiner Anleger | `dock_small` | Infrastruktur | S | Land 2×2 + Wasser 2×2 | L6 | 1 |
+| Flusshafen | `river_port` | Infrastruktur | L | Land 4×3 + Wasser 4×3 | L9 | 1 |
 | Park | `park` | Freizeit | L | 5×5 | L7 | 2 |
 | Spielplatz | `playground` | Freizeit | M | 3×3 | L7 | 1 |
 | Baum | `deco_tree` | Dekoration | XS | 1×1 | L7 | 1 |
@@ -481,10 +483,10 @@ L15–L20 schalten kaum neue Gebäude frei, sondern gaten die Top-Stufen der Ket
 | 3 | 130 | Brunnen, Bürgermeisterhaus | 20.000 Geld · 10 Gold |
 | 4 | 310 | Bauernhof, Steinbruch | 30.000 Geld |
 | 5 | 620 | Markt, Handelskontor | 47.000 Geld · 15 Gold |
-| 6 | 1.120 | Kleiner Laden, Lagerhaus | 85.000 Geld |
+| 6 | 1.120 | Kleiner Laden, Lagerhaus, Kleiner Anleger | 85.000 Geld |
 | 7 | 1.780 | Park, Spielplatz, Wasserpumpe, Logistikzentrum, Baum, Blumenbeet, Zierbrunnen, Parkbank | 130.000 Geld · 20 Gold |
 | 8 | 2.680 | Feuerwache, Kleines Büro | 200.000 Geld |
-| 9 | 3.950 | Bäckerei | 300.000 Geld · 25 Gold |
+| 9 | 3.950 | Bäckerei, Flusshafen | 300.000 Geld · 25 Gold |
 | 10 | 5.700 | — | 500.000 Geld · 50 Gold |
 | 11 | 8.200 | Kohlekraftwerk, Windpark, Wasseraufbereitung | 700.000 Geld · 30 Gold |
 | 12 | 11.500 | Supermarkt | 950.000 Geld |

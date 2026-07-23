@@ -118,3 +118,75 @@ Low-poly stylized 3D city-builder game asset, colorful cartoon look, clean shape
 ```
 
 **Spec:** Größenklasse `vehicle` — Fahrzeug (500–1 200 Tris, ≤ 512², 1–2 Materialien) · Pivot unten-mittig (X/Z zentriert, Unterkante Y = 0) · Front +Z · *geplant* (noch nicht verdrahtet)
+
+### `service_boat.glb` — ≈0.7×1.6
+
+```text
+Low-poly stylized 3D city-builder game asset, colorful cartoon look, clean shapes, soft bevels, hand-painted feel, optimized for realtime rendering, embedded textures, no lights, no cameras, centered object, pivot at bottom center, +Y up, front facing +Z — a compact municipal service boat with a small wheelhouse, rubber fenders and an open utility deck, bow facing +Z, low-poly
+```
+
+**Spec:** Größenklasse `vehicle` — Fahrzeug (500–1 200 Tris, ≤ 512², 1–2 Materialien) · Pivot mittig auf der Wasserlinie · Front +Z · *geplant* (noch nicht verdrahtet)
+
+### `cargo_boat_small.glb` — ≈0.8×2.0
+
+```text
+Low-poly stylized 3D city-builder game asset, colorful cartoon look, clean shapes, soft bevels, hand-painted feel, optimized for realtime rendering, embedded textures, no lights, no cameras, centered object, pivot at bottom center, +Y up, front facing +Z — a small cargo boat with a stern wheelhouse and an open hold for crates, bow facing +Z, low-poly
+```
+
+**Spec:** Größenklasse `vehicle` — Fahrzeug (500–1 200 Tris, ≤ 512², 1–2 Materialien) · Pivot mittig auf der Wasserlinie · Front +Z · *geplant* (noch nicht verdrahtet)
+
+### `ferry_small.glb` — ≈0.9×2.2
+
+```text
+Low-poly stylized 3D city-builder game asset, colorful cartoon look, clean shapes, soft bevels, hand-painted feel, optimized for realtime rendering, embedded textures, no lights, no cameras, centered object, pivot at bottom center, +Y up, front facing +Z — a compact passenger ferry with broad windows and a clear bow ramp, bow facing +Z, low-poly
+```
+
+**Spec:** Größenklasse `vehicle` — Fahrzeug (500–1 200 Tris, ≤ 512², 1–2 Materialien) · Pivot mittig auf der Wasserlinie · Front +Z · *geplant* (noch nicht verdrahtet)
+
+### `cargo_barge.glb` — ≈1.1×3.2
+
+```text
+Low-poly stylized 3D city-builder game asset, colorful cartoon look, clean shapes, soft bevels, hand-painted feel, optimized for realtime rendering, embedded textures, no lights, no cameras, centered object, pivot at bottom center, +Y up, front facing +Z — a low river cargo barge with a broad open deck carrying crates and pallets, bow facing +Z, low-poly
+```
+
+**Spec:** Größenklasse `vehicle` — Fahrzeug (500–1 200 Tris, ≤ 512², 1–2 Materialien) · Pivot mittig auf der Wasserlinie · Front +Z · *geplant* (noch nicht verdrahtet)
+
+### `river_freighter.glb` — ≈1.1×3.4
+
+```text
+Low-poly stylized 3D city-builder game asset, colorful cartoon look, clean shapes, soft bevels, hand-painted feel, optimized for realtime rendering, embedded textures, no lights, no cameras, centered object, pivot at bottom center, +Y up, front facing +Z — a compact self-propelled river freighter with a stern wheelhouse, covered hold and navigation lights, bow facing +Z, low-poly
+```
+
+**Spec:** Größenklasse `vehicle` — Fahrzeug (500–1 200 Tris, ≤ 512², 1–2 Materialien) · Pivot mittig auf der Wasserlinie · Front +Z · *geplant* (noch nicht verdrahtet)
+
+### `ferry_medium.glb` — ≈1.2×3.3
+
+```text
+Low-poly stylized 3D city-builder game asset, colorful cartoon look, clean shapes, soft bevels, hand-painted feel, optimized for realtime rendering, embedded textures, no lights, no cameras, centered object, pivot at bottom center, +Y up, front facing +Z — a medium two-deck passenger ferry with broad windows and boarding gates, bow facing +Z, low-poly
+```
+
+**Spec:** Größenklasse `vehicle` — Fahrzeug (500–1 200 Tris, ≤ 512², 1–2 Materialien) · Pivot mittig auf der Wasserlinie · Front +Z · *geplant* (noch nicht verdrahtet)
+
+### `cargo_ship.glb` — ≈1.5×4.5
+
+```text
+Low-poly stylized 3D city-builder game asset, colorful cartoon look, clean shapes, soft bevels, hand-painted feel, optimized for realtime rendering, embedded textures, no lights, no cameras, centered object, pivot at bottom center, +Y up, front facing +Z — a coastal cargo ship with a stern superstructure, two deck cranes and several cargo hatches, bow facing +Z, low-poly
+```
+
+**Spec:** Größenklasse `vehicle` — Fahrzeug (500–1 200 Tris, ≤ 512², 1–2 Materialien) · Pivot mittig auf der Wasserlinie · Front +Z · *geplant* (noch nicht verdrahtet)
+
+### `passenger_ship.glb` — ≈1.5×4.2
+
+```text
+Low-poly stylized 3D city-builder game asset, colorful cartoon look, clean shapes, soft bevels, hand-painted feel, optimized for realtime rendering, embedded textures, no lights, no cameras, centered object, pivot at bottom center, +Y up, front facing +Z — a small coastal passenger ship with three readable decks, broad windows and a clean silhouette, bow facing +Z, low-poly
+```
+
+**Spec:** Größenklasse `vehicle` — Fahrzeug (500–1 200 Tris, ≤ 512², 1–2 Materialien) · Pivot mittig auf der Wasserlinie · Front +Z · *geplant* (noch nicht verdrahtet)
+
+### `construction_barge.glb` — ≈1.5×4.0
+
+```text
+Low-poly stylized 3D city-builder game asset, colorful cartoon look, clean shapes, soft bevels, hand-painted feel, optimized for realtime rendering, embedded textures, no lights, no cameras, centered object, pivot at bottom center, +Y up, front facing +Z — a construction barge with a lattice crane, material pallets and safety rails, bow facing +Z, low-poly
+```
+
+**Spec:** Größenklasse `vehicle` — Fahrzeug (500–1 200 Tris, ≤ 512², 1–2 Materialien) · Pivot mittig auf der Wasserlinie · Front +Z · *geplant* (noch nicht verdrahtet)

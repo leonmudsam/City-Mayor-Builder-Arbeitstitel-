@@ -41,6 +41,9 @@ Solange ein Bild fehlt, rendert die eingebaute SVG-Grafik als Platzhalter weiter
   `docs/UI_ASSETS.md` und `docs/agents/UI_ASSET_MANIFEST.md`.
 - v0.69-Stadtarbeit-Assets und ihre exakten Prompts stehen in den sieben
   `src/assets/ui/citywork/**/README.md` sowie im UI-Asset-Manifest.
+- v0.71 verwendet `src/assets/environment/cloud_bank.webp` als optionale
+  Alpha-Maske für die gesperrten Regions-Wolkenwände. Blickdichte Geometrie,
+  Schloss-/Level-Tafeln und Minimap-Maske besitzen prozedurale Fallbacks.
 
 ## Technische Vorgaben (für ALLE Assets)
 

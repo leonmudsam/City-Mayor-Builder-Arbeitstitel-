@@ -5,9 +5,10 @@ import {
   Layers3,
   ShieldAlert,
   Sparkles,
+  Network,
   type LucideIcon,
 } from 'lucide-react';
-import type { InfoLayerMode } from '../../renderer/IMapRenderer.ts';
+import type { InfoLayerMode, InfrastructureLayerMode } from '../../renderer/IMapRenderer.ts';
 import { useUiStore } from '../../state/store.ts';
 import { t } from '../../i18n/index.ts';
 
@@ -20,6 +21,17 @@ const MODES: { id: InfoLayerMode; icon: LucideIcon; key: string }[] = [
   { id: 'all', icon: Layers3, key: 'ui.info_layer.all' },
 ];
 
+const INFRASTRUCTURE_MODES: { id: InfrastructureLayerMode; key: string }[] = [
+  { id: 'off', key: 'ui.infrastructure.off' },
+  { id: 'all', key: 'ui.infrastructure.all' },
+  { id: 'roads', key: 'ui.infrastructure.roads' },
+  { id: 'waterways', key: 'ui.infrastructure.waterways' },
+  { id: 'harbors', key: 'ui.infrastructure.harbors' },
+  { id: 'trade', key: 'ui.infrastructure.trade' },
+  { id: 'supply', key: 'ui.infrastructure.supply' },
+  { id: 'problems', key: 'ui.infrastructure.problems' },
+];
+
 /**
  * Presentation-only filter for world-space building bubbles. The renderer reads
  * existing diagnostics/effects; no demand, production or reward logic lives here.
@@ -27,6 +39,8 @@ const MODES: { id: InfoLayerMode; icon: LucideIcon; key: string }[] = [
 export function InfoLayerControl() {
   const mode = useUiStore((state) => state.infoLayerMode);
   const setMode = useUiStore((state) => state.setInfoLayerMode);
+  const infrastructureMode = useUiStore((state) => state.infrastructureLayerMode);
+  const setInfrastructureMode = useUiStore((state) => state.setInfrastructureLayerMode);
 
   return (
     <nav className="info-layer-control" aria-label={t('ui.info_layer.title')}>
@@ -48,6 +62,18 @@ export function InfoLayerControl() {
           </button>
         ))}
       </div>
+      <label className="infrastructure-layer-select">
+        <Network size={16} />
+        <span>{t('ui.infrastructure.title')}</span>
+        <select
+          value={infrastructureMode}
+          onChange={(event) => setInfrastructureMode(event.target.value as InfrastructureLayerMode)}
+        >
+          {INFRASTRUCTURE_MODES.map((entry) => (
+            <option key={entry.id} value={entry.id}>{t(entry.key)}</option>
+          ))}
+        </select>
+      </label>
     </nav>
   );
 }

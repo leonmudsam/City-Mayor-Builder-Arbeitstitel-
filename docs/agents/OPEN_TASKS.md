@@ -1,4 +1,156 @@
-# Offene Aufgaben nach v0.70
+# Offene Aufgaben nach v0.78
+
+## Active Operations 2.0 — Weiterbau nach dem Sägewerk-Referenzschnitt (P0)
+
+Verbindlicher Einstieg: `ACTIVE_OPERATIONS_PLAN.md` (+ RESOURCE_NODE_/
+LOCAL_INVENTORY_/WORKER_OPERATION_/LOGISTICS_INTEGRATION-Docs).
+
+**Erledigt (v0.78, Referenzschnitt Sägewerk):** lokale Betriebslager,
+Ressourcenknoten (Bäume, deterministisch + Deltas), Arbeiter-Zustandsmaschine
+(laufen/fällen/tragen/einlagern), Voll-Stopp, Regeneration, Commands + Read-Helper,
+Save v17, Gebäudefenster-Betriebsbereich, additive Renderer-Arbeiter, 9 Tests.
+
+**Erledigt (v0.79, Phase A5 Transport):** manueller Lagertransport ins
+Zentrallager (`createInventoryTransfer`/`cancelInventoryTransfer`), Ziel-/
+Vorschau-/Netzwerk-Read-Helper (`getInventoryNetworkOverview` = global/lokal/
+reserviert/unterwegs, §7.2), Zustandsmaschine `loading→in_transit→unloading→
+delivered` im Live-Tick, Reservierung + globale Einlagerung (gedeckelt, kein
+Doppelzählen), Save v18 + Migration `v17→v18`, Transport-UI im Gebäudefenster,
+additive gepoolte 3D-Fahrzeuge, 8 Tests. Wiederverwendet `routeAnalysis.ts` +
+`logistics.ts` (kein zweites System, §8).
+
+**Erledigt (v0.79, A5-Reste):** Mehrfachladungen/Nachfüllfahrten (Fahrzeug
+pendelt), Rückruf jederzeit (verladene Ladung kehrt zurück),
+Transport-Betriebskosten je Fahrt (Geldsenke). +4 Tests.
+
+**Offen — bewusst NICHT vorgetäuscht in der UI:**
+
+- **A5-Reste (Rest):** Zwischenlager-Lagerhäuser als eigene lokale Puffer
+  (aktuell globaler Pool über ein Lagergebäude als Anlieferpunkt),
+  Kraftstoff/Fahrzeugzustand.
+- **A6 Steinbruch** (nächster großer Schritt): braucht die Generalisierung von
+  `operations/nodes.ts` (aktuell nur `tree`/Holz) auf `rock`/Stein und eine
+  **Migration der Passiv-Produktionstests** (simulation/systems/upgrade) auf einen
+  dauerhaft passiven Produzenten — der Steinbruch ist heute deren Baseline, und
+  der „Standort-Bonus"-Test ist steinspezifisch (Stein +Bonus auf Gebirge).
+- **A7 Farm / A8 Feuerwehr-Dispatch:** weitere `operation`-Profile
+  bzw. Einsatzsystem über dasselbe Framework — keine Parallel-Simulation.
+- **A9 Regeneration-Ausbau:** Aufforstung/Setzlinge, `RegenerationProfile`,
+  geologische neue Vorkommen statt fester Nachwachszeit.
+- **A10 Automatisierung:** Vorarbeiter, wiederholbare Arbeitszonen, Lagerregeln,
+  wiederkehrende Transporte (verbrauchen weiter Fahrzeuge/Arbeiter/Zeit).
+- **Renderer:** 3D-Einzelbaum-Raycast im Arbeitsmodus (einzelne Bäume anklicken),
+  Fäll-/Trag-Animationen, Hervorhebung reservierter/erschöpfter Knoten. Aktuell:
+  Arbeitsgebiet-Auswahl über das Gebäudefenster; Arbeiter als gepoolte Figuren.
+
+## Vegetations-Performance — Ausbaustufe 2 (P0)
+
+Vollständige Beschreibung + Statusabgrenzung: `WORLD_PERFORMANCE_AUDIT.md`.
+**Kernregel:** Die logische und visuelle Vegetationsdichte bleibt hoch — nur die
+technische Repräsentation wird mit zunehmender Entfernung vereinfacht. Keine
+Optimierung allein aus subjektivem Eindruck; über das Dev-Performance-Panel messen.
+
+**Erledigt (v0.77):** Instancing je Proptyp, Pro-Region-Budgets, vier
+Qualitätsstufen + Dichteskalierung, striktes Schattenbudget, Nahdetail-/
+Auflösungs-/Tierbudget je Stufe, Dev-Performance-Panel, kein Weltneuaufbau bei
+Qualitätswechsel, Nebel-Cheat erzwingt keine Maximalqualität, reine
+`vegetationLodTier`-Funktion (4 Stufen).
+
+**Noch offen (nur auf Zielhardware seriös messbar):**
+
+1. **HLOD-Waldcluster**: ferne Regionen zu einem Cluster-Mesh je Biom verschmelzen.
+2. **Impostor-Billboards** jenseits von `lodDistances[1]` (Profile mit `impostorsEnabled`).
+3. **Chunk-Streaming** je Kachel-Chunk mit Distanz-Cull über `vegetationViewDistance`.
+4. **Shader-Wind** statt CPU-Animation; **Material-/Textur-Atlas-Merging**.
+5. **Waldboden-Schattenmaske** statt Einzelschatten in dichten Beständen.
+6. Zielwerte an echter Hardware verifizieren: Stadt 60 FPS, Region 50–60, volle
+   Insel 40–60.
+
+## Core Gameplay Overhaul 8.0 — nächste Phase (P1)
+
+Vollständige Beschreibung: `CORE_GAMEPLAY_OVERHAUL_PLAN.md`. Ursachen und
+Dateistellen: `CORE_GAMEPLAY_OVERHAUL_AUDIT.md`.
+
+### G2 — Bauen, Verschieben, Kamera. Reihenfolge ist zwingend.
+
+1. **Terrain-Picking zuerst (Audit §2.1).** `groundPointAt` raycastet gegen eine
+   unsichtbare flache Ebene bei y = 0 (`ThreeMapRenderer.ts:514–520`) statt
+   gegen das Höhenfeld. Auf erhöhtem Gelände liegt die getroffene Kachel um
+   ungefähr `Höhe / tan(Kamerawinkel)` daneben. Fix: Schrittsuche entlang des
+   Strahls gegen `terrainHeightAt` plus binäre Verfeinerung — `terrainHeightAt`
+   bleibt die einzige Bodenhöhenquelle. Betrifft auch `pickTileAt`,
+   `updateGhostAt`, `paint` und `CameraInputController.onWheel`.
+2. **Kamera im Baumodus (Audit §2.2).** In `CameraInputController.onPointerDown`
+   belegt LMB beim Platzieren den `build`-Modus und RMB ist fest `cancel` —
+   Schwenken und Drehen sind praktisch unmöglich. Belegung gemäß §10.3 neu
+   ordnen, ohne den Bauentwurf zu verlieren.
+3. Echter GLB-Ghost inkl. Rotation, Sockel, Anschlusspunkt und Radius;
+   `placementDiagnostics` nutzen.
+4. Verschieben als Entwurf: Ghost an der Zielposition, Ursprung markiert,
+   Abbruch ohne Wirkung, Bestätigung = genau ein Command.
+5. Wirkungsradien terrainfolgend projizieren (`getCoverageOverlay`).
+6. Straßenbau als Planen → Vorschau → Bestätigen → Command.
+
+**Nach Schritt 1 erneut prüfen:** Die abgelehnten Anleger-Plätze (§14) sind
+sehr wahrscheinlich eine Folge des Picking-Fehlers — Land-/Wasser-Footprint,
+Küstensnapping und Tiefenprüfung existieren bereits. Erst wenn die Ablehnung
+mit korrektem Picking bestehen bleibt, an der Validierung ansetzen.
+
+### G1-Reste
+
+- `RouteTrafficForecast.criticalSegments` auf der Planungskarte markieren
+  (`ManualRouteMap.tsx`) — die Daten liegen bereits an.
+- Instanzzahl, Draw-Calls und VRAM der neuen regionsweisen Prop-Budgets beim
+  Vollinsel-Reveal auf Zielhardware messen; `REGION_PROP_BUDGET` nur anhand
+  dieser Messung ändern.
+- Wolkenwand gesperrter Regionen zerfällt im 1920×1080-Screenshot sichtbar in
+  einzelne weiße Kapseln (§24). Rein visuell, keine Save-Wirkung — guter
+  Einstieg für Phase G3.
+
+### Später (G3–G8)
+
+Weltmaßstab und Regionszahl (§17/§18) erst nach Klärung, ob „zu groß" die
+Fläche oder die Regionsanzahl meint — die Insel wurde in 6.1 bereits um 20 %
+verdichtet. Bevölkerungsmodell (§20/§21) braucht eine lineare Migration
+v15→v16. Lieferketten (§7) und aktive Minispiele (§8) folgen danach.
+
+## Waterways, Harbors & Infrastructure 7.0 — TODO(CLAUDE_LOGIC)
+
+- Persistente Schifffahrtsrouten mit Commands, Schiffszuteilung, Kapazität,
+  Reisezeit, Betriebskosten, Warenfluss und Pausen-/Löschlogik an die bestehende
+  Simulation anbinden. Bei neuen Save-Feldern v15 linear migrieren.
+- Hafenbetrieb um Arbeitskräfte, Energie, lokales Lager, Umschlag sowie
+  Straßen-Vor- und Nachlauf erweitern. `water_only` darf nicht automatisch eine
+  Region versorgen.
+- Remote Construction über zwei Häfen, reservierte Baumaterialien und
+  Lieferleistung als kanonischen Ökonomiepfad modellieren.
+- Brückenprofile mit Durchfahrtshöhe, Kanalbreite und Schiffsklassen ergänzen;
+  Brückenentwürfe gegen bestehende Wassergraph-Kanten prüfen und warnen.
+- Multimodale Stadtarbeits-Legs (`road → harbor → water → harbor → road`) in
+  die vorhandene Aktivität integrieren, keine zweite Missions-State-Machine.
+- `trade_harbor`, `ferry_terminal`, `fishing_harbor` und `shipyard` erst nach
+  Config-/Balancingentscheidung aktivieren. Die Assetverträge sind bereits in
+  `HARBOR_SYSTEM_PLAN.md` dokumentiert.
+- Zielhardware-Abnahme für radialen Ozean, Ferninseln, Vollinsel-Reveal,
+  Wassergraph-Overlay und Hafenfallbacks; Draw-Calls und VRAM messen.
+
+## Terrain & World Scale 6.1 — bewusst offen
+
+- Alte Source `reference/stylized island map 3d model.glb` erst nach einem
+  sauberen Git-Sicherungspunkt nach `reference/legacy-world/` archivieren oder
+  entfernen. Sie wird bereits von keinem aktiven Pfad gelesen.
+- Automatisierten Regionsbild-Batchrenderer mit festen 3D-Kamerapresets
+  ergänzen. Aktuell bleiben reale Weltansichten/generische Heroes der ehrliche
+  Fallback; keine erfundenen Landschaftsbilder.
+- Getrennte Landmassen erst durch echte Fähren-/Schifffahrtsprogression
+  erschließen. Hafen- und Wasserwegkandidaten sind vorhanden;
+  `TODO(CLAUDE_LOGIC)`.
+- Brücken, Viadukte und Tunnel als Erweiterung des bestehenden Straßensystems
+  implementieren: Kosten, Freigaben, Rampen, Pfeiler, Portale und Navigation.
+- Weitere PBR-Kanäle nur nach Texturspeicher-/Zielhardwaremessung aktivieren;
+  die 6.1-Kernsets für Granit, Wiese, Wald und Ufer sind vorhanden.
+- Auf Windows-Zielhardware Vollinsel-FPS, Draw-Calls, Texturspeicher und den
+  Reveal-All-Test messen; Qualitätscaps nur anhand dieser Messung ändern.
 
 ## Map Redesign 5.0 — nächster Produktionspass
 
@@ -6,14 +158,17 @@
 
 - Referenz-Screenshots für Gebirge, Gras/Wald, Küste/Wasser, Wüste/Sumpf sowie
   Morgen, Nebel und Nacht bei 1920×1080 archivieren und mit den Mockups prüfen.
+- Die v0.71-Wolkenwand in Vollinsel-, Schräg- und Nahansicht sowie die
+  Schloss-/Level-Marker auf Welt und Minimap gegen das Nebel-Mockup abnehmen.
 - Auf Windows-Zielhardware FPS, Draw-Calls, Dreiecke und Texturspeicher in
-  Stadt- und Vollinselansicht messen; Landmark-Caps nur datenbasiert verändern.
+  Stadt- und Vollinselansicht messen; dabei die maximal 168 Wolkeninstanzen und
+  Canvas-Texturen je gesperrter Region separat prüfen. Caps nur datenbasiert
+  verändern.
 
-### P1 — Materialien und Drop-ins
+### P1 — Drop-ins und Zielhardware
 
-- Passende Normal-/Roughness- und optional AO-/Height-Maps für Berg, Schnee,
-  Wüste, Sumpf, Wiese und Küstenkies ergänzen; Shader und Registry gemeinsam
-  erweitern. Aktuell sind die neuen Quellen ehrliche Base-Color-Texturen.
+- Weitere Schnee-/Wüsten-/Moor-PBR-Sets erst ergänzen, wenn die derzeit
+  selektiv geladenen Normal-/Roughness-/AO-Maps auf Zielhardware vermessen sind.
 - Optimierte GLBs aus `WORLD_ASSET_MANIFEST.md` einlegen: Felsbogen, Urbaum,
   Ruine, Wüstenfelsnadel, Sumpfbaum, Seeinsel, Schilf, Totholz, Felscluster.
 - Küstenspray, Caustics und eigene ruhige Seevariation nur im bestehenden

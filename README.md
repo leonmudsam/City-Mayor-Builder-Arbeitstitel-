@@ -18,7 +18,13 @@ Codebasis. Der Browser bleibt Entwicklungs- und Test-Umgebung.
 React 18 · TypeScript (strict) · Vite 6 · three.js (3D-Karte) ·
 Zustand · Zod · Vitest · **Tauri 2** (Desktop-Wrapper).
 
-## Aktueller visueller Stand — v0.69
+## Aktueller visueller Stand — v0.72
+
+World Rebuild 6.0 nutzt die neue 3D-Insel als Offline-Authoringquelle für eine
+512×512-Kachelwelt mit 40 organischen Regionen, monumentalem Höhenfeld,
+Ostküsten-Start, Tiefenwasser, dichter Vegetation und synchronen Karten für
+Minimap und Stadtarbeit. Das 1,85-Millionen-Dreiecke-Modell wird nicht zur
+Laufzeit geladen; 64 cullbare Terrain-Chunks verwenden die gebackenen Daten.
 
 Die verbindlichen Mockups sind als maritimes Premium-PC-HUD umgesetzt:
 Live-Inselkarte, linker Stadtstatus, Bürgeranliegen, manuelle 2D-Stadtarbeit,
@@ -31,6 +37,9 @@ Stoppreihenfolge, Live-Cargo/Nachfüllungen, kompakter Fahrzeugwahl,
 Tourübersicht, Infrastrukturberater und validierter Startfreigabe. Spontane
 Aufträge speichern bewusst keine ideale Standardroute; die automatische
 3D-Ausführung mit Verfolgerkamera und Ergebniswertung bleibt erhalten.
+Gesperrte Regionen liegen vollständig unter einer dichten, animierten
+Wolkenwand. Große Schloss-/Level-Tafeln in der Welt und entsprechende Marker
+auf der Minimap machen Freischaltstatus und Voraussetzung sofort lesbar.
 Details und offene Datenquellen:
 [docs/agents/PROJECT_STATE.md](docs/agents/PROJECT_STATE.md).
 

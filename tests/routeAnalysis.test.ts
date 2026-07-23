@@ -4,6 +4,7 @@ import {
   analyseManualRoute,
   analyseActivityRouteFrom,
   computeRoadBusyness,
+  forecastRouteTraffic,
   targetOrderOnPath,
   type RouteAnalysisInput,
 } from '../src/game/activities/routeAnalysis.ts';
@@ -151,5 +152,63 @@ describe('routeAnalysis — Controller-Integration (§ C2)', () => {
   it('gibt undefined für unbekannte Aktivitäten zurück', () => {
     const { controller } = cityWithRoute();
     expect(controller.analyseActivityRoute('does_not_exist', [])).toBeUndefined();
+  });
+});
+
+// § Overhaul 8.0 / §9 — Die Verkehrslast darf während der Planung nicht
+// dauerhaft „Wird geprüft" anzeigen. Sie hing früher an `analysis`, die es erst
+// bei vollständig verbundener Zielkette gab. Die Prognose bewertet jetzt exakt
+// den bereits gezeichneten Weg.
+describe('forecastRouteTraffic — Prognose ab der ersten Kachel (§9)', () => {
+  const roads = roadColumn(0, 0, 10);
+  const path = [
+    { x: 0, y: 0 },
+    { x: 0, y: 1 },
+    { x: 0, y: 2 },
+  ];
+
+  it('liefert auch für einen Teilweg ein vollständiges Ergebnis', () => {
+    const forecast = forecastRouteTraffic(path, roads, new Map());
+    expect(forecast.level).toBe('low');
+    expect(forecast.averageSpeedFactor).toBe(1);
+    expect(forecast.expectedDelaySeconds).toBe(0);
+    expect(forecast.criticalSegments).toEqual([]);
+  });
+
+  it('ist deterministisch', () => {
+    const busy = new Map([['0,1', 6]]);
+    expect(forecastRouteTraffic(path, roads, busy)).toEqual(forecastRouteTraffic(path, roads, busy));
+  });
+
+  it('erkennt stark belastete Kacheln als Problemabschnitte', () => {
+    const busy = new Map([
+      ['0,0', 6],
+      ['0,1', 6],
+      ['0,2', 6],
+    ]);
+    const forecast = forecastRouteTraffic(path, roads, busy);
+    expect(forecast.totalLoad).toBe(1);
+    expect(forecast.criticalSegments).toEqual(['0,0', '0,1', '0,2']);
+    expect(forecast.level).toBe('critical');
+    expect(forecast.averageSpeedFactor).toBeLessThan(1);
+    expect(forecast.expectedDelaySeconds).toBeGreaterThan(0);
+  });
+
+  it('bestraft ein schwerfälliges, breites Fahrzeug in vollen Straßen stärker', () => {
+    const busy = new Map([
+      ['0,0', 4],
+      ['0,1', 4],
+      ['0,2', 4],
+    ]);
+    const nimble = forecastRouteTraffic(path, roads, busy, { handling: 5, narrowStreetPenalty: 0 });
+    const heavy = forecastRouteTraffic(path, roads, busy, { handling: 1, narrowStreetPenalty: 0.6 });
+    expect(heavy.averageSpeedFactor).toBeLessThan(nimble.averageSpeedFactor);
+    expect(heavy.expectedDelaySeconds).toBeGreaterThan(nimble.expectedDelaySeconds);
+  });
+
+  it('bleibt bei leerem Weg neutral', () => {
+    const forecast = forecastRouteTraffic([], roads, new Map());
+    expect(forecast.level).toBe('low');
+    expect(forecast.totalLoad).toBe(0);
   });
 });

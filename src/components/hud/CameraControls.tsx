@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { CloudFog, CloudRain, CloudSun, Grid3x3, Plus, Minus, Compass, Pause, Play } from 'lucide-react';
-import { getMapApi, useUiStore } from '../../state/store.ts';
+import { getMapApi, useGame, useUiStore } from '../../state/store.ts';
 import {
   getEnvironmentSettings,
   setEnvironmentSettings,
@@ -74,15 +74,20 @@ function clock(tod: number): string {
   return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
 }
 
-/** Day/night HUD: toggle the auto-cycle and scrub the time of day (§ Atmosphäre,
- *  v0.37). Reads/writes the shared environmentSettings store the SkyEnvironment
- *  also listens to, so changes apply live. Purely visual — no game effect. */
+/**
+ * Zeit- und Atmosphären-HUD. Die Wetter-/Tageszeitanzeige bleibt visuell, die
+ * Geschwindigkeitsleiste steuert seit § Overhaul 8.0 (§26) aber die ECHTE
+ * Simulation: Pause hält Einkommen, Verbrauch, Produktion, Wachstum, Bauzeit und
+ * Missionen an, 2×/4× skalieren sie gemeinsam. Die sichtbare Tageslänge folgt
+ * derselben Stufe, damit Anzeige und Simulation nicht auseinanderlaufen.
+ */
 export function DayNightControl() {
+  const game = useGame();
   const [env, setEnv] = useState(getEnvironmentSettings());
   const openPanel = useUiStore((state) => state.openPanel);
   const setPanel = useUiStore((state) => state.setPanel);
   useEffect(() => subscribeEnvironmentSettings(() => setEnv(getEnvironmentSettings())), []);
-  const visualSpeed = env.dayLengthMin <= 4 ? 4 : env.dayLengthMin <= 8 ? 2 : 1;
+  const speed = game.getSpeed();
   const WeatherIcon = env.weather === 'rain' ? CloudRain : env.weather === 'fog' ? CloudFog : CloudSun;
   const weatherLabel =
     env.weather === 'rain' ? t('ui.weather.rain') : env.weather === 'fog' ? t('ui.weather.fog') : t('ui.weather.clear');
@@ -113,21 +118,27 @@ export function DayNightControl() {
         />
       </div>
       <button
-        className={`env-cycle${env.cycle ? ' active' : ''}`}
-        onClick={() => setEnvironmentSettings({ cycle: !env.cycle })}
-        title={t('ui.env.cycle')}
+        className={`env-cycle${speed === 0 ? ' active' : ''}`}
+        onClick={() => game.setSpeed(speed === 0 ? 1 : 0)}
+        title={t(speed === 0 ? 'ui.env.resume' : 'ui.env.pause')}
+        aria-label={t(speed === 0 ? 'ui.env.resume' : 'ui.env.pause')}
       >
-        {env.cycle ? <Pause size={16} /> : <Play size={16} />}
+        {speed === 0 ? <Play size={16} /> : <Pause size={16} />}
       </button>
       <div className="hud-env-speeds" aria-label={t('ui.env.speed')}>
-        {[1, 2, 4].map((speed) => (
+        {([1, 2, 4] as const).map((option) => (
           <button
-            key={speed}
-            className={visualSpeed === speed ? 'active' : ''}
-            onClick={() => setEnvironmentSettings({ dayLengthMin: speed === 1 ? 16 : speed === 2 ? 8 : 4 })}
-            title={`${speed}× · ${t('ui.env.speed')}`}
+            key={option}
+            className={speed === option ? 'active' : ''}
+            onClick={() => {
+              game.setSpeed(option);
+              // Die sichtbare Tageslänge folgt der Simulationsgeschwindigkeit,
+              // damit die Welt bei 4× nicht in Zeitlupe wirkt.
+              setEnvironmentSettings({ dayLengthMin: option === 1 ? 16 : option === 2 ? 8 : 4 });
+            }}
+            title={`${option}× · ${t('ui.env.speed')}`}
           >
-            {speed}×
+            {option}×
           </button>
         ))}
       </div>

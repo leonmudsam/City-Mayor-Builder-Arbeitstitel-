@@ -324,6 +324,39 @@ function roadArt(): Draw {
   );
 }
 
+function dockArt(): Draw {
+  return () => (
+    <g>
+      <path d="M5 37 Q20 32 33 37 T59 37 V52 H5 Z" fill="#278fbd" />
+      <path d="M5 43 Q20 38 33 43 T59 43" fill="none" stroke="#8fe0ef" strokeWidth="1.5" opacity="0.9" />
+      <path d="M11 25 H38 V35 H47 V41 H31 V34 H11 Z" fill="#b67b3d" stroke="#70472b" strokeWidth="1.4" strokeLinejoin="round" />
+      {[15, 23, 31, 39].map((x) => <path key={x} d={`M${x} 27 V34`} stroke="#e0aa61" strokeWidth="1.2" />)}
+      <rect x="14" y="20" width="4" height="22" rx="1" fill="#62402a" />
+      <rect x="35" y="20" width="4" height="22" rx="1" fill="#62402a" />
+      <path d="M42 43 Q49 34 57 43 L54 48 H45 Z" fill="#e7e0c9" stroke="#5c7080" strokeWidth="1" />
+      <path d="M49 35 V43 H55 Z" fill="#f2d15f" stroke="#9a7934" strokeWidth="0.8" />
+    </g>
+  );
+}
+
+function riverPortArt(): Draw {
+  return () => (
+    <g>
+      <path d="M4 39 Q19 34 33 39 T60 39 V53 H4 Z" fill="#247fab" />
+      <path d="M4 46 Q19 41 33 46 T60 46" fill="none" stroke="#8ed9ea" strokeWidth="1.5" opacity="0.85" />
+      <rect x="7" y="28" width="40" height="13" rx="1.5" fill="#b9854b" stroke="#68472e" strokeWidth="1.3" />
+      <path d="M7 28 L27 20 L49 28 Z" fill="#77513a" />
+      <rect x="12" y="32" width="11" height="9" fill="#435465" />
+      <rect x="28" y="32" width="11" height="9" fill="#435465" />
+      <path d="M45 18 V40 M45 19 H57 M55 19 V35" fill="none" stroke="#d8b15d" strokeWidth="2.4" strokeLinecap="round" />
+      <path d="M50 20 V29 L46 33" fill="none" stroke="#4f4639" strokeWidth="1.1" />
+      <path d="M38 45 Q46 38 57 44 L54 49 H42 Z" fill="#df7b35" stroke="#5c6570" strokeWidth="1" />
+      <rect x="17" y="25" width="7" height="5" fill="#d99a43" />
+      <rect x="25" y="25" width="7" height="5" fill="#5b87b4" />
+    </g>
+  );
+}
+
 // small emblems for shops / services
 const crossEmblem: Draw = () => (
   <g>
@@ -372,6 +405,8 @@ const BUILDINGS: Record<string, Draw> = {
   mayor_house: civic('#4a8fd6'),
   district_center: civic('#c9a227'),
   road: roadArt(),
+  dock_small: dockArt(),
+  river_port: riverPortArt(),
   house_small: cottage('#e5c07a', '#c05a3a'),
   house_row: rowhouse(),
   apartment: block(3, '#d9b98a', '#b6552f'),

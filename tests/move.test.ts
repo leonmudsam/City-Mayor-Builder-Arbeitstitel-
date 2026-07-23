@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { flattenTerrain, nearTownHall, newController, setLevel, START_REGION, T0 } from './helpers.ts';
 import { tileAt } from '../src/game/map/world.ts';
-import { regionIdAt } from '../src/game/config/startRegion.config.ts';
+import { bakedSurfaceAt, regionIdAt, terrainAt, WORLD_TILES } from '../src/game/config/startRegion.config.ts';
 import type { GameController } from '../src/game/commands/controller.ts';
 
 // Moving is disabled in MVP 1 (§5) but the engine command is retained behind a
@@ -19,10 +19,26 @@ const at = (dx: number, dy: number) => nearTownHall(dx, dy);
 
 /** Erste Kachel nördlich des Rathauses in einer GESPERRTEN Region. */
 function lockedTile(): { x: number; y: number } {
-  for (let dy = -1; dy > -200; dy--) {
-    const { x, y } = at(0, dy);
-    const rid = regionIdAt(x, y);
-    if (rid !== 0 && rid !== START_REGION) return { x, y };
+  for (let y = 0; y < WORLD_TILES - 4; y++) {
+    for (let x = 0; x < WORLD_TILES - 4; x++) {
+      const rid = regionIdAt(x, y);
+      if (rid === 0 || rid === START_REGION) continue;
+      let valid = true;
+      let minHeight = Infinity;
+      let maxHeight = -Infinity;
+      for (let dy = 0; dy < 5 && valid; dy++) {
+        for (let dx = 0; dx < 5; dx++) {
+          const surface = bakedSurfaceAt(x + dx, y + dy);
+          if (regionIdAt(x + dx, y + dy) !== rid || terrainAt(x + dx, y + dy) !== 'grass' || !surface.buildable) {
+            valid = false;
+            break;
+          }
+          minHeight = Math.min(minHeight, surface.height);
+          maxHeight = Math.max(maxHeight, surface.height);
+        }
+      }
+      if (valid && maxHeight - minHeight <= 0.85) return { x, y };
+    }
   }
   throw new Error('keine gesperrte Region nördlich des Rathauses gefunden');
 }
@@ -63,17 +79,18 @@ describe('moveBuilding', () => {
     expect(tileAt(controller.state, at(4, 6).x, at(4, 6).y)?.buildingId).toBe(house.id);
   });
 
-  it('rejects occupied or roadless targets and keeps the building in place', () => {
+  it('rejects occupied targets and allows a move to a disconnected location', () => {
     const controller = movableController();
     controller.placeBuilding('road', at(5, 5).x, at(5, 5).y);
     controller.placeBuilding('house_small', at(3, 6).x, at(3, 6).y);
     const house = Object.values(controller.state.buildings).find((b) => b.defId === 'house_small')!;
     // Onto the town hall footprint:
     expect(controller.moveBuilding(house.id, at(0, 0).x, at(0, 0).y)).toEqual({ ok: false, error: 'occupied' });
-    // Away from any road:
-    expect(controller.moveBuilding(house.id, at(-5, -5).x, at(-5, -5).y)).toEqual({ ok: false, error: 'needs_road' });
-    expect(house.x).toBe(at(3, 6).x);
-    expect(tileAt(controller.state, at(3, 6).x, at(3, 6).y)?.buildingId).toBe(house.id);
+    // Away from any road: placement is legal, operation remains disconnected.
+    expect(controller.moveBuilding(house.id, at(-5, -3).x, at(-5, -3).y)).toEqual({ ok: true });
+    expect(house.x).toBe(at(-5, -3).x);
+    expect(tileAt(controller.state, at(3, 6).x, at(3, 6).y)?.buildingId).toBeUndefined();
+    expect(controller.getBuildingInfrastructureStatus(house.id)).toMatchObject({ status: 'disconnected' });
   });
 
   it('moves unique buildings (town hall) even though they cannot be demolished', () => {

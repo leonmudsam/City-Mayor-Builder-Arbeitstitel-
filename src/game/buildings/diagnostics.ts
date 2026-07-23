@@ -4,7 +4,7 @@ import type { BuildingInstance, GameState } from '../types.ts';
 import { canAfford } from '../economy/economyService.ts';
 import { effectiveEffects } from './effects.ts';
 import { locationBonusPct } from './location.ts';
-import { isConnectedToRoad } from './placement.ts';
+import { buildingInfrastructureStatus } from '../infrastructure/buildingInfrastructure.ts';
 
 /**
  * A single legible statement about a building's current situation — the shared
@@ -17,13 +17,16 @@ import { isConnectedToRoad } from './placement.ts';
 export type DiagnosisCode =
   // Problems (red bubble / warning line):
   | 'no_road'
+  | 'no_waterway'
+  | 'partial_infrastructure'
   | 'paused'
   | 'storage_full'
   | 'no_movein'
   // Benefits (green/amber badge / positive line):
   | 'upgrade_ready'
   | 'location_bonus'
-  | 'road_ok';
+  | 'road_ok'
+  | 'water_ok';
 
 export interface Diagnosis {
   code: DiagnosisCode;
@@ -55,8 +58,13 @@ export function buildingDiagnostics(
 
   // --- Problems ---------------------------------------------------------------
   if (b.status === 'paused') problem('paused');
-  const roadConnected = !def.requiresRoad || isConnectedToRoad(derived, def, b.x, b.y);
-  if (def.requiresRoad && !roadConnected) problem('no_road');
+  const infrastructure = buildingInfrastructureStatus(state, config, derived.roadNetwork, b);
+  const roadConnected = infrastructure.modes.road;
+  if (infrastructure.problems.includes('no_road')) problem('no_road');
+  if (infrastructure.problems.includes('no_waterway')) problem('no_waterway');
+  if (infrastructure.status === 'water_only' || infrastructure.status === 'road_only') {
+    problem('partial_infrastructure');
+  }
 
   // A producer whose output resource is at storage cap is wasting production.
   for (const eff of effectiveEffects(def, b.upgradeLevel)) {
@@ -87,6 +95,7 @@ export function buildingDiagnostics(
     const bonus = derived.productionBonus[b.id] ?? locationBonusPct(state, def, b.x, b.y);
     if (bonus > 0) benefit('location_bonus', { pct: Math.round(bonus) });
     if (def.requiresRoad && roadConnected) benefit('road_ok');
+    if (def.waterfront && infrastructure.modes.water) benefit('water_ok');
   }
 
   return out;
@@ -97,7 +106,12 @@ export function buildingDiagnostics(
  * gleichzeitig"). A problem always wins over a benefit; a ready upgrade is the
  * only benefit worth a bubble (location bonus already has its own corner badge).
  */
-export function primaryMarker(diagnoses: Diagnosis[]): 'problem' | 'upgrade' | undefined {
+export function primaryMarker(
+  diagnoses: Diagnosis[],
+): 'problem' | 'road_problem' | 'water_problem' | 'partial_problem' | 'upgrade' | undefined {
+  if (diagnoses.some((d) => d.code === 'no_waterway')) return 'water_problem';
+  if (diagnoses.some((d) => d.code === 'no_road')) return 'road_problem';
+  if (diagnoses.some((d) => d.code === 'partial_infrastructure')) return 'partial_problem';
   if (diagnoses.some((d) => d.kind === 'problem')) return 'problem';
   if (diagnoses.some((d) => d.code === 'upgrade_ready')) return 'upgrade';
   return undefined;
