@@ -19,11 +19,17 @@
   `clearActivitySelection`; Read `getActivitySelectionStatus`; **keine** Auto-
   Zielersetzung, `stale`-Hinweis stattdessen. 10 Tests (`activityStability.test.ts`).
   Audit: `ACTIVITY_STABILITY_AUDIT.md`.
-- ❌ **P-B Zentrale Ingame-Zeit**: EINE Zeitquelle (`REAL_SECONDS_PER_GAME_MINUTE_AT_1X`),
-  sichtbare laufende Uhr aus dem Sim-Snapshot (kein `setInterval` in React), 1×/2×/4×
-  konsistent für **alle** zeitabhängigen Systeme; Bau-/Upgrade-/Arbeits-/Transportzeiten
-  auf Ingame-Zeit umstellen + neu balancieren. Doku: `INGAME_TIME_SYSTEM.md`,
-  `TIMED_PROCESS_MIGRATION.md`.
+- 🟡 **P-B Zentrale Ingame-Zeit** — teilweise:
+  - ✅ **P-B1** (v0.88): kanonisches `src/game/time/gameTime.ts`
+    (`SIM_MS_PER_GAME_MINUTE = 10_000`) + Read `getGameClock()`; HUD-Uhr ist reine
+    Projektion der Simulationszeit (Tag N · HH:MM · Jahreszeit · Pausiert), kein
+    `setInterval` in React; 1×/2×/4× + Pause konsistent (Simulation war schon
+    korrekt — nur die Anzeige war entkoppelt). 7 Tests (`gameTime.test.ts`). Doku:
+    `INGAME_TIME_SYSTEM.md`, **D-038**. Sonne/Himmel bleibt vorerst kosmetisch
+    getrennt (dokumentiert offen, „slaven" auf Wunsch).
+  - ❌ **P-B2**: Bau-/Upgrade-/Arbeits-/Transport-/Missionsdauern in **Ingame-Minuten**
+    ausdrücken (über `gameMinutesToSimMs`) + Countdown-Anzeigen in Ingame-Zeit, dann
+    **neu balancieren** (§9). Balancing-Tests anpassen. Doku: `TIMED_PROCESS_MIGRATION.md`.
 - ❌ **P-C Frühlogistik + Lagerübersicht**: Handkarren ab L2 (Holz Sägewerk→Rathauslager,
   kein Motorfahrzeug nötig); Rathaus-/Lager-Bestände einzeln sichtbar (gesamt/verfügbar/
   unterwegs/reserviert). **Überlappt 10.0-R3/R4** — dort miterledigen. Doku:

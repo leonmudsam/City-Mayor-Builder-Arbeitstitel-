@@ -1,5 +1,35 @@
 # Entscheidungen
 
+## D-038 — EINE verbindliche Ingame-Zeit; sichtbare Uhr als reine Projektion der Simulationszeit
+
+**Entscheidung (P-B des Spielbarkeits-Auftrags):** Es gibt genau **eine** Zeit —
+die Simulationsuhr `state.meta.lastSimTime`. Die sichtbare HUD-Uhr wird zur **reinen
+Projektion** dieser einen Uhr (`src/game/time/gameTime.ts`, `getGameClock()`), statt
+wie bisher die kosmetische Renderer-Tageszeit + statische „Tag 1"/„Frühling"-Texte zu
+zeigen. Zentrale Zahl `SIM_MS_PER_GAME_MINUTE = 10_000` (1× → 1 Ingame-Minute je 10
+Echtzeitsekunden, §7). Kein System führt einen eigenen Zeitfaktor.
+
+**Befund:** Die Simulation war **bereits** konsistent — `advanceByRealTime(realMs,
+live)` multipliziert die reale Zeit mit der Geschwindigkeit und treibt darüber alle
+Systeme (Bau/Upgrade/Betriebe/Transport/Wirtschaft/Cooldowns/Missionen) durch
+denselben Takt; Pause hält alles an. Kaputt war nur die **entkoppelte Anzeige**.
+
+**Architektur:** Reines Zeitmodul (keine three/React-Importe, §1); HUD liest nur
+`getGameClock()` und re-rendert über `useGame()`/`version` — **kein `setInterval` in
+React** (§7.4). Der manuelle Tageszeit-Regler und der Speed-`dayLengthMin`-Hack
+(zweite, widersprüchliche Zeit) sind entfernt. **Keine Save-Änderung** (v21) — die Uhr
+projiziert nur `createdAt`/`lastSimTime`.
+
+**Bewusst offen:** Der Tag/Nacht-**Himmel** bleibt vorerst ein eigener kosmetischer
+Zyklus (voller Ingame-Tag = 4 Echtzeitstunden bei 1× → strikte Kopplung würde die
+Sonne optisch einfrieren); „Sonne an die Uhr slaven" ist ein kleiner umkehrbarer
+Folgeschritt. **P-B2** stellt Bau-/Upgrade-/Arbeits-/Transportdauern auf Ingame-Minuten
+um und balanciert sie neu (§9).
+
+**Verworfen:** ein Echtzeit-Timer in React; die Sonne sofort an eine 4-Stunden-Tages-
+länge zu koppeln; Dauern in P-B1 schon umzurechnen (bewusst nach P-B2 verschoben,
+damit die 387 Tests grün bleiben und der Nutzer die Uhr-Feel zuerst testen kann).
+
 ## D-037 — Spielbarkeits-Auftrag vorgezogen; Stadtarbeit über einen eingefrorenen Planungssnapshot stabilisiert
 
 **Entscheidung:** Auf ausdrücklichen Nutzerwunsch (24.07.2026, „ich teste im Moment

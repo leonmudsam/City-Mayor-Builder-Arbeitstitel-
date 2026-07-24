@@ -215,9 +215,17 @@ kein zweites System, nur ein State-Feld. Lebenszyklus als Commands
 Zielersetzung** — ein Abriss meldet `getActivitySelectionStatus='stale'`, die UI
 zeigt Aktualisieren/Abbrechen. **Save v21 additiv** (Migration v20→v21). Audit:
 `docs/agents/ACTIVITY_STABILITY_AUDIT.md`.
-Offen (Reihenfolge): **P-B** zentrale Ingame-Zeit (eine Zeitquelle, sichtbare Uhr,
-1×/2×/4× konsistent, Bau-/Upgrade-/Arbeits-/Transportzeiten umgestellt + neu
-balanciert) · **P-C** Frühlogistik (Handkarren ab L2: Holz Sägewerk→Rathauslager) +
+**v0.88 = P-B1 erledigt (Save v21):** EINE verbindliche Ingame-Zeit. Befund: die
+Simulation war schon konsistent (`advanceByRealTime × Geschwindigkeit` treibt alle
+Systeme durch einen Takt) — nur die **Anzeige** war entkoppelt (kosmetische
+Renderer-Tageszeit + statische „Tag 1"/„Frühling"). Fix: kanonisches Zeitmodul
+`src/game/time/gameTime.ts` (`SIM_MS_PER_GAME_MINUTE = 10_000`; 1× → 1 Ingame-Min je
+10 Echtzeit-Sek) + Read `getGameClock()`; HUD zeigt Tag N · HH:MM · Jahreszeit ·
+Pausiert als **reine Projektion** (kein `setInterval` in React). Fake-Zeitregler +
+`dayLengthMin`-Hack entfernt. Sonne/Himmel bleibt vorerst kosmetisch getrennt
+(dokumentiert offen). Doku: `docs/agents/INGAME_TIME_SYSTEM.md`, **D-038**.
+Offen (Reihenfolge): **P-B2** Dauern in Ingame-Minuten + Rebalancing (§9) ·
+**P-C** Frühlogistik (Handkarren ab L2: Holz Sägewerk→Rathauslager) +
 Rathaus-/Lagerübersicht · **P-D** Anleger-zu-Anleger-Netz (Straßenstart am isolierten
 Landanker, gemeinsamer Infrastrukturgraph, Schiffsrouten; = I3/I4) · **P-E**
 Performance-Pass + dauerhafte gedrosselte FPS-Anzeige. Nichts Fehlendes vortäuschen.

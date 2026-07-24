@@ -66,6 +66,7 @@ import {
   type RouteTrafficForecast,
 } from '../activities/routeAnalysis.ts';
 import { regionPreview, type RegionPreview } from '../regions/regionPreview.ts';
+import { gameClock, type GameClock } from '../time/gameTime.ts';
 import { analyseRoadPath, type RoadPlanPreview } from '../roads/roadPlanning.ts';
 import { routeRoadWaypoints } from '../roads/roadRouting.ts';
 import {
@@ -389,6 +390,16 @@ export class GameController {
   /** § §26: aktuelle Simulationsgeschwindigkeit (0 = Pause). */
   getSpeed(): SimulationSpeed {
     return this.speed;
+  }
+
+  /**
+   * § P-B: die EINE Ingame-Uhr als reine Projektion der Simulationszeit
+   * (`meta.lastSimTime`). Tag/Stunde/Minute/Jahreszeit laufen damit exakt mit der
+   * gewählten Geschwindigkeit und stehen bei Pause still — die UI liest nur diesen
+   * Snapshot (kein eigener Timer in React). Kein State, keine Mutation.
+   */
+  getGameClock(): GameClock {
+    return gameClock(this.state);
   }
 
   /**

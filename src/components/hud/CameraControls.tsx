@@ -3,9 +3,9 @@ import { CloudFog, CloudRain, CloudSun, Grid3x3, Plus, Minus, Compass, Pause, Pl
 import { getMapApi, useGame, useUiStore } from '../../state/store.ts';
 import {
   getEnvironmentSettings,
-  setEnvironmentSettings,
   subscribeEnvironmentSettings,
 } from '../../renderer/three/environmentSettings.ts';
+import { formatClockTime } from '../../game/time/gameTime.ts';
 import { t } from '../../i18n/index.ts';
 
 // 3D view controls (§9/§14, v0.30): camera presets replace the old 2D/iso/3D
@@ -66,20 +66,15 @@ export function CameraControls() {
   );
 }
 
-/** Format a normalised time-of-day (0..1) as HH:MM. */
-function clock(tod: number): string {
-  const total = Math.round(tod * 24 * 60);
-  const h = Math.floor(total / 60) % 24;
-  const m = total % 60;
-  return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
-}
-
 /**
- * Zeit- und Atmosphären-HUD. Die Wetter-/Tageszeitanzeige bleibt visuell, die
- * Geschwindigkeitsleiste steuert seit § Overhaul 8.0 (§26) aber die ECHTE
- * Simulation: Pause hält Einkommen, Verbrauch, Produktion, Wachstum, Bauzeit und
- * Missionen an, 2×/4× skalieren sie gemeinsam. Die sichtbare Tageslänge folgt
- * derselben Stufe, damit Anzeige und Simulation nicht auseinanderlaufen.
+ * Zeit- und Atmosphären-HUD. Die sichtbare **Uhr ist jetzt eine reine Projektion
+ * der EINEN Simulationsuhr** (`game.getGameClock()`, § P-B): Tag, Uhrzeit und
+ * Jahreszeit laufen live mit der gewählten Geschwindigkeit und stehen bei Pause
+ * still — kein eigener Timer in React (§7.4). Die Geschwindigkeitsleiste steuert
+ * seit § Overhaul 8.0 (§26) die ECHTE Simulation: Pause hält Einkommen, Verbrauch,
+ * Produktion, Wachstum, Bauzeit, Betriebe, Transport und Missionen gemeinsam an,
+ * 2×/4× beschleunigen sie gemeinsam. Das Wetter/Atmosphäre bleibt rein visuell und
+ * wird im Wetter-Panel eingestellt.
  */
 export function DayNightControl() {
   const game = useGame();
@@ -88,6 +83,7 @@ export function DayNightControl() {
   const setPanel = useUiStore((state) => state.setPanel);
   useEffect(() => subscribeEnvironmentSettings(() => setEnv(getEnvironmentSettings())), []);
   const speed = game.getSpeed();
+  const gameClock = game.getGameClock();
   const WeatherIcon = env.weather === 'rain' ? CloudRain : env.weather === 'fog' ? CloudFog : CloudSun;
   const weatherLabel =
     env.weather === 'rain' ? t('ui.weather.rain') : env.weather === 'fog' ? t('ui.weather.fog') : t('ui.weather.clear');
@@ -103,19 +99,11 @@ export function DayNightControl() {
         <WeatherIcon className="hud-environment-sun" size={24} />
       </button>
       <div className="hud-environment-copy">
-        <strong>{t('ui.env.season')}</strong>
-        <span>{t('ui.env.day')} · {clock(env.timeOfDay)} · {weatherLabel}</span>
-        <input
-          type="range"
-          className="env-time"
-          min={0}
-          max={0.999}
-          step={0.001}
-          value={env.timeOfDay}
-          onChange={(e) => setEnvironmentSettings({ timeOfDay: Number(e.target.value), cycle: false })}
-          title={t('ui.env.time')}
-          aria-label={t('ui.env.time')}
-        />
+        <strong>{t(`ui.season.${gameClock.seasonKey}`)}</strong>
+        <span>
+          {t('ui.clock.day')} {gameClock.day} · {formatClockTime(gameClock)}
+          {speed === 0 ? ` · ${t('ui.clock.paused')}` : ''} · {weatherLabel}
+        </span>
       </div>
       <button
         className={`env-cycle${speed === 0 ? ' active' : ''}`}
@@ -130,12 +118,7 @@ export function DayNightControl() {
           <button
             key={option}
             className={speed === option ? 'active' : ''}
-            onClick={() => {
-              game.setSpeed(option);
-              // Die sichtbare Tageslänge folgt der Simulationsgeschwindigkeit,
-              // damit die Welt bei 4× nicht in Zeitlupe wirkt.
-              setEnvironmentSettings({ dayLengthMin: option === 1 ? 16 : option === 2 ? 8 : 4 });
-            }}
+            onClick={() => game.setSpeed(option)}
             title={`${option}× · ${t('ui.env.speed')}`}
           >
             {option}×

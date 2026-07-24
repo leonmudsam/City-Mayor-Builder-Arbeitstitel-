@@ -1,5 +1,76 @@
 # Patch Notes
 
+## v0.88 — Spielbarkeit 9.1 / P-B1: EINE verbindliche Ingame-Zeit + sichtbare Uhr (Save v21)
+
+### Was
+
+- **Die Uhr läuft endlich richtig.** Bisher zeigte das HUD eine tote Uhr: „Tag 1"
+  und „Frühling" waren **feste Texte**, und die Uhrzeit kam aus dem **kosmetischen**
+  Tag/Nacht-Renderer — nicht aus der Simulation. Jetzt ist die Anzeige eine **reine
+  Projektion der einen Simulationszeit**: **Tag N · HH:MM · Jahreszeit** laufen live
+  mit und stehen bei Pause still (**„· Pausiert"**).
+- **1×/2×/4× wirken sichtbar und konsistent.** Eine Ingame-Minute vergeht bei **1×
+  in 10 Echtzeitsekunden**, bei 2× in 5, bei 4× in 2,5. Die Uhr — und mit ihr Bauzeit,
+  Betriebe, Transport, Wirtschaft und Missionen — beschleunigt bei 2×/4× **gemeinsam**;
+  Pause hält **alles** an.
+- **Kein Fake-Zeitregler mehr im HUD.** Der manuelle Tageszeit-Schieber und der
+  Trick, bei jeder Geschwindigkeit die „Tageslänge" umzustellen, sind aus der
+  Zeitleiste raus (sie waren eine zweite, widersprüchliche Zeit). Atmosphäre/Wetter
+  bleibt rein visuell und wird weiter im Wetter-Panel eingestellt.
+
+### Warum
+
+- Baustein P-B des Spielbarkeits-Auftrags: „Eine einzige verbindliche Ingame-Zeit …
+  die Uhr muss sichtbar korrekt laufen, 1×/2×/4× müssen alle zeitabhängigen Systeme
+  konsistent antreiben, Pause alle Simulationssysteme stoppen." Befund: Die
+  **Simulation war bereits konsistent** (`advanceByRealTime × Geschwindigkeit` treibt
+  alle Systeme durch denselben Takt) — nur die **Anzeige** war davon entkoppelt und
+  wirkte deshalb „stehen geblieben".
+
+### Architektur
+
+- **Kanonisches Zeitmodul `src/game/time/gameTime.ts`** (rein, keine three/React-
+  Importe, §1). Zentrale Zahl `SIM_MS_PER_GAME_MINUTE = 10_000`; `gameClockAt(
+  createdAt, simTime)` projiziert die eine Simulationsuhr (`meta.lastSimTime`) auf
+  Tag/Stunde/Minute/`timeOfDay`/Jahreszeit (Start Tag 1, 08:00; Tag = 1440 Min,
+  Jahreszeit = 28 Tage).
+- **Controller-Read `getGameClock()`** ist die einzige Zeitquelle der UI.
+- **HUD `DayNightControl`** liest nur `game.getGameClock()` und re-rendert über
+  `useGame()`/`version` bei jedem Tick — **kein `setInterval` in React** (§7.4).
+- **Keine Save-Änderung** (v21): die Uhr ist eine Projektion vorhandener Felder
+  (`createdAt`, `lastSimTime`).
+
+### Auswirkung
+
+- Die Zeit ist jetzt **eine** verbindliche Größe; Geschwindigkeit und Pause sind
+  sichtbar und konsistent. Kein Datenverlust.
+- Verifikation: `tsc` · ESLint · **387 Vitest grün** (neu: `gameTime.test.ts`, 7
+  Fälle inkl. Pause-friert-alles + Bauzeit-skaliert-mit-Speed) · Vite-Build.
+
+### Zukunft
+
+- **P-B2 (nächster Schritt):** Bau-/Upgrade-/Arbeits-/Transportdauern in
+  **Ingame-Minuten** ausdrücken und **neu balancieren** (§9) — kleine Gebäude wenige
+  reale Minuten, große/Upgrades langfristig. Danach P-C Frühlogistik, P-D Anlegernetz,
+  P-E Performance/FPS.
+- **Bewusst offen (nicht vorgetäuscht):** der Tag/Nacht-**Himmel** bleibt vorerst ein
+  eigener kosmetischer Zyklus (ein voller Ingame-Tag = 4 Echtzeitstunden bei 1×; die
+  Sonne strikt daran zu koppeln, würde sie optisch einfrieren). Sonne an die Uhr zu
+  „slaven" ist ein kleiner, umkehrbarer Folgeschritt auf Wunsch.
+
+### Dateien
+
+- `src/game/time/gameTime.ts` (neu)
+- `src/game/commands/controller.ts` (`getGameClock()`)
+- `src/components/hud/CameraControls.tsx` (`DayNightControl` liest die Sim-Uhr;
+  Fake-Regler/`dayLengthMin`-Hack entfernt)
+- `src/i18n/de.json` (`ui.clock.*`, `ui.season.*`; doppelter `ui.env.paused` bereinigt)
+- `tests/gameTime.test.ts` (neu), `docs/agents/INGAME_TIME_SYSTEM.md` (neu), DECISIONS **D-038**
+
+### Assets
+
+- Keine neuen Assets.
+
 ## v0.87 — Stadtarbeit-Stabilität 9.1: eingefrorener Planungssnapshot (Save v21)
 
 ### Was
