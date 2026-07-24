@@ -61,7 +61,15 @@ import {
 } from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { SkyEnvironment } from './SkyEnvironment.ts';
-import { SPLAT_BANDS, terrainHeightAt, terrainMinHeightAround, WATER_LEVEL } from './terrainHeight.ts';
+import {
+  SPLAT_BANDS,
+  terrainHeightAt,
+  terrainMinHeightAround,
+  TERRAIN_MAX_Y,
+  TERRAIN_MIN_Y,
+  WATER_LEVEL,
+} from './terrainHeight.ts';
+import { raycastHeightfield } from './terrainPicking.ts';
 import { blendedVisualSplat, regionVisualProfile } from './worldVisualProfiles.ts';
 import { REGION_PROP_BUDGET, selectPropTiles, type PropKind } from './vegetationBudget.ts';
 import { CameraController3D } from './CameraController3D.ts';
@@ -1181,11 +1189,27 @@ export class ThreeMapRenderer implements IMapRenderer {
     );
   }
 
-  /** Screen point → world ground point (x,z) via the invisible pick plane. */
+  /**
+   * Screen point → world ground point (x,z). Marschiert den Cursor-Strahl gegen
+   * das gebackene Höhenfeld (`terrainHeightAt`), damit die getroffene Kachel auch
+   * auf Hängen/Bergen exakt unter dem Cursor liegt (G2 ①). Zeigt der Strahl in
+   * den Himmel/über den Horizont, fällt er auf die unsichtbare y=0-Ebene zurück,
+   * damit Leerraum-Klicks (Kamera-Fokus/Zoom) weiter funktionieren.
+   */
   private groundPointAt(clientX: number, clientY: number): { x: number; z: number } | undefined {
     const ndc = this.ndc(clientX, clientY);
-    if (!ndc || !this.ground) return undefined;
+    if (!ndc) return undefined;
     this.raycaster.setFromCamera(ndc, this.camera);
+    const o = this.raycaster.ray.origin;
+    const d = this.raycaster.ray.direction;
+    const terrain = raycastHeightfield(
+      { ox: o.x, oy: o.y, oz: o.z, dx: d.x, dy: d.y, dz: d.z },
+      terrainHeightAt,
+      { minY: TERRAIN_MIN_Y, maxY: TERRAIN_MAX_Y },
+    );
+    if (terrain) return terrain;
+    // Fallback: flache Pick-Ebene (Klick in den Himmel / über den Horizont).
+    if (!this.ground) return undefined;
     const hit = this.raycaster.intersectObject(this.ground, false)[0];
     return hit ? { x: hit.point.x, z: hit.point.z } : undefined;
   }

@@ -1,5 +1,65 @@
 # Patch Notes
 
+## v0.94 — Bauen 8.0 / G2 ①: Cursor trifft die richtige Kachel auf Hängen & Bergen (Save v21)
+
+### Was
+
+- **Bauen, Verschieben, Straßen ziehen und Zoom treffen jetzt auf erhöhtem Gelände
+  exakt die Kachel unter dem Mauszeiger.** Bisher landete der Ghost auf Hügeln und
+  Bergen sichtbar **daneben** — je höher das Gelände, desto größer der Versatz. Auf
+  flachem Land ändert sich nichts.
+
+### Warum
+
+- Kern-Interaktionsfehler (Audit §2.1): Der Cursor→Kachel-Strahl schnitt eine
+  **unsichtbare flache Ebene bei y = 0** statt das echte Höhenfeld. Auf erhöhtem
+  Gelände liegt der so getroffene Punkt um ≈ `Höhe / tan(Kamerawinkel)` daneben — bei
+  Gipfeln bis ~52 Einheiten wird das riesig. Genau **das** machte das Bauen auf der
+  verdichteten, hügeligen Welt frustrierend (und ist die wahrscheinliche Ursache der
+  zuvor abgelehnten Anleger-Plätze). Es war als **Voraussetzung** für sauberen
+  Straßen-/Gebäudebau markiert („① zuerst, Reihenfolge zwingend").
+
+### Architektur
+
+- **Reiner, testbarer Helfer** `src/renderer/three/terrainPicking.ts`
+  (`raycastHeightfield`): marschiert den Strahl gegen einen Höhen-Sampler und findet
+  den ersten Boden-Schnittpunkt per Bracketing + binärer Verfeinerung. **Bewusst frei
+  von three.js** (nackte Zahlen + Sampler) → deterministisch unit-testbar.
+- **`terrainHeightAt` bleibt die EINZIGE Bodenhöhenquelle** (CLAUDE.md); der Helfer
+  bekommt sie als Sampler. Das vertikale Suchband kommt aus den neuen abgeleiteten
+  Grenzen `TERRAIN_MIN_Y`/`TERRAIN_MAX_Y` (aus dem Bake), damit nur die Terrain-Schale
+  abgetastet wird (wenige Dutzend Samples je Pick).
+- **Ein einziger Fix** in `ThreeMapRenderer.groundPointAt` korrigiert die **gesamte**
+  Interaktion, weil `pickTileAt`/`updateGhostAt`/`paint`/`selectAt` und der
+  Cursor-Zoom (`CameraInputController.onWheel` → `groundAt`) alle darüber laufen.
+  Zeigt der Strahl in den Himmel/über den Horizont, greift der **Ebenen-Fallback** —
+  Leerraum-Klicks für Kamera-Fokus/Zoom bleiben erhalten.
+- **Keine Save-Änderung** (v21), rein visuell/interaktiv, kein neues System.
+
+### Auswirkung
+
+- `tsc` · ESLint · **400 Vitest grün** (neu: `terrainPicking.test.ts`, 6 Fälle — u. a.
+  „auf dem Hang trifft der Strahl die echte Oberfläche, die y=0-Ebene läge >5 Kacheln
+  daneben") · Vite-Build. 3D-Init-Smoke (Chromium/SwiftShader): Renderer initialisiert,
+  0 Konsolenfehler.
+
+### Zukunft — G2-Reste (nächste Schritte, Reihenfolge zwingend)
+
+- ② Kamera-Belegung im Baumodus (LMB/RMB, §10.3), ③ echter GLB-Ghost mit Rotation/
+  Sockel/Anschluss/Radius, ④ Verschieben als Entwurf, ⑤ Wirkungsradien terrainfolgend,
+  ⑥ Straßenbau als Plan→Vorschau→Bestätigen. Nach diesem Fix ① erneut prüfen, ob die
+  Anleger-Ablehnungen (§14) verschwinden.
+
+### Dateien
+
+- `src/renderer/three/terrainPicking.ts` (neu), `src/renderer/three/terrainHeight.ts`
+  (`TERRAIN_MIN_Y`/`TERRAIN_MAX_Y`), `src/renderer/three/ThreeMapRenderer.ts`
+  (`groundPointAt` + Import), `tests/terrainPicking.test.ts` (neu).
+
+### Assets
+
+- Keine neuen Assets.
+
 ## v0.92 — Spielbarkeit 9.1 / P-D: Straßenstart am isolierten Anleger (lokales Netz hinter Wasser) (Save v21)
 
 ### Was

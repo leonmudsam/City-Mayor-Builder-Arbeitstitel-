@@ -19,6 +19,13 @@ import { HEIGHT_GRID, HEIGHT_MIN, HEIGHT_RANGE, HEIGHT_SAMPLES_PER_TILE, heightG
  *  der Uferlinie (= y 0 der gebackenen Welt), damit Strände lesbar bleiben. */
 export const WATER_LEVEL = -0.04;
 
+/** Globale Höhengrenzen der gebackenen Insel (tiefster Ozeanboden … höchster
+ *  Gipfel). Reine Ableitung aus dem Bake — dient dem Terrain-Picking als
+ *  vertikales Suchband, damit der Cursor-Strahl nur die Terrain-Schale abtastet.
+ *  Kleiner Puffer, damit Randfälle sicher innerhalb des Bandes liegen. */
+export const TERRAIN_MIN_Y = HEIGHT_MIN - 1;
+export const TERRAIN_MAX_Y = HEIGHT_MIN + HEIGHT_RANGE + 1;
+
 /**
  * Höhen-Bänder für den Splat-Shader (§ P3): EINE Quelle statt der früheren
  * Duplikation zwischen BASE-Tabelle und hartkodierten smoothstep-Konstanten in

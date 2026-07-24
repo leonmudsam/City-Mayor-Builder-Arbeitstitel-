@@ -91,9 +91,10 @@ Transport (A5), zentraler Start (S1/S2), Fog/Kamera (S3).
 
 ## 4. Bauen, Verschieben, Kamera (Core Gameplay 8.0 · G2)
 > Reihenfolge zwingend; ① zuerst.
-- ❌ `[P1]` ① **Terrain-Picking gegen Höhenfeld** statt y=0-Ebene
-  (`ThreeMapRenderer.ts` `groundPointAt`/`pickTileAt`/`updateGhostAt`/`paint`).
-  **Voraussetzung für sauberen Straßen-/Gebäudebau.**
+- ✅ `[P1]` ① **Terrain-Picking gegen Höhenfeld** statt y=0-Ebene (v0.94):
+  reiner Helfer `terrainPicking.ts` (`raycastHeightfield`) treibt `groundPointAt` →
+  `pickTileAt`/`updateGhostAt`/`paint`/`selectAt`/Cursor-Zoom treffen auf Hängen
+  exakt. `terrainHeightAt` bleibt einzige Höhenquelle. 6 Tests. Keine Save-Änderung.
 - ❌ `[P1]` ② Kamera im Baumodus (LMB/RMB-Belegung, §10.3).
 - ❌ `[P1]` ③ Echter GLB-Ghost (Rotation/Sockel/Anschluss/Radius, `placementDiagnostics`).
 - ❌ `[P1]` ④ Verschieben als Entwurf (Ghost, Ursprung, Bestätigung = 1 Command).

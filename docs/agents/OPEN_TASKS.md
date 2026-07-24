@@ -253,13 +253,14 @@ Dateistellen: `CORE_GAMEPLAY_OVERHAUL_AUDIT.md`.
 
 ### G2 — Bauen, Verschieben, Kamera. Reihenfolge ist zwingend.
 
-1. **Terrain-Picking zuerst (Audit §2.1).** `groundPointAt` raycastet gegen eine
-   unsichtbare flache Ebene bei y = 0 (`ThreeMapRenderer.ts:514–520`) statt
-   gegen das Höhenfeld. Auf erhöhtem Gelände liegt die getroffene Kachel um
-   ungefähr `Höhe / tan(Kamerawinkel)` daneben. Fix: Schrittsuche entlang des
-   Strahls gegen `terrainHeightAt` plus binäre Verfeinerung — `terrainHeightAt`
-   bleibt die einzige Bodenhöhenquelle. Betrifft auch `pickTileAt`,
-   `updateGhostAt`, `paint` und `CameraInputController.onWheel`.
+1. ✅ **ERLEDIGT (v0.94) — Terrain-Picking gegen das Höhenfeld (Audit §2.1).**
+   `groundPointAt` marschiert den Cursor-Strahl jetzt per reinem, unit-getestetem
+   Helfer `src/renderer/three/terrainPicking.ts` (`raycastHeightfield`,
+   Bracketing + binäre Verfeinerung) gegen `terrainHeightAt` (einzige Bodenhöhen-
+   quelle) statt gegen die y=0-Ebene; Suchband aus `TERRAIN_MIN_Y`/`TERRAIN_MAX_Y`.
+   Korrigiert in einem Zug `pickTileAt`, `updateGhostAt`, `paint`, `selectAt` und
+   den Cursor-Zoom (`CameraInputController.onWheel` → `groundAt`); Ebenen-Fallback
+   für Himmel-/Horizontklicks. 6 Tests (`terrainPicking.test.ts`). Keine Save-Änderung.
 2. **Kamera im Baumodus (Audit §2.2).** In `CameraInputController.onPointerDown`
    belegt LMB beim Platzieren den `build`-Modus und RMB ist fest `cancel` —
    Schwenken und Drehen sind praktisch unmöglich. Belegung gemäß §10.3 neu
