@@ -1,5 +1,93 @@
 # Patch Notes
 
+## v0.86 — Infrastruktur 2.0 / I2: terrainbewusster Straßen-Router, Kontrollpunkte & atomarer Bau (Save v20)
+
+### Was
+
+- **Straßen folgen jetzt dem Gelände statt einer starren L-Form.** Bisher füllte ein
+  schneller Zug oder ein Klick auf einen entfernten Punkt die Lücke stur orthogonal
+  (erst X, dann Y) — quer durch Wasser, Klippen und gesperrte Kacheln. Jetzt setzt
+  man nur noch **Kontrollpunkte** (Start, beliebige Zwischenpunkte, Ziel); der
+  Router verbindet sie **lückenlos über wirklich bebaubares Gelände**. Bodenstraßen
+  **weichen** Wasser/Klippen **aus**, Höhenstraßen **überbrücken** sie zum bekannten
+  Pfeiler-Aufpreis — automatisch, je nach gewählter Straßen-Bauklasse.
+- **Klarere Vorschau-Farben (grün/gelb/rot).** Die Bauvorschau markiert jede Kachel
+  jetzt eindeutig: **grün = baubar**, **gelb/amber = teuer (Brücke)**, **rot =
+  blockiert**. Eine kleine Legende im Straßenplaner erklärt die Farben.
+- **Atomarer Bau (alles oder nichts).** Bestätigt man den Plan, prüft der Controller
+  den **ganzen** Pfad und den **Gesamtpreis** vorab und baut ihn dann in einem Zug.
+  Ist ein Segment blockiert oder das Material zu knapp, wird **nichts** gebaut — kein
+  halbfertiger Straßenstummel mehr, der bei einem Fehler mitten im Pfad zurückblieb.
+
+### Warum
+
+- I2 aus dem Infrastruktur-2.0-Auftrag (D-036): „Der Straßenentwurf verbindet
+  Start→Ziel lückenlos (Snap-Points, saubere Übergänge). Vorschau: grün=möglich,
+  gelb=teuer, rot=blockiert." Die alte L-Form erzeugte Zacken und Segmente, die durch
+  Wasser/Klippen liefen und deshalb blockierten — gerade in der verdichteten Welt
+  (D-035) unbrauchbar. Der Auftrag fasst hier die zurückgestellte 10.0-Phase **R6**
+  (terrainbasierter A→B-Vorschlag, Kontrollpunkte, atomarer Command) mit ab.
+
+### Architektur
+
+- **Reiner Sim-Router `src/game/roads/roadRouting.ts` (CLAUDE.md §1).** Ein
+  gewichtetes, deterministisches Dijkstra über die 4er-Nachbarschaft verbindet
+  aufeinanderfolgende Kontrollpunkte. **Die Passierbarkeit jeder Kachel ist exakt
+  `validatePlacement`** (§2): `needs_road` gilt als passierbar (der Weg stellt den
+  Anschluss selbst her), jeder andere Fehler (Terrain/Belegung/gesperrte Region/
+  außerhalb) macht die Kachel unpassierbar. **Kein zweites Verkehrs- oder
+  Platzierungssystem** — der Router ist nur ein Vorschlag, `analyseRoadPath` bleibt
+  die alleinige Wahrheit für Status/Kosten/Blockaden.
+- **Gewichte:** bestehende (verbundene) Straße ≈ gratis (Wiederverwendung),
+  normales Bauland günstig, Brücke/Viadukt teuer — so weicht der Router einer
+  schmalen Wasserstelle nur aus, wenn der Umweg kürzer als ~sechs Landkacheln ist,
+  überbrückt sie aber, wenn das klar direkter ist. Die Suche ist auf die um einen
+  Rand erweiterte Bounding-Box begrenzt (nie die ganze 512²-Insel) und hart
+  gedeckelt; findet sich kein Weg, füllt ein gerader Rückfall die Lücke (die Prüfung
+  zeigt sie dann rot). Vollständig deterministisch (kein RNG, keine Zeit).
+- **Controller:** `roadPathPreview(kontrollpunkte, defId)` routet die Punkte, bevor
+  `analyseRoadPath` prüft — bereits orthogonal benachbarte Punkte routen auf sich
+  selbst, dichte Pfade und alle Bestandstests bleiben also unverändert. Neuer
+  atomarer Command **`buildRoadPath(kontrollpunkte, defId)`**: routet, validiert den
+  ganzen Pfad + Gesamtpreis, baut alles-oder-nichts über die bestehenden
+  `placeBuilding`-Platzierungen. Straßen skalieren nicht im Preis, daher entspricht
+  die Vorschausumme exakt der Abbuchung (§18.3).
+- **UI:** `MapView` sammelt nur noch Kontrollpunkte (`pushRoadPoint`) statt der alten
+  `extendRoadDraft`-L-Füllung; die lückenlose Verbindung kommt aus dem Router. Der
+  `SmartRoadPlannerHud` bestätigt über `buildRoadPath` und zeigt die Farb-Legende.
+  Der Renderer-Overlay färbt `ok` grün und `bridge` amber (grün/gelb/rot).
+
+### Auswirkung
+
+- **Save v20 unverändert (additiv, keine Migration).** Straßen bleiben normale
+  Gebäude-Instanzen; nur die Planung/der Bau-Command sind neu. Bestehende Straßen
+  und Spielstände unberührt.
+- Der Straßenentwurf ist reiner UI-State (Kontrollpunkte); nichts wird persistiert,
+  bevor gebaut wird.
+
+### Zukunft
+
+- Offen (nicht vorgetäuscht): frei ziehbare Kontrollpunkt-**Griffe** (Verschieben
+  bestehender Punkte), Live-Vorschau vom letzten Punkt zum Mauszeiger als eigener
+  Renderer-Layer, sowie Kurven-/Diagonal-Snapping. Als Nächstes: **I3** Küste/Anleger
+  als Netzknoten (= R9) · **I4** Schifffahrtsnetz · **I5** Bevölkerungs-Rebalancing +
+  Infrastruktur-Netz-UI.
+
+### Dateien
+
+- Neu: `src/game/roads/roadRouting.ts` (Router), `tests/roadRouting.test.ts`
+  (6 Tests: Lückenfüllung, Idempotenz, Wasser-Umweg, Brücken-Entscheid, atomarer
+  Bau, Nichts-bei-Blockade).
+- `src/game/commands/controller.ts` (`roadPathPreview` routet vor der Prüfung; neuer
+  `buildRoadPath`), `src/components/MapView.tsx` (`pushRoadPoint` statt
+  `extendRoadDraft`), `src/components/operations/SmartRoadPlannerHud.tsx` (atomarer
+  Confirm + Legende), `src/styles/active-operations.css` (Legenden-Stil),
+  `src/renderer/three/ThreeMapRenderer.ts` (Overlay-Farben grün/amber).
+
+### Assets
+
+- Keine neuen Assets. Brücken-Deck/Pfeiler bleiben prozedural (I1).
+
 ## v0.85 — Testbefund I1: ehrliche Höhenstraßen-Kosten, Planer-Banner & Steinbruch auf Fels (Save v20)
 
 ### Was

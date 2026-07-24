@@ -837,11 +837,14 @@ export class ThreeMapRenderer implements IMapRenderer {
     const material = new MeshBasicMaterial({ vertexColors: true, transparent: true, opacity: 0.82 });
     const mesh = new InstancedMesh(geometry, material, tiles.length);
     const dummy = new Object3D();
+    // § Infrastruktur 2.0 / I2: grün = baubar, gelb/amber = teuer (Brücke),
+    // rot = blockiert. Start/Ziel behalten eigene Ankerfarben, Viadukt-Landkacheln
+    // bleiben violett (informativ), bestehende Straße grau.
     const colors: Record<RoadPlanOverlayTile['status'], number> = {
       start: 0x4ed17c,
       end: 0xf0a13a,
-      ok: 0xeef7fa,
-      bridge: 0x45c7e7,
+      ok: 0x5fd88a,
+      bridge: 0xf0b23a,
       elevated: 0xc69cff,
       exists: 0x758b96,
       blocked: 0xe65345,

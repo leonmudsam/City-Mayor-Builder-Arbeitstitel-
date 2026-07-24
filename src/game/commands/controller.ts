@@ -65,6 +65,7 @@ import {
 } from '../activities/routeAnalysis.ts';
 import { regionPreview, type RegionPreview } from '../regions/regionPreview.ts';
 import { analyseRoadPath, type RoadPlanPreview } from '../roads/roadPlanning.ts';
+import { routeRoadWaypoints } from '../roads/roadRouting.ts';
 import {
   cargoPlanFor,
   evaluateCargoRoute,
@@ -1875,13 +1876,53 @@ export class GameController {
   }
 
   /**
-   * Straßenplan-Vorschau (§ C6/§18). Reine Read-Projektion eines gezeichneten
-   * Straßenpfads: pro Kachel Status/Grund/Kosten + Gesamtsumme, damit die UI vor
-   * dem Bau „Länge/Kosten/Konflikte" zeigen kann. Keine Mutation, keine
-   * Abbuchung — gebaut wird erst über die bestehenden Platzierungs-Commands.
+   * Straßenplan-Vorschau (§ C6/§18, § Infrastruktur 2.0 / I2). Der Eingabepfad
+   * ist eine Kette von KONTROLLPUNKTEN (Start, Zwischenpunkte, Ziel); der
+   * terrainbewusste Router verbindet sie lückenlos über wirklich bebaubares
+   * Gelände (Bodenstraße meidet Wasser/Klippen, Höhenstraße überbrückt sie),
+   * bevor `analyseRoadPath` pro Kachel Status/Grund/Kosten + Gesamtsumme liefert.
+   * Bereits orthogonal benachbarte Punkte routen auf sich selbst — die Vorschau
+   * bleibt für dichte Pfade also unverändert. Reine Read-Projektion: keine
+   * Mutation, keine Abbuchung — gebaut wird erst über `buildRoadPath`.
    */
   roadPathPreview(path: { x: number; y: number }[], defId: string = 'road'): RoadPlanPreview {
-    return analyseRoadPath(this.state, this.config, this.derived, path, (x, y) => this.getBuildCost(defId, x, y), defId);
+    const def = this.config.buildings.get(defId);
+    const routed =
+      def?.category === 'roads'
+        ? routeRoadWaypoints(this.state, this.config, this.derived, def, path)
+        : path;
+    return analyseRoadPath(this.state, this.config, this.derived, routed, (x, y) => this.getBuildCost(defId, x, y), defId);
+  }
+
+  /**
+   * Atomarer Straßenbau (§ Infrastruktur 2.0 / I2). Nimmt dieselben
+   * Kontrollpunkte wie `roadPathPreview`, routet sie und baut den ganzen Pfad
+   * ALLES-ODER-NICHTS: Ist ein Segment blockiert oder der Gesamtpreis nicht
+   * bezahlbar, wird NICHTS gebaut (kein halbfertiger Stummel). Nach der
+   * Vollvalidierung muss jede Einzelplatzierung gelingen — Straßen skalieren
+   * nicht im Preis, daher entspricht die Vorschausumme exakt der Abbuchung.
+   */
+  buildRoadPath(
+    waypoints: { x: number; y: number }[],
+    defId: string = 'road',
+  ): { ok: true; built: number } | { ok: false; error: CommandError } {
+    const def = this.config.buildings.get(defId);
+    if (!def || def.category !== 'roads') return { ok: false, error: 'not_found' };
+    const preview = this.roadPathPreview(waypoints, defId);
+    if (preview.tiles.length === 0) return { ok: false, error: 'invalid' };
+    if (!preview.valid) {
+      const firstBlocked = preview.tiles.find((tile) => tile.status === 'blocked');
+      return { ok: false, error: firstBlocked?.reason ?? 'terrain' };
+    }
+    if (!this.canAffordCost(preview.totalCost)) return { ok: false, error: 'insufficient' };
+    let built = 0;
+    for (const tile of preview.tiles) {
+      if (tile.status === 'exists') continue;
+      const result = this.placeBuilding(defId, tile.x, tile.y);
+      if (!result.ok) return { ok: false, error: result.error }; // nach Vorvalidierung nicht erwartet
+      built += 1;
+    }
+    return { ok: true, built };
   }
 
   getBuildCost(defId: string, x?: number, y?: number): Partial<Record<ResourceId, number>> {

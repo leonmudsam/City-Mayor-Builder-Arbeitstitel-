@@ -29,8 +29,17 @@ der Unblocker.
     Platzierungssystem). Tests: `tests/quarryRock.test.ts`.
   - ⏳ Offen (I1-Verfeinerung, nicht vortäuschen): steinerne Prachtbrücken, echte
     Pfeilertiefe bis zum Wasserboden, Rampenlängen.
-- ❌ **I2 Saubere Straßenstruktur** (Snap/Kurven/lückenlos, Vorschau grün/gelb/rot).
-  **Erledigt zugleich 10.0-R6** (terrainbasierter A→B, Kontrollpunkte, atomarer Command).
+- ✅ **I2 Saubere Straßenstruktur** (v0.86): terrainbewusster Router
+  `src/game/roads/roadRouting.ts` (gewichtetes deterministisches Dijkstra) verbindet
+  **Kontrollpunkte** lückenlos über bebaubares Gelände (Bodenstraße meidet Wasser/
+  Klippen, Höhenstraße überbrückt sie). Passierbarkeit = `validatePlacement`
+  (`needs_road` passierbar), `analyseRoadPath` bleibt Wahrheit — **kein zweiter Graph
+  (§2/§8)**. Vorschau grün/gelb/rot + Legende; **atomarer** `buildRoadPath`
+  (alles-oder-nichts); `pushRoadPoint` statt `extendRoadDraft`. **Erledigt zugleich
+  10.0-R6.** 6 neue Tests (`roadRouting.test.ts`). Save v20 additiv.
+  - ⏳ Offen (I2-Verfeinerung, nicht vortäuschen): frei ziehbare Kontrollpunkt-Griffe,
+    Live-Vorschau vom letzten Punkt zum Mauszeiger als Renderer-Layer, Kurven-/
+    Diagonal-Snapping.
 - ❌ **I3 Küste/Ufer + Anleger als Netzknoten** (Straße↔Anleger↔Schiff). **Erledigt
   zugleich 10.0-R9** (adaptive Uferplattform). Baut auf `buildingInfrastructure.ts`.
 - ❌ **I4 Schifffahrtsnetz + Stadtarbeit-Integration** (persistente Routen: Kapazität,
@@ -44,11 +53,11 @@ der Unblocker.
 **Nicht vortäuschen:** fehlende Schiffs-Legs/Kapazitäts-/Verkehrsdaten sind
 `TODO(CLAUDE_LOGIC)`. Kein zweiter Straßengraph/Transport.
 
-## ZURÜCKGESTELLT (nach Infrastruktur 2.0 fortsetzen): § 10.0 R2–R6, R9
+## ZURÜCKGESTELLT (nach Infrastruktur 2.0 fortsetzen): § 10.0 R2–R5, R9
 
 > Bleiben P0 **nach** Infrastruktur 2.0. Master-Spec: `ACTIVE_RESOURCE_LOOPS_10_PLAN.md`.
-> R1/R7/R8 sind erledigt (D-035, v0.83). R6/R9 werden in Infrastruktur 2.0 (I2/I3)
-> mit­erledigt.
+> R1/R7/R8 sind erledigt (D-035, v0.83). **R6 ist mit I2 erledigt (v0.86).** R9 wird
+> in Infrastruktur 2.0 (I3) miterledigt.
 
 - ❌ **R2** Dauerbetrieb: persistentes `workArea` (circle/rect/polygon) +
   `ContinuousOperationStatus`, Auto-Pause/Resume statt Auto-Delete (Save v20→v21 additiv).

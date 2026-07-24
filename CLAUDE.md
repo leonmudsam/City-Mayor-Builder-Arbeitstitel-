@@ -185,11 +185,20 @@ nicht mehr (Planer ist alleinige Instanz). Zusätzlich: **Steinbruch baubar auf 
 via additivem `BuildingDef.buildsOnRock?: { maxSlope? }` — flache Felsschelfe (echte
 Steilheitsgrenze), Wasser/senkrechte Wand/gesperrte Region bleiben tabu; kein neues
 Platzierungssystem (§2).
-Offen: **I2** saubere Straßen (Snap/Kurven, = R6) · **I3** Küste/Anleger als
-Netzknoten (= R9) · **I4** Schifffahrtsnetz (persistente Routen, lineare Migration) ·
-**I5** Bevölkerungs-Rebalancing + Infrastruktur-Netz-UI. Reihenfolge = Umsetzung.
-Nichts Fehlendes vortäuschen; weitere Brücken-/Rampen-/Pfeilertiefe-Verfeinerungen
-sind dokumentiert offen.
+**v0.86 = I2 erledigt (= R6, Save v20):** terrainbewusster Straßen-Router
+`src/game/roads/roadRouting.ts` (gewichtetes deterministisches Dijkstra) verbindet
+**Kontrollpunkte** lückenlos über bebaubares Gelände — Bodenstraße meidet Wasser/
+Klippen, Höhenstraße überbrückt sie. **Passierbarkeit = `validatePlacement`**
+(`needs_road` passierbar), `analyseRoadPath` bleibt die Wahrheit — **kein zweiter
+Verkehrsgraph (§2/§8)**. Vorschau grün/gelb/rot; neuer **atomarer** Command
+`buildRoadPath` (alles-oder-nichts, kein halber Stummel); `roadPathPreview` routet
+vor der Prüfung (benachbarte Punkte idempotent → Bestandstests unverändert). UI:
+`pushRoadPoint` statt `extendRoadDraft`.
+Offen: **I3** Küste/Anleger als Netzknoten (= R9) · **I4** Schifffahrtsnetz
+(persistente Routen, lineare Migration) · **I5** Bevölkerungs-Rebalancing +
+Infrastruktur-Netz-UI. Reihenfolge = Umsetzung. Nichts Fehlendes vortäuschen;
+Kontrollpunkt-Griffe, Live-Mauszeiger-Vorschau und Kurven-Snapping sind
+dokumentiert offen.
 
 Verbindlicher Einstieg für die Weiterarbeit:
 `docs/HANDOFF_CLAUDE.md` → `docs/agents/PROJECT_STATE.md` →

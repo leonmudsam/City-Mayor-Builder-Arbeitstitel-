@@ -15,39 +15,17 @@ interface CoverageInfo {
   capacity?: { servable: number; used: number };
 }
 
-/** Schließt Lücken eines schnellen Pointer-Drags orthogonal, ohne diagonal
- * unverbundene Straßenkacheln zu erzeugen. Der Entwurf bleibt reiner UI-State. */
-function extendRoadDraft(
-  path: readonly { x: number; y: number }[],
-  target: { x: number; y: number },
-): { x: number; y: number }[] {
-  const next = [...path];
-  const last = next[next.length - 1];
-  if (!last) return [{ x: target.x, y: target.y }];
-  if (last.x === target.x && last.y === target.y) return next;
-  let x = last.x;
-  let y = last.y;
-  const xFirst = Math.abs(target.x - x) >= Math.abs(target.y - y);
-  const walkX = () => {
-    while (x !== target.x) {
-      x += Math.sign(target.x - x);
-      next.push({ x, y });
-    }
-  };
-  const walkY = () => {
-    while (y !== target.y) {
-      y += Math.sign(target.y - y);
-      next.push({ x, y });
-    }
-  };
-  if (xFirst) {
-    walkX();
-    walkY();
-  } else {
-    walkY();
-    walkX();
-  }
-  return next;
+/** Fügt einen Straßen-KONTROLLPUNKT an (Start, Zwischenpunkt oder Ziel). Die
+ * lückenlose, terrainbewusste Verbindung dazwischen erzeugt der Router im
+ * Controller (`roadPathPreview`, § Infrastruktur 2.0 / I2) — die UI sammelt nur
+ * die geklickten/gezogenen Ankerpunkte. Aufeinanderfolgende Duplikate (Klick auf
+ * dieselbe Kachel, Drag über dieselbe Kachel) werden verworfen. Reiner UI-State. */
+function pushRoadPoint(target: { x: number; y: number }): void {
+  const state = useUiStore.getState();
+  const tile = { x: Math.round(target.x), y: Math.round(target.y) };
+  const last = state.roadPlanPath[state.roadPlanPath.length - 1];
+  if (last && last.x === tile.x && last.y === tile.y) return;
+  state.setRoadPlanPath([...state.roadPlanPath, tile]);
 }
 
 /** Imperative camera surface exposed to the HUD. */
@@ -157,8 +135,7 @@ export function MapView() {
         // Alle Straßen-Bauklassen (Bodenstraße, Höhenstraße/Brücke) laufen über den
         // Straßenentwurf-Planer, nicht über Sofortbau (§ Infrastruktur 2.0 / I1).
         if (controller.config.buildings.get(defId)?.category === 'roads') {
-          const state = useUiStore.getState();
-          state.setRoadPlanPath(extendRoadDraft(state.roadPlanPath, { x, y }));
+          pushRoadPoint({ x, y });
           return;
         }
         const result = controller.placeBuilding(defId, x, y, rotation);
@@ -176,8 +153,7 @@ export function MapView() {
       // but a real blocker (funds, locked sector) still surfaces once.
       onDragPlace: (defId, x, y) => {
         if (controller.config.buildings.get(defId)?.category === 'roads') {
-          const state = useUiStore.getState();
-          state.setRoadPlanPath(extendRoadDraft(state.roadPlanPath, { x, y }));
+          pushRoadPoint({ x, y });
           return;
         }
         const result = controller.placeBuilding(defId, x, y);

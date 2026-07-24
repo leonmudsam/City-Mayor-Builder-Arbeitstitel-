@@ -33,18 +33,15 @@ export function SmartRoadPlannerHud() {
 
   const confirm = () => {
     if (!view.valid || !affordable) return;
-    let built = 0;
-    for (const tile of raw.tiles) {
-      if (tile.status === 'exists') continue;
-      const result = game.placeBuilding(roadDefId, tile.x, tile.y);
-      if (!result.ok) {
-        pushToast(`${roadName}-Bau nach ${built} Segmenten gestoppt: ${result.error}`, 'error');
-        clearRoadPlan();
-        return;
-      }
-      built += 1;
+    // Atomarer Bau (§ Infrastruktur 2.0 / I2): der Controller routet die
+    // Kontrollpunkte, prüft den GANZEN Pfad + Gesamtpreis und baut alles oder
+    // nichts — kein halbfertiger Stummel mehr bei einem blockierten Segment.
+    const result = game.buildRoadPath(roadPlanPath, roadDefId);
+    if (!result.ok) {
+      pushToast(`${roadName}-Bau nicht möglich: ${t(`error.${result.error}`)}`, 'error');
+      return;
     }
-    pushToast(`${built} ${roadName}-Segmente gebaut.`, 'success');
+    pushToast(`${result.built} ${roadName}-Segmente gebaut.`, 'success');
     clearRoadPlan();
   };
 
@@ -85,6 +82,12 @@ export function SmartRoadPlannerHud() {
         <DataMetric label="Kosten" value={costLabel(view.costs)} icon={<Coins size={15} />} tone={affordable ? 'neutral' : 'danger'} />
         <DataMetric label="Brücken" value={view.bridgeCount} tone={view.bridgeCount > 0 ? 'info' : 'neutral'} />
         <DataMetric label="Konflikte" value={view.blockedCount} tone={view.blockedCount > 0 ? 'danger' : 'good'} />
+      </div>
+
+      <div className="smart-road-legend" aria-hidden>
+        <span><i className="dot dot-ok" /> Baubar</span>
+        <span><i className="dot dot-bridge" /> Brücke (teuer)</span>
+        <span><i className="dot dot-blocked" /> Blockiert</span>
       </div>
 
       {view.warnings.map((item) => (

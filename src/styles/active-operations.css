@@ -604,6 +604,12 @@
 .smart-road-anchors b { font-size: 9px; }
 .smart-road-anchors > i { height: 1px; background: repeating-linear-gradient(90deg, var(--ui-cyan) 0 5px, transparent 5px 9px); }
 .smart-road-metrics { display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px; }
+.smart-road-legend { display: flex; flex-wrap: wrap; gap: 6px 12px; margin-top: 7px; font-size: 11px; opacity: 0.82; }
+.smart-road-legend span { display: inline-flex; align-items: center; gap: 5px; }
+.smart-road-legend .dot { width: 9px; height: 9px; border-radius: 2px; display: inline-block; }
+.smart-road-legend .dot-ok { background: #5fd88a; }
+.smart-road-legend .dot-bridge { background: #f0b23a; }
+.smart-road-legend .dot-blocked { background: #e65345; }
 .smart-road-actions { display: flex; gap: 5px; margin-top: 7px; }
 .smart-road-actions .primary-action { margin-left: auto; }
 
