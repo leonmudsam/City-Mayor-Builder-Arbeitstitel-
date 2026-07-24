@@ -47,10 +47,15 @@
     Anleger-Netzknoten-Panel; multimodale Stadtarbeit. Bausteine vorhanden
     (`waterNavigation.ts`, `buildingInfrastructure.ts`, `operations/transport.ts`). Eigener
     Meilenstein. Doku: `HARBOR_INFRASTRUCTURE_GRAPH.md`.
-- ❌ **P-E Performance-Pass + FPS-Anzeige**: dauerhafte, **gedrosselte** FPS-Anzeige
-  neben der Uhr (Renderer sammelt, ~alle 500 ms ein Snapshot; kein React-Update pro
-  Frame); Infrastrukturgraph cachen/versionieren; Rerender-/Marker-/Vegetations-Audit.
-  Doku: `PERFORMANCE_PASS_REPORT.md`.
+- 🟡 **P-E Performance-Pass + FPS-Anzeige**:
+  - ✅ **FPS-Anzeige** (v0.90): dauerhaft neben der Uhr, gedrosselt (~alle 500 ms via
+    `fpsMeter` + `useSyncExternalStore`), farbcodiert; kein React-Update pro Frame.
+  - ✅ **Report + Analyse** (v0.93, `PERFORMANCE_PASS_REPORT.md`): Infrastrukturgraph ist
+    **bereits** event-getrieben (nicht pro Render — §15.5 erfüllt); Activity-Regen durch
+    P-A beseitigt; Hotspot-Analyse + Mess-Protokoll (im Spiel mit der FPS-Anzeige zu
+    füllen — kein Browser-Profiler in der Cloud, keine erfundenen Zahlen).
+  - ❌ **Live-Profiling** (im Spiel) + daraus gezielte Optimierungen; Feinschliff einzelner
+    Planer-Reads (Memoisierung); optional Draw-Calls im FPS-Tooltip.
 
 **Nicht vortäuschen:** fehlende Schiffs-Legs/Kapazitäts-/Verkehrs-/Netzlastdaten sind
 `TODO(CLAUDE_LOGIC)`. Keine zweite Zeit-, Verkehrs- oder Missionssimulation.
