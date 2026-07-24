@@ -202,6 +202,47 @@ button:disabled {
   background: linear-gradient(150deg, rgba(17, 45, 59, 0.94), rgba(8, 29, 42, 0.96));
 }
 
+/* Dauerhafte FPS-Anzeige neben der Uhr (§ P-E). Kompakter Chip, farbcodiert. */
+.hud-fps {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0;
+  height: 56px;
+  min-width: 46px;
+  padding: 4px 8px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-md);
+  background: linear-gradient(150deg, rgba(17, 45, 59, 0.94), rgba(8, 29, 42, 0.96));
+  line-height: 1.05;
+  font-variant-numeric: tabular-nums;
+}
+
+.hud-fps strong {
+  font-size: 17px;
+  font-weight: 700;
+}
+
+.hud-fps span {
+  font-size: 9px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+}
+
+.hud-fps-good strong {
+  color: #5fd88a;
+}
+
+.hud-fps-warn strong {
+  color: #f0b23a;
+}
+
+.hud-fps-bad strong {
+  color: #e65345;
+}
+
 .hud-environment-copy strong {
   color: var(--text-main);
   font-size: 11px;

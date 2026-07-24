@@ -1,6 +1,7 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { CloudFog, CloudRain, CloudSun, Grid3x3, Plus, Minus, Compass, Pause, Play } from 'lucide-react';
 import { getMapApi, useGame, useUiStore } from '../../state/store.ts';
+import { getFpsSample, subscribeFps } from '../../services/fpsMeter.ts';
 import {
   getEnvironmentSettings,
   setEnvironmentSettings,
@@ -63,6 +64,26 @@ export function CameraControls() {
           </button>
         </div>
       </div>
+    </div>
+  );
+}
+
+/**
+ * Dauerhafte, gedrosselte FPS-Anzeige neben der Uhr (§ P-E / §15.1). Liest den
+ * ~alle 500 ms veröffentlichten Snapshot des `fpsMeter` über useSyncExternalStore
+ * — **kein** React-Update pro Frame. Farbe: grün ≥55, gold 35–54, rot <35.
+ */
+export function FpsIndicator() {
+  const sample = useSyncExternalStore(subscribeFps, getFpsSample, getFpsSample);
+  const tone = sample.fps >= 55 ? 'good' : sample.fps >= 35 ? 'warn' : 'bad';
+  return (
+    <div
+      className={`hud-fps hud-fps-${tone}`}
+      title={`${sample.fps} FPS · ${sample.frameMs} ms/Frame`}
+      aria-label={`${sample.fps} FPS`}
+    >
+      <strong>{sample.fps}</strong>
+      <span>FPS</span>
     </div>
   );
 }

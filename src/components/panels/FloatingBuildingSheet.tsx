@@ -41,7 +41,7 @@ import type { Diagnosis } from '../../game/buildings/diagnostics.ts';
 import { ActionBubble } from '../common/ActionBubble.tsx';
 import { ConfirmModal } from '../common/ConfirmModal.tsx';
 import { BuildingArt } from '../art/index.ts';
-import { formatDuration, formatMoney, t } from '../../i18n/index.ts';
+import { formatDuration, formatGameDuration, formatMoney, t } from '../../i18n/index.ts';
 import { regionIdAt, terrainAt } from '../../game/config/startRegion.config.ts';
 import { CapacityBar, StatusChip } from '../common/GamePanel.tsx';
 import { buildBuildingOperationView, defaultWorkAreaSelection } from '../operations/adapters.ts';
@@ -186,7 +186,7 @@ export function FloatingBuildingSheet() {
           <>
             <p className="dialog-status">
               <Clock size={15} /> {t(b.targetUpgradeLevel !== undefined ? 'ui.upgrade_running' : 'ui.construction')} —{' '}
-              {t('ui.ready_in', { time: formatDuration(b.constructionEndsAt - now) })}
+              {t('ui.ready_in', { time: formatGameDuration(b.constructionEndsAt - now) })}
             </p>
             {b.targetUpgradeLevel !== undefined && (
               // §2/§17: reassure that the current stage stays fully active during

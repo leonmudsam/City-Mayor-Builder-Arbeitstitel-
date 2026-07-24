@@ -6,7 +6,7 @@ import { ResourceArt } from '../art/index.ts';
 import { brandImage } from '../../assets/registry.ts';
 import { ResourceCard } from './ResourceCard.tsx';
 import { ResourceDetailPopover } from './ResourceDetailPopover.tsx';
-import { DayNightControl } from './CameraControls.tsx';
+import { DayNightControl, FpsIndicator } from './CameraControls.tsx';
 
 const int = (n: number) => Math.floor(n).toLocaleString('de-DE');
 const perMin = (n: number) => (n === 0 ? undefined : `${n > 0 ? '+' : '−'}${int(Math.abs(n))}/min`);
@@ -141,6 +141,7 @@ export function GameHud() {
       </div>
 
       <DayNightControl />
+      <FpsIndicator />
       <button
         className={`hud-menu-btn hud-settings-btn${openPanel === 'settings' ? ' active' : ''}`}
         onClick={() => setPanel('settings')}

@@ -3,7 +3,7 @@ import { Anchor, Clock, Hammer, Lock, Sparkles, X } from 'lucide-react';
 import { useGame, useUiStore } from '../../state/store.ts';
 import type { BuildingCategory, NeedId, ResourceId } from '../../game/types.ts';
 import type { BuildingDef } from '../../game/config/types.ts';
-import { formatMoney, t } from '../../i18n/index.ts';
+import { formatGameDuration, formatMoney, t } from '../../i18n/index.ts';
 import { ResourceIcon } from '../common/icons.tsx';
 import { BuildingArt, CategoryArt } from '../art/index.ts';
 
@@ -271,7 +271,7 @@ function BuildCard({
           {def.constructionSec > 0 && (
             <span className="chip">
               <Clock size={13} />
-              {def.constructionSec}s
+              {formatGameDuration(def.constructionSec * 1000)}
             </span>
           )}
         </div>

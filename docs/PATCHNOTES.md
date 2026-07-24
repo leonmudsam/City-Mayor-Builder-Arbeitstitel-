@@ -1,5 +1,54 @@
 # Patch Notes
 
+## v0.90 — Spielbarkeit 9.1 / P-B2-Anzeige + P-E FPS: Bauzeiten in Ingame-Zeit, dauerhafte FPS-Anzeige (Save v21)
+
+### Was
+
+- **Bauzeiten stehen jetzt in Ingame-Zeit.** Der Bau-Shop und der Bau-/Upgrade-
+  Countdown zeigen die Dauer in **Ingame-Minuten** (z. B. „45 Min", „3 Std 20 Min")
+  statt roher Sekunden — dieselbe Einheit wie die Uhr, sodass eine Bauzeit genau so
+  viele Ingame-Minuten läuft, wie die Uhr währenddessen weiterrückt.
+- **Dauerhafte FPS-Anzeige neben der Uhr.** Ein kleiner Chip zeigt die Bildrate,
+  farbcodiert (**grün ≥55**, **gold 35–54**, **rot <35**). Tooltip: FPS + Frame-Zeit.
+
+### Warum
+
+- P-B2-Anzeigeteil des Spielbarkeits-Auftrags (§8 „jedes zeitabhängige System hat eine
+  Dauer in Ingame-Zeit") und P-E-FPS (§15.1 „dauerhaft sichtbare FPS-Anzeige neben der
+  Uhr"). Die Bauzeit-**Werte** selbst bleiben vorerst unverändert — jetzt in
+  Ingame-Minuten sichtbar, damit das §9-Feintuning auf echtem Spielgefühl beruht.
+
+### Architektur
+
+- **`formatGameDuration(simMs)`** (i18n) rechnet Simulations-ms über
+  `SIM_MS_PER_GAME_MINUTE` in Ingame-Minuten um; `BuildMenu` und
+  `FloatingBuildingSheet` nutzen es. Kein Sim-/Save-Eingriff.
+- **`src/services/fpsMeter.ts`**: EIN `requestAnimationFrame`-Zähler misst die reale
+  Bildrate und veröffentlicht **nur ~alle 500 ms** einen Snapshot; die React-Anzeige
+  liest ihn über `useSyncExternalStore` — **kein Update pro Frame** (§15.2). Der
+  Renderer bleibt unberührt; die Anzeige kostet praktisch nichts.
+
+### Auswirkung
+
+- `tsc` · ESLint · **387 Vitest grün** · Vite-Build. Keine Save-Änderung (v21).
+
+### Zukunft
+
+- **P-B2-Werte:** §9-Rebalancing der Baudauern (jetzt auf Basis der sichtbaren
+  Ingame-Minuten). **P-C** Frühlogistik (Handkarren L2 + Lagerübersicht), **P-D**
+  Anlegernetz, **P-E** systematischer Performance-Pass (Report) folgen.
+
+### Dateien
+
+- `src/i18n/index.ts` (`formatGameDuration`), `src/components/panels/BuildMenu.tsx`,
+  `src/components/panels/FloatingBuildingSheet.tsx`, `src/services/fpsMeter.ts` (neu),
+  `src/components/hud/CameraControls.tsx` (`FpsIndicator`), `src/components/hud/GameHud.tsx`,
+  `src/styles/components.css`.
+
+### Assets
+
+- Keine neuen Assets.
+
 ## v0.89 — Spielbarkeit 9.1 / P-B1 Feinschliff: schnellere Uhr + gekoppelte Sonne (Save v21)
 
 ### Was
