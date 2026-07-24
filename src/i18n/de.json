@@ -697,6 +697,8 @@
   "ui.route.manual_adjacent": "Wähle eine direkt angrenzende Straßenkachel oder ziehe entlang einer geraden Straße.",
   "ui.route.started_auto": "Mission gestartet – das gewählte Fahrzeug fährt die Route jetzt automatisch ab.",
 
+  "vehicle.handcart": "Handkarren",
+  "vehicle.handcart.desc": "Muskelkraft statt Motor: bringt ab Level 2 kleine Mengen über kurze Strecken – ideal, um Sägewerk-Holz ins Rathauslager zu ziehen, bevor der erste Lieferwagen kommt.",
   "vehicle.van": "Kleiner Lieferwagen",
   "vehicle.van.desc": "Wendig, günstig und ideal für kurze Lieferungen in engen Vierteln.",
   "vehicle.medium_truck": "Mittlerer LKW",

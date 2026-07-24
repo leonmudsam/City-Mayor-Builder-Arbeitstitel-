@@ -344,6 +344,28 @@ export const activitiesConfig: ActivitiesConfig = {
   // Definitionen; Zukunftsträger bleiben sichtbar, aber nicht auswählbar.
   vehicles: [
     {
+      // § P-C Frühlogistik: der Handkarren ist ab Level 2 verfügbar, damit lokal
+      // geerntetes Holz vom Sägewerk ins Rathauslager gelangt, BEVOR ein
+      // Motorfahrzeug (Lieferwagen, L4) freigeschaltet ist. Kleine Ladung, kein
+      // Motor → keine Betriebskosten, langsam. Nur für Lagertransporte relevant
+      // (keine Stadtarbeit-Mission listet ihn).
+      id: 'handcart',
+      nameKey: 'vehicle.handcart',
+      descriptionKey: 'vehicle.handcart.desc',
+      unlockLevel: 2,
+      capacity: 40,
+      speedKph: 22,
+      handling: 5,
+      operatingCost: 0,
+      consumption: 'low',
+      imageKey: 'handcart',
+      strengthsKeys: ['vehicle.strength.short', 'vehicle.strength.cheap'],
+      weaknessesKeys: ['vehicle.weakness.capacity', 'vehicle.weakness.slow'],
+      loadTimeSec: 8,
+      unloadTimeSecPerTarget: 6,
+      narrowStreetPenalty: 0,
+    },
+    {
       id: 'van',
       nameKey: 'vehicle.van',
       descriptionKey: 'vehicle.van.desc',

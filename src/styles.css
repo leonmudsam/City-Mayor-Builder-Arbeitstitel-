@@ -460,6 +460,7 @@ body {
 .res-detail-row { display: flex; justify-content: space-between; font-size: 12.5px; color: var(--text-muted); }
 .res-detail-row.strong { color: var(--text); font-weight: 700; border-top: 1px solid var(--border); margin-top: 3px; padding-top: 5px; }
 .res-detail-value { font-variant-numeric: tabular-nums; color: var(--good); }
+.res-detail-locations { border-top: 1px solid var(--border); margin-top: 6px; padding-top: 6px; }
 .res-detail-note { font-size: 12px; color: var(--text-muted); margin-top: 9px; line-height: 1.4; }
 .res-detail-link { margin-top: 8px; }
 

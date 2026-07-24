@@ -28,6 +28,7 @@ export type QuestId = string;
 export type MayorActionId = string;
 export type TerrainType = 'grass' | 'forest' | 'water' | 'river' | 'mountain' | 'sand' | 'fertile';
 export type DriveVehicle =
+  | 'handcart'
   | 'van'
   | 'medium_truck'
   | 'large_truck'

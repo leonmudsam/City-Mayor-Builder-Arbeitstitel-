@@ -30,10 +30,13 @@
   - ❌ **P-B2**: Bau-/Upgrade-/Arbeits-/Transport-/Missionsdauern in **Ingame-Minuten**
     ausdrücken (über `gameMinutesToSimMs`) + Countdown-Anzeigen in Ingame-Zeit, dann
     **neu balancieren** (§9). Balancing-Tests anpassen. Doku: `TIMED_PROCESS_MIGRATION.md`.
-- ❌ **P-C Frühlogistik + Lagerübersicht**: Handkarren ab L2 (Holz Sägewerk→Rathauslager,
-  kein Motorfahrzeug nötig); Rathaus-/Lager-Bestände einzeln sichtbar (gesamt/verfügbar/
-  unterwegs/reserviert). **Überlappt 10.0-R3/R4** — dort miterledigen. Doku:
-  `EARLY_LOGISTICS.md`.
+- ✅ **P-C Frühlogistik + Lagerübersicht** (v0.91): **Handkarren** (`handcart`,
+  unlockLevel 2) im bestehenden Fahrzeugkatalog schließt die Lücke Sägewerk→Rathaus vor
+  dem Lieferwagen (L4); Kapazität 40, 0 Betriebskosten. Bestand nach Standort direkt im
+  Ressourcen-Popover (verfügbar/in Betrieben/unterwegs/reserviert); volle Standortliste
+  bleibt im `ResourceNetworkPanel`. Additiv, keine Save-Änderung. 4 Tests
+  (`earlyLogistics.test.ts`). Doku: `EARLY_LOGISTICS.md`. Offen: echtes Handkarren-
+  Modell, weitere Frühstufen, §9-Feintuning.
 - ❌ **P-D Anleger-zu-Anleger-Netz (= Infrastruktur 2.0 I3/I4, voll ausgebaut)**:
   Straßenstart am **isolierten** Anleger-Landanker (lokales Netz), gemeinsamer
   Infrastrukturgraph (road/bridge/elevated/harbor_transfer/water_route),

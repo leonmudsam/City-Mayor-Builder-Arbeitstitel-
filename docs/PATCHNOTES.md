@@ -1,5 +1,59 @@
 # Patch Notes
 
+## v0.91 — Spielbarkeit 9.1 / P-C: Handkarren ab Level 2 + Lager nach Standort sichtbar (Save v21)
+
+### Was
+
+- **Holz kommt in Level 2–3 endlich vom Sägewerk ins Rathaus.** Neuer **Handkarren**
+  (ab Level 2) transportiert lokal geerntetes Holz ins Rathauslager — **bevor** der
+  erste Lieferwagen (Level 4) kommt. Kleine Ladung (40), langsam, **kein Motor →
+  keine Betriebskosten**. Auswählbar im Sägewerk unter „Transport".
+- **Bestand nach Standort auf einen Blick.** Das Ressourcen-Popover zeigt jetzt direkt
+  „Für Bau verfügbar", „In Betrieben (lokal)", „Unterwegs" und „Reserviert" — nicht
+  mehr nur den Gesamtbestand. Die volle Standortliste (Rathaus/Lagerhäuser mit
+  Kapazität, Kamera-Fokus) bleibt über „Gesamtes Ressourcennetz öffnen".
+
+### Warum
+
+- P-C des Spielbarkeits-Auftrags: Das Sägewerk ist ab L2 baubar, der Lieferwagen aber
+  erst ab L4 — dazwischen fehlte **jedes** Transportfahrzeug, der frühe Baufortschritt
+  stockte. Und: „Rathauslager und Lagerhäuser sind in der Ressourcenübersicht nicht
+  ausreichend sichtbar."
+
+### Architektur
+
+- **Kein neues System (§2):** `handcart` ist ein Eintrag im bestehenden
+  Fahrzeugkatalog (`activities.config.ts`); die A5-Transportmaschinerie
+  (`operations/transport.ts`) wird unverändert wiederverwendet. Additiv:
+  `DriveVehicle`-Wert `'handcart'` (Type + Zod-Enum), i18n. Renderer fällt für
+  unbekannte Fahrzeuge auf das Van-Modell zurück (echtes `.glb` drop-in-fähig, §5).
+- **Lagersicht** ist eine reine Read-Projektion (`buildResourceNetworkView`) — der
+  Zentralbestand ist EIN Pool (Rathaus + Lagerhäuser = Kapazität), die Aufteilung je
+  Gebäude bleibt der vollen Übersicht vorbehalten; **nichts erfunden**.
+- **Keine Save-Änderung** (v21) — Fahrzeuge sind Config, kein State.
+
+### Auswirkung
+
+- `tsc` · ESLint · **391 Vitest grün** (neu: `earlyLogistics.test.ts`, 4 Fälle inkl.
+  vollem Loop) · Vite-Build.
+
+### Zukunft
+
+- **P-D** Anleger-zu-Anleger-Netz, **P-E** systematischer Performance-Pass. §9-Feintuning
+  von Handkarren-Kapazität/-Tempo und Baudauern nach Spielgefühl. Echtes
+  Handkarren-Modell drop-in-fähig.
+
+### Dateien
+
+- `src/game/config/activities.config.ts` (Handkarren), `src/game/types.ts` +
+  `src/game/config/schemas.ts` (`'handcart'`), `src/i18n/de.json`,
+  `src/components/hud/ResourceDetailPopover.tsx` (+ `src/styles.css`),
+  `tests/earlyLogistics.test.ts` (neu), `docs/agents/EARLY_LOGISTICS.md` (neu).
+
+### Assets
+
+- Kein neues Asset zwingend (Van-Fallback). Ein `handcart`-Modell/-Bild ist drop-in.
+
 ## v0.90 — Spielbarkeit 9.1 / P-B2-Anzeige + P-E FPS: Bauzeiten in Ingame-Zeit, dauerhafte FPS-Anzeige (Save v21)
 
 ### Was

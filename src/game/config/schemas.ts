@@ -172,6 +172,7 @@ const activityBuff = z.object({
 });
 
 const driveVehicle = z.enum([
+  'handcart',
   'van',
   'medium_truck',
   'large_truck',

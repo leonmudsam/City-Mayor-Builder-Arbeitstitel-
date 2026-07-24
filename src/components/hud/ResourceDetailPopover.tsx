@@ -1,6 +1,7 @@
 import { useGame, useUiStore } from '../../state/store.ts';
 import type { ResourceId } from '../../game/types.ts';
 import { ResourceIcon } from '../common/icons.tsx';
+import { buildResourceNetworkView } from '../operations/adapters.ts';
 import { formatMoney, t } from '../../i18n/index.ts';
 
 // The detail card behind a resource badge (§2, §12): where a resource stands
@@ -46,6 +47,17 @@ export function ResourceDetailPopover({ id }: { id: ResourceId }) {
 
   const full = cap > 0 && stock >= cap;
   const fillPct = cap > 0 ? Math.min(100, Math.round((stock / cap) * 100)) : 0;
+  // § P-C: Bestand nach STANDORT sichtbar machen. Der Zentralbestand (Rathaus +
+  // Lagerhäuser) ist EIN gemeinsamer Pool — seine Kapazität steckt in der cap-Zeile,
+  // die Aufteilung je Gebäude zeigt das volle Ressourcennetz. Hier kompakt die
+  // ehrlichen Größen: zentral verfügbar, lokal in Betrieben, unterwegs, reserviert.
+  // Nur belegte Zeilen werden gezeigt; nichts wird erfunden (§ nicht vortäuschen).
+  const net = buildResourceNetworkView(game, id);
+  const locationRows: { label: string; value: number }[] = [
+    { label: 'In Betrieben (lokal)', value: net.inProductionBuildings },
+    { label: 'Unterwegs', value: net.inTransit },
+    { label: 'Reserviert', value: net.reserved },
+  ].filter((row) => row.value > 0);
   return (
     <div className="res-detail">
       <div className="res-detail-head">
@@ -63,8 +75,16 @@ export function ResourceDetailPopover({ id }: { id: ResourceId }) {
       )}
       <div className="res-detail-rows">
         <DetailRow label={t('ui.production')} value={perMin > 0 ? `+${perMin % 1 === 0 ? perMin : perMin.toFixed(1)} /min` : '—'} />
+        <DetailRow label="Für Bau verfügbar" value={fmt(net.accessibleForConstruction)} />
         {cap > 0 && <DetailRow label={t('ui.storage')} value={fmt(cap)} />}
       </div>
+      {locationRows.length > 0 && (
+        <div className="res-detail-rows res-detail-locations">
+          {locationRows.map((row) => (
+            <DetailRow key={row.label} label={row.label} value={fmt(row.value)} />
+          ))}
+        </div>
+      )}
       <p className="res-detail-note">{full ? t('ui.storage.full') : t(`ui.resource.note.${id}`)}</p>
       <button className="btn-link res-detail-link" onClick={() => openResourceNetwork(id)}>
         Gesamtes Ressourcennetz öffnen
