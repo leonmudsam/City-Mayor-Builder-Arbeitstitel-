@@ -512,6 +512,7 @@ export function buildSmartRoadPlanView(
     tiles,
     lengthTiles: preview.buildTiles,
     cost: money,
+    costs: preview.totalCost,
     bridgeCount,
     // Höhenstraßen-Landkacheln (Viadukt/Rampe auf Land): alle neu gebauten Kacheln
     // einer querenden Bauklasse abzüglich der echten Wasser-/Klippen-Brückenkacheln.

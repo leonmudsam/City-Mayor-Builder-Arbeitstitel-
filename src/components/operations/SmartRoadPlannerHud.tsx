@@ -5,6 +5,15 @@ import { useGame, useUiStore } from '../../state/store.ts';
 import { DataMetric, StatusChip } from '../common/GamePanel.tsx';
 import { buildSmartRoadPlanView } from './adapters.ts';
 
+const int = (value: number): string => Math.round(value).toLocaleString('de-DE');
+/** Materialkosten als „57.500 · 1.660 Holz" (Geld kompakt, Rest ganzzahlig). */
+function costLabel(cost: Partial<Record<string, number>>): string {
+  const parts = Object.entries(cost)
+    .filter(([, amount]) => (amount ?? 0) > 0)
+    .map(([res, amount]) => (res === 'money' ? formatMoney(amount ?? 0) : `${int(amount ?? 0)} ${t(`resource.${res}`)}`));
+  return parts.length > 0 ? parts.join(' · ') : formatMoney(0);
+}
+
 export function SmartRoadPlannerHud() {
   const game = useGame();
   const { roadPlanPath, setRoadPlanPath, clearRoadPlan, stopPlacing, pushToast, placingDefId } = useUiStore();
@@ -16,6 +25,11 @@ export function SmartRoadPlannerHud() {
   const view = useMemo(() => buildSmartRoadPlanView(game, roadPlanPath, roadDefId), [game, game.version, roadPlanPath, roadDefId]);
   const raw = useMemo(() => game.roadPathPreview(roadPlanPath, roadDefId), [game, game.version, roadPlanPath, roadDefId]);
   const affordable = game.canAffordCost(raw.totalCost);
+  // Welche Ressourcen fehlen konkret? (§18.3: der Grund muss sichtbar sein — nicht
+  // nur „Stadtbudget", denn Höhenstraßen kosten auch Holz.)
+  const missing = Object.entries(raw.totalCost)
+    .map(([res, need]) => ({ res, need: need ?? 0, have: game.state.resources[res as keyof typeof game.state.resources] ?? 0 }))
+    .filter((m) => m.have < m.need);
 
   const confirm = () => {
     if (!view.valid || !affordable) return;
@@ -68,7 +82,7 @@ export function SmartRoadPlannerHud() {
 
       <div className="smart-road-metrics">
         <DataMetric label="Neue Segmente" value={view.lengthTiles} />
-        <DataMetric label="Kosten" value={formatMoney(view.cost)} icon={<Coins size={15} />} tone={affordable ? 'neutral' : 'danger'} />
+        <DataMetric label="Kosten" value={costLabel(view.costs)} icon={<Coins size={15} />} tone={affordable ? 'neutral' : 'danger'} />
         <DataMetric label="Brücken" value={view.bridgeCount} tone={view.bridgeCount > 0 ? 'info' : 'neutral'} />
         <DataMetric label="Konflikte" value={view.blockedCount} tone={view.blockedCount > 0 ? 'danger' : 'good'} />
       </div>
@@ -78,8 +92,11 @@ export function SmartRoadPlannerHud() {
           <AlertTriangle size={13} /> {item.label}
         </p>
       ))}
-      {!affordable && roadPlanPath.length > 0 && (
-        <p className="inline-warning tone-danger"><AlertTriangle size={13} /> Das Stadtbudget deckt die echten Gesamtkosten nicht.</p>
+      {!affordable && missing.length > 0 && roadPlanPath.length > 0 && (
+        <p className="inline-warning tone-danger">
+          <AlertTriangle size={13} /> Nicht genug Material:{' '}
+          {missing.map((m) => `${t(`resource.${m.res}`)} ${int(m.have)}/${int(m.need)}`).join(', ')}
+        </p>
       )}
 
       <div className="smart-road-actions">

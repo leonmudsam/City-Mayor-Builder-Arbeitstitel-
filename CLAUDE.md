@@ -178,6 +178,13 @@ als **Straßen-Bauklasse** (`BuildingDef.road?: RoadClassDef`) über denselben
 (§2)**. Automatische Brückenlogik pro Kachel; Deck/Pfeiler prozedural
 (`buildBridgeDeck`); Kosten holzbasiert + Pfeiler-Aufschlag (gezeigter = gezahlter
 Preis). **Save v20 unverändert (additiv)** — Höhenstraßen sind Gebäude-Instanzen.
+**v0.85 = Testbefund-Fixes (Save v20):** Höhenstraßen-Kosten zeigen jetzt **alle**
+Materialien inkl. Holz + konkreten Fehlbetrag (§18.3, nicht nur „Stadtbudget");
+das isolierte Ein-Kachel-„Braucht Anschluss…"-Banner erscheint beim Straßenplanen
+nicht mehr (Planer ist alleinige Instanz). Zusätzlich: **Steinbruch baubar auf Fels**
+via additivem `BuildingDef.buildsOnRock?: { maxSlope? }` — flache Felsschelfe (echte
+Steilheitsgrenze), Wasser/senkrechte Wand/gesperrte Region bleiben tabu; kein neues
+Platzierungssystem (§2).
 Offen: **I2** saubere Straßen (Snap/Kurven, = R6) · **I3** Küste/Anleger als
 Netzknoten (= R9) · **I4** Schifffahrtsnetz (persistente Routen, lineare Migration) ·
 **I5** Bevölkerungs-Rebalancing + Infrastruktur-Netz-UI. Reihenfolge = Umsetzung.

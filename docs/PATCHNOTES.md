@@ -1,5 +1,82 @@
 # Patch Notes
 
+## v0.85 — Testbefund I1: ehrliche Höhenstraßen-Kosten, Planer-Banner & Steinbruch auf Fels (Save v20)
+
+### Was
+
+- **Höhenstraßen-Kosten sind jetzt vollständig sichtbar.** Der Straßenplaner zeigte
+  in „Kosten" nur den **Geld**-Anteil (z. B. 57.500), obwohl eine lange Brücke auch
+  viel **Holz** kostet (40/Kachel + 20/Brücke). Bei genug Geld, aber zu wenig Holz
+  war der Bau-Button gesperrt, ohne dass der Grund sichtbar war. Jetzt zeigt die
+  Kosten-Metrik **alle** Materialien (z. B. „57.500 · 1.660 Holz") und die Warnung
+  benennt konkret, **welche** Ressource wie weit fehlt („Nicht genug Material: Holz
+  582/1.660") statt pauschal „Stadtbudget".
+- **Irreführendes „Braucht Anschluss…"-Banner beim Straßenplanen entfernt.** Während
+  man eine Höhenstraße zieht, prüfte das kleine Ein-Kachel-Hinweisbanner oben die
+  Kachel unter dem Mauszeiger **isoliert** und meldete am Brückenende fälschlich
+  „Braucht Anschluss an eine verbundene Straße" — obwohl der Planer unten korrekt
+  „Baubar / 0 Konflikte" zeigte. Beim Straßenplanen ist jetzt allein der
+  Straßenplaner die Instanz; das widersprüchliche Banner erscheint nicht mehr.
+- **Steinbruch ist auf Fels bebaubar (Nutzerwunsch).** Der Steinbruch darf jetzt
+  auf sonst gesperrtem **Gebirge/Fels** stehen — thematisch schneidet er in den
+  Stein. Erlaubt sind **flache Felsschelfe** (echte Steilheits-/Unebenheitsgrenze);
+  senkrechte Wände und Wasser bleiben gesperrt. Rund 900 flache Fels-Standorte
+  existieren inselweit (verifiziert per Bake-Scan). Höhenstraßen liefern gleich die
+  passende Zufahrt hinauf.
+
+### Warum
+
+- In-Game-Test zeigte: Brücken funktionierten technisch (13 Brückensegmente,
+  0 Konflikte, „Baubar"), aber der Bau war „ohne erkennbaren Grund" gesperrt. Ursache
+  waren zwei reine **Transparenz**-Lücken (nicht die Brückenlogik): versteckte
+  Holzkosten (§18.3-Verstoß „gezeigter ≠ gezahlter Preis") und ein Banner, das die
+  pfad-bewusste Prüfung des Planers scheinbar widerlegte. Zusätzlich sollte der
+  Steinbruch dort baubar sein, wo Stein liegt.
+
+### Architektur
+
+- **Kosten-Transparenz:** `SmartRoadPlanView` trägt jetzt die volle Materialkosten-
+  Map (`costs`), nicht nur `cost` (Geld). Der HUD rendert sie über einen kleinen
+  Multi-Ressourcen-Formatter und berechnet den konkreten Fehlbetrag aus
+  `raw.totalCost` gegen `state.resources` — dieselbe Quelle wie `canAffordCost`.
+- **Banner:** `MapView` unterdrückt das Ein-Kachel-`PlacementBanner`, solange eine
+  Straßen-Bauklasse geplant wird (analog zum eigenständigen Waterfront-HUD). Keine
+  Logikänderung an der Platzierung.
+- **Steinbruch/Fels (§2, additiv):** neues optionales `BuildingDef.buildsOnRock?:
+  { maxSlope? }` (Zod-validiert). `validatePlacement` bekommt einen Fels-Zweig:
+  Gebirge ist erlaubter Untergrund, statt der pauschalen Gebirgs-/Klippensperre gilt
+  `surface.slope ≤ maxSlope` (Vorgabe 2) und ein gekoppeltes Höhendelta; die
+  Regionsprüfung bleibt (kein Bau in gesperrtem Gebiet, kein Bau ins Meer). Keine
+  neue Terrain-/Platzierungslogik — nur eine gebäudeseitige Ausnahme.
+
+### Auswirkung
+
+- **Save v20 unverändert.** Keine neuen State-Felder, keine Migration. Reine UI- und
+  Platzierungsregel-Änderungen. Bestehende Gebäude/Straßen unberührt.
+- Normale Gebäude bleiben auf Fels gesperrt (nur `buildsOnRock`-Gebäude nicht).
+
+### Zukunft
+
+- Unverändert: I2 saubere Straßen (= R6) · I3 Küste/Anleger (= R9) · I4
+  Schifffahrtsnetz · I5 Bevölkerungs-Rebalancing. Weitere `buildsOnRock`-Kandidaten
+  (Bergwerk/Aussichtspunkt) sind mit demselben Feld ohne neues System möglich.
+
+### Dateien
+
+- `src/components/operations/viewModels.ts` (Feld `costs`),
+  `src/components/operations/adapters.ts` (`buildSmartRoadPlanView` füllt `costs`),
+  `src/components/operations/SmartRoadPlannerHud.tsx` (voller Kosten-Label +
+  konkrete Fehlbetrags-Warnung), `src/components/MapView.tsx` (Banner beim
+  Straßenplanen unterdrückt), `src/game/config/types.ts` +
+  `src/game/config/schemas.ts` (`buildsOnRock`), `src/game/config/buildings.config.ts`
+  (Steinbruch `buildsOnRock`), `src/game/buildings/placement.ts` (Fels-Zweig),
+  `tests/quarryRock.test.ts` (neu, 3 Tests).
+
+### Assets
+
+- Keine. Steinbruch nutzt das vorhandene prozedurale/Drop-in-Modell; Höhenstraßen
+  bleiben prozedural (§5).
+
 ## v0.84 — Infrastruktur 2.0 / I1: Höhenstraßen & Brücken (Save v20, additiv)
 
 ### Was

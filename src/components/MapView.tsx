@@ -259,6 +259,10 @@ export function MapView() {
   const moving = useUiStore((s) => s.movingBuildingId);
   const overlayMode = useUiStore((s) => s.overlayMode);
   const active = placing !== undefined || moving !== undefined;
+  // Beim Straßenplanen ist der SmartRoadPlannerHud die einzige Autorität: das
+  // Ein-Kachel-Hover-Banner würde den Endpunkt isoliert prüfen und fälschlich
+  // „Braucht Anschluss…" melden, obwohl der pfad-bewusste Planer „Baubar" zeigt.
+  const planningRoad = placing !== undefined && getController().config.buildings.get(placing)?.category === 'roads';
 
   // Headline supply figure for the top-centre banner (§7): share of served
   // consumers among all in-radius consumers.
@@ -268,7 +272,7 @@ export function MapView() {
     <div className={`map-host${overlayMode ? ' overlay-active' : ''}`} ref={hostRef}>
       {active && hoverInfo?.waterfront
         ? <WaterfrontPlacementHud info={hoverInfo} />
-        : active && <PlacementBanner info={hoverInfo} moving={moving !== undefined} />}
+        : active && !planningRoad && <PlacementBanner info={hoverInfo} moving={moving !== undefined} />}
       {banner && !active && <ServiceOverlayBanner label={banner.label} detail={banner.detail} tone={banner.tone} />}
       {coverage && !active && <CoverageLegend info={coverage} />}
       {workAreaHover && <WorkAreaMapTooltip hover={workAreaHover} />}

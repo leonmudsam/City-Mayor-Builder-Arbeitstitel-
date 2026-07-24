@@ -74,6 +74,16 @@ export function validatePlacement(
     const waterBlocked = surface.waterOverlap > 0 && rc?.crossesWater !== true;
     const cliffBlocked = surface.cliffOverlap > 0 && rc?.crossesCliff !== true;
     if (waterBlocked || cliffBlocked || surface.slope > maxSlope) return 'terrain';
+  } else if (def.buildsOnRock) {
+    // § Steinbruch: Fels/Gebirge ist ein gewollter Untergrund — der Betrieb
+    // schneidet in den Stein. Die pauschale Gebirgs-/Klippensperre entfällt;
+    // stattdessen begrenzt eine echte Steilheit (`slope`) und Unebenheit
+    // (`heightDelta`), dass nur flache Felsschelfe bebaut werden. Wasser/Fluss
+    // bleibt gesperrt.
+    const maxSlope = def.buildsOnRock.maxSlope ?? 2;
+    if (surface.waterOverlap > 0 || surface.slope > maxSlope || heightDelta > maxSlope + 0.5) {
+      return 'terrain';
+    }
   } else if (
     surface.buildableRatio < 1 ||
     surface.waterOverlap > 0 ||
@@ -97,10 +107,13 @@ export function validatePlacement(
         roadClass?.crossesWater === true && (tile.terrain === 'water' || tile.terrain === 'river');
       const bridgesCliff = roadClass?.crossesCliff === true && tile.terrain === 'mountain';
       const spanned = bridgesWater || bridgesCliff;
+      // § Steinbruch: Gebirgskacheln sind hier ein erlaubter, real bebauter
+      // Untergrund (nicht „überspannt") — nur Wasser/Fluss bleibt gesperrt.
+      const rockBuilds = def.buildsOnRock !== undefined && tile.terrain === 'mountain';
       if (!spanned) {
         const region = regionOfTile(state, x + dx, y + dy);
         if (!region || region.status !== 'unlocked') return 'region_locked';
-        if (!isTerrainBuildable(tile)) return 'terrain';
+        if (!isTerrainBuildable(tile) && !rockBuilds) return 'terrain';
       }
       if (tile.buildingId && tile.buildingId !== moving) return 'occupied';
     }

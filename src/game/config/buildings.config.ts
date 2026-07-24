@@ -430,6 +430,9 @@ export const buildingsConfig: BuildingDef[] = [
     sizeClass: 'L',
     requiresRoad: true,
     unlockLevel: 4,
+    // Der Steinbruch schneidet in den Fels: er darf auf sonst gesperrtem Gebirge
+    // stehen, solange es ein flaches Felsschelf ist (keine senkrechte Wand).
+    buildsOnRock: { maxSlope: 2 },
     cost: { money: 45_000, wood: 120 },
     firstBuildDiscount: 0.5,
     constructionSec: 90,

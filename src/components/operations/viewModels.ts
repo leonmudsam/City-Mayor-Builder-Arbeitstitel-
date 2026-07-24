@@ -249,7 +249,10 @@ export interface SmartRoadPlanView {
   controlPoints: RoadControlPointView[];
   tiles: SmartRoadPlanTileView[];
   lengthTiles: number;
+  /** Geld-Anteil der Gesamtkosten (Metrik-Ton/Button-Kurzform). */
   cost: number;
+  /** Vollständige Materialkosten inkl. Holz o. Ä. (§18.3 „gezeigter = gezahlter Preis"). */
+  costs: Partial<Record<string, number>>;
   bridgeCount: number;
   elevatedCount: number;
   blockedCount: number;

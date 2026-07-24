@@ -51,6 +51,8 @@ export const buildingDefSchema = z.object({
     maxSlope: z.number().positive().optional(),
     bridgeCostPerTile: z.record(resourceId, z.number().nonnegative()).optional(),
   }).optional(),
+  // Bau auf Fels/Gebirge (§ Steinbruch) — flache Felsschelfe statt Klippenwände.
+  buildsOnRock: z.object({ maxSlope: z.number().positive().optional() }).optional(),
   waterfront: z.object({
     landWidth: z.number().int().positive(),
     landDepth: z.number().int().positive(),

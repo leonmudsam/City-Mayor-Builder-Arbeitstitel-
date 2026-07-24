@@ -17,10 +17,18 @@ Expansion — Straßen können heute nur ebenes Land bebauen. Höhenstraßen/Br�
 der Unblocker.
 
 **Phasen (Reihenfolge = Umsetzung):**
-- 🟡 **I1 Höhenstraßen & automatische Brücken** (in Arbeit, v0.84): Straßen-Bauklasse
+- ✅ **I1 Höhenstraßen & automatische Brücken** (v0.84): Straßen-Bauklasse
   `RoadClassDef` (Wasser/Klippe/Steigung queren), Def `road_elevated`,
   `validatePlacement`/`analyseRoadPath`/`roadPathPreview` je Straßentyp, Brückendeck+
   Pfeiler im Renderer. Additiv (kein Save-Bump).
+  - ✅ **I1-Testfixes (v0.85):** Planer-Kosten zeigen **alle** Materialien inkl. Holz +
+    konkreten Fehlbetrag (nicht nur „Stadtbudget", §18.3); isoliertes Ein-Kachel-
+    „Braucht Anschluss…"-Banner beim Straßenplanen unterdrückt (Planer = alleinige
+    Instanz). Zusätzlich **Steinbruch auf Fels bebaubar** (additiv
+    `BuildingDef.buildsOnRock?: { maxSlope? }`, flache Felsschelfe; kein neues
+    Platzierungssystem). Tests: `tests/quarryRock.test.ts`.
+  - ⏳ Offen (I1-Verfeinerung, nicht vortäuschen): steinerne Prachtbrücken, echte
+    Pfeilertiefe bis zum Wasserboden, Rampenlängen.
 - ❌ **I2 Saubere Straßenstruktur** (Snap/Kurven/lückenlos, Vorschau grün/gelb/rot).
   **Erledigt zugleich 10.0-R6** (terrainbasierter A→B, Kontrollpunkte, atomarer Command).
 - ❌ **I3 Küste/Ufer + Anleger als Netzknoten** (Straße↔Anleger↔Schiff). **Erledigt

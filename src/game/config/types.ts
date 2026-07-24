@@ -214,6 +214,14 @@ export interface BuildingDef {
    * Fehlt das Feld → Bodenstraße (Wasser/Klippe/Steilhang gesperrt).
    */
   road?: RoadClassDef;
+  /**
+   * Bau auf sonst unbebaubarem Fels/Gebirge (§ Steinbruch). Erlaubt
+   * Gebirgskacheln als Untergrund und ersetzt die pauschale Gebirgs-/
+   * Klippensperre durch eine echte Steilheitsgrenze (`maxSlope`, Vorgabe 2):
+   * nur flache Felsschelfe sind bebaubar, senkrechte Wände bleiben gesperrt.
+   * Rein additiv — Gebäude ohne dieses Feld bleiben exakt wie bisher gesperrt.
+   */
+  buildsOnRock?: { maxSlope?: number };
   /** Zusätzlicher Wasser-Footprint für Anleger/Häfen. */
   waterfront?: WaterfrontFootprint;
   unlockLevel: number;
