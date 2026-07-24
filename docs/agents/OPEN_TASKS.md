@@ -261,10 +261,13 @@ Dateistellen: `CORE_GAMEPLAY_OVERHAUL_AUDIT.md`.
    Korrigiert in einem Zug `pickTileAt`, `updateGhostAt`, `paint`, `selectAt` und
    den Cursor-Zoom (`CameraInputController.onWheel` → `groundAt`); Ebenen-Fallback
    für Himmel-/Horizontklicks. 6 Tests (`terrainPicking.test.ts`). Keine Save-Änderung.
-2. **Kamera im Baumodus (Audit §2.2).** In `CameraInputController.onPointerDown`
-   belegt LMB beim Platzieren den `build`-Modus und RMB ist fest `cancel` —
-   Schwenken und Drehen sind praktisch unmöglich. Belegung gemäß §10.3 neu
-   ordnen, ohne den Bauentwurf zu verlieren.
+2. ✅ **ERLEDIGT (v0.95) — Kamera im Baumodus (Audit §2.2).** Belegung §10.3 über
+   eine reine, unit-getestete Stelle `src/renderer/three/cameraInputMapping.ts`
+   (`deriveDragMode`/`deriveClickAction`): Mitteltaste schwenkt, Rechts-Zug dreht,
+   Rechts-Klick bricht ab, `Strg`+Linkszug dreht (auch beim Platzieren) — der
+   Bauentwurf überlebt jede Kamerabewegung (Zug ↔ Klick strikt getrennt). Der
+   `CameraInputController` nutzt nur noch diese Funktionen; kein neues Eingabesystem,
+   keine Save-Änderung. 6 Tests (`camera.test.ts`).
 3. Echter GLB-Ghost inkl. Rotation, Sockel, Anschlusspunkt und Radius;
    `placementDiagnostics` nutzen.
 4. Verschieben als Entwurf: Ghost an der Zielposition, Ursprung markiert,

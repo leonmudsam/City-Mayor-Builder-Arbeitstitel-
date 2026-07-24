@@ -4,6 +4,58 @@ import { CameraExplorationBoundary } from '../src/renderer/three/CameraExplorati
 import { worldOverviewCenter } from '../src/game/config/startRegion.config.ts';
 import { CAMERA_LIMITS, worldCameraBounds } from '../src/renderer/three/CameraConfig.ts';
 import { DEFAULT_CAMERA_SETTINGS, type CameraSettings } from '../src/renderer/three/cameraSettings.ts';
+import { deriveClickAction, deriveDragMode } from '../src/renderer/three/cameraInputMapping.ts';
+
+const LMB = 0;
+const MMB = 1;
+const RMB = 2;
+
+describe('cameraInputMapping — Belegung §10.3 (G2.2)', () => {
+  it('free roam: LMB zieht = schwenken, LMB-Klick = auswaehlen', () => {
+    expect(deriveDragMode({ button: LMB, ctrlKey: false, isPlacing: false })).toBe('pan');
+    expect(deriveClickAction({ button: LMB, ctrlKey: false, isPlacing: false })).toBe('select');
+  });
+
+  it('beim Platzieren: LMB zieht = malen/bauen, LMB-Klick = setzen', () => {
+    expect(deriveDragMode({ button: LMB, ctrlKey: false, isPlacing: true })).toBe('build');
+    expect(deriveClickAction({ button: LMB, ctrlKey: false, isPlacing: true })).toBe('place');
+  });
+
+  it('Mitteltaste schwenkt in beiden Modi und tut beim Klick nichts', () => {
+    for (const isPlacing of [false, true]) {
+      expect(deriveDragMode({ button: MMB, ctrlKey: false, isPlacing })).toBe('pan');
+      expect(deriveClickAction({ button: MMB, ctrlKey: false, isPlacing })).toBe('none');
+    }
+  });
+
+  it('Rechts-Zug dreht in beiden Modi; nur der Rechts-Klick bricht ab', () => {
+    for (const isPlacing of [false, true]) {
+      expect(deriveDragMode({ button: RMB, ctrlKey: false, isPlacing })).toBe('orbit');
+      expect(deriveClickAction({ button: RMB, ctrlKey: false, isPlacing })).toBe('cancel');
+    }
+  });
+
+  it('Strg+Links dreht auch waehrend des Platzierens; der Strg-Klick tut nichts', () => {
+    expect(deriveDragMode({ button: LMB, ctrlKey: true, isPlacing: true })).toBe('orbit');
+    expect(deriveDragMode({ button: LMB, ctrlKey: true, isPlacing: false })).toBe('orbit');
+    expect(deriveClickAction({ button: LMB, ctrlKey: true, isPlacing: true })).toBe('none');
+  });
+
+  it('der Bauentwurf ueberlebt jede Kamerabewegung: kein Zug verwirft ihn', () => {
+    // Ein Zug (dragged) fuehrt nie zu einer Klickaktion; die einzige verwerfende
+    // Klickaktion ist der Rechts-Klick — also nie waehrend einer Kamera-Drehung/-Schwenk.
+    for (const button of [LMB, MMB, RMB]) {
+      for (const ctrlKey of [false, true]) {
+        const drag = deriveDragMode({ button, ctrlKey, isPlacing: true });
+        // Kein Zug-Modus ist selbst „abbrechen"; Abbruch entsteht nur aus einem Klick.
+        expect(drag === 'pan' || drag === 'orbit' || drag === 'build').toBe(true);
+      }
+    }
+    // Waehrend des Bauens dreht Rechts-Zug (kein Abbruch); nur der Rechts-Klick bricht ab.
+    expect(deriveDragMode({ button: RMB, ctrlKey: false, isPlacing: true })).toBe('orbit');
+    expect(deriveClickAction({ button: RMB, ctrlKey: false, isPlacing: true })).toBe('cancel');
+  });
+});
 
 const settings = (over: Partial<CameraSettings> = {}) => () => ({ ...DEFAULT_CAMERA_SETTINGS, ...over });
 

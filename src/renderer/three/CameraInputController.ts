@@ -1,18 +1,20 @@
-// CameraInputController (v0.30) — all raw input for the 3D map lives here, so the
-// renderer stays about rendering and the CameraController3D stays pure. It maps
-// mouse, wheel, keyboard and (multi-)touch to camera intents + host callbacks,
-// gates camera actions during build mode, and gives cursor feedback.
+// CameraInputController (v0.30; Belegung §10.3 seit v0.95) — all raw input for the
+// 3D map lives here, so the renderer stays about rendering and the CameraController3D
+// stays pure. It maps mouse, wheel, keyboard and (multi-)touch to camera intents +
+// host callbacks and gives cursor feedback. The button→intent mapping is the pure,
+// unit-tested cameraInputMapping module — camera and build stay fully usable at once.
 //
-// Desktop:
-//   LMB drag ................ pan ("grab the map")
-//   CTRL+LMB drag / MMB drag  orbit (yaw) + tilt (pitch)
+// Desktop (identisch beim Bauen und beim freien Umsehen — §10.3):
+//   LMB drag ................ pan ("grab the map"), beim Platzieren: bauen/malen
+//   MMB drag ................ pan (schwenkt)
+//   RMB drag ................ orbit (yaw) + tilt (pitch)
+//   RMB click ............... cancel / deselect (verwirft auch den Bauentwurf)
+//   CTRL+LMB drag ........... orbit — auch waehrend des Platzierens
 //   Wheel ................... zoom toward the cursor
-//   RMB (click) ............. cancel / deselect (never pans)
 //   WASD / arrows ........... pan     Q/E yaw   PageUp/PageDown tilt
 //   +/- ..................... zoom    Space focus city   F focus selection
 //   Shift ................... move faster
-// Build mode: LMB is reserved for placing/painting — the camera never moves on
-// LMB; pan via MMB drag or the keyboard, orbit via CTRL+LMB/MMB.
+// Der Bauentwurf ueberlebt jede Kamerabewegung: nur ein Rechts-Klick bricht ab.
 //
 // Touch (prepared for mobile):
 //   1 finger drag ........... pan          tap ......... select
@@ -20,6 +22,7 @@
 //   2 finger vertical ....... tilt (pitch)
 
 import type { CameraController3D } from './CameraController3D.ts';
+import { deriveClickAction, deriveDragMode, type PointerButtons } from './cameraInputMapping.ts';
 import { getCameraSettings } from './cameraSettings.ts';
 
 const DRAG_THRESHOLD = 5;
@@ -41,7 +44,8 @@ export interface CameraInputHost {
   groundAt(clientX: number, clientY: number): { x: number; z: number } | undefined;
 }
 
-type Mode = 'none' | 'pan' | 'orbit' | 'build' | 'cancel';
+// Zug-Modus der aktuellen Geste (Klickaktionen entstehen getrennt via deriveClickAction).
+type Mode = 'none' | 'pan' | 'orbit' | 'build';
 
 export class CameraInputController {
   private pointers = new Map<number, { x: number; y: number }>();
@@ -51,6 +55,8 @@ export class CameraInputController {
   private lastX = 0;
   private lastY = 0;
   private dragging = false;
+  // Welche Taste die aktuelle Geste eroeffnet hat — bestimmt die Klickaktion beim Loslassen.
+  private downButtons: PointerButtons = { button: 0, ctrlKey: false, isPlacing: false };
   private held = new Set<string>();
   private hovering = false;
   private hoverX = 0;
@@ -108,18 +114,9 @@ export class CameraInputController {
     this.startX = this.lastX = e.clientX;
     this.startY = this.lastY = e.clientY;
     this.dragging = false;
-    if (this.host.isPlacing() && e.button === 0) {
-      this.mode = 'build';
-    } else if (e.button === 1 || (e.button === 0 && e.ctrlKey)) {
-      this.mode = 'orbit';
-    } else if (e.button === 0) {
-      this.mode = 'pan';
-      this.cam.beginPan();
-    } else if (e.button === 2) {
-      this.mode = 'cancel';
-    } else {
-      this.mode = 'none';
-    }
+    this.downButtons = { button: e.button, ctrlKey: e.ctrlKey, isPlacing: this.host.isPlacing() };
+    this.mode = deriveDragMode(this.downButtons);
+    if (this.mode === 'pan') this.cam.beginPan();
     this.setCursor();
   };
 
@@ -170,10 +167,12 @@ export class CameraInputController {
     }
     if (this.mode === 'pan') this.cam.endPan();
     if (!this.dragging) {
-      // A click (no drag).
-      if (this.mode === 'build') this.host.place(e.clientX, e.clientY);
-      else if (this.mode === 'cancel') this.host.cancel();
-      else if (this.mode === 'pan') this.host.selectAt(e.clientX, e.clientY);
+      // A click (no drag): the button decides. Only a right-click cancels; every
+      // camera drag leaves the build draft untouched (§10.3).
+      const action = deriveClickAction(this.downButtons);
+      if (action === 'place') this.host.place(e.clientX, e.clientY);
+      else if (action === 'cancel') this.host.cancel();
+      else if (action === 'select') this.host.selectAt(e.clientX, e.clientY);
     }
     this.mode = 'none';
     this.dragging = false;

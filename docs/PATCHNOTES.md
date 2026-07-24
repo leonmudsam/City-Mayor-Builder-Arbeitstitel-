@@ -1,5 +1,65 @@
 # Patch Notes
 
+## v0.95 — Bauen 8.0 / G2 ②: Kamera bleibt im Baumodus voll bedienbar (Save v21)
+
+### Was
+
+- **Während des Platzierens lässt sich die Karte jetzt frei bewegen.** Mittlere Taste
+  **schwenkt**, rechte Taste **zieht = drehen/neigen**, Mausrad zoomt, `Strg`+Linkszug
+  dreht — alles, **ohne den Bauentwurf zu verlieren**. Ein bewusster **Rechts-Klick**
+  (ohne Zug) bricht das Platzieren ab. Die linke Taste baut/malt wie bisher.
+- Dieselbe, jetzt konsistente Belegung gilt auch beim freien Umsehen: die Mitteltaste
+  schwenkt überall (statt zu orbitieren), Drehen liegt einheitlich auf Rechts-Zug bzw.
+  `Strg`+Links.
+
+### Warum
+
+- Kamerafehler im Baumodus (Audit §2.2): Beim Platzieren belegte die **linke** Taste
+  fest den `build`-Modus (kein Schwenken per Linkszug) und die **rechte** Taste war fest
+  `cancel` (kein Drehen). Es blieb praktisch nur die Mitteltaste + Mausrad — die Karte
+  ließ sich beim Bauen kaum ausrichten. Verbindliche Zielbelegung: §10.3.
+
+### Architektur
+
+- **Eine reine, testbare Stelle** `src/renderer/three/cameraInputMapping.ts`
+  (`deriveDragMode` + `deriveClickAction`) bildet `(Taste, Strg, Platzierungszustand)`
+  auf Zug- bzw. Klickabsicht ab. **Bewusst frei von three.js/React** → deterministisch
+  unit-testbar. Der `CameraInputController` ruft nur noch diese Funktionen statt einer
+  verzweigten Inline-Logik.
+- **Trennung Zug ↔ Klick:** Der Zug-Modus (`pan`/`orbit`/`build`) steuert die
+  Kamerabewegung; die Klickaktion (`place`/`select`/`cancel`) entsteht **getrennt** beim
+  Loslassen aus der gedrückten Taste. Dadurch verwirft **keine** Kamera-Geste den
+  Entwurf — nur der Rechts-Klick tut es (§10.3: „Der Bauentwurf überlebt jede
+  Kamerabewegung").
+- **Kein neues Eingabesystem**: derselbe Controller, dieselben `CameraController3D`-
+  Aufrufe (`beginPan`/`panScreen`/`orbit`); nur die Ableitung ist herausgezogen und
+  präzisiert. WASD/Pfeile, Q/E, PageUp/Down, Randscrollen und Touch bleiben unverändert.
+- **Keine Save-Änderung** (v21), rein interaktiv.
+
+### Auswirkung
+
+- `tsc` · ESLint · **406 Vitest grün** (+6 in `camera.test.ts` zur Modusableitung — u. a.
+  „Rechts-Zug dreht in beiden Modi; nur der Rechts-Klick bricht ab" und „der Bauentwurf
+  überlebt jede Kamerabewegung") · Vite-Build. 3D-Init-Smoke (Chromium): Renderer
+  initialisiert mit geändertem Input-Controller, 0 Konsolenfehler.
+
+### Zukunft — G2-Reste (nächste Schritte, Reihenfolge zwingend)
+
+- ③ echter GLB-Ghost mit Rotation/Sockel/Anschluss/Radius (`placementDiagnostics`),
+  ④ Verschieben als Entwurf, ⑤ Wirkungsradien terrainfolgend (`getCoverageOverlay`),
+  ⑥ Straßenbau als Plan→Vorschau→Bestätigen. Mit korrektem Picking (①) und bedienbarer
+  Kamera (②) ist die Basis für die sichtbare Bau-Vorschau gelegt.
+
+### Dateien
+
+- `src/renderer/three/cameraInputMapping.ts` (neu),
+  `src/renderer/three/CameraInputController.ts` (Belegung §10.3, nutzt das Mapping),
+  `tests/camera.test.ts` (+6 Modusableitungs-Tests).
+
+### Assets
+
+- Keine neuen Assets.
+
 ## v0.94 — Bauen 8.0 / G2 ①: Cursor trifft die richtige Kachel auf Hängen & Bergen (Save v21)
 
 ### Was

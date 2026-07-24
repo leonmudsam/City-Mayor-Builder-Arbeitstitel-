@@ -95,7 +95,10 @@ Transport (A5), zentraler Start (S1/S2), Fog/Kamera (S3).
   reiner Helfer `terrainPicking.ts` (`raycastHeightfield`) treibt `groundPointAt` →
   `pickTileAt`/`updateGhostAt`/`paint`/`selectAt`/Cursor-Zoom treffen auf Hängen
   exakt. `terrainHeightAt` bleibt einzige Höhenquelle. 6 Tests. Keine Save-Änderung.
-- ❌ `[P1]` ② Kamera im Baumodus (LMB/RMB-Belegung, §10.3).
+- ✅ `[P1]` ② **Kamera im Baumodus** (§10.3, v0.95): reine Stelle
+  `cameraInputMapping.ts` (`deriveDragMode`/`deriveClickAction`) — Mitteltaste
+  schwenkt, Rechts-Zug dreht, Rechts-Klick bricht ab, `Strg`+Links dreht; Bauentwurf
+  überlebt jede Kamerabewegung. 6 Tests. Keine Save-Änderung.
 - ❌ `[P1]` ③ Echter GLB-Ghost (Rotation/Sockel/Anschluss/Radius, `placementDiagnostics`).
 - ❌ `[P1]` ④ Verschieben als Entwurf (Ghost, Ursprung, Bestätigung = 1 Command).
 - ❌ `[P1]` ⑤ Wirkungsradien terrainfolgend (`getCoverageOverlay`).
