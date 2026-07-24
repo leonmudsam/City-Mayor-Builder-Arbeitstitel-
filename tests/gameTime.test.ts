@@ -49,10 +49,10 @@ describe('P-B Ingame-Zeit — Uhr ist reine Projektion der Simulationszeit', () 
     expect(start.seasonKey).toBe('spring');
   });
 
-  it('1× lässt die Uhr in Echtzeit laufen (1 Ingame-Min je 10 Echtzeit-Sek)', () => {
+  it('1× lässt die Uhr in Echtzeit laufen (1 Ingame-Min je SIM_MS_PER_GAME_MINUTE)', () => {
     const { controller } = newController();
     controller.setSpeed(1);
-    controller.advanceByRealTime(SIM_MS_PER_GAME_MINUTE, false); // 10 s real
+    controller.advanceByRealTime(SIM_MS_PER_GAME_MINUTE, false);
     expect(controller.getGameClock().minute).toBe(1);
   });
 

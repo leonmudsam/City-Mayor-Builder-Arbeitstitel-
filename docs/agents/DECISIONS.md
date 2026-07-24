@@ -20,15 +20,20 @@ React** (§7.4). Der manuelle Tageszeit-Regler und der Speed-`dayLengthMin`-Hack
 (zweite, widersprüchliche Zeit) sind entfernt. **Keine Save-Änderung** (v21) — die Uhr
 projiziert nur `createdAt`/`lastSimTime`.
 
-**Bewusst offen:** Der Tag/Nacht-**Himmel** bleibt vorerst ein eigener kosmetischer
-Zyklus (voller Ingame-Tag = 4 Echtzeitstunden bei 1× → strikte Kopplung würde die
-Sonne optisch einfrieren); „Sonne an die Uhr slaven" ist ein kleiner umkehrbarer
-Folgeschritt. **P-B2** stellt Bau-/Upgrade-/Arbeits-/Transportdauern auf Ingame-Minuten
-um und balanciert sie neu (§9).
+**Feinschliff nach Nutzertest (v0.89):** Der Nutzer wählte eine **schnellere Uhr**
+und eine **an die Uhr gekoppelte Sonne**. Umsetzung: `SIM_MS_PER_GAME_MINUTE = 4000`
+(1× → 1 Ingame-Min je 4 Echtzeit-Sek; voller Tag = 96 Echtzeitminuten bei 1×, 24 bei
+4×) und die Sonne folgt der Uhr — der HUD treibt `environmentSettings.timeOfDay` aus
+`getGameClock().timeOfDay` (cycle aus); bei Pause steht die Uhr → steht die Sonne. Der
+manuelle Tageszeit-Regler ist auch aus dem Wetter-Panel entfernt (die Uhr besitzt die
+Zeit); dort bleibt nur die reine Wetter-Atmosphäre.
 
-**Verworfen:** ein Echtzeit-Timer in React; die Sonne sofort an eine 4-Stunden-Tages-
-länge zu koppeln; Dauern in P-B1 schon umzurechnen (bewusst nach P-B2 verschoben,
-damit die 387 Tests grün bleiben und der Nutzer die Uhr-Feel zuerst testen kann).
+**P-B2** stellt Bau-/Upgrade-/Arbeits-/Transportdauern auf Ingame-Minuten um und
+balanciert sie neu (§9), auf Basis der bestätigten 4-Sekunden-Ratio.
+
+**Verworfen:** ein Echtzeit-Timer in React; Dauern in P-B1 schon umzurechnen (bewusst
+nach P-B2 verschoben, damit die Tests grün bleiben und der Nutzer die Uhr-Feel zuerst
+testet).
 
 ## D-037 — Spielbarkeits-Auftrag vorgezogen; Stadtarbeit über einen eingefrorenen Planungssnapshot stabilisiert
 

@@ -39,17 +39,19 @@ Der eigentliche Fehler war also die **entkoppelte Anzeige**, nicht die Simulatio
   „Tag N · HH:MM · Jahreszeit", bei Pause „· Pausiert". Der manuelle Tageszeit-
   Regler und der Speed-`dayLengthMin`-Hack sind entfernt (waren Parallelzeit).
 
-## 3. Bewusste Entscheidung: Sonne/Atmosphäre bleibt (vorerst) kosmetisch getrennt
+## 3. Ratio & Sonne (Nutzerentscheid nach Test, v0.89)
 
-Die **verbindliche Ingame-Zeit** ist die HUD-Uhr (aus `lastSimTime`). Der
-**Tag/Nacht-Himmel** (`SkyEnvironment`/`environmentSettings`) bleibt in P-B1 ein
-**eigenständiger, rein visueller** Zyklus (wie in CLAUDE.md dokumentiert: „Wetter
-bleibt reine Darstellung … keinerlei Simulations-/Save-Wirkung"; §7.3 „Die
-Jahreszeit bleibt separat"). Grund: ein voller Ingame-Tag dauert bei 1× vier
-Echtzeitstunden; die Sonne strikt daran zu koppeln, würde den lebendigen
-Himmel-Zyklus optisch einfrieren. Die Sonne an die Uhr zu **slaven** ist ein
-kleiner, umkehrbarer Folgeschritt, falls der Nutzer eine exakt gekoppelte Sonne
-bevorzugt — dokumentiert offen, nicht vorgetäuscht.
+Der Nutzer wählte eine **schnellere Uhr** und eine **an die Uhr gekoppelte Sonne**:
+
+- `SIM_MS_PER_GAME_MINUTE = 4000` — 1× → 1 Ingame-Minute je **4 Echtzeitsekunden**
+  (15 Ingame-Min/Echtzeitmin). Voller Ingame-Tag = **96 Echtzeitminuten** bei 1×,
+  48 bei 2×, **24 bei 4×** — lebendig genug für eine sichtbar wandernde Sonne.
+- **Sonne gekoppelt:** der HUD (`DayNightControl`, immer gemountet) treibt
+  `environmentSettings.timeOfDay` aus `getGameClock().timeOfDay` (cycle aus). Bei
+  Pause steht die Uhr → steht die Sonne. Schritt je Ingame-Minute (winzig bei
+  1440-Min-Tag → optisch glatt). Der manuelle Tageszeit-Regler ist auch aus dem
+  Wetter-Panel entfernt — die Uhr besitzt die Zeit; dort bleibt nur die reine
+  Wetter-Atmosphäre (klar/Regen/Nebel), weiterhin ohne Sim-/Save-Wirkung.
 
 ## 4. Offen — P-B2 (Dauern in Ingame-Zeit + Rebalancing)
 

@@ -1,5 +1,47 @@
 # Patch Notes
 
+## v0.89 — Spielbarkeit 9.1 / P-B1 Feinschliff: schnellere Uhr + gekoppelte Sonne (Save v21)
+
+### Was
+
+- **Die Uhr läuft jetzt lebendiger.** Nach dem Test wurde das Tempo erhöht: **1× = 1
+  Ingame-Minute je 4 Echtzeitsekunden** (statt 10). Ein voller Ingame-Tag dauert bei
+  1× rund 96 Echtzeitminuten, bei 4× nur 24.
+- **Die Sonne folgt jetzt der Uhr.** Tag/Nacht am Himmel ist an die **eine** Ingame-Zeit
+  gekoppelt: Der Sonnenstand entspricht der Uhrzeit, und bei Pause steht auch die Sonne.
+  Der frühere manuelle Tageszeit-Regler ist damit überflüssig und aus dem Wetter-Panel
+  entfernt — dort bleibt nur noch die reine **Wetter-Atmosphäre** (Sonnig/Regen/Nebel).
+
+### Warum
+
+- Direkte Umsetzung der Nutzer-Rückmeldung zu P-B1 (24.07.2026): „schnellere Uhr
+  (3–5 s/Min)" und „Sonne an die Uhr koppeln". Mit dem kürzeren Ingame-Tag wandert die
+  gekoppelte Sonne sichtbar, statt einzufrieren.
+
+### Architektur
+
+- Zentrale Zahl `SIM_MS_PER_GAME_MINUTE` von 10 000 → **4 000**. Kopplung: `DayNightControl`
+  (immer im HUD gemountet) treibt `environmentSettings.timeOfDay` aus
+  `getGameClock().timeOfDay` (cycle aus) — kein Renderer-Code geändert, nur ein bereits
+  vorhandener, geklammerter Eingang wird jetzt aus der Uhr gespeist. `WeatherPanel` auf
+  reine Atmosphäre reduziert. Keine Save-Änderung (v21).
+
+### Auswirkung
+
+- `tsc` · ESLint · **387 Vitest grün** · Vite-Build. Kein 3D-Renderer-Code berührt; der
+  Live-3D-Smoke läuft in dieser Umgebung nicht (kein Playwright) — die In-Game-Prüfung
+  des Nutzers bestätigt die Sonne.
+
+### Dateien
+
+- `src/game/time/gameTime.ts` (Ratio 4 s), `src/components/hud/CameraControls.tsx`
+  (Sonnen-Kopplung), `src/components/panels/WeatherPanel.tsx` (nur Atmosphäre),
+  `tests/gameTime.test.ts`, `docs/agents/INGAME_TIME_SYSTEM.md`, DECISIONS **D-038**.
+
+### Assets
+
+- Keine neuen Assets.
+
 ## v0.88 — Spielbarkeit 9.1 / P-B1: EINE verbindliche Ingame-Zeit + sichtbare Uhr (Save v21)
 
 ### Was

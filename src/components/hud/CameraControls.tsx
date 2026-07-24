@@ -3,6 +3,7 @@ import { CloudFog, CloudRain, CloudSun, Grid3x3, Plus, Minus, Compass, Pause, Pl
 import { getMapApi, useGame, useUiStore } from '../../state/store.ts';
 import {
   getEnvironmentSettings,
+  setEnvironmentSettings,
   subscribeEnvironmentSettings,
 } from '../../renderer/three/environmentSettings.ts';
 import { formatClockTime } from '../../game/time/gameTime.ts';
@@ -84,6 +85,13 @@ export function DayNightControl() {
   useEffect(() => subscribeEnvironmentSettings(() => setEnv(getEnvironmentSettings())), []);
   const speed = game.getSpeed();
   const gameClock = game.getGameClock();
+  // § P-B (D-038, Nutzerentscheid): die Sonne ist an die EINE Uhr gekoppelt — der
+  // Renderer-`timeOfDay` folgt der Ingame-Uhrzeit (cycle aus, die Uhr treibt ihn).
+  // Bei Pause steht die Uhr → steht die Sonne. Schritt je Ingame-Minute (winzig bei
+  // 1440-Minuten-Tag → optisch glatt); kein eigener Timer.
+  useEffect(() => {
+    setEnvironmentSettings({ timeOfDay: gameClock.timeOfDay, cycle: false });
+  }, [gameClock.timeOfDay]);
   const WeatherIcon = env.weather === 'rain' ? CloudRain : env.weather === 'fog' ? CloudFog : CloudSun;
   const weatherLabel =
     env.weather === 'rain' ? t('ui.weather.rain') : env.weather === 'fog' ? t('ui.weather.fog') : t('ui.weather.clear');

@@ -12,12 +12,15 @@ import type { GameState } from '../types.ts';
 // keine Renderer-/React-Importe (CLAUDE.md §1).
 
 /**
- * Simulationszeit (ms), die einer **Ingame-Minute bei 1×** entspricht: 10 s (§7).
+ * Simulationszeit (ms), die einer **Ingame-Minute bei 1×** entspricht: 4 s.
  * Da `lastSimTime` bei 1× in Echtzeit läuft, vergeht so bei 1× eine Ingame-Minute
- * je 10 Echtzeitsekunden (6 Ingame-Minuten je Echtzeitminute); 2× → 5 s, 4× →
- * 2,5 s. Zentrale Zahl — kein anderes System darf einen eigenen Faktor führen.
+ * je 4 Echtzeitsekunden (15 Ingame-Minuten je Echtzeitminute); 2× → 2 s, 4× → 1 s.
+ * Ein voller Ingame-Tag (1440 Min) dauert damit bei 1× 96 Echtzeitminuten, bei 4×
+ * 24 — lebendig genug, um die an die Uhr **gekoppelte** Sonne sichtbar wandern zu
+ * lassen (Nutzerentscheid 24.07.2026: schnellere Uhr + gekoppelte Sonne, D-038).
+ * Zentrale Zahl — kein anderes System darf einen eigenen Zeitfaktor führen.
  */
-export const SIM_MS_PER_GAME_MINUTE = 10_000;
+export const SIM_MS_PER_GAME_MINUTE = 4_000;
 
 export const GAME_MINUTES_PER_HOUR = 60;
 export const GAME_MINUTES_PER_DAY = 24 * 60;
