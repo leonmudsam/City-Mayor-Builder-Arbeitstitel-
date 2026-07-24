@@ -1,5 +1,52 @@
 # Patch Notes
 
+## v0.92 — Spielbarkeit 9.1 / P-D: Straßenstart am isolierten Anleger (lokales Netz hinter Wasser) (Save v21)
+
+### Was
+
+- **Straßen lassen sich jetzt direkt an einem Anleger/Hafen beginnen** — auch wenn er
+  noch nicht ans Hauptstraßennetz angeschlossen ist. So kann man hinter einer
+  Wasserverbindung einen neuen Stadtteil erschließen: der Anleger ist ein
+  **Landanker**, an dem ein **lokales Straßennetz** entsteht und **weiterwächst**.
+
+### Warum
+
+- P-D des Spielbarkeits-Auftrags (§11.2): „Straßen können an noch nicht angeschlossene
+  Anleger teilweise nicht sinnvoll angebaut werden." Bisher seedete der Straßengraph
+  nur aus Distriktzentren — hinter dem Wasser kam man nicht weiter.
+
+### Architektur
+
+- **Kein zweiter Verkehrsgraph (§2):** Jedes `waterfront`-Gebäude ist jetzt ein
+  Saatpunkt desselben Straßengraphen. `roadWouldConnect` erlaubt die erste Straße an
+  der Anleger-Landkante; `computeRoadNetwork` nimmt Anleger-Footprints als Seeds auf,
+  sodass die anliegenden Straßen einen zusammenhängenden, **erweiterbaren** lokalen
+  Verbund bilden (BFS). Gemeinsamer Helfer `adjacentToFootprintEdge` (Distriktzentrum
+  wie Anleger). Derselbe `validatePlacement`/`roadNetwork`-Pfad.
+- **Keine Save-Änderung** (v21) — Straßen/Anleger sind Gebäude-Instanzen.
+
+### Auswirkung
+
+- `tsc` · ESLint · **394 Vitest grün** (neu: `harborNetwork.test.ts`, 3 Fälle) · Vite-Build.
+
+### Zukunft — I4 „voll ausgebaut" (eigener Meilenstein, nicht vorgetäuscht)
+
+- Persistente **Schiffsrouten** Anleger↔Anleger (Kapazität, Reisezeit, Betriebskosten,
+  Warenfluss, Pause/Löschen) mit **linearer Save-Migration**; Anleger-Netzknoten-Panel;
+  multimodale Stadtarbeit (Straße→Schiff→Straße). Bausteine vorhanden
+  (`waterNavigation.ts`, `buildingInfrastructure.ts`, `operations/transport.ts`). Details:
+  `docs/agents/HARBOR_INFRASTRUCTURE_GRAPH.md`.
+
+### Dateien
+
+- `src/game/buildings/placement.ts` (`roadWouldConnect` + `adjacentToFootprintEdge`),
+  `src/game/map/world.ts` (`computeRoadNetwork` seedet Anleger),
+  `tests/harborNetwork.test.ts` (neu), `docs/agents/HARBOR_INFRASTRUCTURE_GRAPH.md` (neu).
+
+### Assets
+
+- Keine neuen Assets.
+
 ## v0.91 — Spielbarkeit 9.1 / P-C: Handkarren ab Level 2 + Lager nach Standort sichtbar (Save v21)
 
 ### Was

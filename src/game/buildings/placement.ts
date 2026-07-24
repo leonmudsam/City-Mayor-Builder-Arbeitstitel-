@@ -295,10 +295,26 @@ function roadWouldConnect(state: GameState, config: GameConfig, derived: Derived
     if (!center) continue;
     const def = config.buildings.get(center.defId);
     if (!def) continue;
-    const inX = x >= center.x - 1 && x <= center.x + def.size.w;
-    const inY = y >= center.y - 1 && y <= center.y + def.size.h;
-    const corner = (x === center.x - 1 || x === center.x + def.size.w) && (y === center.y - 1 || y === center.y + def.size.h);
-    if (inX && inY && !corner) return true;
+    if (adjacentToFootprintEdge(x, y, center.x, center.y, def.size.w, def.size.h)) return true;
+  }
+  // § P-D (§11.2): Ein Anleger/Hafen ist ein Infrastruktur-LANDANKER. Eine Straße
+  // darf an seiner Landkante beginnen, auch wenn er noch NICHT ans Hauptstraßennetz
+  // angeschlossen ist — so entsteht hinter einer Wasserverbindung ein lokales
+  // Straßennetz (Straße → Anleger → Schiff → Anleger → Straße). Kein zweiter Graph:
+  // der Anleger sät den Start wie ein Distriktzentrum.
+  for (const building of Object.values(state.buildings)) {
+    if (building.status !== 'active') continue;
+    const def = config.buildings.get(building.defId);
+    if (!def?.waterfront) continue;
+    if (adjacentToFootprintEdge(x, y, building.x, building.y, def.size.w, def.size.h)) return true;
   }
   return false;
+}
+
+/** Kachel (x,y) liegt an einer Kante (nicht Ecke) des Footprints (bx,by,w,h)? */
+function adjacentToFootprintEdge(x: number, y: number, bx: number, by: number, w: number, h: number): boolean {
+  const inX = x >= bx - 1 && x <= bx + w;
+  const inY = y >= by - 1 && y <= by + h;
+  const corner = (x === bx - 1 || x === bx + w) && (y === by - 1 || y === by + h);
+  return inX && inY && !corner;
 }

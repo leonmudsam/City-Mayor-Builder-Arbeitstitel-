@@ -383,25 +383,33 @@ export function findDistrictCenterSpot(
 export function computeRoadNetwork(state: GameState, config: GameConfig): Set<string> {
   const roads = new Set<string>();
   const seeds: string[] = [];
-  const centerFootprints: { x: number; y: number; w: number; h: number }[] = [];
+  // Netz-Saatpunkte: Distriktzentren UND Anleger/Häfen (§ P-D, §11.2). Ein Anleger
+  // ist ein Infrastruktur-Landanker — an ihm entsteht auch ohne Anschluss ans
+  // Hauptnetz ein extendierbares lokales Straßennetz hinter einer Wasserverbindung.
+  const seedFootprints: { x: number; y: number; w: number; h: number }[] = [];
 
   for (const district of Object.values(state.world.districts)) {
     const center = state.buildings[district.centerBuildingId];
     if (!center) continue;
     const def = config.buildings.get(center.defId);
-    if (def) centerFootprints.push({ x: center.x, y: center.y, w: def.size.w, h: def.size.h });
+    if (def) seedFootprints.push({ x: center.x, y: center.y, w: def.size.w, h: def.size.h });
+  }
+  for (const b of Object.values(state.buildings)) {
+    if (b.status !== 'active') continue;
+    const def = config.buildings.get(b.defId);
+    if (def?.waterfront) seedFootprints.push({ x: b.x, y: b.y, w: def.size.w, h: def.size.h });
   }
 
   for (const b of Object.values(state.buildings)) {
     if (config.buildings.get(b.defId)?.category !== 'roads') continue;
     const key = `${b.x},${b.y}`;
     roads.add(key);
-    const nextToCenter = centerFootprints.some(
+    const nextToSeed = seedFootprints.some(
       (f) => b.x >= f.x - 1 && b.x <= f.x + f.w && b.y >= f.y - 1 && b.y <= f.y + f.h &&
         // orthogonal adjacency only: inside the expanded box but not a diagonal corner
         !((b.x === f.x - 1 || b.x === f.x + f.w) && (b.y === f.y - 1 || b.y === f.y + f.h)),
     );
-    if (nextToCenter) seeds.push(key);
+    if (nextToSeed) seeds.push(key);
   }
 
   const connected = new Set<string>(seeds);

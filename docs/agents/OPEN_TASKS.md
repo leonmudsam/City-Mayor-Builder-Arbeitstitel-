@@ -37,13 +37,16 @@
   bleibt im `ResourceNetworkPanel`. Additiv, keine Save-Änderung. 4 Tests
   (`earlyLogistics.test.ts`). Doku: `EARLY_LOGISTICS.md`. Offen: echtes Handkarren-
   Modell, weitere Frühstufen, §9-Feintuning.
-- ❌ **P-D Anleger-zu-Anleger-Netz (= Infrastruktur 2.0 I3/I4, voll ausgebaut)**:
-  Straßenstart am **isolierten** Anleger-Landanker (lokales Netz), gemeinsamer
-  Infrastrukturgraph (road/bridge/elevated/harbor_transfer/water_route),
-  Schiffsroutenvorschau + **persistente** Routen (Kapazität, Reisezeit, Betriebskosten,
-  Warenfluss, Pause/Löschen) mit **linearer** Save-Migration. Reuse
-  `buildingInfrastructure.ts`/`waterNavigation.ts`/`operations/transport.ts`. Doku:
-  `HARBOR_INFRASTRUCTURE_GRAPH.md`.
+- 🟡 **P-D Anleger-zu-Anleger-Netz (= Infrastruktur 2.0 I3/I4, voll ausgebaut)**:
+  - ✅ **Straßenstart am isolierten Anleger** (v0.92, §11.2): `waterfront`-Gebäude sind
+    Saatpunkte desselben Straßengraphen (`roadWouldConnect` + `computeRoadNetwork`) →
+    lokales, erweiterbares Straßennetz hinter Wasser; kein zweiter Graph; keine
+    Save-Änderung. 3 Tests (`harborNetwork.test.ts`).
+  - ❌ **I4 „voll ausgebaut"**: persistente Schiffsrouten Anleger↔Anleger (Kapazität,
+    Reisezeit, Betriebskosten, Warenfluss, Pause/Löschen) mit **linearer Save-Migration**;
+    Anleger-Netzknoten-Panel; multimodale Stadtarbeit. Bausteine vorhanden
+    (`waterNavigation.ts`, `buildingInfrastructure.ts`, `operations/transport.ts`). Eigener
+    Meilenstein. Doku: `HARBOR_INFRASTRUCTURE_GRAPH.md`.
 - ❌ **P-E Performance-Pass + FPS-Anzeige**: dauerhafte, **gedrosselte** FPS-Anzeige
   neben der Uhr (Renderer sammelt, ~alle 500 ms ein Snapshot; kein React-Update pro
   Frame); Infrastrukturgraph cachen/versionieren; Rerender-/Marker-/Vegetations-Audit.
