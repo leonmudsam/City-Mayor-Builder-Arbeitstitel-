@@ -12,21 +12,33 @@ Transport (A5), zentraler Start (S1/S2), Fog/Kamera (S3).
 
 ---
 
-## 0. AKTIVER AUFTRAG: § 10.0 — Active Resource Loops, Storage, Smart Roads, Final Compaction `[P0]`
+## 0. AKTIVER AUFTRAG: Infrastruktur 2.0 — Höhenstraßen, Brücken, Schifffahrt `[P0]`
+> Master-Spec: [`INFRASTRUCTURE_2_PLAN.md`](INFRASTRUCTURE_2_PLAN.md) · Entscheid: **D-036**.
+> **Vorgezogen auf ausdrücklichen Nutzerwunsch (24.07.2026):** entscheidender Punkt
+> zum Weiterspielen — die verdichtete Welt (D-035) blockiert Expansion über Höhen/Wasser.
+- 🟡 `[P0]` **I1 Höhenstraßen & automatische Brücken** (v0.84, in Arbeit): Straßen-Bauklasse
+  `RoadClassDef` (Wasser/Klippe/Steigung queren), Def `road_elevated`, Placement/Planung
+  je Straßentyp, Brückendeck+Pfeiler im Renderer. Additiv.
+- ❌ `[P0]` **I2 Saubere Straßenstruktur** (Snap/Kurven, grün/gelb/rot) → **erledigt zugleich R6**.
+- ❌ `[P0]` **I3 Küste/Ufer + Anleger als Netzknoten** → **erledigt zugleich R9**.
+- ❌ `[P0]` **I4 Schifffahrtsnetz** (persistente Routen, Stadtarbeit-Legs; lineare Migration).
+- ❌ `[P1]` **I5 Bevölkerungs-Rebalancing + Infrastruktur-Netz-UI**.
+
+## 0b. ZURÜCKGESTELLT (nach Infrastruktur 2.0): § 10.0 — Active Resource Loops, Storage, Compaction `[P0]`
 > Master-Spec: [`ACTIVE_RESOURCE_LOOPS_10_PLAN.md`](ACTIVE_RESOURCE_LOOPS_10_PLAN.md) ·
 > Audit: [`ACTIVE_RESOURCE_LOOPS_10_AUDIT.md`](ACTIVE_RESOURCE_LOOPS_10_AUDIT.md).
 > Die 10.0-UI ist schon gebaut (real-data-wired); es fehlt die **Sim** dahinter.
 - ✅ R1 Audit (UI voraus, Sim = A1–A5, Welt 512²/34.082/Start 1.400).
-- ❌ `[P0]` R2 Dauerbetrieb (persistentes `workArea`, Auto-Pause/Resume, kein Auto-Delete, Save v20).
-- ❌ `[P0]` R3 Ressourcennetz (`ResourceNetworkSummary` + benannte Standorte + Lagervergleich) → Thema 2/3.
-- ❌ `[P0]` R4 Frühtransport (Handkarren/Handtragen, `InventoryTransferRule`) → Thema 2.
-- ❌ `[P0]` R5 Stadtarbeit Ladungsprognose + Nachfüllmarker → Thema 2.
-- ❌ `[P0]` R6 Straßen A→B terrainbasiert + Kontrollpunkte → **erledigt zugleich Thema 1**.
+- ⏸️ `[P0]` R2 Dauerbetrieb (persistentes `workArea`, Auto-Pause/Resume, kein Auto-Delete, Save v20→v21).
+- ⏸️ `[P0]` R3 Ressourcennetz (`ResourceNetworkSummary` + benannte Standorte + Lagervergleich) → Thema 2/3.
+- ⏸️ `[P0]` R4 Frühtransport (Handkarren/Handtragen, `InventoryTransferRule`) → Thema 2.
+- ⏸️ `[P0]` R5 Stadtarbeit Ladungsprognose + Nachfüllmarker → Thema 2.
+- ➡️ `[P0]` R6 Straßen A→B terrainbasiert + Kontrollpunkte → **wandert in Infrastruktur 2.0 / I2**.
 - ✅ `[P0]` **R7+R8** (D-035, v0.83): dritte Verdichtung X/Z 0,84 (~−44 %) + weiches
   Uferprofil (Nutzerwunsch, Waterfront 636→1.210); 13 Regionen, zentraler Start 9
   (1.668 bebaubar, Küstenzugang), Save v20. 🟡 offen: Ufer-Feinschliff + stärkere
   Bau-Glättung (falls Placement zu steil) → siehe [[shore-transition-request]].
-- ❌ `[P0]` R9 adaptive Uferplattform (Thema 6) · R10 Migration + Balancing.
+- ➡️ `[P0]` R9 adaptive Uferplattform → **wandert in Infrastruktur 2.0 / I3** · R10 Migration + Balancing.
 
 ---
 
@@ -39,11 +51,13 @@ Transport (A5), zentraler Start (S1/S2), Fog/Kamera (S3).
 - 🟡 `[P1]` **Straßenbau als Plan→Vorschau→Bestätigen→Command** (§18.3, Kosten erst
   beim Bestätigen). Vorschau existiert, Bau läuft noch kachelweise sofort.
   (OPEN_TASKS „8.0 G2 Pkt 6".) **Hängt an Pkt 4.①.**
-- ❌ `[P1]` **Brücken / Viadukte / Tunnel spielbar bauen** — aktuell nur gebackene
-  Hooks (6/24/17), nicht baubar: Kosten, Freigaben, Rampen, Pfeiler, Portale,
-  Navigation. (Terrain 6.1 / Häfen 7.0.)
-- ❌ `[P2]` **Straßen-Ausbaustufen/-klassen** (Feldweg→Asphalt→Schnellstraße) —
-  existiert nicht (genau ein `road`-Typ). *War bisher nirgends erfasst.*
+- 🟡 `[P0]` **Höhenstraßen / Brücken spielbar bauen** (Infrastruktur 2.0 / I1, v0.84):
+  Straßen-Bauklasse `road_elevated` überwindet Wasser/Klippe/Steilhang; Deck+Pfeiler
+  automatisch aus dem Terrain. Master-Spec `INFRASTRUCTURE_2_PLAN.md`, D-036.
+- ❌ `[P1]` Viadukte/Tunnel/Portale + Durchfahrtshöhe/Schiffsklassen als weitere
+  Bauklassen/Profile (nach I1). (Terrain 6.1 / Häfen 7.0.)
+- 🟡 `[P0]` **Straßen-Bauklassen** (mehr als ein `road`-Typ) — mit Infrastruktur 2.0/I1
+  eingeführt (`RoadClassDef`). Weitere Stufen (Küstenstraße/Schnellstraße) additiv.
 - ❌ `[P2]` Lane-/Kreuzungsbelegung & Kollisionsvermeidung.
 - ❌ `[P1]` Echte Straßendaten (nicht faken): Qualität/Zustand, Sperrungen,
   dynamischer Verkehr, Steigung/Höhenprofil aus der Straßenprojektion.

@@ -472,8 +472,9 @@ export function buildTransportPlannerView(
 export function buildSmartRoadPlanView(
   game: GameController,
   path: readonly { x: number; y: number }[],
+  roadDefId: string = 'road',
 ): SmartRoadPlanView {
-  const preview = game.roadPathPreview([...path]);
+  const preview = game.roadPathPreview([...path], roadDefId);
   const first = path[0];
   const last = path[path.length - 1];
   const tiles = preview.tiles.map((tile, index) => ({
@@ -488,6 +489,7 @@ export function buildSmartRoadPlanView(
     ...(tile.reason ? { reason: t(`error.${tile.reason}`) } : {}),
   }));
   const money = preview.totalCost.money ?? 0;
+  const bridgeCount = preview.tiles.filter((tile) => tile.status === 'bridge').length;
   const warnings: VisualWarning[] = [];
   if (preview.blocked > 0) {
     warnings.push({
@@ -496,8 +498,12 @@ export function buildSmartRoadPlanView(
       tone: 'danger',
     });
   }
-  if (preview.tiles.some((tile) => tile.status === 'bridge')) {
-    warnings.push({ code: 'road.bridge', label: 'Brückensegmente werden mit den echten Kachelregeln geprüft.', tone: 'info' });
+  if (bridgeCount > 0) {
+    warnings.push({
+      code: 'road.bridge',
+      label: `${bridgeCount} Brückensegment${bridgeCount === 1 ? '' : 'e'} über Wasser/Klippe (Pfeiler-Aufschlag inbegriffen).`,
+      tone: 'info',
+    });
   }
   return {
     ...(first ? { start: { ...first, label: 'Startpunkt' } } : {}),
@@ -506,8 +512,10 @@ export function buildSmartRoadPlanView(
     tiles,
     lengthTiles: preview.buildTiles,
     cost: money,
-    bridgeCount: preview.tiles.filter((tile) => tile.status === 'bridge').length,
-    elevatedCount: 0,
+    bridgeCount,
+    // Höhenstraßen-Landkacheln (Viadukt/Rampe auf Land): alle neu gebauten Kacheln
+    // einer querenden Bauklasse abzüglich der echten Wasser-/Klippen-Brückenkacheln.
+    elevatedCount: game.config.buildings.get(roadDefId)?.road ? Math.max(0, preview.buildTiles - bridgeCount) : 0,
     blockedCount: preview.blocked,
     warnings,
     valid: path.length > 1 && preview.valid,

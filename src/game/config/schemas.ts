@@ -44,6 +44,13 @@ export const buildingDefSchema = z.object({
   sizeClass: z.enum(['XS', 'S', 'M', 'L', 'XL', 'XXL']),
   requiresRoad: z.boolean(),
   infrastructureModes: z.array(z.enum(['road', 'water', 'rail', 'air'])).optional(),
+  // Straßen-Bauklasse (§ Infrastruktur 2.0 / I1) — nur für category 'roads'.
+  road: z.object({
+    crossesWater: z.boolean().optional(),
+    crossesCliff: z.boolean().optional(),
+    maxSlope: z.number().positive().optional(),
+    bridgeCostPerTile: z.record(resourceId, z.number().nonnegative()).optional(),
+  }).optional(),
   waterfront: z.object({
     landWidth: z.number().int().positive(),
     landDepth: z.number().int().positive(),

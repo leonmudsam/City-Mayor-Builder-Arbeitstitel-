@@ -67,8 +67,9 @@ export function analyseRoadPath(
   derived: Derived,
   path: { x: number; y: number }[],
   tileCost: (x: number, y: number) => Partial<Record<ResourceId, number>>,
+  roadDefId: string = 'road',
 ): RoadPlanPreview {
-  const roadDef = config.buildings.get('road');
+  const roadDef = config.buildings.get(roadDefId);
   const tiles: RoadPlanTile[] = [];
   const totalCost: Partial<Record<ResourceId, number>> = {};
   let buildTiles = 0;
@@ -120,8 +121,15 @@ export function analyseRoadPath(
     }
 
     const cost = tileCost(x, y);
-    const overWater = terrain === 'water' || terrain === 'river';
-    tiles.push({ x, y, terrain, regionId, status: overWater ? 'bridge' : 'ok', cost });
+    // Eine Kachel ist eine Brücke/ein Viadukt, wenn die Bauklasse sie überspannt
+    // (Wasser/Fluss bzw. Klippe). Bei der Bodenstraße kommt es hierher nie, weil
+    // solche Kacheln oben hart geblockt werden — der `'bridge'`-Status wird erst
+    // mit einer querenden Bauklasse real (§ Infrastruktur 2.0 / I1).
+    const rc = roadDef.road;
+    const spanned =
+      (rc?.crossesWater === true && (terrain === 'water' || terrain === 'river')) ||
+      (rc?.crossesCliff === true && terrain === 'mountain');
+    tiles.push({ x, y, terrain, regionId, status: spanned ? 'bridge' : 'ok', cost });
     addCost(totalCost, cost);
     buildTiles += 1;
     connected.add(k); // spätere Kacheln dürfen hieran anschließen

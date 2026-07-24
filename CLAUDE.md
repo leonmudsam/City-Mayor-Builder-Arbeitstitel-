@@ -168,6 +168,22 @@ inkrementellen Deko-/Vegetations-Neuaufbau bei Unlock) · **S5** lebendige Welt
 Overlay, baut auf A1–A5) · **S7** Steinbruch/Farm · **S8** weitere Betriebe.
 Reihenfolge zwingend (§24). Nichts Fehlendes in der UI vortäuschen.
 
+## Status: Infrastruktur 2.0 — Höhenstraßen/Brücken/Schifffahrt (v0.84+, AKTIV)
+Auf ausdrücklichen Nutzerwunsch **vorgezogen**; die 10.0-Phasen R2–R6/R9 sind
+**zurückgestellt** (nicht gestrichen). Master-Spec:
+`docs/agents/INFRASTRUCTURE_2_PLAN.md`, Entscheid **D-036**. **v0.84 = I1 erledigt:**
+Höhenstraße `road_elevated` (ab L2) überwindet Wasser (Brücke) und Klippen (Viadukt)
+als **Straßen-Bauklasse** (`BuildingDef.road?: RoadClassDef`) über denselben
+`roadNetwork`/`validatePlacement`/`analyseRoadPath` — **kein zweites Verkehrssystem
+(§2)**. Automatische Brückenlogik pro Kachel; Deck/Pfeiler prozedural
+(`buildBridgeDeck`); Kosten holzbasiert + Pfeiler-Aufschlag (gezeigter = gezahlter
+Preis). **Save v20 unverändert (additiv)** — Höhenstraßen sind Gebäude-Instanzen.
+Offen: **I2** saubere Straßen (Snap/Kurven, = R6) · **I3** Küste/Anleger als
+Netzknoten (= R9) · **I4** Schifffahrtsnetz (persistente Routen, lineare Migration) ·
+**I5** Bevölkerungs-Rebalancing + Infrastruktur-Netz-UI. Reihenfolge = Umsetzung.
+Nichts Fehlendes vortäuschen; weitere Brücken-/Rampen-/Pfeilertiefe-Verfeinerungen
+sind dokumentiert offen.
+
 Verbindlicher Einstieg für die Weiterarbeit:
 `docs/HANDOFF_CLAUDE.md` → `docs/agents/PROJECT_STATE.md` →
 `docs/agents/OPEN_TASKS.md`. Keine zweite Verkehrs- oder Missionssimulation

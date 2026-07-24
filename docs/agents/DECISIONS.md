@@ -1,5 +1,36 @@
 # Entscheidungen
 
+## D-036 — Infrastruktur 2.0 vorgezogen; Höhenstraßen/Brücken als Straßen-Bauklasse
+
+**Entscheidung:** Auf ausdrücklichen Nutzerwunsch werden die zurückgestellten
+10.0-Phasen (R2, R3, R4, R5, R6, R9) **nach hinten geschoben** und der neue Auftrag
+**Infrastruktur 2.0** (Höhenstraßen, Brücken, Küste/Anleger, Schifffahrtsnetz,
+Bevölkerungs-Rebalancing) vorgezogen. Begründung des Nutzers: entscheidender Punkt
+zum Weiterspielen — die verdichtete Welt (D-035) blockiert die Expansion über
+Höhen/Wasser. Master-Spec: [`INFRASTRUCTURE_2_PLAN.md`](INFRASTRUCTURE_2_PLAN.md).
+
+**Architektur (§2 Erweitern statt neu bauen):** Höhenstraßen/Brücken sind **keine**
+zweite Verkehrslogik, sondern eine **Straßen-Bauklasse** `BuildingDef.road?:
+RoadClassDef` (`crossesWater`, `crossesCliff`, `maxSlope`, `bridgeCostPerTile`) über
+denselben `roadNetwork`, dieselbe `validatePlacement` und dieselbe `analyseRoadPath`.
+Fehlt das Feld, gilt die bisherige Bodenstraße (Wasser/Klippe/Steilhang gesperrt).
+`analyseRoadPath`/`roadPathPreview` werden je Straßentyp parametrisiert (Def-Id statt
+hartem `'road'`), sodass der seit jeher vorhandene, aber tote `'bridge'`-Status real
+wird. Region-Ausnahme greift **nur** für die tatsächlich überbrückte Wasser-/
+Klippenkachel (Region 0/undefined) — Landkacheln einer Höhenstraße bleiben
+regionspflichtig. Pfeiler/Deck/Rampen sind reine Renderer-Darstellung (§1).
+
+**Konsequenzen:** Neue Straßentypen sind **additiv** (Gebäude-Instanzen, kein
+Save-Bump). Erst persistente Schiffsrouten (Phase I4) und ggf. Bevölkerungs-
+Rebalancing (I5) brauchen eine lineare Migration. Schifffahrt/Anleger nutzen die
+vorhandenen `waterRouteNodes/Edges`, `buildingInfrastructure.ts` und
+`operations/transport.ts` wieder (kein drittes Logistiksystem). R6 (Straßen A→B) und
+R9 (adaptive Uferplattform) werden innerhalb von Infrastruktur 2.0 (I2 bzw. I3)
+miterledigt.
+
+**Verworfen:** ein separater Brücken-/Wasser-Baugraph; manuell platzierte
+Brückenmodelle; das Streichen (statt Zurückstellen) von R2–R9.
+
 ## D-035 — § 10.0 R7/R8: Dritte Weltverdichtung (X/Z 0,84) + flacher Uferübergang, Save v20
 
 **Entscheidung:** Die Insel wird ein drittes Mal horizontal verdichtet — X/Z-Faktor

@@ -1880,21 +1880,37 @@ export class GameController {
    * dem Bau „Länge/Kosten/Konflikte" zeigen kann. Keine Mutation, keine
    * Abbuchung — gebaut wird erst über die bestehenden Platzierungs-Commands.
    */
-  roadPathPreview(path: { x: number; y: number }[]): RoadPlanPreview {
-    return analyseRoadPath(this.state, this.config, this.derived, path, (x, y) => this.getBuildCost('road', x, y));
+  roadPathPreview(path: { x: number; y: number }[], defId: string = 'road'): RoadPlanPreview {
+    return analyseRoadPath(this.state, this.config, this.derived, path, (x, y) => this.getBuildCost(defId, x, y), defId);
   }
 
   getBuildCost(defId: string, x?: number, y?: number): Partial<Record<ResourceId, number>> {
     const def = this.config.buildings.get(defId);
     if (!def) return {};
-    const cost = effectiveBuildCost(def, countOf(this.state, defId), this.state.stats.built[defId] ?? 0);
+    let cost = effectiveBuildCost(def, countOf(this.state, defId), this.state.stats.built[defId] ?? 0);
     // Regions-Straßenkosten-Faktor (§ Welt 2.0): nur für Straßen und nur, wenn
     // eine Zielkachel bekannt ist (Menü ohne Ort zeigt den Basispreis). Der Ghost
     // reicht die Hover-Kachel durch, damit der gezeigte Preis dem gezahlten gleicht.
     if (def.category === 'roads' && x !== undefined && y !== undefined) {
       const factor = regionRoadCostFactorAt(this.config, x, y);
       if (factor !== 1 && cost.money !== undefined) {
-        return { ...cost, money: Math.round(cost.money * factor) };
+        cost = { ...cost, money: Math.round(cost.money * factor) };
+      }
+      // Pfeiler-/Deck-Aufschlag (§ Infrastruktur 2.0 / I1): eine Höhenstraßen-
+      // Bauklasse zahlt über tatsächlich überbrückten Wasser-/Klippenkacheln
+      // zusätzlich `road.bridgeCostPerTile`. So bleibt gezeigter = gezahlter Preis.
+      const premium = def.road?.bridgeCostPerTile;
+      if (premium) {
+        const terrain = worldTerrainAt(this.state, x, y);
+        const spanned =
+          (def.road?.crossesWater === true && (terrain === 'water' || terrain === 'river')) ||
+          (def.road?.crossesCliff === true && terrain === 'mountain');
+        if (spanned) {
+          cost = { ...cost };
+          for (const [res, amount] of Object.entries(premium)) {
+            cost[res as ResourceId] = (cost[res as ResourceId] ?? 0) + (amount ?? 0);
+          }
+        }
       }
     }
     return cost;

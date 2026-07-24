@@ -127,6 +127,28 @@ export type BuildingSizeClass = 'XS' | 'S' | 'M' | 'L' | 'XL' | 'XXL';
 
 export type InfrastructureMode = 'road' | 'water' | 'rail' | 'air';
 
+/**
+ * Straßen-Bauklasse (§ Infrastruktur 2.0 / I1, D-036). Erweitert die EINE
+ * Placement-/Netz-Logik um mehrstufige Straßentypen (Bodenstraße → Höhenstraße/
+ * Brücke), OHNE zweites Verkehrssystem: gilt nur für `category: 'roads'` und wird
+ * von `validatePlacement` (Terrainzweig) und `analyseRoadPath` gelesen. Fehlt das
+ * Feld, ist es eine Bodenstraße mit den bisherigen Regeln (Wasser/Klippe/
+ * Steilhang gesperrt). Pfeiler/Deck/Rampen sind reine Renderer-Darstellung.
+ */
+export interface RoadClassDef {
+  /** Darf Wasser/Fluss überbrücken (Brückendeck + Pfeiler). */
+  crossesWater?: boolean;
+  /** Darf Klippen/Steilhänge als Viadukt überwinden. */
+  crossesCliff?: boolean;
+  /** Maximal überwindbarer Steigungswert. Default 0.8 (= Bodenstraße). */
+  maxSlope?: number;
+  /**
+   * Zusatzkosten je tatsächlich überbrückter (Wasser-/Klippen-)Kachel — modelliert
+   * Pfeiler/Deck. Wird ZUSÄTZLICH zur normalen Kachel-Baukostenbasis berechnet.
+   */
+  bridgeCostPerTile?: Partial<Record<ResourceId, number>>;
+}
+
 /** Zweigeteilte Hafenfläche; das Gebäudemodell zeigt bei 0° mit +Z zum Land. */
 export interface WaterfrontFootprint {
   landWidth: number;
@@ -187,6 +209,11 @@ export interface BuildingDef {
   requiresRoad: boolean;
   /** Unterstützte Netze. Aktuell werden Straße und Wasser ausgewertet. */
   infrastructureModes?: InfrastructureMode[];
+  /**
+   * Straßen-Bauklasse (§ Infrastruktur 2.0 / I1). Nur für `category: 'roads'`.
+   * Fehlt das Feld → Bodenstraße (Wasser/Klippe/Steilhang gesperrt).
+   */
+  road?: RoadClassDef;
   /** Zusätzlicher Wasser-Footprint für Anleger/Häfen. */
   waterfront?: WaterfrontFootprint;
   unlockLevel: number;

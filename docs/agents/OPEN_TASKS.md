@@ -4,6 +4,52 @@
 
 # Offene Aufgaben nach v0.82
 
+## AKTIVER AUFTRAG: Infrastruktur 2.0 — Höhenstraßen, Brücken, Schifffahrt (P0)
+
+> **Vorgezogen auf ausdrücklichen Nutzerwunsch (24.07.2026):** „Schiebe R2 und Rest
+> erstmal nach hinten … beginne mit dem neuen Auftrag Infrastruktur 2.0 … das ist
+> ein entscheidender Punkt, sodass ich das Spiel weiter testen kann, sonst komme ich
+> auf der Spielwelt nicht weiter." Master-Spec: `INFRASTRUCTURE_2_PLAN.md`.
+> Architekturentscheid: **D-036**.
+
+**Warum P0:** Nach der dritten Verdichtung (D-035) blockieren Höhen/Wasser die
+Expansion — Straßen können heute nur ebenes Land bebauen. Höhenstraßen/Brücken sind
+der Unblocker.
+
+**Phasen (Reihenfolge = Umsetzung):**
+- 🟡 **I1 Höhenstraßen & automatische Brücken** (in Arbeit, v0.84): Straßen-Bauklasse
+  `RoadClassDef` (Wasser/Klippe/Steigung queren), Def `road_elevated`,
+  `validatePlacement`/`analyseRoadPath`/`roadPathPreview` je Straßentyp, Brückendeck+
+  Pfeiler im Renderer. Additiv (kein Save-Bump).
+- ❌ **I2 Saubere Straßenstruktur** (Snap/Kurven/lückenlos, Vorschau grün/gelb/rot).
+  **Erledigt zugleich 10.0-R6** (terrainbasierter A→B, Kontrollpunkte, atomarer Command).
+- ❌ **I3 Küste/Ufer + Anleger als Netzknoten** (Straße↔Anleger↔Schiff). **Erledigt
+  zugleich 10.0-R9** (adaptive Uferplattform). Baut auf `buildingInfrastructure.ts`.
+- ❌ **I4 Schifffahrtsnetz + Stadtarbeit-Integration** (persistente Routen: Kapazität,
+  Reisezeit, Betriebskosten, Warenfluss, Pause/Löschen; multimodale Legs). Reuse
+  `operations/transport.ts` + `logistics.ts` + `routeAnalysis.ts`. **Lineare Migration**
+  bei neuen Save-Feldern. Verweise: `WATER_INFRASTRUCTURE_PLAN.md`, „Waterways 7.0".
+- ❌ **I5 Bevölkerungs-Rebalancing + Infrastruktur-Netz-UI** (Haus 4–8 … Hochhaus 300+;
+  Reiter Straßen/Brücken/Anleger/Schiffe + Kapazitäts-Panel via
+  `infrastructureNetworkOverview`).
+
+**Nicht vortäuschen:** fehlende Schiffs-Legs/Kapazitäts-/Verkehrsdaten sind
+`TODO(CLAUDE_LOGIC)`. Kein zweiter Straßengraph/Transport.
+
+## ZURÜCKGESTELLT (nach Infrastruktur 2.0 fortsetzen): § 10.0 R2–R6, R9
+
+> Bleiben P0 **nach** Infrastruktur 2.0. Master-Spec: `ACTIVE_RESOURCE_LOOPS_10_PLAN.md`.
+> R1/R7/R8 sind erledigt (D-035, v0.83). R6/R9 werden in Infrastruktur 2.0 (I2/I3)
+> mit­erledigt.
+
+- ❌ **R2** Dauerbetrieb: persistentes `workArea` (circle/rect/polygon) +
+  `ContinuousOperationStatus`, Auto-Pause/Resume statt Auto-Delete (Save v20→v21 additiv).
+- ❌ **R2/§5** passive `Holz/min` + `Produktion/min` aus der UI entfernen, Durchsatz-Diagnose.
+- ❌ **R3** volle `ResourceNetworkSummary` + benannte Standorte + Lagervergleich.
+- ❌ **R4** Handkarren/Handtragen als Frühtransport + Rathauslager + `InventoryTransferRule`.
+- ❌ **R5** Stadtarbeit-Ladungsprognose je Stopp + Pflicht/Optional-Nachfüllmarker.
+- ❌ **R10** Migration + Balancing-Abschluss.
+
 ## Visual Active Operations – verbleibende Daten-/Logikbindungen
 
 **Erledigt (v0.82, visuell):** fokussierter Arbeitsgebietsmodus mit

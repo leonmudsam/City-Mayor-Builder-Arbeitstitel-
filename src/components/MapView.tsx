@@ -154,7 +154,9 @@ export function MapView() {
       },
       onCoverageInfo: (info) => setCoverage(info),
       onPlace: (defId, x, y, rotation) => {
-        if (defId === 'road') {
+        // Alle Straßen-Bauklassen (Bodenstraße, Höhenstraße/Brücke) laufen über den
+        // Straßenentwurf-Planer, nicht über Sofortbau (§ Infrastruktur 2.0 / I1).
+        if (controller.config.buildings.get(defId)?.category === 'roads') {
           const state = useUiStore.getState();
           state.setRoadPlanPath(extendRoadDraft(state.roadPlanPath, { x, y }));
           return;
@@ -173,7 +175,7 @@ export function MapView() {
       // Drag-painting a road: silent on overlap so a swipe doesn't spam toasts,
       // but a real blocker (funds, locked sector) still surfaces once.
       onDragPlace: (defId, x, y) => {
-        if (defId === 'road') {
+        if (controller.config.buildings.get(defId)?.category === 'roads') {
           const state = useUiStore.getState();
           state.setRoadPlanPath(extendRoadDraft(state.roadPlanPath, { x, y }));
           return;
@@ -214,8 +216,11 @@ export function MapView() {
       renderer.setSelected(s.selectedBuildingId);
       renderer.setInfoLayer(s.infoLayerMode);
       renderer.setInfrastructureLayer(s.infrastructureLayerMode);
-      const roadPlan = s.placingDefId === 'road' && s.roadPlanPath.length > 0
-        ? buildSmartRoadPlanView(controller, s.roadPlanPath)
+      const placingRoadClass = s.placingDefId && controller.config.buildings.get(s.placingDefId)?.category === 'roads'
+        ? s.placingDefId
+        : undefined;
+      const roadPlan = placingRoadClass && s.roadPlanPath.length > 0
+        ? buildSmartRoadPlanView(controller, s.roadPlanPath, placingRoadClass)
         : undefined;
       renderer.setRoadPlanOverlay(roadPlan?.tiles ?? []);
       syncWorldReveal(s);

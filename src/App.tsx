@@ -7,7 +7,7 @@ import type { GameState } from './game/types.ts';
 import { LocalStorageSaveAdapter } from './game/storage/localStorageAdapter.ts';
 import { DEFAULT_SLOT } from './game/storage/saveAdapter.ts';
 import { importSave } from './game/storage/exportImport.ts';
-import { setController, useUiStore } from './state/store.ts';
+import { getController, setController, useUiStore } from './state/store.ts';
 import { MapView } from './components/MapView.tsx';
 import { GameHud } from './components/hud/GameHud.tsx';
 import { DriveHud } from './components/hud/DriveHud.tsx';
@@ -346,7 +346,9 @@ function GameScreen({ onImport, onReset }: { onImport(json: string): boolean; on
             {openPanel === 'build' && <BuildMenu />}
             <ActivityExecutionWidget />
             <DriveHud />
-            {placingDefId === 'road' && <SmartRoadPlannerHud />}
+            {placingDefId !== undefined
+              && getController().config.buildings.get(placingDefId)?.category === 'roads'
+              && <SmartRoadPlannerHud />}
           </>
         )}
       </main>

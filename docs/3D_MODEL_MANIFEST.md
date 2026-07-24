@@ -203,10 +203,13 @@ fix (§3 in `docs/3D_WORLD_ASSETS.md`).
 | deco_fountain | `deco_fountain.glb` | XS | 1×1 | 7 |
 | deco_bench | `deco_bench.glb` | XS | 1×1 | 7 |
 
-### Straße (Sonderfall) — texturbasiert, kein `.glb`
-Die Gebäude-ID **`road`** (1×1) nutzt **kein** `buildings/road.glb` und auch
-kein `roads/`-Segmentmodell mehr: seit v0.44 ist das Straßen-/Brücken-System
-texturbasiert (§ Straßen als Textur), siehe `docs/ROAD_TEXTURES.md`.
+### Straßen (Sonderfall) — texturbasiert, kein `.glb`
+Die Gebäude-IDs **`road`** und **`road_elevated`** (Höhenstraße/Brücke, 1×1,
+§ Infrastruktur 2.0 / I1) nutzen **kein** `buildings/*.glb` und auch kein
+`roads/`-Segmentmodell mehr: seit v0.44 ist das Straßen-/Brücken-System
+texturbasiert (§ Straßen als Textur), siehe `docs/ROAD_TEXTURES.md`. Die
+Höhenstraße wird prozedural aufgebaut — über Wasser als Brückendeck + Geländer +
+Pfeiler (`buildBridgeDeck`), auf Land als geländeangepasste Straßenkachel.
 
 ### Landmarken / Hero-Bauten (geplant) — `buildings/landmarks/`
 Noch keine BuildingDefs, aber vollständig spezifiziert (Footprint, Größenklasse,

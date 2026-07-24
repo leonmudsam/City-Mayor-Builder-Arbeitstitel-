@@ -16,9 +16,11 @@ describe('3D model manifest', () => {
     expect(missing, `docs/3D_MODEL_MANIFEST.md fehlt Gebäude: ${missing.join(', ')}`).toEqual([]);
   });
 
-  it('references every building model file (<id>.glb), except the special-cased road', () => {
+  it('references every building model file (<id>.glb), except the procedural roads', () => {
     const missing = buildingsConfig
-      .filter((b) => b.id !== 'road') // road uses the roads/ segment system, not buildings/road.glb
+      // Alle Straßen-Bauklassen (road, road_elevated) sind texturbasiert/prozedural
+      // (§ Straßen als Textur / Infrastruktur 2.0), kein buildings/<id>.glb.
+      .filter((b) => b.category !== 'roads')
       .map((b) => `${b.id}.glb`)
       .filter((file) => !manifest.includes(file));
     expect(missing, `Manifest fehlt Modelldatei(en): ${missing.join(', ')}`).toEqual([]);

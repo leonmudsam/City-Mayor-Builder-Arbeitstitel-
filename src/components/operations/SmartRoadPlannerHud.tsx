@@ -1,15 +1,20 @@
 import { AlertTriangle, Check, Coins, CornerDownLeft, GitBranch, MapPin, Route, Trash2, Undo2 } from 'lucide-react';
 import { useEffect, useMemo } from 'react';
-import { formatMoney } from '../../i18n/index.ts';
+import { formatMoney, t } from '../../i18n/index.ts';
 import { useGame, useUiStore } from '../../state/store.ts';
 import { DataMetric, StatusChip } from '../common/GamePanel.tsx';
 import { buildSmartRoadPlanView } from './adapters.ts';
 
 export function SmartRoadPlannerHud() {
   const game = useGame();
-  const { roadPlanPath, setRoadPlanPath, clearRoadPlan, stopPlacing, pushToast } = useUiStore();
-  const view = useMemo(() => buildSmartRoadPlanView(game, roadPlanPath), [game, game.version, roadPlanPath]);
-  const raw = useMemo(() => game.roadPathPreview(roadPlanPath), [game, game.version, roadPlanPath]);
+  const { roadPlanPath, setRoadPlanPath, clearRoadPlan, stopPlacing, pushToast, placingDefId } = useUiStore();
+  // Aktiver Straßentyp (Bodenstraße oder Höhenstraße/Brücke). Fällt für alles
+  // Nicht-Straßen-Artige auf 'road' zurück, ist aber nur aktiv, wenn eine Straße
+  // platziert wird (§ Infrastruktur 2.0 / I1).
+  const roadDefId = placingDefId && game.config.buildings.get(placingDefId)?.category === 'roads' ? placingDefId : 'road';
+  const roadName = t(game.config.buildings.get(roadDefId)?.nameKey ?? 'building.road');
+  const view = useMemo(() => buildSmartRoadPlanView(game, roadPlanPath, roadDefId), [game, game.version, roadPlanPath, roadDefId]);
+  const raw = useMemo(() => game.roadPathPreview(roadPlanPath, roadDefId), [game, game.version, roadPlanPath, roadDefId]);
   const affordable = game.canAffordCost(raw.totalCost);
 
   const confirm = () => {
@@ -17,15 +22,15 @@ export function SmartRoadPlannerHud() {
     let built = 0;
     for (const tile of raw.tiles) {
       if (tile.status === 'exists') continue;
-      const result = game.placeBuilding('road', tile.x, tile.y);
+      const result = game.placeBuilding(roadDefId, tile.x, tile.y);
       if (!result.ok) {
-        pushToast(`Straßenbau nach ${built} Segmenten gestoppt: ${result.error}`, 'error');
+        pushToast(`${roadName}-Bau nach ${built} Segmenten gestoppt: ${result.error}`, 'error');
         clearRoadPlan();
         return;
       }
       built += 1;
     }
-    pushToast(`${built} Straßensegmente gebaut.`, 'success');
+    pushToast(`${built} ${roadName}-Segmente gebaut.`, 'success');
     clearRoadPlan();
   };
 
@@ -48,7 +53,7 @@ export function SmartRoadPlannerHud() {
         <span className="smart-road-icon"><Route size={20} /></span>
         <div>
           <small>Smart Planning</small>
-          <h3>Straßenentwurf</h3>
+          <h3>{roadName}</h3>
         </div>
         <StatusChip tone={view.valid ? 'good' : view.blockedCount > 0 ? 'danger' : 'info'}>
           {view.valid ? 'Baubar' : roadPlanPath.length < 2 ? 'Start und Ziel setzen' : 'Prüfung nötig'}

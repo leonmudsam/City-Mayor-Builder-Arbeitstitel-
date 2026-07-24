@@ -64,9 +64,16 @@ export function validatePlacement(
   const surface = samplePlacementSurface(state, x, y, def.size.w, def.size.h);
   const heightDelta = surface.maxHeight - surface.minHeight;
   if (def.category === 'roads') {
-    // Normale Straßen dürfen sanfte Hänge nutzen, aber weder Wasser noch
-    // Klippen. Brücken/Tunnel bleiben vorbereitete, spätere Straßentypen.
-    if (surface.waterOverlap > 0 || surface.cliffOverlap > 0 || surface.slope > 0.8) return 'terrain';
+    // Straßen-Bauklasse (§ Infrastruktur 2.0 / I1, D-036): eine Bodenstraße
+    // (`def.road` fehlt) darf sanfte Hänge nutzen, aber weder Wasser noch
+    // Klippen; eine Höhenstraße/Brücke (`def.road.crossesWater`/`crossesCliff`,
+    // höheres `maxSlope`) überwindet genau diese Hindernisse. Deck/Pfeiler sind
+    // reine Renderer-Darstellung — hier zählt nur, ob das Terrain überbaubar ist.
+    const rc = def.road;
+    const maxSlope = rc?.maxSlope ?? 0.8;
+    const waterBlocked = surface.waterOverlap > 0 && rc?.crossesWater !== true;
+    const cliffBlocked = surface.cliffOverlap > 0 && rc?.crossesCliff !== true;
+    if (waterBlocked || cliffBlocked || surface.slope > maxSlope) return 'terrain';
   } else if (
     surface.buildableRatio < 1 ||
     surface.waterOverlap > 0 ||
@@ -76,13 +83,25 @@ export function validatePlacement(
     return 'terrain';
   }
 
+  const roadClass = def.category === 'roads' ? def.road : undefined;
   for (let dy = 0; dy < def.size.h; dy++) {
     for (let dx = 0; dx < def.size.w; dx++) {
       const tile = tileAt(state, x + dx, y + dy);
       if (!tile) return 'out_of_bounds';
-      const region = regionOfTile(state, x + dx, y + dy);
-      if (!region || region.status !== 'unlocked') return 'region_locked';
-      if (!isTerrainBuildable(tile)) return 'terrain';
+      // Eine Brücke/ein Viadukt überspannt die eigentliche Wasser-/Klippenkachel.
+      // Solche Kacheln gehören keiner freischaltbaren Region an (Wasser = Region 0)
+      // und sind nicht „bebaubar" — für die überbrückte Kachel entfallen deshalb
+      // Regions- und Bebaubarkeitsprüfung. Land unter einer Höhenstraße bleibt
+      // regionspflichtig, sodass man nicht in gesperrtes Gebiet hineinbaut.
+      const bridgesWater =
+        roadClass?.crossesWater === true && (tile.terrain === 'water' || tile.terrain === 'river');
+      const bridgesCliff = roadClass?.crossesCliff === true && tile.terrain === 'mountain';
+      const spanned = bridgesWater || bridgesCliff;
+      if (!spanned) {
+        const region = regionOfTile(state, x + dx, y + dy);
+        if (!region || region.status !== 'unlocked') return 'region_locked';
+        if (!isTerrainBuildable(tile)) return 'terrain';
+      }
       if (tile.buildingId && tile.buildingId !== moving) return 'occupied';
     }
   }

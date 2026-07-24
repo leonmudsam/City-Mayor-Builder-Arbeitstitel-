@@ -160,6 +160,37 @@ export const buildingsConfig: BuildingDef[] = [
     effects: [{ type: 'upkeep', resource: 'money', perMinute: 8 }],
   },
 
+  // Höhenstraße (§ Infrastruktur 2.0 / I1, D-036): DER Unblocker der verdichteten
+  // Welt (D-035). Überwindet Wasser/Fluss (Brücke mit Pfeilern) und Klippen/
+  // Steilhänge (Viadukt) — Deck/Pfeiler/Rampen stellt der Renderer automatisch aus
+  // dem Terrain dar. Deutlich teurer als die Bodenstraße und zusätzlich stein-/
+  // holzintensiv; über tatsächlich überbrückten Wasser-/Klippenkacheln kommt ein
+  // Pfeiler-Aufschlag dazu (`road.bridgeCostPerTile`). Bleibt eine normale
+  // Straßen-Bauklasse über denselben `roadNetwork` — kein zweites System (§2).
+  {
+    id: 'road_elevated',
+    category: 'roads',
+    nameKey: 'building.road_elevated',
+    size: { w: 1, h: 1 },
+    sizeClass: 'XS',
+    requiresRoad: false,
+    unlockLevel: 2,
+    // Holzbasiert (Sägewerk ab L2), damit die Höhenstraße die verdichtete Welt
+    // WIRKLICH früh entsperrt — Stein käme erst mit dem Steinbruch (L4) und würde
+    // weiter blockieren. Teure Holz-Trestle-Brücken; steinerne Prachtbrücken sind
+    // eine spätere Bauklasse (I2/I4).
+    cost: { money: 1_200, wood: 40 },
+    constructionSec: 0,
+    xpReward: 2,
+    road: {
+      crossesWater: true,
+      crossesCliff: true,
+      maxSlope: 5,
+      bridgeCostPerTile: { money: 800, wood: 20 },
+    },
+    effects: [{ type: 'upkeep', resource: 'money', perMinute: 30 }],
+  },
+
   // ---- Wohnen ----
   // Das kleine Haus (§ Gebäudesystem 2.0): DER wichtigste Gebäudetyp — es
   // begleitet den Spieler über 6 Stufen durchs ganze Spiel. 3×3-Grundstück

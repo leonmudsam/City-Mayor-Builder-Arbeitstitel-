@@ -1,5 +1,83 @@
 # Patch Notes
 
+## v0.84 — Infrastruktur 2.0 / I1: Höhenstraßen & Brücken (Save v20, additiv)
+
+### Was
+
+- **Neuer Straßentyp „Höhenstraße" (`road_elevated`, ab Level 2):** überwindet
+  **Wasser/Fluss** (Brücke) und **Klippen/Steilhänge** (Viadukt) — genau das, was
+  die verdichtete Welt (v0.83) bisher blockierte. Der Spieler zeichnet sie über
+  denselben Straßenentwurf-Planer; über Wasser gezogene Segmente werden automatisch
+  zu Brückensegmenten.
+- **Automatische Brückenlogik pro Kachel:** ebenes/geneigtes Land → geländeangepasste
+  Straße, Wasser/Klippe → Brückendeck mit Geländer und Pfeilern. Der Spieler wählt
+  nur den Straßentyp, die Kachelentscheidung fällt aus dem Terrain.
+- **Ehrliche Kosten:** Grundpreis 1.200 Geld + 40 Holz je Kachel; über tatsächlich
+  überbrückten Wasser-/Klippenkacheln kommt ein Pfeiler-Aufschlag (+800 Geld,
+  +20 Holz) dazu. Der Straßenentwurf zeigt Länge, Brückenzahl, Konflikte und exakte
+  Gesamtkosten **vor** dem Bau (gezeigter = gezahlter Preis). Bewusst **holzbasiert**
+  (Sägewerk ab L2), damit die Brücken die Welt WIRKLICH früh entsperren — Stein käme
+  erst mit dem Steinbruch (L4) und würde weiter blockieren.
+- **Reihenfolge geändert (Nutzerwunsch):** Die 10.0-Phasen R2–R6/R9 sind
+  zurückgestellt; Infrastruktur 2.0 wurde vorgezogen, weil es der entscheidende
+  Punkt zum Weiterspielen ist. R6 (Straßen A→B) und R9 (adaptive Uferplattform)
+  werden innerhalb von Infrastruktur 2.0 (I2/I3) miterledigt.
+
+### Warum
+
+- Nach der dritten Weltverdichtung (v0.83, D-035) ist die Insel kompakter und
+  steiler, mit mehr Wasser zwischen den Bauzonen. Das alte Straßensystem baute nur
+  auf ebenem Land — Stadtteile ließen sich nicht über Höhen/Wasser verbinden. Der
+  vorhandene, aber **tote** `'bridge'`-Kachelstatus wird jetzt real.
+
+### Architektur
+
+- **Straßen-Bauklasse statt zweitem System (§2, D-036):** `BuildingDef.road?:
+  RoadClassDef` (`crossesWater`, `crossesCliff`, `maxSlope`, `bridgeCostPerTile`),
+  Zod-validiert. `validatePlacement` liest die Bauklasse (Region-/Bebaubarkeits-
+  Ausnahme NUR für die tatsächlich überbrückte Wasser-/Klippenkachel — Land unter
+  einer Höhenstraße bleibt regionspflichtig). `analyseRoadPath`/`roadPathPreview`/
+  `getBuildCost` sind jetzt je Straßentyp parametrisiert. Alles über denselben
+  `roadNetwork`, dieselbe Anschlussprüfung — kein zweiter Verkehrsgraph.
+- **Renderer:** der bereits vorhandene `buildBridgeDeck`-Pfad (Deck/Geländer/Pfeiler)
+  wird endlich genutzt; Straßen über Wasser sitzen jetzt auf `WATER_LEVEL` statt auf
+  dem tiefen Wasserboden. Prozedural, kein neues `.glb` (Fallback nie crashend, §5).
+- **UI:** Baumenü listet die Höhenstraße automatisch (Kategorie „Straßen"); der
+  Straßenplaner arbeitet für jede Straßen-Bauklasse (nicht mehr hart `'road'`).
+
+### Auswirkung
+
+- **Save v20 unverändert (additiv):** Höhenstraßen sind normale Gebäude-Instanzen,
+  kein neues State-Feld, keine Migration nötig. Alte v20-Stände laden weiter.
+- Bestehende Bodenstraßen unverändert (weiterhin auf Wasser/Klippe gesperrt).
+
+### Zukunft (Infrastruktur 2.0, offen — nicht vorgetäuscht)
+
+- I2 saubere Straßenstruktur (Snap/Kurven, = R6) · I3 Küste/Anleger als Netzknoten
+  (= R9) · I4 Schifffahrtsnetz (persistente Routen, lineare Migration) ·
+  I5 Bevölkerungs-Rebalancing + Infrastruktur-Netz-UI. Steinerne Prachtbrücken,
+  Rampenlängen, echte Pfeilertiefe bis zum Wasserboden bleiben Verfeinerungen.
+  Master-Spec: `docs/agents/INFRASTRUCTURE_2_PLAN.md`.
+
+### Dateien
+
+- Config: `config/types.ts` (`RoadClassDef` + `BuildingDef.road`),
+  `config/schemas.ts` (Zod), `config/buildings.config.ts` (`road_elevated`),
+  `config/levels.config.ts` (L2-Unlock), `i18n/de.json`.
+- Sim: `buildings/placement.ts`, `roads/roadPlanning.ts`, `commands/controller.ts`.
+- UI: `components/MapView.tsx`, `components/operations/SmartRoadPlannerHud.tsx`,
+  `components/operations/adapters.ts`, `App.tsx`.
+- Renderer: `renderer/three/ThreeMapRenderer.ts` (Brücken-`baseY`).
+- Tests: `tests/roadElevated.test.ts` (neu, 5), `tests/manifest.test.ts` (Sonderfall
+  für prozedurale Straßen), `docs/BUILDINGS.md` (regeneriert).
+- Doku: `INFRASTRUCTURE_2_PLAN.md` (neu), `DECISIONS.md` (D-036), `OPEN_TASKS.md`,
+  `BACKLOG.md`, `3D_MODEL_MANIFEST.md`.
+
+### Assets
+
+- Keine neuen Pflicht-Assets. Optionale Drop-ins bleiben `road_bridge_deck`/
+  `road_boardwalk` (Texturen, `docs/ROAD_TEXTURES.md`) — bis dahin Flächenfarbe.
+
 ## v0.83 — § 10.0 R7/R8: Dritte Weltverdichtung + flacher Uferübergang (Save v20)
 
 ### Was

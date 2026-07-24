@@ -3567,7 +3567,15 @@ export class ThreeMapRenderer implements IMapRenderer {
     // Gebäude bleiben waagerecht. Kleine Footprint-Unterschiede gleicht ein
     // sichtbarer Sockel bis zur tiefsten Stelle aus; Straßen folgen weiterhin
     // ihrer eigenen geglätteten Längskurve.
-    const baseY = def.category === 'roads' ? terrainHeightAt(cx, cz) : surface.maxHeight + 0.04;
+    // Höhenstraßen-Brücken (§ Infrastruktur 2.0 / I1): über Wasser/Fluss liegt der
+    // Deckansatz auf der Wasseroberfläche (`WATER_LEVEL`), nicht auf dem tiefen
+    // Wasserboden — sonst versänke das Brückendeck. `buildRoad` erkennt dieselbe
+    // Wasserlage und baut Deck + Geländer + Pfeiler.
+    const roadTerrain = def.category === 'roads' ? worldTerrainAt(this.controller.state, b.x, b.y) : undefined;
+    const roadOverWater = roadTerrain === 'water' || roadTerrain === 'river';
+    const baseY = def.category === 'roads'
+      ? (roadOverWater ? WATER_LEVEL : terrainHeightAt(cx, cz))
+      : surface.maxHeight + 0.04;
     group.position.set(cx, baseY, cz);
 
     const constructing = b.status === 'constructing' && b.targetUpgradeLevel === undefined;

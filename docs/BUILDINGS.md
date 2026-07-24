@@ -479,7 +479,7 @@ L15–L20 schalten kaum neue Gebäude frei, sondern gaten die Top-Stufen der Ket
 | Level | XP (kumuliert) | Schaltet frei | Belohnung |
 |---|---|---|---|
 | 1 | 0 | Straße, Kleines Haus | — |
-| 2 | 36 | Sägewerk | 13.000 Geld |
+| 2 | 36 | Sägewerk, Höhenstraße | 13.000 Geld |
 | 3 | 130 | Brunnen, Bürgermeisterhaus | 20.000 Geld · 10 Gold |
 | 4 | 310 | Bauernhof, Steinbruch | 30.000 Geld |
 | 5 | 620 | Markt, Handelskontor | 47.000 Geld · 15 Gold |
