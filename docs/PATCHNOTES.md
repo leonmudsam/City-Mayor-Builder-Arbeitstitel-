@@ -1,5 +1,99 @@
 # Patch Notes
 
+## v0.87 — Stadtarbeit-Stabilität 9.1: eingefrorener Planungssnapshot (Save v21)
+
+### Was
+
+- **Lieferaufträge verändern sich während der Planung nicht mehr von selbst.** Bisher
+  konnten Zielgebäude, Quelle und Liefermengen eines Auftrags (z. B. „Essen
+  verteilen") **bei laufender Uhr scheinbar von allein springen** — je höher das
+  Level, desto auffälliger. Ab jetzt wird die **Zielmenge beim Öffnen des Auftrags
+  EINMALIG eingefroren** und bleibt exakt so, bis die Mission startet, du den Auftrag
+  bewusst aktualisierst/abbrichst oder ein Ziel real abgerissen wird.
+- **Kein stiller Zieltausch mehr.** Wird ein eingefrorenes Lieferziel tatsächlich
+  abgerissen, **verschwindet der Auftrag nicht heimlich und bekommt kein anderes
+  Gebäude untergeschoben**. Stattdessen erscheint ein klarer Hinweis
+  („Ein Lieferziel wurde abgerissen") mit den Optionen **Auftrag aktualisieren**
+  (neue Ziele) oder **Abbrechen** — die Entscheidung bleibt bei dir.
+- **Plan übersteht Save/Load und UI-Wechsel.** Der eingefrorene Auftrag wird
+  gespeichert; Panel schließen/öffnen, Geschwindigkeit wechseln oder das Spiel neu
+  laden lässt Ziele, Quelle und Mengen unverändert.
+- **Gilt für ALLE Lieferaufträge**, nicht nur „Essen verteilen" (Holz-, Material-,
+  Wasser-, Handels- und Sonderlieferungen laufen über denselben Pfad).
+
+### Warum
+
+- Erster Baustein des Spielbarkeits-Auftrags (Nutzer, 24.07.2026): „Lieferaufträge
+  verändern während der Planung scheinbar selbstständig ihren Zustand … besonders in
+  höheren Leveln wird Stadtarbeit dadurch kaum spielbar." Die **exakte Ursache**: die
+  Zielmenge wurde bei **jeder** UI-Abfrage neu aus der **laufenden Simulations-RNG**
+  gewürfelt (`getActivityRoutePlan` → `pickTargets`). Da die RNG **pro Tick**
+  weiterläuft und die UI bei jedem Controller-`version`-Bump neu liest, wurde bei
+  laufender Uhr **jeden Tick neu gemischt** — genau das sichtbare „Springen". Der
+  frühere Shallow-Clone schützte nur den Save, nicht die Anzeige.
+
+### Architektur
+
+- **Eingefrorener Planungssnapshot `activities.selection` (Sim, CLAUDE.md §1/§2).**
+  Neues, optionales, **persistiertes** Feld pro offenem Auftrag
+  (`ActivityPlanningSelection`: `defId`, `createdAt`, `epoch`, `sourceBuildingId?`,
+  `targetBuildingIds`). Kein neues System — nur ein zusätzliches State-Feld an der
+  bestehenden `ActivitiesState`.
+- **Deterministische Zielwahl statt Live-RNG.** Neue reine Helfer
+  `pickTargetsSeeded()` + `activitySelectionSeed(defId, createdAt, epoch)` in
+  `simulation/activities.ts` würfeln aus einem **stabilen** Seed (Stadt-`createdAt` +
+  Auftrag + Epoch) — **nie** aus `state.rngSeed`. `getActivityRoutePlan` liefert den
+  eingefrorenen Satz, sonst dieselbe deterministische Ableitung (Epoch 0), sodass die
+  Vorschau **vor** und **nach** dem Einfrieren identisch ist (kein Flackern).
+  `pickTargets` (Live-RNG) bleibt ausschließlich für den tatsächlichen Missionsstart.
+- **Lebenszyklus als Commands.** `selectActivity(defId)` friert **idempotent** ein
+  (sicher aus einem UI-Effekt), `refreshActivitySelection(defId)` erhöht den Epoch und
+  zieht bewusst neue Ziele, `clearActivitySelection()` verwirft. `startActivity`
+  räumt den Snapshot beim Übergang planning→executing. Read
+  `getActivitySelectionStatus(defId)` = `none|ok|stale` steuert den UI-Hinweis.
+- **UI (`ActivityRoutePlanner.tsx`).** Öffnen eines Auftrags ruft `selectActivity`;
+  ein `stale`-Zustand zeigt den Aktualisieren/Abbrechen-Hinweis statt eines stillen
+  Tauschs. Keine parallele Zeit, keine Auftragsgenerierung im Render.
+- **Save v21, additiv (CLAUDE.md §3).** Migration `v20→v21` ergänzt nichts weiter als
+  den Versionsstempel; Alt-Saves ohne `selection` bleiben ladbar und frieren beim
+  nächsten Öffnen frisch ein. Zod-Schema erweitert.
+
+### Auswirkung
+
+- Stadtarbeit ist auch in höheren Leveln **verlässlich planbar**: die eingezeichnete
+  Route passt dauerhaft zum Auftrag. Kein Datenverlust, keine Balancing-Änderung.
+- Verifikation: `tsc` · ESLint · **380 Vitest grün** (neu: `activityStability.test.ts`,
+  10 Fälle) · Vite-Build. Reiner 2D-Panel-/Sim-Pfad — kein 3D-Renderer berührt.
+
+### Zukunft
+
+- Nächste Bausteine des Spielbarkeits-Auftrags (Reihenfolge = Umsetzung): zentrale
+  **Ingame-Zeit** (eine Zeitquelle, 1×/2×/4× konsistent, sichtbare Uhr), **Frühlogistik**
+  (Handkarren ab L2: Holz Sägewerk→Rathauslager) + Lagerübersicht,
+  **Anleger-zu-Anleger-Netz** und **Performance-Pass** mit dauerhafter FPS-Anzeige.
+- Offen (bewusst, nicht vorgetäuscht): mehrere gleichzeitig eingefrorene Snapshots
+  (aktuell genau einer = ein Planer); feinere Invalidierung (Ziel wird gesperrt/
+  umgezogen statt abgerissen).
+
+### Dateien
+
+- `src/game/simulation/activities.ts` (neu: `pickTargetsSeeded`, `activitySelectionSeed`)
+- `src/game/commands/controller.ts` (`getActivityRoutePlan` deterministisch; neue
+  Commands `selectActivity`/`refreshActivitySelection`/`clearActivitySelection`;
+  Read `getActivitySelectionStatus`; `startActivity` räumt den Snapshot)
+- `src/game/types.ts` (`ActivityPlanningSelection`, `ActivitiesState.selection?`)
+- `src/game/config/schemas.ts` (Zod: `activities.selection?`)
+- `src/game/newGame.ts` (`SCHEMA_VERSION = 21`), `src/game/storage/migrations.ts`
+  (`migrateV20ToV21`)
+- `src/components/panels/ActivityRoutePlanner.tsx`, `src/styles/citywork.css`
+- `tests/activityStability.test.ts` (neu), `tests/storage.test.ts` +
+  `tests/transport.test.ts` (Versionsliteral v21)
+- `docs/agents/ACTIVITY_STABILITY_AUDIT.md` (neu), DECISIONS **D-037**
+
+### Assets
+
+- Keine neuen Assets. Kein Drop-in nötig.
+
 ## v0.86 — Infrastruktur 2.0 / I2: terrainbewusster Straßen-Router, Kontrollpunkte & atomarer Bau (Save v20)
 
 ### Was

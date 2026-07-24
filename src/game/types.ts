@@ -203,8 +203,36 @@ export interface ActiveActivity {
   targets: { buildingId: BuildingInstanceId; done: boolean }[];
 }
 
+/**
+ * Eingefrorener Planungssnapshot eines noch nicht gestarteten Auftrags
+ * (§ Stadtarbeit-Stabilität 9.1, D-037). Sobald der Spieler einen Auftrag im
+ * Planer wählt, wird EINMALIG eine deterministische Zielmenge festgehalten und
+ * bleibt unverändert, bis die Mission startet, der Spieler den Auftrag verwirft/
+ * aktualisiert oder ein Ziel real verschwindet. Damit können die Ziele — anders
+ * als beim früheren Live-RNG-Neuwürfeln pro Tick — während der Planung nicht mehr
+ * springen. Nur ein Snapshot gleichzeitig (ein Planer). Save v21, additiv.
+ */
+export interface ActivityPlanningSelection {
+  /** Auftrag, für den dieser Snapshot eingefroren wurde. */
+  defId: string;
+  /** Simulationszeit des Einfrierens (Diagnose/Alter). */
+  createdAt: number;
+  /** Seed-Epoch: eine bewusste Aktualisierung erhöht ihn und zieht neue Ziele. */
+  epoch: number;
+  /** Eingefrorenes Quell-Ankergebäude (fehlt = Rathaus-Fallback). */
+  sourceBuildingId?: BuildingInstanceId;
+  /** Eingefrorene Pflichtziele — der Kern der Stabilisierung. */
+  targetBuildingIds: BuildingInstanceId[];
+}
+
 export interface ActivitiesState {
   active?: ActiveActivity;
+  /**
+   * §2.3: eingefrorener Planungssnapshot des aktuell offenen (noch nicht
+   * gestarteten) Auftrags. Verschwindet beim Missionsstart, beim Verwerfen und
+   * beim Auftragswechsel. Optional/additiv (Alt-Saves besitzen ihn nicht).
+   */
+  selection?: ActivityPlanningSelection;
   /** readyAt timestamps per activity def (cooldowns keep running offline). */
   cooldowns: Record<string, number>;
   /** Trade-contract ids already fulfilled in the current rotation window. */

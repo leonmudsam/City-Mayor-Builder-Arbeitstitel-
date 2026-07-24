@@ -4,6 +4,10 @@ import type { GameState } from './types.ts';
 import { allRegionIds, createRegionStub, occupyTiles } from './map/world.ts';
 
 /**
+ * v21 (§ Stadtarbeit-Stabilität 9.1, D-037): additiver, eingefrorener
+ * Planungssnapshot `activities.selection` eines noch nicht gestarteten Auftrags.
+ * Alte Saves bleiben ladbar (Migration v20→v21 lässt das Feld schlicht weg);
+ * keine Welt- oder Balancing-Änderung.
  * v20 (§ Active Resource Loops 10.0, R7/R8 — dritte horizontale Verdichtung):
  * X/Z 0,84 ZUSÄTZLICH (~−45 % Gesamtfläche ggü. Ur-Insel), 12 statt 13 Regionen,
  * neuer zentraler Start (Region 9, Rathaus (127,250), 1.596 bebaubar, endlich mit
@@ -34,7 +38,7 @@ import { allRegionIds, createRegionStub, occupyTiles } from './map/world.ts';
  * v12 (§ Stadtarbeit 2D): laufende Fahrmissionen speichern Fahrzeugklasse und
  * manuell gezeichnete Straßenkette.
  */
-export const SCHEMA_VERSION = 20;
+export const SCHEMA_VERSION = 21;
 
 export function createNewGame(config: GameConfig, cityName: string, now: number): GameState {
   const state: GameState = {

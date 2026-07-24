@@ -4,7 +4,46 @@
 
 # Offene Aufgaben nach v0.82
 
-## AKTIVER AUFTRAG: Infrastruktur 2.0 — Höhenstraßen, Brücken, Schifffahrt (P0)
+## AKTIVER AUFTRAG: § Spielbarkeit 9.1 — Stadtarbeit/Zeit/Frühlogistik/Anlegernetz/Perf (P0)
+
+> **Vorgezogen auf ausdrücklichen Nutzerwunsch (24.07.2026):** „Ich teste im Moment
+> das Spielerlebnis, deshalb folgende Sachen vorziehen, sodass das Game und
+> Fortschritt spielbarer wird." Entscheid **D-037**. Steht **vor** Infrastruktur-2.0
+> I3–I5 — die Anlegernetz-Arbeit I3/I4 („voll ausgebaut") ist jetzt **Phase P-D**.
+
+**Phasen (Reihenfolge = Umsetzung, jede ein testbarer Meilenstein):**
+- ✅ **P-A Stadtarbeit-Stabilität** (v0.87, Save v21): eingefrorener, deterministischer
+  Planungssnapshot `activities.selection`. Ursache war das Neuwürfeln der Ziele aus der
+  pro Tick weiterlaufenden Sim-RNG. Fix: `pickTargetsSeeded`/`activitySelectionSeed`
+  (stabiler Seed, nie `rngSeed`); Commands `selectActivity`/`refreshActivitySelection`/
+  `clearActivitySelection`; Read `getActivitySelectionStatus`; **keine** Auto-
+  Zielersetzung, `stale`-Hinweis stattdessen. 10 Tests (`activityStability.test.ts`).
+  Audit: `ACTIVITY_STABILITY_AUDIT.md`.
+- ❌ **P-B Zentrale Ingame-Zeit**: EINE Zeitquelle (`REAL_SECONDS_PER_GAME_MINUTE_AT_1X`),
+  sichtbare laufende Uhr aus dem Sim-Snapshot (kein `setInterval` in React), 1×/2×/4×
+  konsistent für **alle** zeitabhängigen Systeme; Bau-/Upgrade-/Arbeits-/Transportzeiten
+  auf Ingame-Zeit umstellen + neu balancieren. Doku: `INGAME_TIME_SYSTEM.md`,
+  `TIMED_PROCESS_MIGRATION.md`.
+- ❌ **P-C Frühlogistik + Lagerübersicht**: Handkarren ab L2 (Holz Sägewerk→Rathauslager,
+  kein Motorfahrzeug nötig); Rathaus-/Lager-Bestände einzeln sichtbar (gesamt/verfügbar/
+  unterwegs/reserviert). **Überlappt 10.0-R3/R4** — dort miterledigen. Doku:
+  `EARLY_LOGISTICS.md`.
+- ❌ **P-D Anleger-zu-Anleger-Netz (= Infrastruktur 2.0 I3/I4, voll ausgebaut)**:
+  Straßenstart am **isolierten** Anleger-Landanker (lokales Netz), gemeinsamer
+  Infrastrukturgraph (road/bridge/elevated/harbor_transfer/water_route),
+  Schiffsroutenvorschau + **persistente** Routen (Kapazität, Reisezeit, Betriebskosten,
+  Warenfluss, Pause/Löschen) mit **linearer** Save-Migration. Reuse
+  `buildingInfrastructure.ts`/`waterNavigation.ts`/`operations/transport.ts`. Doku:
+  `HARBOR_INFRASTRUCTURE_GRAPH.md`.
+- ❌ **P-E Performance-Pass + FPS-Anzeige**: dauerhafte, **gedrosselte** FPS-Anzeige
+  neben der Uhr (Renderer sammelt, ~alle 500 ms ein Snapshot; kein React-Update pro
+  Frame); Infrastrukturgraph cachen/versionieren; Rerender-/Marker-/Vegetations-Audit.
+  Doku: `PERFORMANCE_PASS_REPORT.md`.
+
+**Nicht vortäuschen:** fehlende Schiffs-Legs/Kapazitäts-/Verkehrs-/Netzlastdaten sind
+`TODO(CLAUDE_LOGIC)`. Keine zweite Zeit-, Verkehrs- oder Missionssimulation.
+
+## Infrastruktur 2.0 — Höhenstraßen, Brücken, Schifffahrt (P0, I3–I5 pausiert für Spielbarkeit)
 
 > **Vorgezogen auf ausdrücklichen Nutzerwunsch (24.07.2026):** „Schiebe R2 und Rest
 > erstmal nach hinten … beginne mit dem neuen Auftrag Infrastruktur 2.0 … das ist

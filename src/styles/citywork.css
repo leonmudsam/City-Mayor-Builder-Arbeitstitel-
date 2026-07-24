@@ -1115,6 +1115,12 @@
   color: var(--text-secondary);
 }
 
+.citywork-empty-actions {
+  display: flex;
+  gap: 10px;
+  margin-top: 6px;
+}
+
 /* Laufender Auftrag in der 3D-Welt. */
 .citywork-execution {
   position: absolute;

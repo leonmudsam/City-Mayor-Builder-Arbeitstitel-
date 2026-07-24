@@ -200,6 +200,28 @@ Infrastruktur-Netz-UI. Reihenfolge = Umsetzung. Nichts Fehlendes vortäuschen;
 Kontrollpunkt-Griffe, Live-Mauszeiger-Vorschau und Kurven-Snapping sind
 dokumentiert offen.
 
+## Status: § Spielbarkeit 9.1 — Stadtarbeit/Zeit/Frühlogistik/Anlegernetz/Perf (v0.87+, AKTIV)
+Auf ausdrücklichen Nutzerwunsch **vorgezogen** vor Infrastruktur-2.0 I3–I5 (die
+Anlegernetz-Arbeit I3/I4 „voll ausgebaut" ist jetzt **Phase P-D**). Entscheid
+**D-037**; Phasen P-A…P-E, Reihenfolge = Umsetzung, jede ein testbarer Meilenstein.
+**v0.87 = P-A erledigt (Save v21):** Lieferaufträge springen während der Planung
+nicht mehr. Ursache war eindeutig: `getActivityRoutePlan` würfelte die Ziele bei
+**jeder** UI-Abfrage neu aus der **pro Tick weiterlaufenden Sim-RNG**. Fix: **ein
+einmalig eingefrorener, deterministischer Planungssnapshot** `activities.selection`
+(`pickTargetsSeeded`/`activitySelectionSeed` aus stabilem Seed, **nie** `rngSeed`) —
+kein zweites System, nur ein State-Feld. Lebenszyklus als Commands
+(`selectActivity` idempotent, `refreshActivitySelection` Epoch+1,
+`clearActivitySelection`; `startActivity` räumt ihn). **Keine automatische
+Zielersetzung** — ein Abriss meldet `getActivitySelectionStatus='stale'`, die UI
+zeigt Aktualisieren/Abbrechen. **Save v21 additiv** (Migration v20→v21). Audit:
+`docs/agents/ACTIVITY_STABILITY_AUDIT.md`.
+Offen (Reihenfolge): **P-B** zentrale Ingame-Zeit (eine Zeitquelle, sichtbare Uhr,
+1×/2×/4× konsistent, Bau-/Upgrade-/Arbeits-/Transportzeiten umgestellt + neu
+balanciert) · **P-C** Frühlogistik (Handkarren ab L2: Holz Sägewerk→Rathauslager) +
+Rathaus-/Lagerübersicht · **P-D** Anleger-zu-Anleger-Netz (Straßenstart am isolierten
+Landanker, gemeinsamer Infrastrukturgraph, Schiffsrouten; = I3/I4) · **P-E**
+Performance-Pass + dauerhafte gedrosselte FPS-Anzeige. Nichts Fehlendes vortäuschen.
+
 Verbindlicher Einstieg für die Weiterarbeit:
 `docs/HANDOFF_CLAUDE.md` → `docs/agents/PROJECT_STATE.md` →
 `docs/agents/OPEN_TASKS.md`. Keine zweite Verkehrs- oder Missionssimulation

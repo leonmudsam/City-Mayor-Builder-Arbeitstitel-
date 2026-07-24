@@ -52,6 +52,13 @@ export function ActivityRoutePlanner({ defId }: { defId: string }) {
   const pushToast = useUiStore((state) => state.pushToast);
   const setMissionFollow = useUiStore((state) => state.setMissionFollow);
   const active = game.state.activities.active?.defId === defId ? game.state.activities.active : undefined;
+  // §2.3: Beim Öffnen eines Auftrags EINMALIG einen Planungssnapshot einfrieren.
+  // Idempotent im Controller — kein Reroll/kein version-Bump bei erneutem Aufruf.
+  useEffect(() => {
+    game.selectActivity(defId);
+  }, [game, defId]);
+  // §2.4: Ist ein eingefrorenes Ziel real verschwunden? Dann NICHT still tauschen.
+  const selectionStatus = game.getActivitySelectionStatus(defId);
   const context = useMemo(
     () => game.getActivityPlanningContext(defId),
     [game, game.version, defId],
@@ -136,6 +143,33 @@ export function ActivityRoutePlanner({ defId }: { defId: string }) {
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, [anchors, closePlanner, pushToast, roadPath.length]);
+
+  // §2.4: Ein eingefrorenes Ziel wurde abgerissen — klarer Hinweis statt stillem
+  // Zieltausch. Der Spieler entscheidet: aktualisieren (neue Ziele) oder abbrechen.
+  if (selectionStatus === 'stale' && !active) {
+    return (
+      <section className="citywork-planner citywork-empty">
+        <AlertTriangle size={42} />
+        <h2>Ein Lieferziel wurde abgerissen</h2>
+        <p>Aktualisiere den Auftrag, um ein neues Ziel zu erhalten – oder brich ihn ab. Es wird bewusst kein Ziel im Hintergrund ausgetauscht.</p>
+        <div className="citywork-empty-actions">
+          <button
+            className="btn-primary"
+            onClick={() => {
+              game.refreshActivitySelection(defId);
+              setRoadPath([]);
+              setFitNonce((value) => value + 1);
+            }}
+          >
+            Auftrag aktualisieren
+          </button>
+          <button className="btn-secondary" onClick={() => { game.clearActivitySelection(); closePlanner(); }}>
+            Abbrechen
+          </button>
+        </div>
+      </section>
+    );
+  }
 
   if (!def || !context || !source || !anchors || targets.length < 2 || context.vehicles.length === 0) {
     return (

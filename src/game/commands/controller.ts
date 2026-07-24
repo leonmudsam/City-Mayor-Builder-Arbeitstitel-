@@ -8,14 +8,16 @@ import type {
   DriveVehicle,
 } from '../config/types.ts';
 import {
+  activitySelectionSeed,
   currentTradeContracts,
   pickTargets,
+  pickTargetsSeeded,
   QUALITY_SCALE,
   resolveQuality,
   rewardTierFor,
   type TradeContractOffer,
 } from '../simulation/activities.ts';
-import type { ActiveBuildingOperation, BuildingWorkerState, GameState, InventoryTransfer, RegionId, ResourceId, TerrainType } from '../types.ts';
+import type { ActiveBuildingOperation, ActivityPlanningSelection, BuildingWorkerState, GameState, InventoryTransfer, RegionId, ResourceId, TerrainType } from '../types.ts';
 import { recomputeDerived, type Derived } from '../simulation/derived.ts';
 import { advance, moveInPerMin } from '../simulation/tick.ts';
 import { updateQuests, objectiveTarget, questFocus, type QuestFocus } from '../simulation/quests.ts';
@@ -991,29 +993,137 @@ export class GameController {
   }
 
   /**
-   * Preview the exact target set a route planner may reorder. A shallow state
-   * clone gives `pickTargets` its own RNG seed, so opening/optimising the planner
-   * can never reroll simulation state or affect a save.
+   * Preview the exact target set a route planner may reorder. Wenn ein
+   * eingefrorener Planungssnapshot (§2.3) für diesen Auftrag existiert, sind
+   * SEINE Ziele die Wahrheit — unverändert, egal wie oft (und bei welchem
+   * Simulationsstand) die UI nachfragt. Ohne Snapshot wird eine DETERMINISTISCHE,
+   * NICHT tickabhängige Vorschau abgeleitet (`pickTargetsSeeded` statt der pro
+   * Tick weiterlaufenden Sim-RNG) — die Wurzel des früheren „wechselnde Ziele"-
+   * Bugs. Kein RNG-Konsum, keine Save-Mutation.
    */
   getActivityRoutePlan(defId: string): ActivityRoutePlan | undefined {
     const def = this.config.activities.activities.find((activity) => activity.id === defId);
     if (!def || def.type === 'decision' || def.unlockLevel > this.state.level.current) return undefined;
     if (def.requiresAnyBuilding && !this.hasAnyBuilding(def.requiresAnyBuilding)) return undefined;
+    // Eingefrorener Snapshot hat immer Vorrang — auch ein „veralteter" (Ziel
+    // abgerissen) wird bewusst NICHT still ersetzt (§2.4); die UI zeigt dann über
+    // getActivitySelectionStatus() einen Aktualisieren/Abbrechen-Hinweis.
+    const selection = this.state.activities.selection;
+    if (selection?.defId === defId) {
+      return {
+        defId,
+        ...(selection.sourceBuildingId ? { sourceBuildingId: selection.sourceBuildingId } : {}),
+        targetBuildingIds: [...selection.targetBuildingIds],
+      };
+    }
     const candidates = this.activityCandidates(def);
     if (candidates.length < 2) return undefined;
     const { min, max } = def.targetCount ?? { min: 3, max: 4 };
-    const previewState = { ...this.state };
-    const targetBuildingIds = pickTargets(previewState, candidates, min, max);
-    const sourceBuildingId = def.requiresAnyBuilding
-      ? Object.values(this.state.buildings)
-          .filter((building) => building.status === 'active' && def.requiresAnyBuilding!.includes(building.defId))
-          .sort((a, b) => a.id.localeCompare(b.id))[0]?.id
-      : undefined;
+    const targetBuildingIds = pickTargetsSeeded(
+      candidates,
+      min,
+      max,
+      activitySelectionSeed(defId, this.state.meta.createdAt, 0),
+    );
+    const sourceBuildingId = this.firstActivitySourceId(def);
     return {
       defId,
       ...(sourceBuildingId ? { sourceBuildingId } : {}),
       targetBuildingIds,
     };
+  }
+
+  /** Erstes aktives Quell-Ankergebäude (`requiresAnyBuilding`), sonst `undefined`. */
+  private firstActivitySourceId(def: ActivityDef): string | undefined {
+    if (!def.requiresAnyBuilding) return undefined;
+    return Object.values(this.state.buildings)
+      .filter((building) => building.status === 'active' && def.requiresAnyBuilding!.includes(building.defId))
+      .sort((a, b) => a.id.localeCompare(b.id))[0]?.id;
+  }
+
+  /**
+   * §2.3 Planungssnapshot einfrieren. Wählt EINMALIG eine deterministische
+   * Zielmenge für den Auftrag und hält sie fest, bis die Mission startet, der
+   * Spieler den Auftrag verwirft/aktualisiert oder ein Ziel real verschwindet.
+   * Idempotent: existiert bereits ein Snapshot für `defId` (oder läuft eine
+   * Mission), passiert nichts — kein Reroll, kein `version`-Bump. Deshalb sicher
+   * aus einem UI-Effekt beim Öffnen des Planers aufrufbar.
+   */
+  selectActivity(defId: string): CommandResult {
+    const def = this.config.activities.activities.find((a) => a.id === defId);
+    if (!def || def.type === 'decision') return fail('not_found');
+    // Läuft bereits eine Mission? Ihre `active.targets` sind die stabile Wahrheit.
+    if (this.state.activities.active) return ok;
+    if (this.state.activities.selection?.defId === defId) return ok; // schon eingefroren
+    if (def.unlockLevel > this.state.level.current) return fail('locked');
+    if (def.requiresAnyBuilding && !this.hasAnyBuilding(def.requiresAnyBuilding)) return fail('locked');
+    if (this.activityCandidates(def).length < 2) return fail('invalid');
+    this.state.activities.selection = this.freezeActivitySelection(def, 0);
+    this.notify({ type: 'change' });
+    return ok;
+  }
+
+  /**
+   * §2.4 Nach einem echten Abriss (oder bewusst) neue Ziele ziehen. Erhöht den
+   * Seed-Epoch, sodass eine genuin andere Zielmenge entsteht — nie eine stille
+   * Ersetzung im Hintergrund, sondern nur auf Spielerwunsch.
+   */
+  refreshActivitySelection(defId: string): CommandResult {
+    const def = this.config.activities.activities.find((a) => a.id === defId);
+    if (!def || def.type === 'decision') return fail('not_found');
+    if (this.state.activities.active) return fail('invalid');
+    if (this.activityCandidates(def).length < 2) return fail('invalid');
+    const prev = this.state.activities.selection;
+    const epoch = prev?.defId === defId ? prev.epoch + 1 : 0;
+    this.state.activities.selection = this.freezeActivitySelection(def, epoch);
+    this.notify({ type: 'change' });
+    return ok;
+  }
+
+  /** Auftrag verwerfen (§2.3 „bewusst abbrechen"): Snapshot entfernen. */
+  clearActivitySelection(): CommandResult {
+    if (!this.state.activities.selection) return ok;
+    delete this.state.activities.selection;
+    this.notify({ type: 'change' });
+    return ok;
+  }
+
+  private freezeActivitySelection(def: ActivityDef, epoch: number): ActivityPlanningSelection {
+    const candidates = this.activityCandidates(def);
+    const { min, max } = def.targetCount ?? { min: 3, max: 4 };
+    const targetBuildingIds = pickTargetsSeeded(
+      candidates,
+      min,
+      max,
+      activitySelectionSeed(def.id, this.state.meta.createdAt, epoch),
+    );
+    const sourceBuildingId = this.firstActivitySourceId(def);
+    return {
+      defId: def.id,
+      createdAt: this.state.meta.lastSimTime,
+      epoch,
+      ...(sourceBuildingId ? { sourceBuildingId } : {}),
+      targetBuildingIds,
+    };
+  }
+
+  /**
+   * §2.4 Zustand des eingefrorenen Snapshots aus UI-Sicht:
+   * `'none'` — kein Snapshot (und keine laufende Mission) für diesen Auftrag;
+   * `'ok'` — Snapshot (oder laufende Mission) mit gültigen Zielen;
+   * `'stale'` — mindestens ein eingefrorenes Ziel existiert nicht mehr. Die UI
+   * zeigt dann statt eines stillen Zieltauschs einen Aktualisieren/Abbrechen-
+   * Hinweis.
+   */
+  getActivitySelectionStatus(defId: string): 'none' | 'ok' | 'stale' {
+    if (this.state.activities.active?.defId === defId) return 'ok';
+    const selection = this.state.activities.selection;
+    if (!selection || selection.defId !== defId) return 'none';
+    const def = this.config.activities.activities.find((a) => a.id === defId);
+    if (!def) return 'none';
+    const candidates = new Set(this.activityCandidates(def));
+    const stillValid = selection.targetBuildingIds.filter((id) => candidates.has(id));
+    return stillValid.length === selection.targetBuildingIds.length && stillValid.length >= 2 ? 'ok' : 'stale';
   }
 
   private activityRouteSource(defId: string): RoutePointInput | undefined {
@@ -1469,6 +1579,9 @@ export class GameController {
       ...(plan?.roadPath ? { plannedRoadPath: plan.roadPath.map((point) => ({ ...point })) } : {}),
       ...(def.timeLimitSec !== undefined ? { expiresAt: now + def.timeLimitSec * 1000 } : {}),
     };
+    // Der eingefrorene Planungssnapshot ist ab jetzt durch `active.targets`
+    // ersetzt und wird verworfen (§2.3-Lebenszyklus: planning → executing).
+    delete this.state.activities.selection;
     this.notify({ type: 'change' });
     return ok;
   }

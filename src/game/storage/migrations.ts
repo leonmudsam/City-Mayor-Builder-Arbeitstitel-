@@ -401,6 +401,17 @@ const migrateV19ToV20: Migration = (raw) => {
 };
 
 /**
+ * v20 → v21: § Stadtarbeit-Stabilität 9.1 (D-037). Rein additiv — der neue,
+ * eingefrorene Planungssnapshot `activities.selection` ist optional. Alte Saves
+ * besitzen ihn nicht und laufen unverändert weiter (der Controller friert beim
+ * nächsten Öffnen des Planers frisch ein). Kein Weltumbau, kein Datenverlust.
+ */
+const migrateV20ToV21: Migration = (raw) => {
+  raw.schemaVersion = 21;
+  return raw;
+};
+
+/**
  * Migration chain: migrations[n] upgrades a save from schemaVersion n to n+1.
  * Beginnt bei v10 (Insel-Basis).
  */
@@ -415,6 +426,7 @@ const migrations: Record<number, Migration> = {
   17: migrateV17ToV18,
   18: migrateV18ToV19,
   19: migrateV19ToV20,
+  20: migrateV20ToV21,
 };
 
 export class SaveValidationError extends Error {}

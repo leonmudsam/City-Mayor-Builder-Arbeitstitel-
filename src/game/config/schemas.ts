@@ -384,6 +384,17 @@ export const saveGameSchema = z.object({
         targets: z.array(z.object({ buildingId: z.string(), done: z.boolean() })),
       })
       .optional(),
+    // § Stadtarbeit-Stabilität 9.1 (Save v21): eingefrorener Planungssnapshot
+    // des offenen Auftrags. Optional/additiv — Alt-Saves besitzen ihn nicht.
+    selection: z
+      .object({
+        defId: z.string(),
+        createdAt: z.number(),
+        epoch: z.number().int().nonnegative(),
+        sourceBuildingId: z.string().optional(),
+        targetBuildingIds: z.array(z.string()),
+      })
+      .optional(),
     cooldowns: z.record(z.string(), z.number()),
     fulfilledContracts: z.array(z.string()),
   }),

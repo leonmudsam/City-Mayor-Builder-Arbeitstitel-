@@ -44,6 +44,8 @@ export function resolveQuality(def: ActivityDef, startedAt: number, now: number)
 /**
  * Seeded shuffle-pick of activity targets. Uses the state RNG (commands may
  * mutate the seed), so target sets differ run to run but stay replayable.
+ * Used only at the actual mission start, where consuming the sim RNG is the
+ * deliberate, replayable act. Planning previews use {@link pickTargetsSeeded}.
  */
 export function pickTargets(state: GameState, candidates: string[], min: number, max: number): string[] {
   const pool = [...candidates];
@@ -56,6 +58,49 @@ export function pickTargets(state: GameState, candidates: string[], min: number,
   const span = Math.max(0, max - min);
   const count = Math.min(pool.length, min + Math.floor(nextRandom(state) * (span + 1)));
   return pool.slice(0, count);
+}
+
+/**
+ * Deterministic, state-FREE variant of {@link pickTargets}: same seed → same
+ * target set, independent of the live simulation RNG. This is what freezes a
+ * Stadtarbeit planning snapshot (§2.3) so the target list can never reshuffle
+ * while the simulation clock keeps advancing — the root cause of the historic
+ * „wechselnde Ziele während der Planung"-Bug. Never touches `state.rngSeed`.
+ */
+export function pickTargetsSeeded(candidates: string[], min: number, max: number, seed: number): string[] {
+  let s = seed | 0;
+  const rand = (): number => {
+    s = (s + 0x6d2b79f5) | 0;
+    let t = Math.imul(s ^ (s >>> 15), s | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+  const pool = [...candidates];
+  for (let i = pool.length - 1; i > 0; i--) {
+    const j = Math.floor(rand() * (i + 1));
+    const tmp = pool[i]!;
+    pool[i] = pool[j]!;
+    pool[j] = tmp;
+  }
+  const span = Math.max(0, max - min);
+  const count = Math.min(pool.length, min + Math.floor(rand() * (span + 1)));
+  return pool.slice(0, count);
+}
+
+/**
+ * Stable per-city, per-order, per-epoch seed for a frozen planning snapshot.
+ * The city's `createdAt` anchors it (different cities differ), `defId` separates
+ * orders, and `epoch` lets an explicit refresh draw a genuinely new set without
+ * ever depending on the tick-advancing simulation RNG.
+ */
+export function activitySelectionSeed(defId: string, createdAt: number, epoch: number): number {
+  let hash = (2166136261 ^ (createdAt & 0x7fffffff)) >>> 0;
+  for (let i = 0; i < defId.length; i++) {
+    hash ^= defId.charCodeAt(i);
+    hash = Math.imul(hash, 16777619);
+  }
+  hash ^= Math.imul(epoch + 1, 0x9e3779b1);
+  return (hash | 1) >>> 0;
 }
 
 /** A concrete offer in the current rotation window. */

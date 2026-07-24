@@ -20,7 +20,7 @@ describe('save/load (v17 aktive Betriebe)', () => {
     const restored = importSave(exportSave(controller.state));
     expect(restored).toEqual(JSON.parse(JSON.stringify(controller.state)));
     expect(restored.schemaVersion).toBe(SCHEMA_VERSION);
-    expect(restored.schemaVersion).toBe(20);
+    expect(restored.schemaVersion).toBe(21);
   });
 
   it('keeps saves slim: no tile arrays, region stubs only', () => {

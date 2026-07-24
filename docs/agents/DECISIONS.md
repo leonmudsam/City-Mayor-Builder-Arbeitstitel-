@@ -1,5 +1,42 @@
 # Entscheidungen
 
+## D-037 — Spielbarkeits-Auftrag vorgezogen; Stadtarbeit über einen eingefrorenen Planungssnapshot stabilisiert
+
+**Entscheidung:** Auf ausdrücklichen Nutzerwunsch (24.07.2026, „ich teste im Moment
+das Spielerlebnis, deshalb folgende Sachen vorziehen, sodass das Game und Fortschritt
+spielbarer wird") wird ein **Spielbarkeits-Auftrag** vor die restlichen
+Infrastruktur-2.0-Phasen (I3–I5) gezogen: Stadtarbeit-Stabilität, **eine** zentrale
+Ingame-Zeit, Frühlogistik (Handkarren L2 + Lagerübersicht), Anleger-zu-Anleger-Netz
+und ein Performance-Pass mit dauerhafter FPS-Anzeige. Umsetzung in Phasen
+**P-A … P-E** (Reihenfolge = Umsetzung), jede als testbarer Meilenstein. I3/I4
+(Anlegernetz, „voll ausgebaut") sind Teil von **P-D**.
+
+**Phase P-A (dieser Stand):** Die Ursache der „während der Planung wechselnden
+Aufträge" ist eindeutig: `getActivityRoutePlan` würfelte die Zielmenge bei **jeder**
+UI-Abfrage neu aus der **laufenden Simulations-RNG** (`pickTargets`, `state.rngSeed`),
+die **pro Tick** weiterläuft — bei laufender Uhr also jeden Controller-`version`-Bump
+neu gemischt. Fix (§2 Erweitern statt neu bauen): ein **einmalig eingefrorener,
+deterministischer Planungssnapshot** `activities.selection` pro offenem Auftrag.
+Zielwahl über `pickTargetsSeeded`/`activitySelectionSeed` aus einem **stabilen** Seed
+(Stadt-`createdAt` + Auftrag + Epoch), **nie** aus der Sim-RNG. Kein zweites System —
+ein zusätzliches State-Feld an der bestehenden `ActivitiesState`.
+
+**Architektur:** Lebenszyklus als Commands — `selectActivity` (idempotent, aus
+UI-Effekt), `refreshActivitySelection` (Epoch+1, bewusste neue Ziele),
+`clearActivitySelection`, plus `startActivity` räumt den Snapshot (planning→executing).
+**Keine automatische Zielersetzung** (§2.4): ein abgerissenes Ziel meldet
+`getActivitySelectionStatus = 'stale'` und die UI zeigt Aktualisieren/Abbrechen. Der
+Snapshot ist **persistiert** (überlebt Save/Load, UI-Wechsel, Geschwindigkeit).
+
+**Konsequenzen:** **Save v21**, rein additiv (Migration `v20→v21` nur Versionsstempel;
+Alt-Saves ohne `selection` bleiben ladbar). Gilt datengetrieben für alle
+Lieferauftragstypen. Detail-Audit:
+[`ACTIVITY_STABILITY_AUDIT.md`](ACTIVITY_STABILITY_AUDIT.md).
+
+**Verworfen:** stiller Zieltausch bei Invalidierung; ein separater Echtzeit-Timer in
+React; die Live-RNG als Vorschauquelle beizubehalten und nur zu cachen (der Seed muss
+tickunabhängig sein).
+
 ## D-036 — Infrastruktur 2.0 vorgezogen; Höhenstraßen/Brücken als Straßen-Bauklasse
 
 **Entscheidung:** Auf ausdrücklichen Nutzerwunsch werden die zurückgestellten
