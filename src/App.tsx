@@ -33,6 +33,7 @@ import { WeatherPanel } from './components/panels/WeatherPanel.tsx';
 import { ActivityExecutionWidget } from './components/citywork/ActivityExecutionWidget.tsx';
 import { WorkAreaPlanner } from './components/operations/WorkAreaPlanner.tsx';
 import { ResourceNetworkPanel } from './components/operations/ResourceNetworkPanel.tsx';
+import { InfrastructureNetworkPanel } from './components/operations/InfrastructureNetworkPanel.tsx';
 import { SmartRoadPlannerHud } from './components/operations/SmartRoadPlannerHud.tsx';
 import { formatDuration, formatMoney } from './i18n/index.ts';
 import { Toasts } from './components/common/Toasts.tsx';
@@ -266,6 +267,7 @@ function GameScreen({ onImport, onReset }: { onImport(json: string): boolean; on
   const activityPlannerDefId = useUiStore((s) => s.activityPlannerDefId);
   const workAreaPlannerBuildingId = useUiStore((s) => s.workAreaPlannerBuildingId);
   const resourceNetworkResource = useUiStore((s) => s.resourceNetworkResource);
+  const infrastructureNetworkOpen = useUiStore((s) => s.infrastructureNetworkOpen);
   const placingDefId = useUiStore((s) => s.placingDefId);
   const selectedBuildingId = useUiStore((s) => s.selectedBuildingId);
   const regionDialog = useUiStore((s) => s.regionDialog);
@@ -313,6 +315,11 @@ function GameScreen({ onImport, onReset }: { onImport(json: string): boolean; on
         ) : resourceNetworkResource ? (
           <>
             <ResourceNetworkPanel key={resourceNetworkResource} resource={resourceNetworkResource} />
+            <CameraControls />
+          </>
+        ) : infrastructureNetworkOpen ? (
+          <>
+            <InfrastructureNetworkPanel />
             <CameraControls />
           </>
         ) : (

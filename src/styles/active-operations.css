@@ -545,6 +545,51 @@
   overflow: auto;
 }
 .resource-network-headline { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 5px; }
+
+/* Infrastruktur-Netz-Panel (§ Infrastruktur 2.0 / I5): Reiter + Zeilenliste.
+   Nutzt dieselben Tokens/Kopfzeilen wie das Ressourcennetz — kein zweites
+   Panel-Design, nur eine zusätzliche Ansicht. */
+.infrastructure-tabs { display: flex; gap: 6px; margin-bottom: 10px; flex-wrap: wrap; }
+.infrastructure-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 11px;
+  border: 1px solid var(--ui-border);
+  border-radius: 8px;
+  background: var(--ui-bg-card);
+  color: var(--ui-text-muted);
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.infrastructure-tab:hover { color: var(--ui-text); }
+.infrastructure-tab.is-active { color: var(--ui-cyan); border-color: var(--ui-cyan); }
+.infrastructure-list { display: grid; gap: 6px; margin-top: 10px; list-style: none; padding: 0; }
+.infrastructure-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 9px;
+  border: 1px solid var(--ui-border);
+  border-radius: 8px;
+  background: var(--ui-bg-card);
+  font-size: 11px;
+}
+.infrastructure-row-main {
+  background: none;
+  border: 0;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  padding: 0;
+  cursor: pointer;
+  min-width: 0;
+}
+.infrastructure-row-main small { color: var(--ui-text-muted); }
+.infrastructure-row-actions { display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
+.panel-note { color: var(--ui-text-muted); font-size: 10px; margin-top: 10px; line-height: 1.5; }
 .resource-location-list { display: grid; gap: 6px; margin-top: 10px; }
 .resource-location-list > header { display: flex; justify-content: space-between; align-items: center; }
 .resource-location-list > header h3 { margin: 0; font-size: 12px; }

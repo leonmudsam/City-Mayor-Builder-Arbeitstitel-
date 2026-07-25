@@ -1,5 +1,70 @@
 # Patch Notes
 
+## v0.98 — Infrastruktur 2.0 / I5 (Teil 1): Infrastruktur-Netzübersicht (Save v22)
+
+### Was
+
+- **Neues Panel „Infrastruktur"** mit vier Reitern — **Straßen · Brücken · Anleger ·
+  Schiffe**. Erreichbar über die Schnellleiste neben „Regionen".
+- **Straßen:** verbundene Kacheln, gebaute Bodenstraßen, **Teilnetze einzeln
+  aufgelistet** (Stadtnetz vs. lokales Netz mit Anlegerzahl), angeschlossene Gebäude.
+- **Brücken:** Anzahl der Höhenstraßen-/Brückenkacheln.
+- **Anleger:** gebaute Anleger, betriebsbereit, am Stadtnetz, „lokal – per Schiff
+  anschließbar", plus Wasserwegknoten/-kanten.
+- **Schiffe:** alle Schiffsrouten mit Wasserweg, gelieferter Menge und Zustand
+  (Unterwegs / Wartet auf Ware / Pausiert) — **hier lassen sich Routen pausieren,
+  fortsetzen und löschen**. Damit ist I4 auch bedienbar, nicht nur simuliert.
+
+### Warum
+
+- I3 und I4 haben Teilnetze, Anlegerzustände und Schiffsrouten erzeugt, aber es gab
+  **keinen Ort, an dem man sein Netz als Ganzes sieht** — und keine Bedienoberfläche
+  für die neuen Routen.
+
+### Architektur
+
+- `infrastructureNetworkOverview` liefert jetzt zusätzlich `groundRoadTiles`,
+  `elevatedRoadTiles` (Bauklasse `BuildingDef.road`, I1) und `harbors` — echte Zählung
+  aus dem Bestand statt geschätzter Werte.
+- Das Panel nutzt **ausschließlich vorhandene Reads** (`getInfrastructureNetworkOverview`,
+  `getHarborNetworkOverview`, `getRoadSegments`, `getShippingRoutes`,
+  `getShippingNetworkOverview`) — **keine erfundenen Kapazitäts-, Verkehrs- oder
+  Netzlastdaten**. Was noch nicht existiert (Durchfahrtshöhe, Schiffsklassen), steht als
+  ehrlicher Hinweis da, nicht als Zahl.
+- Gleiche Panel-Bausteine wie das Ressourcennetz (`GamePanel`/`DataMetric`/`StatusChip`),
+  gleiche Tokens — kein zweites Panel-Design. **Ein-Sheet-Regel** eingehalten: das Öffnen
+  schließt andere Sheets und umgekehrt.
+- Die sechs Mockup-Hauptslots der Navigation bleiben **unangetastet**; Infrastruktur ist
+  bewusst eine kontextuelle Utility neben „Regionen".
+- Keine Save-Änderung (v22), keine Simulationsänderung.
+
+### Auswirkung
+
+- `tsc` · ESLint · **425 Vitest grün** (+1: „zählt Bodenstraßen, Höhenstraßen/Brücken und
+  Anleger getrennt") · Vite-Build · 3D-Init-Smoke 0 Konsolenfehler.
+
+### Zukunft — I5 Teil 2 (bewusst offen, braucht eine Entscheidung)
+
+- **Bevölkerungs-Rebalancing** (kleines Haus 4–8 … Hochhaus 300+) ist **nicht**
+  enthalten. Grund: Die Zielwerte lassen sich nicht mit einem einheitlichen Faktor
+  erreichen (aktuell wirkt `populationScale: 20` auf `units × maxResidentsPerUnit`;
+  die nötigen Faktoren liegen je Gebäudetyp zwischen ~10 und ~22). Es ist damit **kein
+  Umrechnen, sondern eine echte Neubalancierung**, die Level-Schwellen, Questziele,
+  Pro-Kopf-Wirtschaft und Versorgungskapazitäten verschiebt — plus lineare Migration
+  der persistierten Einwohnerzahl. Das gehört abgestimmt, statt es mitten im laufenden
+  Spieltest zu erraten.
+
+### Dateien
+
+- `src/components/operations/InfrastructureNetworkPanel.tsx` (neu),
+  `src/game/infrastructure/buildingInfrastructure.ts` (Übersicht erweitert),
+  `src/state/store.ts`, `src/App.tsx`, `src/components/hud/QuickActionBar.tsx`,
+  `src/styles/active-operations.css`, `src/i18n/de.json`, `tests/networkSegments.test.ts`.
+
+### Assets
+
+- Keine neuen Assets.
+
 ## v0.97 — Infrastruktur 2.0 / I4: Persistente Schiffsrouten (Save v22)
 
 ### Was

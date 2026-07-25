@@ -25,8 +25,12 @@ Transport (A5), zentraler Start (S1/S2), Fog/Kamera (S3).
   ❌ R9 adaptive Uferplattform (Renderer/Bake) offen.
 - 🟡 `[P0]` **I4 Schifffahrtsnetz**: ✅ persistente Routen (v0.97, **Save v22** +
   Migration v21→v22): `shippingRoutes.ts`, Frachtkahn, Kapazität/Fahrzeit/Kosten/
-  Pause/Löschen, 10 Tests. ❌ offen: 3D-Schiffe, Routen-UI (→I5), echte multimodale Legs.
-- ❌ `[P1]` **I5 Bevölkerungs-Rebalancing + Infrastruktur-Netz-UI**.
+  Pause/Löschen, 10 Tests. ❌ offen: 3D-Schiffe, echte multimodale Legs.
+  (Routen-UI ✅ mit I5/v0.98.)
+- 🟡 `[P1]` **I5**: ✅ Infrastruktur-Netz-UI (v0.98, Reiter Straßen/Brücken/Anleger/
+  Schiffe + Routenbedienung). ❌ **Bevölkerungs-Rebalancing braucht Entscheidung**
+  (kein einheitlicher Faktor → echte Neubalancierung von Level-/Questzielen +
+  Migration; siehe OPEN_TASKS).
 
 ## 0b. ZURÜCKGESTELLT (nach Infrastruktur 2.0): § 10.0 — Active Resource Loops, Storage, Compaction `[P0]`
 > Master-Spec: [`ACTIVE_RESOURCE_LOOPS_10_PLAN.md`](ACTIVE_RESOURCE_LOOPS_10_PLAN.md) ·

@@ -170,6 +170,10 @@ interface UiState {
   resourceNetworkResource: ResourceId | undefined;
   openResourceNetwork(resource: ResourceId): void;
   closeResourceNetwork(): void;
+  /** Infrastruktur-Netzübersicht (§I5): Straßen/Brücken/Anleger/Schiffe. */
+  infrastructureNetworkOpen: boolean;
+  openInfrastructureNetwork(): void;
+  closeInfrastructureNetwork(): void;
   /** UI-only Straßenentwurf. Kosten/Validierung kommen aus roadPathPreview;
    *  gebaut wird erst nach Bestätigung über placeBuilding. */
   roadPlanPath: { x: number; y: number }[];
@@ -262,6 +266,7 @@ export const useUiStore = create<UiState>((set) => ({
       activityPlannerDefId: defId,
       workAreaPlannerBuildingId: undefined,
       resourceNetworkResource: undefined,
+      infrastructureNetworkOpen: false,
       roadPlanPath: [],
       openPanel: undefined,
       selectedBuildingId: undefined,
@@ -282,6 +287,7 @@ export const useUiStore = create<UiState>((set) => ({
       workAreaSelectedNodeIds: [...new Set(selectedNodeIds)],
       workAreaHoverNodeId: undefined,
       resourceNetworkResource: undefined,
+      infrastructureNetworkOpen: false,
       activityPlannerDefId: undefined,
       openPanel: undefined,
       selectedBuildingId: undefined,
@@ -322,6 +328,21 @@ export const useUiStore = create<UiState>((set) => ({
       roadPlanPath: [],
     }),
   closeResourceNetwork: () => set({ resourceNetworkResource: undefined }),
+  infrastructureNetworkOpen: false,
+  openInfrastructureNetwork: () =>
+    set({
+      infrastructureNetworkOpen: true,
+      resourceNetworkResource: undefined,
+      workAreaPlannerBuildingId: undefined,
+      activityPlannerDefId: undefined,
+      openPanel: undefined,
+      selectedBuildingId: undefined,
+      regionDialog: undefined,
+      placingDefId: undefined,
+      movingBuildingId: undefined,
+      roadPlanPath: [],
+    }),
+  closeInfrastructureNetwork: () => set({ infrastructureNetworkOpen: false }),
   roadPlanPath: [],
   setRoadPlanPath: (path) => set({ roadPlanPath: path.map((point) => ({ x: Math.round(point.x), y: Math.round(point.y) })) }),
   clearRoadPlan: () => set({ roadPlanPath: [] }),
@@ -344,6 +365,7 @@ export const useUiStore = create<UiState>((set) => ({
             activityPlannerDefId: undefined,
             workAreaPlannerBuildingId: undefined,
             resourceNetworkResource: undefined,
+            infrastructureNetworkOpen: false,
             roadPlanPath: [],
           }
         : { openPanel: undefined };
@@ -359,6 +381,7 @@ export const useUiStore = create<UiState>((set) => ({
       activityPlannerDefId: undefined,
       workAreaPlannerBuildingId: undefined,
       resourceNetworkResource: undefined,
+      infrastructureNetworkOpen: false,
       roadPlanPath: [],
     }),
   stopPlacing: () => set({ placingDefId: undefined, placingRotation: 0, roadPlanPath: [] }),
@@ -372,6 +395,7 @@ export const useUiStore = create<UiState>((set) => ({
       activityPlannerDefId: undefined,
       workAreaPlannerBuildingId: undefined,
       resourceNetworkResource: undefined,
+      infrastructureNetworkOpen: false,
       roadPlanPath: [],
     }),
   stopMoving: () => set({ movingBuildingId: undefined }),
@@ -386,6 +410,7 @@ export const useUiStore = create<UiState>((set) => ({
             activityPlannerDefId: undefined,
             workAreaPlannerBuildingId: undefined,
             resourceNetworkResource: undefined,
+            infrastructureNetworkOpen: false,
             roadPlanPath: [],
           }
         : { selectedBuildingId: undefined },
@@ -401,6 +426,7 @@ export const useUiStore = create<UiState>((set) => ({
             activityPlannerDefId: undefined,
             workAreaPlannerBuildingId: undefined,
             resourceNetworkResource: undefined,
+            infrastructureNetworkOpen: false,
             roadPlanPath: [],
           }
         : { regionDialog: undefined },

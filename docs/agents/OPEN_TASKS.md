@@ -115,9 +115,19 @@ der Unblocker.
   - ❌ Offen (nicht vortäuschen): **3D-Schiffe** auf der Route, Routen-UI (→ I5),
     Zwischenlager an Häfen, Kraftstoff/Schiffszustand, mehrere Schiffe je Route,
     echte multimodale Legs (Landwege sind in Lade-/Entladezeit abstrahiert).
-- ❌ **I5 Bevölkerungs-Rebalancing + Infrastruktur-Netz-UI** (Haus 4–8 … Hochhaus 300+;
-  Reiter Straßen/Brücken/Anleger/Schiffe + Kapazitäts-Panel via
-  `infrastructureNetworkOverview`).
+- 🟡 **I5 Bevölkerungs-Rebalancing + Infrastruktur-Netz-UI**:
+  - ✅ **Infrastruktur-Netz-UI** (v0.98): Panel mit Reitern Straßen/Brücken/Anleger/
+    Schiffe (Schnellleiste neben „Regionen"); Teilnetzliste, Anlegerzustände und
+    **Bedienung der Schiffsrouten** (pausieren/fortsetzen/löschen). Übersicht um
+    `groundRoadTiles`/`elevatedRoadTiles`/`harbors` erweitert. Nur echte Reads, keine
+    erfundenen Kapazitäts-/Verkehrsdaten. Keine Save-/Sim-Änderung.
+  - ❌ **Bevölkerungs-Rebalancing** (Haus 4–8 … Hochhaus 300+): **braucht eine
+    Entscheidung.** Die Zielwerte sind mit **keinem einheitlichen Faktor** erreichbar
+    (`populationScale: 20` × `units × maxResidentsPerUnit`; nötige Faktoren je Typ
+    ~10–22). Also echte Neubalancierung statt Umrechnung: verschiebt Level-Schwellen,
+    Questziele (inkl. `questText.test.ts`), Pro-Kopf-Wirtschaft und
+    `coverageCapacity` — plus **lineare Migration** der persistierten Einwohnerzahl.
+    Vorher mit dem Auftraggeber abstimmen (vgl. Audit 2.5 / G4).
 
 **Nicht vortäuschen:** fehlende Schiffs-Legs/Kapazitäts-/Verkehrsdaten sind
 `TODO(CLAUDE_LOGIC)`. Kein zweiter Straßengraph/Transport.

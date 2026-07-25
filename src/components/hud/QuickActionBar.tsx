@@ -1,4 +1,4 @@
-import { BarChart3, ClipboardList, Crown, Hammer, Home, Map, Store } from 'lucide-react';
+import { BarChart3, ClipboardList, Crown, Hammer, Home, Map, Store, Waves } from 'lucide-react';
 import { getMapApi, useGame, useUiStore } from '../../state/store.ts';
 import { buttonImage } from '../../assets/registry.ts';
 import { t } from '../../i18n/index.ts';
@@ -9,7 +9,8 @@ import { t } from '../../i18n/index.ts';
 // navigation slot.
 export function QuickActionBar() {
   const game = useGame();
-  const { openPanel, cameraPreset, setPanel, setCameraPreset } = useUiStore();
+  const { openPanel, cameraPreset, setPanel, setCameraPreset, infrastructureNetworkOpen, openInfrastructureNetwork } =
+    useUiStore();
   const hasTrade = game.hasTradePost();
   const hasActivities = game.getActivityDefs().length > 0;
 
@@ -79,6 +80,14 @@ export function QuickActionBar() {
           label={t('ui.nav.regions')}
           active={openPanel === undefined && cameraPreset === 'overview'}
           onClick={showRegions}
+        />
+        {/* Infrastruktur-Netzübersicht (§I5) — bewusst eine kontextuelle Utility
+            neben „Regionen", damit die sechs Mockup-Hauptslots unangetastet bleiben. */}
+        <QuickButton
+          icon={<Waves size={18} />}
+          label={t('ui.nav.infrastructure')}
+          active={infrastructureNetworkOpen}
+          onClick={openInfrastructureNetwork}
         />
       </div>
     </div>

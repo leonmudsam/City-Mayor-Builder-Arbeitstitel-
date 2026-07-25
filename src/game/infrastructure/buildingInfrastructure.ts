@@ -109,6 +109,12 @@ export interface InfrastructureNetworkOverview {
   roadTiles: number;
   waterNodes: number;
   waterEdges: number;
+  /** Kacheln normaler Bodenstraßen (§I5). */
+  groundRoadTiles: number;
+  /** Kacheln von Höhenstraßen/Brücken/Viadukten (`BuildingDef.road`-Klasse, I1). */
+  elevatedRoadTiles: number;
+  /** Gebaute Anleger/Häfen (waterfront), unabhängig vom Anschlusszustand. */
+  harbors: number;
 }
 
 export function infrastructureNetworkOverview(
@@ -119,7 +125,21 @@ export function infrastructureNetworkOverview(
   let connected = 0;
   let partial = 0;
   let disconnected = 0;
-  const buildings = Object.values(state.buildings).filter((building) => config.buildings.get(building.defId)?.category !== 'roads');
+  let groundRoadTiles = 0;
+  let elevatedRoadTiles = 0;
+  let harbors = 0;
+  const buildings: BuildingInstance[] = [];
+  for (const building of Object.values(state.buildings)) {
+    const def = config.buildings.get(building.defId);
+    if (def?.category === 'roads') {
+      // Straßenkacheln nach Bauklasse trennen: `road` = Höhenstraße/Brücke (I1).
+      if (def.road) elevatedRoadTiles++;
+      else groundRoadTiles++;
+      continue;
+    }
+    if (def?.waterfront) harbors++;
+    buildings.push(building);
+  }
   for (const building of buildings) {
     const status = buildingInfrastructureStatus(state, config, roadNetwork, building).status;
     if (status === 'connected') connected++;
@@ -134,5 +154,8 @@ export function infrastructureNetworkOverview(
     roadTiles: roadNetwork.size,
     waterNodes: waterRouteNodes.length,
     waterEdges: waterRouteEdges.length,
+    groundRoadTiles,
+    elevatedRoadTiles,
+    harbors,
   };
 }

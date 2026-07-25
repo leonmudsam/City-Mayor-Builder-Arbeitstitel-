@@ -102,6 +102,22 @@ describe('§I3 Anleger als Netzknoten', () => {
     expect(node!.linksToCityVia).toEqual([]);
   });
 
+  it('zählt Bodenstraßen, Höhenstraßen/Brücken und Anleger getrennt (§I5)', () => {
+    const { controller } = newController();
+    const before = controller.getInfrastructureNetworkOverview();
+    const road = at(5, 5);
+    expect(controller.placeBuilding('road', road.x, road.y)).toEqual({ ok: true });
+    const after = controller.getInfrastructureNetworkOverview();
+    expect(after.groundRoadTiles).toBe(before.groundRoadTiles + 1);
+    // Eine Bodenstraße ist keine Höhenstraße und kein Anleger.
+    expect(after.elevatedRoadTiles).toBe(before.elevatedRoadTiles);
+    expect(after.harbors).toBe(before.harbors);
+
+    const dock = at(16, 16);
+    injectDock(controller, dock.x, dock.y);
+    expect(controller.getInfrastructureNetworkOverview().harbors).toBe(before.harbors + 1);
+  });
+
   it('liefert eine Netzübersicht, die lokale Teilnetze getrennt zählt', () => {
     const { controller } = newController();
     const dock = at(16, 16);
