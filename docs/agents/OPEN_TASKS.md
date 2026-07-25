@@ -138,8 +138,12 @@ der Unblocker.
 > R1/R7/R8 sind erledigt (D-035, v0.83). **R6 ist mit I2 erledigt (v0.86).** R9 wird
 > in Infrastruktur 2.0 (I3) miterledigt.
 
-- ❌ **R2** Dauerbetrieb: persistentes `workArea` (circle/rect/polygon) +
-  `ContinuousOperationStatus`, Auto-Pause/Resume statt Auto-Delete (Save v20→v21 additiv).
+- ✅ **R2 Dauerbetrieb** (v0.99, **Save v23** + lineare Migration v22→v23): `workArea`
+  (`circle`) + `continuous` am Auftrag, neuer Status `waiting`, Auto-Pause/Resume statt
+  Auto-Delete; Wiederaufnahme über dasselbe `selectAreaNodeIds`. Read
+  `getContinuousOperationStatus`. Gebiets-Start ist standardmäßig Dauerbetrieb, die
+  Einzelbaum-Auswahl bleibt einmalig. 5 Tests (u. a. messbarer Ernte-Kontrast).
+  ⏳ Offen: **Rechteck-/Polygon-Arbeitsgebiete** (brauchen erst einen UI-Entwurfsvertrag).
 - ❌ **R2/§5** passive `Holz/min` + `Produktion/min` aus der UI entfernen, Durchsatz-Diagnose.
 - ❌ **R3** volle `ResourceNetworkSummary` + benannte Standorte + Lagervergleich.
 - ❌ **R4** Handkarren/Handtragen als Frühtransport + Rathauslager + `InventoryTransferRule`.

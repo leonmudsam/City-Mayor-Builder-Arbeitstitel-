@@ -432,9 +432,12 @@ export const saveGameSchema = z.object({
         z.object({
           buildingId: z.string(),
           type: z.literal('harvest'),
-          status: z.enum(['active', 'paused']),
+          // 'waiting' = Dauerbetrieb ohne verfügbare Knoten (§R2, Save v23).
+          status: z.enum(['active', 'paused', 'waiting']),
           targetNodeIds: z.array(z.string()),
           startedAt: z.number(),
+          continuous: z.boolean().optional(),
+          workArea: z.object({ kind: z.literal('circle'), radius: z.number().nonnegative() }).optional(),
         }),
       ),
       nodeDeltas: z.record(

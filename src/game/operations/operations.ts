@@ -12,9 +12,11 @@ import type {
   ActiveBuildingOperation,
   BuildingInstance,
   BuildingInventory,
+  BuildingOperationStatus,
   BuildingWorkerState,
   GameState,
   OperationsState,
+  OperationWorkArea,
   ResourceId,
 } from '../types.ts';
 import { centerOf, chebyshev } from '../buildings/effects.ts';
@@ -214,6 +216,11 @@ export function advanceOperations(state: GameState, config: GameConfig, dtMin: n
     const def = b && config.buildings.get(b.defId);
     if (!b || !def?.operation || b.status !== 'active') continue;
     if (op.status === 'paused') continue;
+    if (op.status === 'waiting') {
+      // § R2: schlafender Dauerbetrieb — erst Nachwuchs prüfen, dann weiterarbeiten.
+      const resumed = resumeWaitingOperation(state, def, b, op, operationStage(def.operation, b.upgradeLevel), now);
+      if (!resumed) continue;
+    }
     advanceBuildingOperation(state, config, ops, op, b, def, def.operation, dtMin, now);
   }
   regenerateNodes(ops, now);
@@ -347,8 +354,38 @@ function advanceBuildingOperation(
       w.x = cx;
       w.y = cy;
     }
-    delete ops.active[b.id];
+    // § R2 Dauerbetrieb: Ein Auftrag MIT Arbeitsgebiet wird nicht mehr gelöscht,
+    // sondern schläft ein (`waiting`) und wacht auf, sobald im Gebiet etwas
+    // nachgewachsen ist. Ohne `continuous` bleibt das alte Verhalten (einmaliger
+    // Auftrag, wird abgeschlossen und entfernt).
+    if (op.continuous && op.workArea) {
+      op.status = 'waiting';
+      op.targetNodeIds = [];
+    } else {
+      delete ops.active[b.id];
+    }
   }
+}
+
+/**
+ * § R2: Ein wartender Dauerbetrieb sucht sein Arbeitsgebiet erneut ab und nimmt die
+ * Arbeit selbst wieder auf, sobald Knoten nachgewachsen sind. Das ersetzt das
+ * manuelle Neu-Auswählen nach jeder Abernte.
+ */
+function resumeWaitingOperation(
+  state: GameState,
+  def: BuildingDef,
+  b: BuildingInstance,
+  op: ActiveBuildingOperation,
+  stage: BuildingOperationStage,
+  now: number,
+): boolean {
+  if (!op.workArea) return false;
+  const nodeIds = selectAreaNodeIds(state, def, b, op.workArea.radius, stage.workerSlots * 4, now);
+  if (nodeIds.length === 0) return false;
+  op.targetNodeIds = nodeIds;
+  op.status = 'active';
+  return true;
 }
 
 /** Nachgewachsene Knoten aufräumen (Delta entfernen ⇒ wieder voll verfügbar). */
@@ -363,7 +400,18 @@ function regenerateNodes(ops: OperationsState, now: number): void {
 // ---- Commands (vom Controller aufgerufen) ----------------------------------
 
 /** Startet/ersetzt den Auftrag eines Betriebs mit einer Knotenauswahl. */
-export function startOperation(state: GameState, buildingId: string, nodeIds: string[], now: number): ActiveBuildingOperation {
+export function startOperation(
+  state: GameState,
+  buildingId: string,
+  nodeIds: string[],
+  now: number,
+  /**
+   * § R2 Dauerbetrieb: Mit `workArea` bleibt der Auftrag nach dem Abernten bestehen
+   * und nimmt die Arbeit bei Nachwuchs selbst wieder auf. Ohne die Option verhält
+   * sich `startOperation` exakt wie bisher (einmaliger Auftrag).
+   */
+  options?: { workArea?: OperationWorkArea },
+): ActiveBuildingOperation {
   const ops = ensureOperationsState(state);
   // Alte Reservierungen dieses Betriebs freigeben, bevor neu gesetzt wird.
   cancelOperation(state, buildingId);
@@ -373,9 +421,55 @@ export function startOperation(state: GameState, buildingId: string, nodeIds: st
     status: 'active',
     targetNodeIds: [...new Set(nodeIds)].slice(0, MAX_OPERATION_NODES),
     startedAt: now,
+    ...(options?.workArea ? { continuous: true, workArea: options.workArea } : {}),
   };
   ops.active[buildingId] = op;
   return op;
+}
+
+/** Zustand eines Dauerbetriebs für die UI (§R2). Reine Projektion. */
+export interface ContinuousOperationStatus {
+  buildingId: string;
+  continuous: boolean;
+  status: BuildingOperationStatus;
+  /** Radius des persistenten Arbeitsgebiets (nur bei Dauerbetrieb). */
+  workAreaRadius?: number;
+  /** Aktuell bearbeitete Knoten. */
+  targetCount: number;
+  /** Im Arbeitsgebiet gerade verfügbare (erntbare) Knoten. */
+  availableInArea: number;
+  /** Frühester Zeitpunkt, zu dem im Gebiet wieder etwas nachgewachsen ist (ms). */
+  nextRegrowthAt?: number;
+}
+
+export function getContinuousOperationStatus(
+  state: GameState,
+  config: GameConfig,
+  buildingId: string,
+  now: number,
+): ContinuousOperationStatus | undefined {
+  const op = state.operations?.active[buildingId];
+  const b = state.buildings[buildingId];
+  const def = b ? config.buildings.get(b.defId) : undefined;
+  if (!op || !b || !def?.operation) return undefined;
+  const radius = op.workArea?.radius;
+  const available = radius === undefined ? [] : availableWorkNodes(state, def, b, radius, now);
+  let nextRegrowthAt: number | undefined;
+  if (radius !== undefined) {
+    for (const node of nodesInWorkArea(state, def, b, radius, now)) {
+      const at = state.operations?.nodeDeltas[node.id]?.regenerationAt;
+      if (at !== undefined && (nextRegrowthAt === undefined || at < nextRegrowthAt)) nextRegrowthAt = at;
+    }
+  }
+  return {
+    buildingId,
+    continuous: op.continuous === true,
+    status: op.status,
+    ...(radius !== undefined ? { workAreaRadius: radius } : {}),
+    targetCount: op.targetNodeIds.length,
+    availableInArea: available.length,
+    ...(nextRegrowthAt !== undefined ? { nextRegrowthAt } : {}),
+  };
 }
 
 /** Bricht den Auftrag ab und gibt alle Reservierungen frei (§23 Abbruch). */

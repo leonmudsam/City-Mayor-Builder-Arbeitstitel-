@@ -37,7 +37,10 @@ Transport (A5), zentraler Start (S1/S2), Fog/Kamera (S3).
 > Audit: [`ACTIVE_RESOURCE_LOOPS_10_AUDIT.md`](ACTIVE_RESOURCE_LOOPS_10_AUDIT.md).
 > Die 10.0-UI ist schon gebaut (real-data-wired); es fehlt die **Sim** dahinter.
 - ✅ R1 Audit (UI voraus, Sim = A1–A5, Welt 512²/34.082/Start 1.400).
-- ⏸️ `[P0]` R2 Dauerbetrieb (persistentes `workArea`, Auto-Pause/Resume, kein Auto-Delete, Save v20→v21).
+- ✅ `[P0]` **R2 Dauerbetrieb** (v0.99, **Save v23** + Migration v22→v23): persistentes
+  `workArea` (circle) + `continuous`, Status `waiting`, Auto-Pause/Resume statt
+  Auto-Delete, `getContinuousOperationStatus`. 5 Tests.
+  ⏳ Rechteck-/Polygonflächen offen (UI-Entwurfsvertrag nötig).
 - ⏸️ `[P0]` R3 Ressourcennetz (`ResourceNetworkSummary` + benannte Standorte + Lagervergleich) → Thema 2/3.
 - ⏸️ `[P0]` R4 Frühtransport (Handkarren/Handtragen, `InventoryTransferRule`) → Thema 2.
 - ⏸️ `[P0]` R5 Stadtarbeit Ladungsprognose + Nachfüllmarker → Thema 2.

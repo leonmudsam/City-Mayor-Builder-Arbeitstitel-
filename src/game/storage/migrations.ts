@@ -423,6 +423,16 @@ const migrateV21ToV22: Migration = (raw) => {
 };
 
 /**
+ * v22 → v23: § 10.0 R2 — Dauerbetrieb. Rein additiv: `continuous` und `workArea` am
+ * aktiven Auftrag sind optional, der neue Status `waiting` entsteht erst im Betrieb.
+ * Ein v22-Auftrag ohne die Felder bleibt exakt ein einmaliger Auftrag wie bisher.
+ */
+const migrateV22ToV23: Migration = (raw) => {
+  raw.schemaVersion = 23;
+  return raw;
+};
+
+/**
  * Migration chain: migrations[n] upgrades a save from schemaVersion n to n+1.
  * Beginnt bei v10 (Insel-Basis).
  */
@@ -439,6 +449,7 @@ const migrations: Record<number, Migration> = {
   19: migrateV19ToV20,
   20: migrateV20ToV21,
   21: migrateV21ToV22,
+  22: migrateV22ToV23,
 };
 
 export class SaveValidationError extends Error {}

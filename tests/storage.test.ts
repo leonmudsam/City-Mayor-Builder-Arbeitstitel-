@@ -22,17 +22,18 @@ describe('save/load (v17 aktive Betriebe)', () => {
     expect(restored.schemaVersion).toBe(SCHEMA_VERSION);
   });
 
-  // § Infrastruktur 2.0 / I4: die Migration v21→v22 ist rein additiv — ein v21-Save
-  // ohne `shipping` muss unverändert ladbar bleiben (Regel §3: Saves brechen nie).
-  it('migriert einen v21-Save linear auf v22, ohne Daten zu verlieren', () => {
+  // Die Migrationen v21→v22 (Schiffsrouten) und v22→v23 (Dauerbetrieb) sind rein
+  // additiv — ein v21-Save ohne die neuen Felder muss über die ganze Kette ladbar
+  // bleiben (Regel §3: Saves brechen nie).
+  it('migriert einen v21-Save linear bis zur aktuellen Version, ohne Daten zu verlieren', () => {
     const { controller } = newController();
     const raw = JSON.parse(exportSave(controller.state)) as Record<string, unknown>;
     delete raw.shipping; // v21 kannte das Feld nicht
     raw.schemaVersion = 21;
     const migrated = migrateAndValidate(raw);
-    expect(migrated.schemaVersion).toBe(22);
+    expect(migrated.schemaVersion).toBe(SCHEMA_VERSION);
     expect(migrated.buildings).toEqual(controller.state.buildings);
-    // Keine erfundenen Routen: ein Altsave startet ohne Schifffahrt.
+    // Keine erfundenen Daten: ein Altsave startet ohne Schifffahrt.
     expect(migrated.shipping).toBeUndefined();
   });
 

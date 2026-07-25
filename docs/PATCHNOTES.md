@@ -1,5 +1,57 @@
 # Patch Notes
 
+## v0.99 — Aktive Ressourcen 10.0 / R2: Dauerbetrieb statt Neu-Auswählen (Save v23)
+
+### Was
+
+- **Ein Sägewerk, das du einmal einrichtest, arbeitet dauerhaft weiter.** Wählst du ein
+  Arbeitsgebiet, bleibt es gespeichert: Ist alles abgeerntet, wird der Auftrag **nicht
+  mehr gelöscht** — er legt sich schlafen („wartet auf Nachwuchs") und **nimmt die
+  Arbeit selbst wieder auf**, sobald im Gebiet Bäume nachgewachsen sind.
+- Bisher musstest du nach **jeder** Abernte von Hand ein neues Gebiet auswählen.
+
+### Warum
+
+- `advanceBuildingOperation` löschte den Auftrag (`delete ops.active[...]`), sobald kein
+  bearbeitbarer Knoten mehr übrig war. Da Bäume ohnehin nachwachsen (8 Simminuten),
+  war das reine Klickarbeit ohne Entscheidung — der Betrieb stand still, bis der Spieler
+  es bemerkte.
+
+### Architektur
+
+- `ActiveBuildingOperation` wird **additiv** um `continuous` und `workArea`
+  (`{ kind: 'circle', radius }`) erweitert; neuer Status **`waiting`**.
+- Der Gebiets-Start (`startBuildingOperation`) ist jetzt standardmäßig ein Dauerbetrieb;
+  mit `continuous = false` bleibt es beim einmaligen Auftrag. Die **Einzelbaum-Auswahl
+  bleibt bewusst einmalig** — dort hat der Spieler konkrete Bäume gemeint, kein Gebiet.
+- Die Wiederaufnahme nutzt **`selectAreaNodeIds`**, also exakt dieselbe Gebietsauswahl
+  wie der Start — kein zweiter Auswahlpfad.
+- **Rechteck-/Polygonflächen sind bewusst NICHT enthalten:** sie brauchen erst einen
+  UI-Entwurfsvertrag. Ein Typ, den niemand erzeugen kann, wäre eine Attrappe.
+- Neuer Read `getContinuousOperationStatus` (Status, Gebietsradius, Ziele, verfügbare
+  Knoten, frühester Nachwuchszeitpunkt) — reine Projektion.
+- **Save v23** mit **linearer Migration v22→v23** (rein additiv). Ein v22-Auftrag ohne
+  die Felder bleibt exakt ein einmaliger Auftrag.
+
+### Auswirkung
+
+- `tsc` · ESLint · **430 Vitest grün** (+5 `continuousOperation.test.ts`) · Vite-Build.
+- Kerntest ist ein **messbarer Kontrast**: Bei identischem Aufbau und identischer Laufzeit
+  erntet der Dauerbetrieb **mehr** als der einmalige Auftrag — der Unterschied kann nur
+  aus der Wiederaufnahme stammen.
+
+### Dateien
+
+- `src/game/operations/operations.ts` (Auto-Pause/Resume, `getContinuousOperationStatus`),
+  `src/game/types.ts` (`OperationWorkArea`, `BuildingOperationStatus`),
+  `src/game/config/schemas.ts`, `src/game/newGame.ts` (v23),
+  `src/game/storage/migrations.ts` (v22→v23), `src/game/commands/controller.ts`,
+  `tests/continuousOperation.test.ts` (neu), `tests/storage.test.ts`.
+
+### Assets
+
+- Keine neuen Assets.
+
 ## v0.98 — Infrastruktur 2.0 / I5 (Teil 1): Infrastruktur-Netzübersicht (Save v22)
 
 ### Was

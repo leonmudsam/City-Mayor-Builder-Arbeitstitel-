@@ -305,12 +305,40 @@ export interface BuildingWorkerState {
  * `targetNodeIds` ist die vom Spieler bestätigte Auswahl/Warteschlange (einzelne
  * Knoten ODER ein Arbeitsgebiet). Reihenfolge = Bearbeitungsreihenfolge.
  */
+/**
+ * Persistentes Arbeitsgebiet eines Dauerbetriebs (§10.0 R2, Save v23). Der
+ * Mittelpunkt ist immer die Grundfläche des Betriebs — genau wie bei
+ * `workAreaBounds`. Rechteck-/Polygonflächen sind bewusst noch NICHT enthalten:
+ * sie brauchen erst einen UI-Entwurfsvertrag (dokumentiert offen), und ein Typ,
+ * den niemand erzeugen kann, wäre eine Attrappe.
+ */
+export interface OperationWorkArea {
+  kind: 'circle';
+  radius: number;
+}
+
+/**
+ * `active` — es wird gearbeitet · `paused` — vom Spieler angehalten ·
+ * `waiting` — **Dauerbetrieb ohne verfügbare Knoten**: der Auftrag bleibt bestehen
+ * und nimmt die Arbeit selbst wieder auf, sobald im Arbeitsgebiet etwas nachgewachsen
+ * ist (§R2: Auto-Pause/Resume statt Auto-Delete).
+ */
+export type BuildingOperationStatus = 'active' | 'paused' | 'waiting';
+
 export interface ActiveBuildingOperation {
   buildingId: BuildingInstanceId;
   type: 'harvest';
-  status: 'active' | 'paused';
+  status: BuildingOperationStatus;
   targetNodeIds: string[];
   startedAt: number;
+  /**
+   * Dauerbetrieb (§R2, Save v23): Der Auftrag überlebt das Abernten und wartet auf
+   * Nachwuchs, statt gelöscht zu werden. Ohne dieses Feld verhält sich ein Auftrag
+   * exakt wie bisher (einmalig).
+   */
+  continuous?: boolean;
+  /** Persistentes Arbeitsgebiet — Grundlage der automatischen Wiederaufnahme. */
+  workArea?: OperationWorkArea;
 }
 
 /**

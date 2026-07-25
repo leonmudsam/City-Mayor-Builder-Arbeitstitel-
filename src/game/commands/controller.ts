@@ -85,6 +85,7 @@ import {
   availableWorkNodes,
   cancelOperation,
   ensureInventory,
+  getContinuousOperationStatus,
   getInventory,
   inventoryFree,
   inventoryUsed,
@@ -96,6 +97,7 @@ import {
   startOperation,
   workAreaBounds,
   workerRenderStates,
+  type ContinuousOperationStatus,
   type OperationPreview,
   type WorkerRenderState,
 } from '../operations/operations.ts';
@@ -2362,7 +2364,13 @@ export class GameController {
    * verfügbaren Ressourcenknoten in Reichweite werden vorgemerkt (§26.3
    * Arbeitsgebiet). `radius`/`maxCount` verfeinern die Auswahl.
    */
-  startBuildingOperation(buildingId: string, radius?: number, maxCount?: number): CommandResult {
+  /**
+   * Startet einen Gebiets-Auftrag. Seit § R2 ist das ein **Dauerbetrieb**: Das
+   * Arbeitsgebiet wird persistiert, und statt den Auftrag beim Abernten zu löschen,
+   * wartet er auf Nachwuchs und nimmt die Arbeit selbst wieder auf. Mit
+   * `continuous = false` bleibt es beim einmaligen Auftrag.
+   */
+  startBuildingOperation(buildingId: string, radius?: number, maxCount?: number, continuous = true): CommandResult {
     const b = this.state.buildings[buildingId];
     const def = b && this.config.buildings.get(b.defId);
     if (!b || !def?.operation || b.status !== 'active') return fail('invalid');
@@ -2371,9 +2379,14 @@ export class GameController {
     const nodeIds = selectAreaNodeIds(this.state, def, b, r, maxCount ?? 60, now);
     if (nodeIds.length === 0) return fail('invalid');
     ensureInventory(this.state, b.id, operationStage(def.operation, b.upgradeLevel).storageCapacity);
-    startOperation(this.state, b.id, nodeIds, now);
+    startOperation(this.state, b.id, nodeIds, now, continuous ? { workArea: { kind: 'circle', radius: r } } : {});
     this.notify({ type: 'change' });
     return ok;
+  }
+
+  /** Zustand eines Dauerbetriebs (§R2): wartet er, arbeitet er, wann wächst nach? */
+  getContinuousOperationStatus(buildingId: string): ContinuousOperationStatus | undefined {
+    return getContinuousOperationStatus(this.state, this.config, buildingId, this.state.meta.lastSimTime);
   }
 
   /** Startet einen Auftrag über eine explizite Knotenauswahl (§26.3 Einzelbäume). */
