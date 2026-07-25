@@ -165,7 +165,11 @@ der Unblocker.
   **Pflicht-/Optional-Marker** für Nachfüllstopps (`required`/`requiredForBuildingId`,
   additiv). Der Marker entsteht per Vorausschau auf dem echten Weg (Bedarf des nächsten
   offenen Ziels vs. Ladung vor dem Nachladen) — keine Heuristik. 2 Tests.
-- ❌ **R10** Migration + Balancing-Abschluss.
+- 🟡 **R10**: ✅ **Migrationskette lueckenlos abgesichert** (v1.03): Test prueft jede
+  ladbare Schema-Version bis zur aktuellen; erlaubt ist nur ein bewusster
+  `LegacyWorldSaveError`, nie "Missing migration". Netz gegengeprueft (kuenstlicher
+  Bump auf v24 laesst den Test fehlschlagen). ❌ **Balancing-Abschluss offen** — haengt
+  an P-B2 (Dauern in Ingame-Minuten) und dem Bevoelkerungs-Rebalancing (I5 Teil 2).
 
 ## Visual Active Operations – verbleibende Daten-/Logikbindungen
 

@@ -1,5 +1,49 @@
 # Patch Notes
 
+## v1.03 — Aktive Ressourcen 10.0 / R10: Migrationskette abgesichert (Save v23)
+
+### Was
+
+- **Ein Spielstand kann nicht mehr still unladbar werden.** Ein neuer Test prüft, dass
+  die Migrationskette **lückenlos** ist: Für jede ladbare Schema-Version muss es einen
+  Weg bis zur aktuellen geben.
+
+### Warum
+
+- Ein `SCHEMA_VERSION`-Bump ohne zugehörige Migration wäre bisher erst **beim Spieler**
+  aufgefallen, der einen alten Stand lädt — genau das verbietet CLAUDE.md §3 („Saves
+  brechen nie"). Bei drei Schema-Bumps in dieser Runde (v21→v22→v23) ist das kein
+  theoretisches Risiko.
+
+### Architektur
+
+- Der Test geht jede Version von der Insel-Basis bis zur aktuellen durch. Erlaubt ist
+  nur ein **bewusster** Weltumbau-Abbruch (`LegacyWorldSaveError` für die ersetzten
+  Alt-Welten) — ein „Missing migration" schlägt fehl.
+- **Das Netz wurde gegengeprüft:** mit einem künstlichen Bump auf v24 ohne Migration
+  schlägt der Test mit „Missing migration from v23" fehl. Ein Test, der nicht fängt,
+  wäre wertlos.
+
+### Balancing-Abschluss — ehrlich offen
+
+- Der zweite Teil von R10 („Balancing-Abschluss") ist **nicht** erledigt und wird auch
+  nicht als erledigt markiert. Er hängt an zwei bewusst vertagten Entscheidungen:
+  **P-B2** (Dauern in Ingame-Minuten neu balancieren) und dem
+  **Bevölkerungs-Rebalancing** (I5 Teil 2) — beides wartet auf dein Spielgefühl bzw.
+  deine Entscheidung zur Zielskala.
+
+### Auswirkung
+
+- `tsc` · ESLint · **437 Vitest grün** (+1) · Vite-Build.
+
+### Dateien
+
+- `tests/storage.test.ts`.
+
+### Assets
+
+- Keine neuen Assets.
+
 ## v1.02 — Aktive Ressourcen 10.0 / R5: Pflicht- und Kür-Nachladen in der Stadtarbeit (Save v23)
 
 ### Was

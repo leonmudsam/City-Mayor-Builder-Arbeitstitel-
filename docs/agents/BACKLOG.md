@@ -54,7 +54,7 @@ Transport (A5), zentraler Start (S1/S2), Fog/Kamera (S3).
   Uferprofil (Nutzerwunsch, Waterfront 636→1.210); 13 Regionen, zentraler Start 9
   (1.668 bebaubar, Küstenzugang), Save v20. 🟡 offen: Ufer-Feinschliff + stärkere
   Bau-Glättung (falls Placement zu steil) → siehe [[shore-transition-request]].
-- ➡️ `[P0]` R9 adaptive Uferplattform → **wandert in Infrastruktur 2.0 / I3** · R10 Migration + Balancing.
+- ➡️ `[P0]` R9 adaptive Uferplattform → **wandert in Infrastruktur 2.0 / I3** · **R10**: ✅ Migrationskette lückenlos abgesichert (v1.03, Test gegengeprüft); ❌ Balancing-Abschluss offen (haengt an P-B2 + Bevoelkerungs-Entscheid).
 
 ---
 

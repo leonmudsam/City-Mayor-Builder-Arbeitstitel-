@@ -4,6 +4,7 @@ import { REGION_COUNT, startRegionConfig } from '../src/game/config/startRegion.
 import { exportSave, importSave } from '../src/game/storage/exportImport.ts';
 import { SCHEMA_VERSION } from '../src/game/newGame.ts';
 import {
+  ISLAND_BASE_VERSION,
   LegacyWorldSaveError,
   migrateAndValidate,
   SaveValidationError,
@@ -20,6 +21,26 @@ describe('save/load (v17 aktive Betriebe)', () => {
     const restored = importSave(exportSave(controller.state));
     expect(restored).toEqual(JSON.parse(JSON.stringify(controller.state)));
     expect(restored.schemaVersion).toBe(SCHEMA_VERSION);
+  });
+
+  // § R10 Migrations-Abschluss: Die Kette darf KEINE Lücke haben. Ohne diesen Test
+  // fällt ein `SCHEMA_VERSION`-Bump ohne zugehörige Migration erst beim Spieler auf,
+  // der einen alten Stand lädt — genau das verbietet CLAUDE.md §3. Erlaubt ist nur
+  // ein *bewusster* Weltumbau-Abbruch (LegacyWorldSaveError), nie „Missing migration".
+  it('hat für jede ladbare Schema-Version eine Migration (keine Lücke in der Kette)', () => {
+    const { controller } = newController();
+    const template = JSON.parse(exportSave(controller.state)) as Record<string, unknown>;
+    for (let version = ISLAND_BASE_VERSION; version < SCHEMA_VERSION; version++) {
+      const raw = { ...template, schemaVersion: version };
+      try {
+        const migrated = migrateAndValidate(raw);
+        expect(migrated.schemaVersion).toBe(SCHEMA_VERSION);
+      } catch (error) {
+        // Bewusst abgebrochene Alt-Welten sind in Ordnung — fehlende Migrationen nicht.
+        expect(error).toBeInstanceOf(LegacyWorldSaveError);
+        expect(String(error)).not.toContain('Missing migration');
+      }
+    }
   });
 
   // Die Migrationen v21→v22 (Schiffsrouten) und v22→v23 (Dauerbetrieb) sind rein
