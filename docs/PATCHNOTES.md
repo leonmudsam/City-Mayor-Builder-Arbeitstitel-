@@ -1,5 +1,62 @@
 # Patch Notes
 
+## v1.00 — Aktive Ressourcen 10.0 / R2·§5: Echter Durchsatz statt erfundener „+45/min" (Save v23)
+
+### Was
+
+- **Die passive Produktionsrate ist bei aktiven Betrieben verschwunden** — sie war
+  schlicht **falsch**. Ein Sägewerk zeigte „+45 Holz/min", produzierte aber seit
+  Active Operations 2.0 **nichts** passiv: Holz entsteht dort ausschließlich durch
+  Arbeiter, Bäume und lokales Lager.
+- **Neu: echte Durchsatz-Diagnose** im Betriebsbereich — Einheiten/Minute **unter den
+  aktuellen Bedingungen**, plus mittlere Entfernung der Ziele. Läuft nichts, steht der
+  ehrliche Grund da: *Pausiert · Wartet auf Nachwuchs · Lager voll · Kein Auftrag*.
+- **Im Baumenü** steht bei Betrieben jetzt „Aktiver Betrieb (Arbeiter statt
+  Passivproduktion)" statt einer Rate, die es nie gab — das ist die Stelle, an der
+  gekauft wird.
+
+### Warum
+
+- Der frühere Wert kam direkt aus dem `produce`-Effekt der Config, obwohl genau dieser
+  Pfad für Gebäude mit `operation` in Tick **und** Derived abgeschaltet ist. Der
+  Betriebsbereich trug dafür schon den ehrlichen Platzhalter „Durchsatz: Nicht
+  angebunden" — der wird jetzt eingelöst.
+
+### Architektur
+
+- Neuer reiner Read `getOperationThroughput` (in `operations.ts`, kein Renderer/React):
+  **Projektion der echten Arbeitsschleife mit denselben Formeln wie der Tick** —
+  `Durchsatz/Arbeiter = Traglast / (Hinweg + Fällzeit + Rückweg)`, mit Standortgüte und
+  Reichweiten-Effizienz. Gezählt werden nur Ziele, an denen **jetzt** etwas zu holen ist
+  (erschöpfte/nachwachsende Knoten tragen nichts bei).
+- **Bewusst als Bedingungswert benannt, nicht als Messung:** Ablade- und Wartezeiten
+  sind nicht enthalten, der reale Wert liegt leicht darunter. Das steht als Tooltip an
+  der Zahl — kein stiller Genauigkeitsanspruch.
+- `effectStats` und `effectSummary` unterdrücken die `produce`-Zeile für Gebäude mit
+  `operation`. Passive Produzenten (Farm, Wasserwerk …) bleiben **unverändert**.
+- Keine Save-Änderung (v23), keine Simulationsänderung — nur Wahrheit in der Anzeige.
+
+### Auswirkung
+
+- `tsc` · ESLint · **432 Vitest grün** (+2) · Vite-Build. Ein Test verankert die
+  Trennung ausdrücklich: Der gemeldete Durchsatz ist **nicht** die Config-Rate 45.
+
+### Zukunft
+
+- Ein **gemessener**, rollierender Durchsatz über ein Zeitfenster (z. B. 10 Spielminuten)
+  bleibt offen — dafür bräuchte es eine persistierte Historie je Betrieb.
+
+### Dateien
+
+- `src/game/operations/operations.ts` (`getOperationThroughput`),
+  `src/game/commands/controller.ts`, `src/components/panels/FloatingBuildingSheet.tsx`,
+  `src/components/panels/BuildMenu.tsx`, `src/i18n/de.json`,
+  `tests/continuousOperation.test.ts`.
+
+### Assets
+
+- Keine neuen Assets.
+
 ## v0.99 — Aktive Ressourcen 10.0 / R2: Dauerbetrieb statt Neu-Auswählen (Save v23)
 
 ### Was

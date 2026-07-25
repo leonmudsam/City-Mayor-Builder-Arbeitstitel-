@@ -84,6 +84,36 @@ describe('§R2 Dauerbetrieb', () => {
     expect(controller.state.operations!.active[sawmillId]).toBeUndefined();
   });
 
+  it('meldet einen echten Durchsatz statt der passiven Config-Rate (§R2/§5)', () => {
+    const { controller, sawmillId } = sawmillWithTinyForest();
+    // Ohne Auftrag fließt nichts — und es wird auch nichts behauptet.
+    const idle = controller.getOperationThroughput(sawmillId)!;
+    expect(idle.perMinute).toBe(0);
+    expect(idle.idleReason).toBe('no_targets');
+
+    expect(controller.startBuildingOperation(sawmillId, 4)).toEqual({ ok: true });
+    const running = controller.getOperationThroughput(sawmillId)!;
+    expect(running.perMinute).toBeGreaterThan(0);
+    expect(running.activeWorkers).toBeGreaterThan(0);
+    expect(running.avgDistance).toBeGreaterThan(0);
+    // Der Wert stammt aus der Arbeitsschleife, NICHT aus dem `produce`-Effekt der
+    // Config (Sägewerk Stufe 1: 45 Holz/min) — sonst wäre es wieder die alte Lüge.
+    const passiveRate = controller.config.buildings
+      .get('sawmill')!
+      .effects.find((e) => e.type === 'produce') as { perMinute: number } | undefined;
+    expect(passiveRate?.perMinute).toBe(45);
+    expect(running.perMinute).not.toBe(45);
+  });
+
+  it('meldet bei pausiertem Betrieb ehrlich 0 statt einer Wunschrate', () => {
+    const { controller, sawmillId } = sawmillWithTinyForest();
+    expect(controller.startBuildingOperation(sawmillId, 4)).toEqual({ ok: true });
+    expect(controller.pauseBuildingOperation(sawmillId)).toEqual({ ok: true });
+    const paused = controller.getOperationThroughput(sawmillId)!;
+    expect(paused.perMinute).toBe(0);
+    expect(paused.idleReason).toBe('paused');
+  });
+
   it('lässt sich weiterhin manuell pausieren und abbrechen', () => {
     const { controller, sawmillId } = sawmillWithTinyForest();
     expect(controller.startBuildingOperation(sawmillId, 4)).toEqual({ ok: true });

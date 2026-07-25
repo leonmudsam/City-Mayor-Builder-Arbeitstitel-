@@ -87,6 +87,7 @@ import {
   ensureInventory,
   getContinuousOperationStatus,
   getInventory,
+  getOperationThroughput,
   inventoryFree,
   inventoryUsed,
   nodesInWorkArea,
@@ -99,6 +100,7 @@ import {
   workerRenderStates,
   type ContinuousOperationStatus,
   type OperationPreview,
+  type OperationThroughput,
   type WorkerRenderState,
 } from '../operations/operations.ts';
 import { resolveNode, type ResourceNode } from '../operations/nodes.ts';
@@ -2387,6 +2389,14 @@ export class GameController {
   /** Zustand eines Dauerbetriebs (§R2): wartet er, arbeitet er, wann wächst nach? */
   getContinuousOperationStatus(buildingId: string): ContinuousOperationStatus | undefined {
     return getContinuousOperationStatus(this.state, this.config, buildingId, this.state.meta.lastSimTime);
+  }
+
+  /**
+   * Durchsatz-Diagnose eines Betriebs (§R2/§5) — ersetzt die frühere, für Betriebe
+   * schlicht falsche passive „+X/min"-Anzeige.
+   */
+  getOperationThroughput(buildingId: string): OperationThroughput | undefined {
+    return getOperationThroughput(this.state, this.config, buildingId, this.state.meta.lastSimTime);
   }
 
   /** Startet einen Auftrag über eine explizite Knotenauswahl (§26.3 Einzelbäume). */

@@ -144,7 +144,13 @@ der Unblocker.
   `getContinuousOperationStatus`. Gebiets-Start ist standardmäßig Dauerbetrieb, die
   Einzelbaum-Auswahl bleibt einmalig. 5 Tests (u. a. messbarer Ernte-Kontrast).
   ⏳ Offen: **Rechteck-/Polygon-Arbeitsgebiete** (brauchen erst einen UI-Entwurfsvertrag).
-- ❌ **R2/§5** passive `Holz/min` + `Produktion/min` aus der UI entfernen, Durchsatz-Diagnose.
+- ✅ **R2/§5** (v1.00): passive `produce`-Rate für Gebäude mit `operation` aus
+  Gebäudefenster **und** Baumenü entfernt (sie war falsch — der Passivpfad ist dort
+  abgeschaltet); neuer reiner Read `getOperationThroughput` löst den Platzhalter
+  „Durchsatz: Nicht angebunden" ein: Projektion der echten Arbeitsschleife
+  (Traglast / (Hinweg + Fällzeit + Rückweg)) mit den Tick-Formeln, plus ehrliche
+  Leerlaufgründe. Keine Save-/Sim-Änderung. 2 Tests.
+  ⏳ Offen: **gemessener** rollierender Durchsatz (braucht persistierte Historie).
 - ❌ **R3** volle `ResourceNetworkSummary` + benannte Standorte + Lagervergleich.
 - ❌ **R4** Handkarren/Handtragen als Frühtransport + Rathauslager + `InventoryTransferRule`.
 - ❌ **R5** Stadtarbeit-Ladungsprognose je Stopp + Pflicht/Optional-Nachfüllmarker.

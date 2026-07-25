@@ -41,6 +41,10 @@ Transport (A5), zentraler Start (S1/S2), Fog/Kamera (S3).
   `workArea` (circle) + `continuous`, Status `waiting`, Auto-Pause/Resume statt
   Auto-Delete, `getContinuousOperationStatus`. 5 Tests.
   ⏳ Rechteck-/Polygonflächen offen (UI-Entwurfsvertrag nötig).
+- ✅ `[P0]` **R2/§5 Durchsatz-Diagnose** (v1.00): falsche passive `produce`-Rate für
+  Betriebe aus Gebäudefenster + Baumenü entfernt; `getOperationThroughput` projiziert
+  die echte Arbeitsschleife mit den Tick-Formeln. Keine Save-/Sim-Änderung. 2 Tests.
+  ⏳ Gemessener rollierender Durchsatz offen (braucht persistierte Historie).
 - ⏸️ `[P0]` R3 Ressourcennetz (`ResourceNetworkSummary` + benannte Standorte + Lagervergleich) → Thema 2/3.
 - ⏸️ `[P0]` R4 Frühtransport (Handkarren/Handtragen, `InventoryTransferRule`) → Thema 2.
 - ⏸️ `[P0]` R5 Stadtarbeit Ladungsprognose + Nachfüllmarker → Thema 2.

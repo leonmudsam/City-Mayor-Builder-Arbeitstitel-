@@ -427,6 +427,86 @@ export function startOperation(
   return op;
 }
 
+/**
+ * Durchsatz-Diagnose eines aktiven Betriebs (§ R2/§5). Ersetzt die frühere passive
+ * „+X/min"-Anzeige, die für Betriebe **falsch** war: deren `produce`-Pfad ist seit
+ * Active Operations 2.0 abgeschaltet.
+ *
+ * Der Wert ist eine **Projektion der echten Arbeitsschleife** mit denselben Formeln,
+ * die der Tick benutzt — Hinweg, Fällen bis die Traglast voll ist, Rückweg:
+ *   Durchsatz/Arbeiter = Traglast / (Hinweg + Fällzeit + Rückweg)
+ * Er ist damit kein gemessener Mittelwert, sondern der Durchsatz **unter den aktuellen
+ * Bedingungen** (Entfernung, Standortgüte, Ausbaustufe) — und wird genau so benannt.
+ * Ablade-/Wartezeiten sind nicht enthalten; der reale Wert liegt leicht darunter.
+ */
+export interface OperationThroughput {
+  buildingId: string;
+  resource: ResourceId;
+  /** Einheiten pro Minute unter den aktuellen Bedingungen (0, wenn nichts läuft). */
+  perMinute: number;
+  /** Warum gerade nichts fließt. */
+  idleReason?: 'paused' | 'waiting_for_regrowth' | 'storage_full' | 'no_targets';
+  activeWorkers: number;
+  /** Mittlere Entfernung der aktuellen Ziele (Kacheln) — der Haupt-Tempohebel. */
+  avgDistance: number;
+}
+
+export function getOperationThroughput(
+  state: GameState,
+  config: GameConfig,
+  buildingId: string,
+  now: number,
+): OperationThroughput | undefined {
+  const b = state.buildings[buildingId];
+  const def = b ? config.buildings.get(b.defId) : undefined;
+  if (!b || !def?.operation) return undefined;
+  const profile = def.operation;
+  const stage = operationStage(profile, b.upgradeLevel);
+  const op = state.operations?.active[buildingId];
+  const inv = getInventory(state, buildingId);
+  const base: OperationThroughput = {
+    buildingId,
+    resource: profile.resource,
+    perMinute: 0,
+    activeWorkers: 0,
+    avgDistance: 0,
+  };
+  if (!op) return { ...base, idleReason: 'no_targets' };
+  if (op.status === 'paused') return { ...base, idleReason: 'paused' };
+  if (op.status === 'waiting') return { ...base, idleReason: 'waiting_for_regrowth' };
+  if (inv && inventoryFree(inv) <= 0) return { ...base, idleReason: 'storage_full' };
+
+  const { cx, cy } = centerOf(def, b);
+  // Nur Ziele zählen, an denen JETZT wirklich etwas zu holen ist — erschöpfte oder
+  // nachwachsende Knoten tragen nichts zum Durchsatz bei.
+  const targets = op.targetNodeIds
+    .filter((id) => {
+      const node = resolveNode(state, profile.nodeTerrain, id, now);
+      return !!node && node.remainingAmount > 0 && node.state !== 'regrowing' && node.state !== 'depleted';
+    })
+    .map((id) => parseNodeId(id))
+    .filter((t): t is { x: number; y: number } => !!t);
+  if (targets.length === 0) return { ...base, idleReason: 'no_targets' };
+
+  const avgDistance =
+    targets.reduce((sum, t) => sum + Math.max(1, chebyshev(cx, cy, t.x, t.y)), 0) / targets.length;
+  const quality = siteQuality(state, config, def, b, profile.resource);
+  const eff = rangeEfficiency(profile, avgDistance);
+  // Dieselben Formeln wie im Tick: Laufzeit = dist / (Tempo × Güte × Reichweite),
+  // Fällzeit = Traglast / (Arbeitstempo × Güte).
+  const walkMin = avgDistance / Math.max(1e-6, stage.movementSpeed * quality * eff);
+  const cutMin = stage.carryCapacity / Math.max(1e-6, stage.workSpeed * quality);
+  const cycleMin = walkMin * 2 + cutMin;
+  const perWorker = cycleMin > 0 ? stage.carryCapacity / cycleMin : 0;
+  const workers = Math.min(stage.workerSlots, targets.length);
+  return {
+    ...base,
+    perMinute: Math.round(perWorker * workers * 10) / 10,
+    activeWorkers: workers,
+    avgDistance: Math.round(avgDistance * 10) / 10,
+  };
+}
+
 /** Zustand eines Dauerbetriebs für die UI (§R2). Reine Projektion. */
 export interface ContinuousOperationStatus {
   buildingId: string;

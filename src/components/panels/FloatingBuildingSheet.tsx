@@ -223,7 +223,7 @@ export function FloatingBuildingSheet() {
           // "Werte" block (mockup §6): the building's key figures as a compact
           // label/value grid rather than a wall of sentences. Derived straight
           // from the effective effects — no new state.
-          const stats = effects.flatMap((eff) => effectStats(eff, bonusPct));
+          const stats = effects.flatMap((eff) => effectStats(eff, bonusPct, def.operation !== undefined));
           if (bonusPct > 0) stats.push({ icon: <Sparkles size={14} />, label: t('ui.location_bonus_short'), value: `+${Math.round(bonusPct)}%`, tone: 'good' });
           if (ambience !== undefined) stats.push({ icon: <Leaf size={14} />, label: t('ui.ambience'), value: `${ambience >= 0 ? '+' : ''}${ambience}`, tone: ambience >= 0 ? 'good' : 'bad' });
           if (stats.length === 0) return null;
@@ -460,6 +460,7 @@ function BuildingOperationSection({ buildingId }: { buildingId: string }) {
   const def = game.config.buildings.get(building.defId)!;
   const running = info.active !== undefined;
   const preview = running ? undefined : game.getBuildingOperationPreview(buildingId);
+  const throughput = game.getOperationThroughput(buildingId);
   const resName = t(`resource.${info.resource}`);
   const inv = info.inventory;
   const storagePct = inv.capacity > 0 ? Math.min(100, Math.round((inv.used / inv.capacity) * 100)) : 0;
@@ -510,9 +511,21 @@ function BuildingOperationSection({ buildingId }: { buildingId: string }) {
           <span><MapPinned size={13} /> {t('ui.operation.available_nodes')}</span>
           <strong>{info.availableNodes}</strong>
         </div>
+        {/* § R2/§5: echter Durchsatz statt der früheren passiven „+X/min"-Lüge.
+            Projektion der realen Arbeitsschleife (Hinweg + Fällen + Rückweg) mit den
+            Formeln des Ticks — also der Wert unter den AKTUELLEN Bedingungen. */}
         <div className="op-metric">
-          <span><TrendingUp size={13} /> Durchsatz</span>
-          <strong className="muted">Nicht angebunden</strong>
+          <span><TrendingUp size={13} /> {t('ui.operation.throughput')}</span>
+          {throughput && throughput.perMinute > 0 ? (
+            <strong title={t('ui.operation.throughput_hint')}>
+              {throughput.perMinute.toLocaleString('de-DE')} {resName}/min
+              <small> · ø {throughput.avgDistance} Kacheln</small>
+            </strong>
+          ) : (
+            <strong className="muted">
+              {throughput?.idleReason ? t(`ui.operation.idle.${throughput.idleReason}`) : '—'}
+            </strong>
+          )}
         </div>
       </div>}
 
@@ -757,10 +770,14 @@ interface SheetStat {
 
 /** One effect → its "Werte" grid rows (label + value). Empty for effects that
  *  have no legible figure (ambience/demand are shown elsewhere or implied). */
-function effectStats(eff: BuildingEffect, bonusPct: number): SheetStat[] {
+function effectStats(eff: BuildingEffect, bonusPct: number, isActiveOperation = false): SheetStat[] {
   const icon = effectIcon(eff);
   switch (eff.type) {
     case 'produce': {
+      // § R2/§5: Bei einem aktiven Betrieb ist der passive `produce`-Pfad seit
+      // Active Operations 2.0 ABGESCHALTET — eine „+X/min"-Zeile wäre schlicht
+      // falsch. Der echte Durchsatz steht im Betriebsbereich (Durchsatz-Diagnose).
+      if (isActiveOperation) return [];
       const rate = eff.perMinute * (1 + bonusPct / 100);
       return [{ icon, label: t(`resource.${eff.resource}`), value: `+${rate % 1 === 0 ? rate : rate.toFixed(1)}/min`, tone: 'good' }];
     }

@@ -340,9 +340,17 @@ function BuildCard({
 
 function effectSummary(def: BuildingDef): string {
   const parts: string[] = [];
+  // § R2/§5: Aktive Betriebe produzieren NICHT passiv (der `produce`-Pfad ist seit
+  // Active Operations 2.0 abgeschaltet). Im Shop eine Rate zu versprechen, die es
+  // nicht gibt, wäre die irreführendste Stelle überhaupt — dort wird gekauft.
+  const isActiveOperation = def.operation !== undefined;
   for (const eff of def.effects) {
     switch (eff.type) {
       case 'produce':
+        if (isActiveOperation) {
+          parts.push(t('ui.build.active_operation'));
+          break;
+        }
         parts.push(`+${eff.perMinute} ${t(`resource.${eff.resource}`)}/min`);
         break;
       case 'housing':
