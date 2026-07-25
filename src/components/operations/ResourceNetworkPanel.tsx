@@ -55,6 +55,33 @@ export function ResourceNetworkPanel({ resource }: { resource: ResourceId }) {
         <DataMetric label="Reserviert" value={view.reserved.toLocaleString('de-DE')} icon={<CircleDollarSign size={18} />} />
       </div>
 
+      {/* § R3 Lagervergleich: Wo staut es sich? Nur physische Standorte — der
+          zentrale Pool hat im aktuellen Modell keinen Ort (§7.2). */}
+      {view.storageComparison.locations > 0 && (
+        <div className="resource-network-headline">
+          <DataMetric
+            label="Lager belegt"
+            value={`${view.storageComparison.utilizationPct} %`}
+            icon={<Warehouse size={18} />}
+            tone={view.storageComparison.utilizationPct >= 85 ? 'warning' : 'info'}
+            detail={`${view.storageComparison.totalStored.toLocaleString('de-DE')} / ${view.storageComparison.totalCapacity.toLocaleString('de-DE')}`}
+          />
+          <DataMetric label="Freier Lagerplatz" value={view.storageComparison.totalFree.toLocaleString('de-DE')} icon={<PackageOpen size={18} />} />
+          <DataMetric
+            label="Standorte (voll/fast voll)"
+            value={`${view.storageComparison.locations} (${view.storageComparison.fullLocations})`}
+            {...(view.storageComparison.fullLocations > 0 ? { tone: 'warning' as const } : {})}
+          />
+          {view.storageComparison.fullestLocationName && (
+            <DataMetric
+              label="Engpass zuerst"
+              value={view.storageComparison.fullestLocationName}
+              detail={`${view.storageComparison.fullestPct} % belegt`}
+            />
+          )}
+        </div>
+      )}
+
       <div className="resource-location-list">
         <header>
           <div><h3>Standorte</h3><small>Echte lokale Lager und zentraler Controller-Bestand</small></div>

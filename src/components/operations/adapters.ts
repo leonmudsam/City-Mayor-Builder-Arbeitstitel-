@@ -7,6 +7,7 @@ import type {
   BuildingOperationView,
   ResourceLocationView,
   ResourceNetworkView,
+  ResourceStorageComparison,
   SmartRoadPlanView,
   TransportMethodView,
   TransportPlannerView,
@@ -324,6 +325,7 @@ export function buildResourceNetworkView(game: GameController, resource: Resourc
     inTransit: number(overview?.inTransit ?? 0),
     reserved: number(overview?.reserved ?? 0),
     locations,
+    storageComparison: buildStorageComparison(locations),
     dataNotes: [
       'Lokale Betriebslager und Transporte sind physisch zugeordnet.',
       'Der zentrale Bestand ist im aktuellen Controller ein gemeinsamer Pool; Rathaus- und Lagerhausanteile werden nicht vorgetäuscht.',
@@ -331,21 +333,52 @@ export function buildResourceNetworkView(game: GameController, resource: Resourc
   };
 }
 
+/**
+ * Lagervergleich über die **physischen** Standorte (§ R3): Wo staut es sich, wo ist
+ * noch Platz? Der zentrale Pool bleibt draußen — er hat im aktuellen Modell keinen
+ * Standort (§7.2) und würde den Vergleich verfälschen.
+ */
+function buildStorageComparison(locations: ResourceLocationView[]): ResourceStorageComparison {
+  const physical = locations.filter(
+    (location) => location.kind !== 'network' && location.kind !== 'transport' && (location.capacity ?? 0) > 0,
+  );
+  let totalCapacity = 0;
+  let totalStored = 0;
+  let fullLocations = 0;
+  let fullest: { id: string; name: string; pct: number } | undefined;
+  for (const location of physical) {
+    const capacity = location.capacity ?? 0;
+    totalCapacity += capacity;
+    totalStored += location.storedAmount;
+    const pct = capacity > 0 ? (location.storedAmount / capacity) * 100 : 0;
+    if (location.status === 'full' || location.status === 'nearly_full') fullLocations++;
+    if (!fullest || pct > fullest.pct) fullest = { id: location.id, name: location.displayName, pct };
+  }
+  return {
+    locations: physical.length,
+    totalCapacity: Math.round(totalCapacity),
+    totalStored: Math.round(totalStored),
+    totalFree: Math.round(Math.max(0, totalCapacity - totalStored)),
+    utilizationPct: totalCapacity > 0 ? Math.round((totalStored / totalCapacity) * 100) : 0,
+    fullLocations,
+    ...(fullest
+      ? {
+          fullestLocationId: fullest.id,
+          fullestLocationName: fullest.name,
+          fullestPct: Math.round(fullest.pct),
+        }
+      : {}),
+  };
+}
+
+/**
+ * Transportmethoden = **der echte Fahrzeugkatalog**, nichts daneben. Früher stand hier
+ * zusätzlich ein hart kodierter Handkarren-Platzhalter („Nicht angebunden", Kapazität 0).
+ * Seit § P-C (v0.91) ist der Handkarren ein echtes Katalogfahrzeug ab Level 2 — der Stub
+ * war dadurch doppelt gelistet und schlicht falsch (§ R4 Frühtransport).
+ */
 function allTransportMethods(game: GameController): TransportMethodView[] {
-  const methods: TransportMethodView[] = [
-    {
-      id: 'handcart',
-      displayName: 'Handkarren',
-      description: 'Visuell vorgesehene Frühtransport-Stufe.',
-      imageKey: 'transport_handcart',
-      capacity: 0,
-      speedLabel: 'Nicht angebunden',
-      operatingCost: 0,
-      unlocked: false,
-      available: false,
-      disabledReason: 'Im Fahrzeugkatalog und Controller noch nicht vorhanden.',
-    },
-  ];
+  const methods: TransportMethodView[] = [];
   for (const vehicle of game.config.activities.vehicles) {
     const unlocked = vehicle.unlockLevel <= game.state.level.current && !vehicle.future;
     methods.push({

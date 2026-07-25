@@ -45,8 +45,8 @@ Transport (A5), zentraler Start (S1/S2), Fog/Kamera (S3).
   Betriebe aus Gebäudefenster + Baumenü entfernt; `getOperationThroughput` projiziert
   die echte Arbeitsschleife mit den Tick-Formeln. Keine Save-/Sim-Änderung. 2 Tests.
   ⏳ Gemessener rollierender Durchsatz offen (braucht persistierte Historie).
-- ⏸️ `[P0]` R3 Ressourcennetz (`ResourceNetworkSummary` + benannte Standorte + Lagervergleich) → Thema 2/3.
-- ⏸️ `[P0]` R4 Frühtransport (Handkarren/Handtragen, `InventoryTransferRule`) → Thema 2.
+- 🟡 `[P0]` **R3 Ressourcennetz**: ✅ Lagervergleich (v1.01, `buildStorageComparison` — Belegung/frei/Engpass, nur physische Lager). ❌ getrennte Rathaus-/Lagerhausanteile offen (braucht Bestandsmodell je Gebäude).
+- 🟡 `[P0]` **R4 Frühtransport**: ✅ Handkarren real (v0.91) + hart kodierter Platzhalter entfernt (v1.01, Methoden nur noch aus dem Katalog). ❌ `InventoryTransferRule` + physisches Rathauslager offen.
 - ⏸️ `[P0]` R5 Stadtarbeit Ladungsprognose + Nachfüllmarker → Thema 2.
 - ➡️ `[P0]` R6 Straßen A→B terrainbasiert + Kontrollpunkte → **wandert in Infrastruktur 2.0 / I2**.
 - ✅ `[P0]` **R7+R8** (D-035, v0.83): dritte Verdichtung X/Z 0,84 (~−44 %) + weiches

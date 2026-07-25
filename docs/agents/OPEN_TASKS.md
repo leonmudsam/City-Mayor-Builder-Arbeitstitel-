@@ -151,8 +151,16 @@ der Unblocker.
   (Traglast / (Hinweg + Fällzeit + Rückweg)) mit den Tick-Formeln, plus ehrliche
   Leerlaufgründe. Keine Save-/Sim-Änderung. 2 Tests.
   ⏳ Offen: **gemessener** rollierender Durchsatz (braucht persistierte Historie).
-- ❌ **R3** volle `ResourceNetworkSummary` + benannte Standorte + Lagervergleich.
-- ❌ **R4** Handkarren/Handtragen als Frühtransport + Rathauslager + `InventoryTransferRule`.
+- 🟡 **R3** Ressourcennetz: ✅ benannte Standorte (Region + Richtung) waren bereits echt;
+  ✅ **Lagervergleich** (v1.01) — Belegung %, freier Platz, voll/fast-voll-Zähler,
+  Engpass-Standort (`buildStorageComparison`, nur physische Lager; zentraler Pool
+  bewusst ausgenommen, §7.2). ❌ offen: getrennte Rathaus-/Lagerhausanteile (braucht ein
+  echtes Bestandsmodell je Gebäude statt des gemeinsamen Pools).
+- 🟡 **R4** Frühtransport: ✅ Handkarren ist seit v0.91 real; der **hart kodierte
+  Platzhalter** daneben („Nicht angebunden", Kapazität 0) ist mit v1.01 entfernt —
+  Transportmethoden kommen nur noch aus `config.activities.vehicles`, jede genau einmal.
+  ❌ offen: `InventoryTransferRule` (wiederkehrende Lagerregeln) + physisches
+  Rathauslager.
 - ❌ **R5** Stadtarbeit-Ladungsprognose je Stopp + Pflicht/Optional-Nachfüllmarker.
 - ❌ **R10** Migration + Balancing-Abschluss.
 

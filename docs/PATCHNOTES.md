@@ -1,5 +1,58 @@
 # Patch Notes
 
+## v1.01 — Aktive Ressourcen 10.0 / R3+R4: Lagervergleich + echter Handkarren (Save v23)
+
+### Was
+
+- **Der Handkarren war doppelt gelistet** — einmal als toter Platzhalter („Nicht
+  angebunden", Kapazität 0, deaktiviert) und einmal echt aus dem Fahrzeugkatalog. Der
+  Platzhalter stammte aus der Zeit **vor** v0.91, wo der Handkarren tatsächlich noch
+  fehlte. Er ist jetzt weg: Jede Transportmethode erscheint **genau einmal**, mit den
+  echten Katalogwerten (Handkarren: Kapazität 40, ab Level 2 nutzbar).
+- **Neu: Lagervergleich im Ressourcennetz** — Belegung in Prozent, freier Lagerplatz,
+  Zahl der Standorte samt „voll/fast voll", und **welcher Standort zuerst dichtmacht**.
+  Damit ist auf einen Blick sichtbar, wo sich Ware staut.
+
+### Warum
+
+- Der Platzhalter war eine harte Fehlinformation an der Stelle, an der man ein
+  Transportmittel wählt — und ein Alt-Test hatte genau diese Lüge festgeschrieben
+  (`available: false, capacity: 0`). Beides ist korrigiert.
+- Der Lagerstand einzelner Standorte war zwar gelistet, aber nirgends verglichen: Bei
+  vollem lokalem Lager stoppt ein Betrieb (§26.8) — man sah nur nicht, welcher zuerst.
+
+### Architektur
+
+- Die Transportmethoden kommen jetzt **ausschließlich** aus
+  `config.activities.vehicles` — keine hart kodierten Kopien mehr neben dem Katalog.
+- Neuer reiner Helfer `buildStorageComparison` über die vorhandenen Standortdaten.
+  **Nur physische Lager zählen**; der zentrale Pool bleibt bewusst draußen, weil er im
+  aktuellen Modell keinen Ort hat (§7.2) und den Vergleich verfälschen würde.
+- Keine Save-Änderung (v23), keine Simulationsänderung.
+
+### Auswirkung
+
+- `tsc` · ESLint · **434 Vitest grün** (+2) · Vite-Build. Der stale Alt-Test wurde durch
+  einen ersetzt, der das Gegenteil sichert: keine Dubletten, Werte **aus dem Katalog**.
+  Ein zweiter Test prüft, dass `belegt + frei = Gesamtkapazität` gilt — keine erfundenen
+  Restmengen.
+
+### Zukunft
+
+- Offen aus R4: **`InventoryTransferRule`** (wiederkehrende Lagerregeln) und ein
+  physisches Rathauslager statt des gemeinsamen Pools — beides braucht ein echtes
+  Bestandsmodell je Gebäude, nicht nur eine UI.
+
+### Dateien
+
+- `src/components/operations/adapters.ts`, `src/components/operations/viewModels.ts`,
+  `src/components/operations/ResourceNetworkPanel.tsx`,
+  `src/dev/activeOperationsMockData.ts`, `tests/activeOperationsViewModels.test.ts`.
+
+### Assets
+
+- Keine neuen Assets.
+
 ## v1.00 — Aktive Ressourcen 10.0 / R2·§5: Echter Durchsatz statt erfundener „+45/min" (Save v23)
 
 ### Was

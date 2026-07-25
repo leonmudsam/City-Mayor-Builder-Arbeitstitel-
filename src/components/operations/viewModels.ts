@@ -137,7 +137,31 @@ export interface ResourceNetworkView {
   inTransit: number;
   reserved: number;
   locations: ResourceLocationView[];
+  /** Lagervergleich über alle physischen Standorte (§ R3). Nur echte Werte. */
+  storageComparison: ResourceStorageComparison;
   dataNotes: string[];
+}
+
+/**
+ * Vergleich der **physischen** Lagerorte (lokale Betriebslager) — beantwortet
+ * „wo staut es sich?". Der zentrale Pool ist bewusst NICHT enthalten: er ist im
+ * aktuellen Modell ein gemeinsamer Bestand ohne Standort (§7.2).
+ */
+export interface ResourceStorageComparison {
+  /** Anzahl Standorte mit echter Lagerkapazität. */
+  locations: number;
+  totalCapacity: number;
+  totalStored: number;
+  /** Freie physische Lagerkapazität. */
+  totalFree: number;
+  /** Auslastung 0..100. */
+  utilizationPct: number;
+  /** Standorte, die voll bzw. fast voll sind (Engpass). */
+  fullLocations: number;
+  /** Der vollste Standort — dort droht der Stopp zuerst. */
+  fullestLocationId?: string;
+  fullestLocationName?: string;
+  fullestPct?: number;
 }
 
 export interface TransportMethodView {

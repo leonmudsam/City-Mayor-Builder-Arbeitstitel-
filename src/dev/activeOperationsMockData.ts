@@ -58,6 +58,14 @@ export const activeOperationsVisualMocks: {
     inTransit: 18,
     reserved: 22,
     locations: [],
+    storageComparison: {
+      locations: 0,
+      totalCapacity: 0,
+      totalStored: 0,
+      totalFree: 0,
+      utilizationPct: 0,
+      fullLocations: 0,
+    },
     dataNotes: ['Visuelle Kompositionsdaten – keine Produktionsquelle.'],
   },
   transport: {

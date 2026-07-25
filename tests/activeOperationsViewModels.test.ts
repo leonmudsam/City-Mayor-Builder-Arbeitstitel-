@@ -78,13 +78,46 @@ describe('Active Operations Visual ViewModels', () => {
       'van',
     );
 
-    expect(view.methods.find((method) => method.id === 'handcart')).toMatchObject({
-      available: false,
-      capacity: 0,
-    });
+    // Fahrzeugwerte kommen aus dem Katalog — nie aus hart kodierten Kopien.
     expect(view.methods.find((method) => method.id === 'van')?.capacity).toBe(
       controller.config.activities.vehicles.find((vehicle) => vehicle.id === 'van')?.capacity,
     );
+  });
+
+  // § R4: Der Handkarren stand hier zusätzlich als hart kodierter Platzhalter
+  // („Nicht angebunden", Kapazität 0) — seit v0.91 ist er ein echtes Katalogfahrzeug.
+  it('listet jede Transportmethode genau einmal, mit echten Katalogwerten (§R4)', () => {
+    const { controller, sawmillId } = visualSawmill();
+    setLevel(controller, 8);
+    const view = buildTransportPlannerView(controller, sawmillId, 'wood', 10);
+    const ids = view.methods.map((method) => method.id);
+    expect(new Set(ids).size).toBe(ids.length); // keine Dubletten mehr
+
+    const handcart = view.methods.find((method) => method.id === 'handcart')!;
+    const catalog = controller.config.activities.vehicles.find((vehicle) => vehicle.id === 'handcart')!;
+    expect(handcart.capacity).toBe(catalog.capacity);
+    expect(handcart.capacity).toBeGreaterThan(0);
+    expect(handcart.available).toBe(true); // ab Level 2 nutzbar
+    expect(handcart.speedLabel).not.toBe('Nicht angebunden');
+  });
+
+  // § R3: Lagervergleich über die physischen Standorte.
+  it('vergleicht die echten Lagerstandorte und nennt den Engpass (§R3)', () => {
+    const { controller, sawmillId } = visualSawmill();
+    controller.startBuildingOperation(sawmillId);
+    controller.update(T0 + 31_000 + 20 * 60_000, true);
+
+    const view = buildResourceNetworkView(controller, 'wood');
+    const comparison = view.storageComparison;
+    expect(comparison.locations).toBeGreaterThan(0);
+    expect(comparison.totalCapacity).toBeGreaterThan(0);
+    // Belegt + frei ergibt die Gesamtkapazität — keine erfundenen Restmengen.
+    expect(comparison.totalStored + comparison.totalFree).toBe(comparison.totalCapacity);
+    expect(comparison.utilizationPct).toBeGreaterThanOrEqual(0);
+    expect(comparison.utilizationPct).toBeLessThanOrEqual(100);
+    expect(comparison.fullestLocationName).toBeDefined();
+    // Der zentrale Pool ist kein physischer Standort und darf nicht mitzählen.
+    expect(comparison.locations).toBeLessThan(view.locations.length);
   });
 
   it('analysiert einen Straßenentwurf ohne den Spielzustand zu verändern', () => {
