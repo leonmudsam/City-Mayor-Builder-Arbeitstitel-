@@ -4,6 +4,20 @@ City Mayor Builder wird als **natives PC-Spiel** (Tauri, Windows zuerst) aus **e
 Codebasis entwickelt; der Browser ist nur Dev/Test. Vollständige Begründung:
 `docs/PROJECT_STRATEGY.md`. Architektur: `docs/ARCHITECTURE.md`.
 
+## Oberste Designregel: Active Simplicity (D-039, 25.07.2026)
+> **Der Spieler entscheidet. Die Stadt arbeitet.** Nicht andersherum.
+>
+> **Jede Aktion, die der Spieler mehr als drei Mal hintereinander ausführen muss,
+> wird automatisiert oder durch ein dauerhaftes Regelwerk ersetzt.**
+>
+> Vereinfacht wird die **Bedienung**, nicht die Simulation — Tiefe im Hintergrund,
+> Ruhe im Vordergrund. Automatisiert wird **Ausführung**, nie **Wahl** (wo
+> expandieren, was bauen, welche Steuern, welche Bürgerwünsche bleibt Spieler).
+> Diese Regel schlägt im Konflikt jede frühere Feature-Planung — sie löst
+> ausdrücklich A5/D-032 (manueller Transport), R4 (Lager-/Fahrzeugwahl) und R5
+> (manuelle Nachfüllplanung) als *Bedienkonzept* ab; die Systeme dahinter bleiben.
+> Verbindlich: `docs/agents/ACTIVE_SIMPLICITY_PLAN.md`.
+
 ## Harte Regeln
 1. **Simulation ≠ Rendering.** Nichts unter `src/game/**` darf `three`, `pixi.js`,
    `react`, `zustand`, `../renderer`, `../components` oder `../state` importieren. UI

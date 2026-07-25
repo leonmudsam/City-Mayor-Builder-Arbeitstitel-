@@ -10,6 +10,7 @@ import { updateQuests } from './quests.ts';
 import { advanceOperations } from '../operations/operations.ts';
 import { advanceTransfers } from '../operations/transport.ts';
 import { advanceShippingRoutes } from '../infrastructure/shippingRoutes.ts';
+import { advanceAutoLogistics } from '../operations/autoLogistics.ts';
 import { nextRandom, newId } from '../engine/rng.ts';
 
 export interface TickResult {
@@ -195,6 +196,12 @@ function advanceLiveEconomy(
   // 2c. Lagertransporte (§ Active Operations 2.0, A5): manuell erteilte Fahrten
   //     bringen lokal geerntete Ware ins Zentrallager (globaler Pool). Nur live,
   //     zeitfaktor-korrekt; `derived.storageCaps` deckelt die Einlagerung.
+  // 2b2. Automatischer Warenfluss (§ Active Simplicity / AS-1, D-039): Betriebe
+  //      beauftragen ihre Abholung selbst — der Spieler muss keinen Transport mehr
+  //      planen. Erteilt nur Aufträge an denselben Lagertransport (kein zweites
+  //      System) und läuft VOR dessen Schritt, damit eine neue Fahrt sofort anläuft.
+  advanceAutoLogistics(state, config, derived);
+
   advanceTransfers(state, config, derived, dtMin);
 
   // 2d. Schiffsrouten (§ Infrastruktur 2.0, I4): persistente Anleger↔Anleger-Routen

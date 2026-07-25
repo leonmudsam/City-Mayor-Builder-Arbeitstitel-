@@ -433,6 +433,17 @@ const migrateV22ToV23: Migration = (raw) => {
 };
 
 /**
+ * v23 → v24: § Active Simplicity / AS-1 (D-039) — automatischer Warenfluss. Rein
+ * additiv: `operations.autoTransport` ist optional, und ein **fehlender Eintrag
+ * bedeutet „an"**. Alte Stände bekommen die Automatik damit geschenkt — genau das
+ * ist der Zweck der Entscheidung (weniger Klicken), und niemand verliert Daten.
+ */
+const migrateV23ToV24: Migration = (raw) => {
+  raw.schemaVersion = 24;
+  return raw;
+};
+
+/**
  * Migration chain: migrations[n] upgrades a save from schemaVersion n to n+1.
  * Beginnt bei v10 (Insel-Basis).
  */
@@ -450,6 +461,7 @@ const migrations: Record<number, Migration> = {
   20: migrateV20ToV21,
   21: migrateV21ToV22,
   22: migrateV22ToV23,
+  23: migrateV23ToV24,
 };
 
 export class SaveValidationError extends Error {}

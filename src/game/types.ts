@@ -464,6 +464,12 @@ export interface OperationsState {
   nodeDeltas: Record<string, ResourceNodeDelta>;
   /** Laufende Lagertransporte (Key = transferId, Save v18). */
   transfers?: Record<string, InventoryTransfer>;
+  /**
+   * Automatischer Warenfluss je Betrieb (§ Active Simplicity / AS-1, Save v24).
+   * **Fehlender Eintrag = an** — die Automatik ist der Normalfall (D-039); nur ein
+   * ausdrückliches `false` schaltet sie für einen Betrieb ab.
+   */
+  autoTransport?: Record<BuildingInstanceId, boolean>;
 }
 
 export interface GameState {

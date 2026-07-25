@@ -471,6 +471,9 @@ export const saveGameSchema = z.object({
           }),
         )
         .optional(),
+      // § Active Simplicity / AS-1 (Save v24): Auto-Warenfluss je Betrieb.
+      // Fehlender Eintrag = an (D-039).
+      autoTransport: z.record(z.string(), z.boolean()).optional(),
     })
     .optional(),
   // § Infrastruktur 2.0 / I4 (Save v22): persistente Schiffsrouten. Optional/additiv —

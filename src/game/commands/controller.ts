@@ -142,6 +142,12 @@ import {
 } from '../infrastructure/harborNodes.ts';
 import type { RoadSegment } from '../infrastructure/networkSegments.ts';
 import {
+  getAutoTransportState,
+  getLogisticsWarnings,
+  setAutoTransport,
+  type LogisticsWarning,
+} from '../operations/autoLogistics.ts';
+import {
   createShippingRoute,
   deleteShippingRoute,
   getShippingNetworkOverview,
@@ -2397,6 +2403,29 @@ export class GameController {
    */
   getOperationThroughput(buildingId: string): OperationThroughput | undefined {
     return getOperationThroughput(this.state, this.config, buildingId, this.state.meta.lastSimTime);
+  }
+
+  // ---- Automatischer Warenfluss (§ Active Simplicity / AS-1, D-039) ---------
+
+  /** Liefert dieser Betrieb selbstständig ab? (Normalfall: ja.) */
+  getAutoTransport(buildingId: string): { enabled: boolean } {
+    return getAutoTransportState(this.state, buildingId);
+  }
+
+  /** Automatik je Betrieb abschalten/einschalten — die einzige nötige Bedienung. */
+  setAutoTransport(buildingId: string, enabled: boolean): CommandResult {
+    if (!this.state.buildings[buildingId]) return fail('invalid');
+    setAutoTransport(this.state, buildingId, enabled);
+    this.notify({ type: 'change' });
+    return ok;
+  }
+
+  /**
+   * Warnungen statt Aufgaben (§AS-2): sagt, **warum** gerade nichts fließt — mit
+   * genau der Information, die für einen Ein-Klick-Fix nötig ist.
+   */
+  getLogisticsWarnings(): LogisticsWarning[] {
+    return getLogisticsWarnings(this.state, this.config, this.derived);
   }
 
   /** Startet einen Auftrag über eine explizite Knotenauswahl (§26.3 Einzelbäume). */

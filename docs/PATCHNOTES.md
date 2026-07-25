@@ -1,5 +1,66 @@
 # Patch Notes
 
+## v1.10 — Active Simplicity / AS-1+AS-2: Die Stadt liefert selbst (Save v24)
+
+> **Neue oberste Designregel (D-039): Der Spieler entscheidet. Die Stadt arbeitet.**
+> Jede Aktion, die man mehr als drei Mal hintereinander machen muss, wird
+> automatisiert oder durch ein Regelwerk ersetzt.
+
+### Was
+
+- **Sägewerk bauen, Arbeitsgebiet starten — fertig.** Der Betrieb holt seine Ware ab
+  jetzt **selbst** ab: Ziel-Lager, Fahrzeug, Route und Nachfüllen entscheidet das
+  Spiel. Die Schleife „Transport planen → Lager wählen → Route wählen → Fahrzeug
+  wählen → starten → erneut starten" entfällt vollständig.
+- **Automatik ist der Normalfall** — auch in bestehenden Spielständen. Wer sie für
+  einen Betrieb nicht will, schaltet sie dort ab.
+- **Warnungen statt Aufgaben:** Fließt nichts, sagt das Spiel *warum* — kein Fahrzeug,
+  kein Lagerplatz, keine Straßenverbindung, kein Ziel. Kein stiller Stillstand.
+
+### Warum
+
+- Das Spiel driftete Richtung Logistikmanager statt Bürgermeister. **Ehrlich:** die
+  Phasen R3/R4/R5 dieser Runde haben den Drift verstärkt — jedes Feature für sich
+  korrekt, zusammen aber Mikromanagement. Diese Version dreht die Richtung.
+
+### Architektur
+
+- Neues reines Sim-Modul `src/game/operations/autoLogistics.ts` (kein Renderer/React).
+- **Kein zweites Transportsystem (§2/§8):** Das Modul **erteilt nur Aufträge** an den
+  bestehenden `createInventoryTransfer` und nutzt dessen Ziel-, Routen- und
+  Fahrzeuglogik unverändert. Es rechnet nichts eigenes.
+- **Zielwahl deterministisch:** nächstes erreichbares Lager (kürzeste Route, bei
+  Gleichstand kleinere Id). **Fahrzeugwahl:** größte freigeschaltete Kapazität;
+  Schiffe bleiben den Schiffsrouten vorbehalten.
+- **Abholschwelle bewusst bei 60 %,** nicht 100 %: Ein Betrieb stoppt bei vollem Lager
+  (§26.8) — die Abholung muss vorher anlaufen, sonst steht er trotz Automatik still.
+- **Nie zwei Fahrten je Betrieb gleichzeitig** (per Test abgesichert).
+- **Save v24** mit **linearer Migration v23→v24**: `operations.autoTransport` ist
+  optional, **fehlender Eintrag = an**. Alte Stände bekommen die Automatik geschenkt.
+
+### Auswirkung
+
+- `tsc` · ESLint · **444 Vitest grün** (+7) · Vite-Build. Kein Bestandstest bricht —
+  die Automatik ergänzt den vorhandenen Transportpfad, sie ersetzt ihn nicht.
+
+### Zukunft — die Umbaustrecke steht
+
+`docs/agents/ACTIVE_SIMPLICITY_PLAN.md` (D-039) führt AS-3…AS-9: Gebäudefenster
+entschlacken, Regeln statt Befehle, ruhigere Ressourcenanzeige, Stadtarbeit nur noch
+für Ereignisse, Straßenbau A→B, begreifbare Bürgerzahlen, multimodale Automatik.
+
+### Dateien
+
+- `src/game/operations/autoLogistics.ts` (neu), `src/game/simulation/tick.ts`,
+  `src/game/commands/controller.ts`, `src/game/types.ts`, `src/game/config/schemas.ts`,
+  `src/game/newGame.ts` (v24), `src/game/storage/migrations.ts` (v23→v24),
+  `CLAUDE.md`, `docs/agents/ACTIVE_SIMPLICITY_PLAN.md` (neu),
+  `tests/autoLogistics.test.ts` (neu).
+
+### Assets
+
+- Keine neuen Assets.
+
 ## v1.03 — Aktive Ressourcen 10.0 / R10: Migrationskette abgesichert (Save v23)
 
 ### Was
