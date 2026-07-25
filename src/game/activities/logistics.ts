@@ -94,6 +94,15 @@ export interface CargoRouteStop {
   cargoAfter: number;
   /** §3.2: Ein Lieferziel ist erst `completed`, wenn seine Menge komplett übergeben wurde. */
   status: ActivityStopStatus;
+  /**
+   * Nur bei `resupply` (§ R5): **Pflichtstopp** — ohne dieses Nachladen reicht die
+   * Ladung für das nächste angefahrene Ziel nicht. `false` = optionales Auffüllen
+   * (die Tour liefe auch ohne). Ermittelt per Vorausschau auf dem echten Weg, nicht
+   * geschätzt.
+   */
+  required?: boolean;
+  /** Ziel, das ohne diesen Pflichtstopp leer ausginge (Anzeige/Begründung). */
+  requiredForBuildingId?: string;
 }
 
 /**
@@ -544,6 +553,19 @@ export function evaluateCargoRoute(
       const availableToLoad = Math.max(0, remainingAmount - cargo);
       const amount = Math.min(Math.max(0, plan.capacity - cargo), availableToLoad);
       if (amount > 0) {
+        // § R5: Pflicht oder Kür? Vorausschau auf dem echten Weg — das nächste noch
+        // offene Ziel entscheidet. Reicht die Ladung VOR dem Nachladen dafür nicht,
+        // ist dieser Halt zwingend; sonst füllt er nur auf.
+        const cargoBefore = cargo;
+        let requiredFor: string | undefined;
+        for (let ahead = index + 1; ahead < roadPath.length; ahead++) {
+          const nextPoint = roadPath[ahead]!;
+          const nextTarget = targetByTile.get(`${nextPoint.x},${nextPoint.y}`);
+          if (!nextTarget || delivered.has(nextTarget.buildingId)) continue;
+          const need = requirements.get(nextTarget.buildingId) ?? 0;
+          if (need > 0 && cargoBefore < need) requiredFor = nextTarget.buildingId;
+          break; // nur das unmittelbar nächste Ziel ist entscheidend
+        }
         cargo += amount;
         stops.push({
           type: 'resupply',
@@ -552,6 +574,8 @@ export function evaluateCargoRoute(
           amount,
           cargoAfter: cargo,
           status: 'completed',
+          required: requiredFor !== undefined,
+          ...(requiredFor ? { requiredForBuildingId: requiredFor } : {}),
         });
       }
       continue;

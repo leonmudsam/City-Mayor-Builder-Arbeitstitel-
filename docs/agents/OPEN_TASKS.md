@@ -161,7 +161,10 @@ der Unblocker.
   Transportmethoden kommen nur noch aus `config.activities.vehicles`, jede genau einmal.
   ❌ offen: `InventoryTransferRule` (wiederkehrende Lagerregeln) + physisches
   Rathauslager.
-- ❌ **R5** Stadtarbeit-Ladungsprognose je Stopp + Pflicht/Optional-Nachfüllmarker.
+- ✅ **R5** (v1.02): Ladungsprognose je Stopp (`cargoAfter`) war bereits echt; neu sind
+  **Pflicht-/Optional-Marker** für Nachfüllstopps (`required`/`requiredForBuildingId`,
+  additiv). Der Marker entsteht per Vorausschau auf dem echten Weg (Bedarf des nächsten
+  offenen Ziels vs. Ladung vor dem Nachladen) — keine Heuristik. 2 Tests.
 - ❌ **R10** Migration + Balancing-Abschluss.
 
 ## Visual Active Operations – verbleibende Daten-/Logikbindungen

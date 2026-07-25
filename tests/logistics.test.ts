@@ -302,6 +302,65 @@ describe('logistics.evaluateCargoRoute — konkrete Fahrt auf gezeichnetem Pfad'
     expect(ev.stops.filter((stop) => stop.status === 'skipped')).toHaveLength(1);
   });
 
+  // § R5: Ein Nachfüllstopp ist Pflicht oder Kür — das entscheidet, ob der Spieler ihn
+  // weglassen darf. Der Marker entsteht per Vorausschau auf dem echten Weg.
+  it('markiert einen unverzichtbaren Nachfüllstopp als Pflicht (§R5)', () => {
+    // Kapazität 100, zwei Ziele à 100: ohne das Nachladen bleibt „b" leer.
+    const plan = cargoPlan(100, [req('a', 100), req('b', 100)]);
+    const ev = evaluateCargoRoute(
+      plan,
+      { buildingId: 'farm', x: 0, y: 0 },
+      [
+        { buildingId: 'a', x: 2, y: 0 },
+        { buildingId: 'b', x: 4, y: 0 },
+      ],
+      [
+        { x: 0, y: 0 },
+        { x: 1, y: 0 },
+        { x: 2, y: 0 }, // a beliefert → Ladung 0
+        { x: 1, y: 0 },
+        { x: 0, y: 0 }, // nachladen (zwingend)
+        { x: 1, y: 0 },
+        { x: 2, y: 0 },
+        { x: 3, y: 0 },
+        { x: 4, y: 0 }, // b
+      ],
+    );
+    const resupply = ev.stops.filter((stop) => stop.type === 'resupply');
+    expect(resupply).toHaveLength(1);
+    expect(resupply[0]!.required).toBe(true);
+    expect(resupply[0]!.requiredForBuildingId).toBe('b');
+  });
+
+  it('markiert ein reines Auffüllen als optional (§R5)', () => {
+    // Kapazität 100, Gesamtbedarf 60 — die Erstladung reicht bereits für alles.
+    const plan = cargoPlan(100, [req('a', 30), req('b', 30)]);
+    const ev = evaluateCargoRoute(
+      plan,
+      { buildingId: 'farm', x: 0, y: 0 },
+      [
+        { buildingId: 'a', x: 2, y: 0 },
+        { buildingId: 'b', x: 4, y: 0 },
+      ],
+      [
+        { x: 0, y: 0 },
+        { x: 1, y: 0 },
+        { x: 2, y: 0 }, // a (Ladung 30 weg, 30 übrig)
+        { x: 1, y: 0 },
+        { x: 0, y: 0 }, // optionales Auffüllen — 30 reichen für b bereits
+        { x: 1, y: 0 },
+        { x: 2, y: 0 },
+        { x: 3, y: 0 },
+        { x: 4, y: 0 }, // b
+      ],
+    );
+    const resupply = ev.stops.filter((stop) => stop.type === 'resupply');
+    for (const stop of resupply) {
+      expect(stop.required).toBe(false);
+      expect(stop.requiredForBuildingId).toBeUndefined();
+    }
+  });
+
   it('zählt Lieferziele und Nachfüllstopps getrennt (§3.2)', () => {
     const plan = cargoPlan(100, [req('a', 100), req('b', 100)]);
     const ev = evaluateCargoRoute(

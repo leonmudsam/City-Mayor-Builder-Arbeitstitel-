@@ -87,9 +87,16 @@ export function TourOverview({
           const next = stops[index + 1];
           const distanceTiles = next ? Math.max(0, next.pathIndex - stop.pathIndex) : 0;
           const skipped = stop.status === 'skipped';
+          // § R5: Nachfüllstopps sind Pflicht oder Kür — das entscheidet, ob man sie
+          // weglassen darf. Der Marker kommt aus der Cargo-Auswertung des echten Wegs.
           const meta = skipped
             ? { label: 'Zu wenig Ladung', icon: <AlertTriangle size={12} /> }
-            : stopMeta(stop.type);
+            : stop.type === 'resupply' && stop.required !== undefined
+              ? {
+                  label: stop.required ? 'Nachladen · Pflicht' : 'Nachladen · optional',
+                  icon: stop.required ? <AlertTriangle size={12} /> : stopMeta(stop.type).icon,
+                }
+              : stopMeta(stop.type);
           return (
             <article
               key={`${stop.type}-${stop.buildingId}-${stop.pathIndex}`}
@@ -105,9 +112,11 @@ export function TourOverview({
                 <span>
                   {skipped
                     ? 'Leer vorbeigefahren — fülle nach und fahre erneut vorbei.'
-                    : stop.amount > 0
-                      ? `${stop.amount.toLocaleString('de-DE')} laden/liefern`
-                      : point.subtitle}
+                    : stop.type === 'resupply' && stop.required
+                      ? `${stop.amount.toLocaleString('de-DE')} laden — ohne diesen Halt reicht die Ladung für das nächste Ziel nicht.`
+                      : stop.amount > 0
+                        ? `${stop.amount.toLocaleString('de-DE')} laden/liefern`
+                        : point.subtitle}
                 </span>
               </div>
               <dl>

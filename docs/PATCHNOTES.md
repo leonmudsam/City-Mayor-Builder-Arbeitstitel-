@@ -1,5 +1,46 @@
 # Patch Notes
 
+## v1.02 — Aktive Ressourcen 10.0 / R5: Pflicht- und Kür-Nachladen in der Stadtarbeit (Save v23)
+
+### Was
+
+- **Nachfüllstopps sind jetzt als Pflicht oder optional gekennzeichnet.** Ein
+  Pflichtstopp trägt den Hinweis „ohne diesen Halt reicht die Ladung für das nächste
+  Ziel nicht" — ein optionaler ist nur ein Auffüllen, das man weglassen darf.
+- Damit sieht man beim Planen, **welche Umwege wirklich nötig sind** und welche nur
+  Zeit kosten.
+
+### Warum
+
+- Die Ladungsprognose je Stopp (`cargoAfter`) gab es schon, aber alle Nachfüllstopps
+  sahen gleich aus. Ob ein Umweg zur Quelle zwingend ist oder reine Bequemlichkeit,
+  war die eigentlich interessante Information — und fehlte.
+
+### Architektur
+
+- `CargoRouteStop` wird **additiv** um `required` und `requiredForBuildingId` ergänzt
+  (nur für `resupply` gesetzt).
+- Der Marker entsteht bei der Auswertung des **echten gezeichneten Wegs**: eine
+  Vorausschau ermittelt das unmittelbar nächste noch offene Ziel und vergleicht dessen
+  Bedarf mit der Ladung **vor** dem Nachladen. Kein Schätzwert, keine Heuristik.
+- Läuft im vorhandenen `evaluateCargoRoute` — kein zweites Logistikmodell (§8).
+- Keine Save-Änderung (v23), keine Simulationsänderung.
+
+### Auswirkung
+
+- `tsc` · ESLint · **436 Vitest grün** (+2) · Vite-Build. Die Tests decken **beide**
+  Richtungen ab: ein zwingender Stopp (zwei Ziele à 100 bei Kapazität 100) wird als
+  Pflicht mit Zielangabe gemeldet, ein reines Auffüllen (Gesamtbedarf 60) als optional.
+
+### Dateien
+
+- `src/game/activities/logistics.ts`, `src/components/citywork/TourOverview.tsx`,
+  `tests/logistics.test.ts`.
+
+### Assets
+
+- Keine neuen Assets.
+
 ## v1.01 — Aktive Ressourcen 10.0 / R3+R4: Lagervergleich + echter Handkarren (Save v23)
 
 ### Was
