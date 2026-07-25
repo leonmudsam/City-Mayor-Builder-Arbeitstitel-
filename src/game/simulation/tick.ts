@@ -9,6 +9,7 @@ import { addXp } from '../progression/levels.ts';
 import { updateQuests } from './quests.ts';
 import { advanceOperations } from '../operations/operations.ts';
 import { advanceTransfers } from '../operations/transport.ts';
+import { advanceShippingRoutes } from '../infrastructure/shippingRoutes.ts';
 import { nextRandom, newId } from '../engine/rng.ts';
 
 export interface TickResult {
@@ -195,6 +196,12 @@ function advanceLiveEconomy(
   //     bringen lokal geerntete Ware ins Zentrallager (globaler Pool). Nur live,
   //     zeitfaktor-korrekt; `derived.storageCaps` deckelt die Einlagerung.
   advanceTransfers(state, config, derived, dtMin);
+
+  // 2d. Schiffsrouten (§ Infrastruktur 2.0, I4): persistente Anleger↔Anleger-Routen
+  //     fahren zyklisch weiter und schließen die Lücke, an der der Landtransport
+  //     mangels Straße über Wasser scheitert. Derselbe dtMin-Pfad → Pause/2×/4×
+  //     wirken automatisch; `derived.storageCaps` deckelt die Einlagerung.
+  advanceShippingRoutes(state, config, derived, dtMin);
 
   // 3. Needs & happiness.
   const pop = state.citizens.population;

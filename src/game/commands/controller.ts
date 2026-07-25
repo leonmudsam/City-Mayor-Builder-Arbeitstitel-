@@ -137,6 +137,18 @@ import {
   type HarborNodeStatus,
 } from '../infrastructure/harborNodes.ts';
 import type { RoadSegment } from '../infrastructure/networkSegments.ts';
+import {
+  createShippingRoute,
+  deleteShippingRoute,
+  getShippingNetworkOverview,
+  getShippingRoutes,
+  setShippingRoutePaused,
+  shippingRouteLegs,
+  type CreateShippingRouteInput,
+  type ShippingNetworkOverview,
+  type ShippingRouteError,
+  type ShippingRouteView,
+} from '../infrastructure/shippingRoutes.ts';
 
 export type CommandError =
   | PlacementError
@@ -2250,6 +2262,49 @@ export class GameController {
   /** Straßen-Teilnetze: trennt das Stadtnetz von lokalen Netzen hinter Wasser (§I3). */
   getRoadSegments(): RoadSegment[] {
     return this.derived.roadSegments.segments;
+  }
+
+  // ---- Schiffsrouten (§ Infrastruktur 2.0 / I4, Save v22) -------------------
+
+  /**
+   * Legt eine persistente Schiffsroute an: Betrieb → Verladehafen → Schiff →
+   * Zielhafen → Lagergebäude. Schließt die Lücke, an der der Landtransport über
+   * Wasser mit `no_route` scheitert.
+   */
+  createShippingRoute(input: CreateShippingRouteInput): { ok: true; routeId: string } | { ok: false; error: ShippingRouteError } {
+    const result = createShippingRoute(this.state, this.config, this.derived, input, this.state.meta.lastSimTime);
+    if (typeof result === 'string') return { ok: false, error: result };
+    this.notify({ type: 'change' });
+    return { ok: true, routeId: result.id };
+  }
+
+  setShippingRoutePaused(routeId: string, paused: boolean): boolean {
+    const changed = setShippingRoutePaused(this.state, routeId, paused);
+    if (changed) this.notify({ type: 'change' });
+    return changed;
+  }
+
+  deleteShippingRoute(routeId: string): boolean {
+    const deleted = deleteShippingRoute(this.state, routeId);
+    if (deleted) this.notify({ type: 'change' });
+    return deleted;
+  }
+
+  getShippingRoutes(): ShippingRouteView[] {
+    return getShippingRoutes(this.state);
+  }
+
+  getShippingNetworkOverview(): ShippingNetworkOverview {
+    return getShippingNetworkOverview(this.state);
+  }
+
+  /** Vorschau von Wasserweg + Fahrzeit, bevor eine Route angelegt wird. */
+  getShippingRouteLegs(
+    originHarborId: string,
+    destinationHarborId: string,
+    vehicleId?: DriveVehicle,
+  ): { travelMs: number; waterDistance: number } | undefined {
+    return shippingRouteLegs(this.state, this.config, this.derived, originHarborId, destinationHarborId, vehicleId);
   }
 
   getAvailableHarborConnections(harborId: string): AvailableHarborConnection[] {

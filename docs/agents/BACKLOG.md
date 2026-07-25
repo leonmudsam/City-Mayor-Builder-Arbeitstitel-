@@ -23,7 +23,9 @@ Transport (A5), zentraler Start (S1/S2), Fog/Kamera (S3).
 - 🟡 `[P0]` **I3 Küste/Ufer + Anleger als Netzknoten**: ✅ Netzknoten-Modell (v0.96,
   `networkSegments.ts` + `harborNodes.ts` — Stadtnetz vs. lokales Netz, `linksToCityVia`);
   ❌ R9 adaptive Uferplattform (Renderer/Bake) offen.
-- ❌ `[P0]` **I4 Schifffahrtsnetz** (persistente Routen, Stadtarbeit-Legs; lineare Migration).
+- 🟡 `[P0]` **I4 Schifffahrtsnetz**: ✅ persistente Routen (v0.97, **Save v22** +
+  Migration v21→v22): `shippingRoutes.ts`, Frachtkahn, Kapazität/Fahrzeit/Kosten/
+  Pause/Löschen, 10 Tests. ❌ offen: 3D-Schiffe, Routen-UI (→I5), echte multimodale Legs.
 - ❌ `[P1]` **I5 Bevölkerungs-Rebalancing + Infrastruktur-Netz-UI**.
 
 ## 0b. ZURÜCKGESTELLT (nach Infrastruktur 2.0): § 10.0 — Active Resource Loops, Storage, Compaction `[P0]`

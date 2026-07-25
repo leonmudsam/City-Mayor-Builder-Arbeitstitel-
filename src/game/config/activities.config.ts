@@ -349,6 +349,27 @@ export const activitiesConfig: ActivitiesConfig = {
       // Motorfahrzeug (Lieferwagen, L4) freigeschaltet ist. Kleine Ladung, kein
       // Motor → keine Betriebskosten, langsam. Nur für Lagertransporte relevant
       // (keine Stadtarbeit-Mission listet ihn).
+      // Frachtkahn (§ Infrastruktur 2.0 / I4): das Schiff persistenter
+      // Schiffsrouten. Große Ladung, langsam, spürbare Betriebskosten je Fahrt —
+      // die strategische Gegenrechnung zum kurzen, billigen Landweg. Keine
+      // Stadtarbeit-Mission listet ihn (reines Routen-Fahrzeug).
+      id: 'cargo_barge',
+      nameKey: 'vehicle.cargo_barge',
+      descriptionKey: 'vehicle.cargo_barge.desc',
+      unlockLevel: 6,
+      capacity: 260,
+      speedKph: 18,
+      handling: 3,
+      operatingCost: 900,
+      consumption: 'high',
+      imageKey: 'cargo_barge',
+      strengthsKeys: ['vehicle.strength.capacity', 'vehicle.strength.water'],
+      weaknessesKeys: ['vehicle.weakness.slow', 'vehicle.weakness.cost'],
+      loadTimeSec: 18,
+      unloadTimeSecPerTarget: 14,
+      narrowStreetPenalty: 0,
+    },
+    {
       id: 'handcart',
       nameKey: 'vehicle.handcart',
       descriptionKey: 'vehicle.handcart.desc',

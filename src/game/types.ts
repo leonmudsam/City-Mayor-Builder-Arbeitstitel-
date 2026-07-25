@@ -39,7 +39,9 @@ export type DriveVehicle =
   | 'police_car'
   | 'flatbed'
   | 'freight_train'
-  | 'cargo_plane';
+  | 'cargo_plane'
+  /** Frachtkahn für persistente Schiffsrouten (§ Infrastruktur 2.0 / I4). */
+  | 'cargo_barge';
 
 export type BuildingStatus = 'constructing' | 'active' | 'paused';
 
@@ -360,6 +362,69 @@ export interface InventoryTransfer {
  * Saves ohne dieses Feld bleiben gültig; der Controller initialisiert lazily.
  * `transfers` kam mit Save v18 (Phase A5) hinzu und ist ebenfalls optional.
  */
+/**
+ * Phasen einer laufenden Schiffsroute. Bewusst dasselbe Vokabular wie
+ * `InventoryTransferStatus` — eine Route ist der **dauerhafte, sich wiederholende**
+ * Bruder des einmaligen Lagertransports, kein zweites Transportsystem (§8).
+ */
+export type ShippingRoutePhase = 'loading' | 'outbound' | 'unloading' | 'returning';
+
+/**
+ * Eine persistente Schiffsroute (§ Infrastruktur 2.0 / I4, Save v22).
+ *
+ * Sie schließt genau die Lücke, an der der Landtransport scheitert: Quelle und Ziel
+ * liegen durch Wasser getrennt (`createInventoryTransfer` liefert dort `no_route`).
+ * Die Route ist multimodal — Betrieb → Verladehafen → **Schiff** → Zielhafen →
+ * Lagergebäude — und läuft zyklisch weiter, bis der Spieler sie pausiert oder löscht.
+ *
+ * Persistiert nur Skalare; Wasserweg und Landwege werden deterministisch aus dem
+ * Wassergraph bzw. dem Straßengraph rekonstruiert (Slim-Save wie bei Transporten).
+ */
+export interface ShippingRoute {
+  id: string;
+  /** Betrieb mit lokalem Lager, dessen Ware verschifft wird. */
+  sourceBuildingId: BuildingInstanceId;
+  /** Verladehafen auf der Quellseite (waterfront). */
+  originHarborId: BuildingInstanceId;
+  /** Zielhafen (waterfront). */
+  destinationHarborId: BuildingInstanceId;
+  /** Physischer Anlieferpunkt am Ziel: Gebäude mit Lagerkapazität. */
+  targetBuildingId: BuildingInstanceId;
+  resource: ResourceId;
+  /** Eingesetztes Schiff aus dem Fahrzeugkatalog. */
+  vehicleId?: DriveVehicle;
+  /** Pausiert: die Route bleibt bestehen, bewegt aber nichts. */
+  paused?: boolean;
+  phase: ShippingRoutePhase;
+  /** Fortschritt der aktuellen Phase 0..1. */
+  progress: number;
+  /** Aktuell an Bord befindliche Menge. */
+  onboard?: number;
+  /** Kumuliert eingelagerte Menge über alle Fahrten (Anzeige). */
+  deliveredTotal?: number;
+  /** Abgeschlossene Rundfahrten (Anzeige). */
+  cycles?: number;
+  /** Ladekapazität je Fahrt (bei Erstellung aus dem Schiff fixiert). */
+  capacity: number;
+  /**
+   * Reine Fahrdauer des **Wasserwegs** je Richtung in ms (bei Erstellung aus
+   * Distanz + Schiffstempo fixiert). Die Landwege Betrieb→Anleger und
+   * Anleger→Lager sind bewusst in Lade-/Entladezeit abstrahiert und werden NICHT
+   * als eigene Fahrten simuliert — dafür bleibt der Lagertransport zuständig.
+   */
+  travelMs: number;
+  /** Länge des Wasserwegs (Anzeige, bei Erstellung fixiert). */
+  waterDistance: number;
+  /** Betriebskosten je gefahrener Ladung (Geldsenke, §15). */
+  operatingCost: number;
+  createdAt: number;
+}
+
+/** Persistenter Schifffahrts-Zustand (§I4, Save v22). Additiv/optional. */
+export interface ShippingState {
+  routes: Record<string, ShippingRoute>;
+}
+
 export interface OperationsState {
   /** Lokales Lager je Betrieb (Key = buildingId). */
   inventories: Record<BuildingInstanceId, BuildingInventory>;
@@ -424,6 +489,11 @@ export interface GameState {
    * fehlt in Alt-Saves und wird lazily initialisiert. Siehe `OperationsState`.
    */
   operations?: OperationsState;
+  /**
+   * Persistente Schiffsrouten (§ Infrastruktur 2.0 / I4, Save v22). Optional/additiv:
+   * fehlt in v21-Saves und wird lazily initialisiert.
+   */
+  shipping?: ShippingState;
   stats: GameStats;
   nextId: number;
 }

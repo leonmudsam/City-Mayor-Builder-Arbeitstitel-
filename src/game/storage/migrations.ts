@@ -412,6 +412,17 @@ const migrateV20ToV21: Migration = (raw) => {
 };
 
 /**
+ * v21 → v22: § Infrastruktur 2.0 / I4 — persistente Schiffsrouten. Rein additiv:
+ * `shipping.routes` ist optional und in alten Saves schlicht nicht vorhanden. Wer
+ * v21 lädt, hat einfach noch keine Route angelegt; alles andere bleibt unberührt.
+ * Kein Weltumbau, kein Datenverlust.
+ */
+const migrateV21ToV22: Migration = (raw) => {
+  raw.schemaVersion = 22;
+  return raw;
+};
+
+/**
  * Migration chain: migrations[n] upgrades a save from schemaVersion n to n+1.
  * Beginnt bei v10 (Insel-Basis).
  */
@@ -427,6 +438,7 @@ const migrations: Record<number, Migration> = {
   18: migrateV18ToV19,
   19: migrateV19ToV20,
   20: migrateV20ToV21,
+  21: migrateV21ToV22,
 };
 
 export class SaveValidationError extends Error {}

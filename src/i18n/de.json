@@ -697,6 +697,8 @@
   "ui.route.manual_adjacent": "Wähle eine direkt angrenzende Straßenkachel oder ziehe entlang einer geraden Straße.",
   "ui.route.started_auto": "Mission gestartet – das gewählte Fahrzeug fährt die Route jetzt automatisch ab.",
 
+  "vehicle.cargo_barge": "Frachtkahn",
+  "vehicle.cargo_barge.desc": "Das Arbeitstier der Schiffsrouten: nimmt sehr viel Ladung über das Wasser mit, ist dafür langsam und kostet je Fahrt spürbar Betriebskosten. Lohnt sich, wo der Landweg lang ist – oder gar nicht existiert.",
   "vehicle.handcart": "Handkarren",
   "vehicle.handcart.desc": "Muskelkraft statt Motor: bringt ab Level 2 kleine Mengen über kurze Strecken – ideal, um Sägewerk-Holz ins Rathauslager zu ziehen, bevor der erste Lieferwagen kommt.",
   "vehicle.van": "Kleiner Lieferwagen",
@@ -729,6 +731,7 @@
   "vehicle.strength.balance": "Ausgewogene Werte",
   "vehicle.strength.medium_routes": "Ideal für mittlere Routen",
   "vehicle.strength.capacity": "Sehr hohe Kapazität",
+  "vehicle.strength.water": "Fährt über Wasser",
   "vehicle.strength.long_routes": "Stark auf langen Strecken",
   "vehicle.strength.cooling": "Kühlkette schützt Ware",
   "vehicle.strength.quality": "Bessere Lieferqualität",

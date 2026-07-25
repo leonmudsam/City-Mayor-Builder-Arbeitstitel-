@@ -184,6 +184,7 @@ const driveVehicle = z.enum([
   'flatbed',
   'freight_train',
   'cargo_plane',
+  'cargo_barge',
 ]);
 
 const activityVehicleDefSchema = z.object({
@@ -467,6 +468,35 @@ export const saveGameSchema = z.object({
           }),
         )
         .optional(),
+    })
+    .optional(),
+  // § Infrastruktur 2.0 / I4 (Save v22): persistente Schiffsrouten. Optional/additiv —
+  // v21-Saves ohne das Feld bleiben gültig (lineare Migration setzt nur die Version).
+  shipping: z
+    .object({
+      routes: z.record(
+        z.string(),
+        z.object({
+          id: z.string(),
+          sourceBuildingId: z.string(),
+          originHarborId: z.string(),
+          destinationHarborId: z.string(),
+          targetBuildingId: z.string(),
+          resource: resourceId,
+          vehicleId: driveVehicle.optional(),
+          paused: z.boolean().optional(),
+          phase: z.enum(['loading', 'outbound', 'unloading', 'returning']),
+          progress: z.number(),
+          onboard: z.number().nonnegative().optional(),
+          deliveredTotal: z.number().nonnegative().optional(),
+          cycles: z.number().nonnegative().optional(),
+          capacity: z.number().nonnegative(),
+          travelMs: z.number().nonnegative(),
+          waterDistance: z.number().nonnegative(),
+          operatingCost: z.number().nonnegative(),
+          createdAt: z.number(),
+        }),
+      ),
     })
     .optional(),
   stats: z.object({

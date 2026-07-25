@@ -104,10 +104,17 @@ der Unblocker.
     Gebäudefenster zeigt die Landseite. Kein zweiter Graph, keine Save-Änderung.
     Kapazität/Reisezeit/Warenfluss bewusst offen (= I4). 8 Tests.
   - ❌ **R9 adaptive Uferplattform** (Renderer/Bake) — noch offen.
-- ❌ **I4 Schifffahrtsnetz + Stadtarbeit-Integration** (persistente Routen: Kapazität,
-  Reisezeit, Betriebskosten, Warenfluss, Pause/Löschen; multimodale Legs). Reuse
-  `operations/transport.ts` + `logistics.ts` + `routeAnalysis.ts`. **Lineare Migration**
-  bei neuen Save-Feldern. Verweise: `WATER_INFRASTRUCTURE_PLAN.md`, „Waterways 7.0".
+- 🟡 **I4 Schifffahrtsnetz + Stadtarbeit-Integration**:
+  - ✅ **Persistente Schiffsrouten** (v0.97, **Save v22** + lineare Migration v21→v22):
+    `infrastructure/shippingRoutes.ts` — zyklische Anleger↔Anleger-Route mit echter
+    Kapazität, Fahrzeit aus der Wasserdistanz, Betriebskosten je Fahrt, Pause/Löschen,
+    Warte-Zustand bei leerem Lager. Neues Fahrzeug `cargo_barge` (Config, §2).
+    Wiederverwendet `waterNavigation` + `logistics` + `operations` und **dasselbe
+    Phasenvokabular** wie der Transport — kein zweites System. Läuft im selben
+    `dtMin`-Tickpfad. 10 Tests.
+  - ❌ Offen (nicht vortäuschen): **3D-Schiffe** auf der Route, Routen-UI (→ I5),
+    Zwischenlager an Häfen, Kraftstoff/Schiffszustand, mehrere Schiffe je Route,
+    echte multimodale Legs (Landwege sind in Lade-/Entladezeit abstrahiert).
 - ❌ **I5 Bevölkerungs-Rebalancing + Infrastruktur-Netz-UI** (Haus 4–8 … Hochhaus 300+;
   Reiter Straßen/Brücken/Anleger/Schiffe + Kapazitäts-Panel via
   `infrastructureNetworkOverview`).

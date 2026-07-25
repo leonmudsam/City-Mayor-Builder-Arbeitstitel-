@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { flattenTerrain, nearTownHall, newController, paintTerrain, setLevel, T0 } from './helpers.ts';
+import { SCHEMA_VERSION } from '../src/game/newGame.ts';
 
 const MIN = 60_000;
 const at = (dx: number, dy: number) => nearTownHall(dx, dy);
@@ -212,7 +213,7 @@ describe('§ Active Operations 2.0 — A5 Transport: Save v18', () => {
     controller.createInventoryTransfer({ sourceBuildingId: sawmillId, targetBuildingId: townHallId, resource: 'wood', amount: wood, vehicleId: 'van' });
     const { exportSave, importSave } = await import('../src/game/storage/exportImport.ts');
     const restored = importSave(exportSave(controller.state));
-    expect(restored.schemaVersion).toBe(21);
+    expect(restored.schemaVersion).toBe(SCHEMA_VERSION);
     expect(restored.operations!.transfers).toEqual(controller.state.operations!.transfers);
   });
 

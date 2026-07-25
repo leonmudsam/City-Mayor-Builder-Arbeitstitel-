@@ -1,5 +1,74 @@
 # Patch Notes
 
+## v0.97 — Infrastruktur 2.0 / I4: Persistente Schiffsrouten (Save v22)
+
+### Was
+
+- **Neu: dauerhafte Schiffsrouten zwischen zwei Anlegern.** Einmal eingerichtet, holt
+  das Schiff selbstständig Ware aus dem lokalen Betriebslager, fährt über das Wasser
+  und lagert sie am Ziel ein — **zyklisch weiter**, bis du sie pausierst oder löschst.
+- Jede Route zeigt echte Werte: **Kapazität** (Frachtkahn 260), **Fahrzeit** aus der
+  tatsächlichen Wasserdistanz, **Betriebskosten je Fahrt** und die kumuliert gelieferte
+  Menge. Ist das Quell-Lager leer, **wartet** die Route sichtbar, statt zu verschwinden.
+- **Neues Fahrzeug „Frachtkahn"** (ab Level 6): sehr hohe Ladung, langsam, spürbare
+  Betriebskosten — die strategische Gegenrechnung zum kurzen, billigen Landweg.
+
+### Warum
+
+- Der vorhandene Lagertransport fährt über den **Straßengraphen**. Liegen Quelle und
+  Ziel durch Wasser getrennt, liefert er `no_route` — die Ware bleibt im lokalen
+  Betriebslager stecken. Genau diese Lücke schließt die Schiffsroute.
+- I3 hat den Anleger zum Netzknoten gemacht; `linksToCityVia` war bereits als Eingabe
+  dafür gedacht. I4 macht daraus einen echten, laufenden Warenfluss.
+
+### Architektur
+
+- **Reines Sim-Modul** `src/game/infrastructure/shippingRoutes.ts` (kein Renderer/React).
+- **Kein zweites Transportsystem (§2/§8):** Wasserweg/Distanz aus dem bestehenden
+  `waterNavigation`-Dijkstra · Kapazität/Fahrzeugdaten aus demselben
+  `activities/logistics`-Katalog · Lager/Reservierung aus `operations` ·
+  **dasselbe Phasenvokabular** wie der Transport (`loading → outbound → unloading →
+  returning`). Der einzige Unterschied ist die **Persistenz**.
+- **Derselbe Tick-Pfad** (`advanceShippingRoutes` neben `advanceTransfers`, beide mit
+  dem zeitfaktor-skalierten `dtMin`) → Pause/1×/2×/4× wirken automatisch;
+  `derived.storageCaps` deckelt die Einlagerung; `stats.produced` wird **nicht** erneut
+  erhöht (kein Doppelzählen).
+- **Keine Vorab-Reservierung:** Anders als ein einmaliger Transport bindet eine
+  Dauerroute das Quell-Lager nicht — sie nimmt je Fahrt, was gerade frei ist.
+- **Save v22** mit **linearer Migration v21→v22** (rein additiv, `shipping` optional).
+  Ein v21-Save lädt unverändert und startet ohne Routen — keine erfundenen Daten.
+- **Genauer Umfang (nicht mehr behauptet als simuliert):** Modelliert wird die
+  **Schiffsfahrt zwischen den Anlegern**. Die Landwege Betrieb→Anleger und
+  Anleger→Lager sind in Lade-/Entladezeit abstrahiert; dafür bleibt der
+  Lagertransport zuständig.
+
+### Auswirkung
+
+- `tsc` · ESLint · **424 Vitest grün** (+9 `shippingRoutes.test.ts`, +1 Migrationstest
+  — u. a. „bringt Holz über das Wasser in den globalen Pool und fährt zyklisch weiter",
+  „wartet bei leerem Quell-Lager, statt zu verschwinden", vier konkrete
+  Ablehnungsfälle) · Vite-Build. Zwei Tests hatten die Schema-Version hart kodiert und
+  hängen jetzt an `SCHEMA_VERSION`.
+
+### Zukunft
+
+- Bewusst offen (nicht vorgetäuscht): **3D-Schiffe** auf der Route, Zwischenlager an
+  Häfen, Kraftstoff/Schiffszustand, mehrere Schiffe je Route, echte multimodale Legs
+  und die Routen-UI (kommt mit **I5**: Infrastruktur-Netz-Panel).
+
+### Dateien
+
+- `src/game/infrastructure/shippingRoutes.ts` (neu), `src/game/types.ts`
+  (`ShippingRoute`/`ShippingState`, `cargo_barge`), `src/game/config/schemas.ts`,
+  `src/game/config/activities.config.ts` (Frachtkahn), `src/game/newGame.ts` (v22),
+  `src/game/storage/migrations.ts` (v21→v22), `src/game/simulation/tick.ts`,
+  `src/game/commands/controller.ts`, `src/i18n/de.json`,
+  `tests/shippingRoutes.test.ts` (neu), `tests/storage.test.ts`, `tests/transport.test.ts`.
+
+### Assets
+
+- Keine neuen Assets. Ein `cargo_barge`-Fahrzeugbild ist drop-in-fähig vorgesehen.
+
 ## v0.96 — Infrastruktur 2.0 / I3: Anleger als echter Netzknoten (Save v21)
 
 ### Was
