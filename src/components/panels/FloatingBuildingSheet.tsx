@@ -106,6 +106,19 @@ export function FloatingBuildingSheet() {
     : def.requiresRoad
       ? { label: t('diag.road_ok'), tone: 'good' }
       : { label: 'Nicht erforderlich', tone: 'muted' };
+  // §I3 — Anleger als Netzknoten: die Landseite unterscheidet Stadtnetz von einem
+  // lokalen Netz hinter dem Wasser. „Anschließbar" heißt: ein erreichbarer Anleger
+  // hängt am Stadtnetz — die Schiffsroute selbst kommt erst mit I4.
+  const harborNode = def.waterfront ? game.getHarborNodeStatus(b.id) : undefined;
+  const harborLandNetwork = !def.waterfront
+    ? { label: '—', tone: 'muted' }
+    : !harborNode?.landSegmentId
+      ? { label: t('ui.building.harbor_land_none'), tone: 'bad' }
+      : harborNode.onCityNetwork
+        ? { label: t('ui.building.harbor_land_city'), tone: 'good' }
+        : harborNode.linksToCityVia.length > 0
+          ? { label: t('ui.building.harbor_land_linkable'), tone: 'warn' }
+          : { label: t('ui.building.harbor_land_isolated'), tone: 'warn' };
   const close = () => selectBuilding(undefined);
 
   return (
@@ -258,6 +271,12 @@ export function FloatingBuildingSheet() {
                   <strong className={harborConnections.some((connection) => connection.status === 'planned') ? 'text-good' : 'text-bad'}>
                     {harborConnections.filter((connection) => connection.status === 'planned').length}
                   </strong>
+                </div>
+                {/* §I3 — Landseite: hängt der Anleger am Stadtnetz oder an einem
+                    lokalen Netz hinter dem Wasser? Ohne diese Zeile sah beides gleich aus. */}
+                <div className="building-site-row">
+                  <span>{t('ui.building.harbor_land_network')}</span>
+                  <strong className={`text-${harborLandNetwork.tone}`}>{harborLandNetwork.label}</strong>
                 </div>
               </>
             )}

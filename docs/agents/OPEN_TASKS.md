@@ -96,8 +96,14 @@ der Unblocker.
   - ⏳ Offen (I2-Verfeinerung, nicht vortäuschen): frei ziehbare Kontrollpunkt-Griffe,
     Live-Vorschau vom letzten Punkt zum Mauszeiger als Renderer-Layer, Kurven-/
     Diagonal-Snapping.
-- ❌ **I3 Küste/Ufer + Anleger als Netzknoten** (Straße↔Anleger↔Schiff). **Erledigt
-  zugleich 10.0-R9** (adaptive Uferplattform). Baut auf `buildingInfrastructure.ts`.
+- 🟡 **I3 Küste/Ufer + Anleger als Netzknoten** (Straße↔Anleger↔Schiff):
+  - ✅ **Netzknoten-Modell** (v0.96): `networkSegments.ts` zerlegt das **bestehende**
+    `roadNetwork` in Teilnetze und benennt das Stadtnetz (`city`/`local`, deterministisch,
+    in `computeDerived` statt pro Read); `harborNodes.ts` projiziert daraus je Anleger
+    Landseite/Wasserseite/erreichbare Häfen und `linksToCityVia` (Eingabe für I4).
+    Gebäudefenster zeigt die Landseite. Kein zweiter Graph, keine Save-Änderung.
+    Kapazität/Reisezeit/Warenfluss bewusst offen (= I4). 8 Tests.
+  - ❌ **R9 adaptive Uferplattform** (Renderer/Bake) — noch offen.
 - ❌ **I4 Schifffahrtsnetz + Stadtarbeit-Integration** (persistente Routen: Kapazität,
   Reisezeit, Betriebskosten, Warenfluss, Pause/Löschen; multimodale Legs). Reuse
   `operations/transport.ts` + `logistics.ts` + `routeAnalysis.ts`. **Lineare Migration**

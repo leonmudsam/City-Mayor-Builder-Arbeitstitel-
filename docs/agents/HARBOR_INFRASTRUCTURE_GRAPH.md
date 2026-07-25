@@ -37,6 +37,28 @@ ohne Anschluss weiter abgelehnt · lokales Netz erweiterbar).
   (road/water/`water_only`), `nearestNavigableWaterNode`, `infrastructureNetworkOverview`.
 - `operations/transport.ts`: die A5-Transportmaschinerie (Reservierung, Ladung, Fahrt).
 
+## 2b. Erledigt (v0.96, I3): Teilnetze + Anleger als Netzknoten
+
+`roadNetwork` ist EIN flaches Set (Distriktzentren **und** Anleger seeden es). Ein
+isoliertes Anleger-Netz war darin nicht vom Stadtnetz unterscheidbar — genau das
+verhinderte den Netzknoten-Charakter.
+
+- `infrastructure/networkSegments.ts` — `computeRoadSegments` zerlegt **dasselbe**
+  Netz in zusammenhängende Teilnetze und klassifiziert sie: `city` (berührt ein
+  Distriktzentrum) vs. `local`. Deterministische Ids (kleinste Kachel), stabile
+  Reihenfolge. Gebaut in `computeDerived` → nur bei Strukturänderungen (§15.5).
+- `infrastructure/harborNodes.ts` — `getHarborNodeStatus` je Anleger: Landseite
+  (Teilnetz + `onCityNetwork`), Wasserseite (`waterNodeId`, `navigable`),
+  `reachableHarborIds` und **`linksToCityVia`** (erreichbare Anleger am Stadtnetz →
+  genau die Eingabe für I4-Routen). `getHarborNetworkOverview` aggregiert.
+- UI: Gebäudefenster zeigt die Landseite (Stadtnetz / anschließbar / isoliert / keine
+  Straße). Kein zweiter Graph, keine Save-Änderung (v21).
+- **Nicht erfunden:** Kapazität/Reisezeit/Betriebskosten/Warenfluss = I4.
+- **Operabilität unverändert:** lokale Netze werden gezeigt, nicht bestraft — ohne
+  Schiffsrouten (I4) hätte der Spieler kein Gegenmittel.
+
+Tests: `tests/networkSegments.test.ts` (8).
+
 ## 3. Offen — I4 „voll ausgebaut" (nächste große Stufe, nicht vorgetäuscht)
 
 - **Persistente Schiffsrouten** Anleger↔Anleger als echter Netz-Bestandteil:

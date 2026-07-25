@@ -1,5 +1,74 @@
 # Patch Notes
 
+## v0.96 — Infrastruktur 2.0 / I3: Anleger als echter Netzknoten (Save v21)
+
+### Was
+
+- **Ein Anleger zeigt jetzt, woran seine Landseite hängt:** „Am Stadtnetz",
+  „Lokales Netz – per Schiff anschließbar", „Lokales Netz – ohne Stadtanschluss" oder
+  „Keine Straße am Anleger". Bisher sahen ein Anleger mitten in der Stadt und ein
+  abgeschnittener Anleger hinter dem Wasser **identisch** aus.
+- Damit wird aus dem Einzelobjekt ein **Netzknoten**: Straße → Anleger → (Schiff) →
+  Anleger → Straße ist erstmals als Zustand ablesbar.
+
+### Warum
+
+- Seit v0.92 seedet ein Anleger den Straßengraphen wie ein Distriktzentrum, damit
+  hinter Wasser überhaupt gebaut werden kann. `derived.roadNetwork` ist aber **ein
+  flaches Set** — ein isoliertes Anleger-Netz war darin nicht vom Stadtnetz zu
+  unterscheiden. Genau diese fehlende Unterscheidung verhinderte, dass Anleger als
+  Netzknoten funktionieren (§I3), und sie ist die Eingabe, die I4 für Schiffsrouten
+  braucht.
+
+### Architektur
+
+- **Reines Modul** `src/game/infrastructure/networkSegments.ts`: zerlegt das
+  **bestehende** `roadNetwork` in seine zusammenhängenden Teilnetze und klassifiziert
+  sie (`city` = berührt ein Distriktzentrum, sonst `local`). Deterministische Ids
+  (kleinste Kachel), stabile Reihenfolge. **Kein zweiter Verkehrsgraph (§2/§8)** —
+  Eingabe ist ausschließlich das vorhandene Netz.
+- **Event-getrieben statt pro Read (§15.5):** Die Zerlegung entsteht in
+  `computeDerived` neben `roadNetwork`, also nur bei Strukturänderungen.
+- **Reine Projektion** `src/game/infrastructure/harborNodes.ts`
+  (`getHarborNodeStatus`, `getHarborNetworkOverview`): Landseite (Teilnetz +
+  Stadtanschluss), Wasserseite (Wasserknoten aus `buildingInfrastructureStatus`),
+  über Wasser erreichbare Anleger und — für lokale Netze — über welche Anleger eine
+  Schiffsverbindung die Stadt anbinden **würde**.
+- **Bewusst nicht erfunden:** Kapazität, Reisezeit, Betriebskosten und Warenfluss
+  gehören zu den persistenten Schiffsrouten (**I4**) und werden nicht vorgetäuscht.
+  `WaterfrontFootprint` trägt heute keine Kapazitätsdaten.
+- **Operabilität unverändert:** Ein Gebäude auf einem lokalen Netz bleibt vorerst
+  betriebsfähig. Es jetzt stillzulegen wäre eine Falle — ohne Schiffsrouten (I4)
+  hätte der Spieler kein Mittel dagegen. Der Zustand wird gezeigt, nicht bestraft.
+- **Keine Save-Änderung** (v21): alles ist reine Projektion.
+
+### Auswirkung
+
+- `tsc` · ESLint · **414 Vitest grün** (+8 in `networkSegments.test.ts` — u. a.
+  „trennt ein isoliertes Anleger-Netz als eigenes lokales Teilnetz vom Stadtnetz",
+  Determinismus und „täuscht keine Schiffsroute vor") · Vite-Build.
+
+### Zukunft
+
+- **I4:** persistente Schiffsrouten Anleger↔Anleger (Kapazität, Reisezeit,
+  Betriebskosten, Warenfluss, Pause/Löschen) mit **linearer Save-Migration**;
+  `linksToCityVia` ist genau deren Eingabe. Danach **I5** (Bevölkerungs-Rebalancing +
+  Infrastruktur-Netz-UI).
+- Offen aus I3: die adaptive Uferplattform (R9) bleibt Renderer-/Bake-Arbeit.
+
+### Dateien
+
+- `src/game/infrastructure/networkSegments.ts` (neu),
+  `src/game/infrastructure/harborNodes.ts` (neu),
+  `src/game/simulation/derived.ts` (`roadSegments`),
+  `src/game/commands/controller.ts` (drei Reads),
+  `src/components/panels/FloatingBuildingSheet.tsx`, `src/i18n/de.json`,
+  `tests/networkSegments.test.ts` (neu).
+
+### Assets
+
+- Keine neuen Assets.
+
 ## v0.95 — Bauen 8.0 / G2 ②: Kamera bleibt im Baumodus voll bedienbar (Save v21)
 
 ### Was

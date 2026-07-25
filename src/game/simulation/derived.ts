@@ -4,6 +4,7 @@ import { centerOf, chebyshev, effectiveEffects, isContributing } from '../buildi
 import { locationBonusPct } from '../buildings/location.ts';
 import { computeRoadNetwork, regionProductionFactorAt } from '../map/world.ts';
 import { buildingInfrastructureStatus, isInfrastructureOperational } from '../infrastructure/buildingInfrastructure.ts';
+import { computeRoadSegments, type RoadSegmentIndex } from '../infrastructure/networkSegments.ts';
 
 /**
  * Values derived from the set of active buildings. Recomputed only on
@@ -36,6 +37,12 @@ export interface Derived {
   /** Buildings inside a fire-station radius. */
   fireProtected: Set<string>;
   roadNetwork: Set<string>;
+  /**
+   * Teilnetze des `roadNetwork` (§I3): trennt das Stadtnetz von lokalen Netzen
+   * hinter Wasser (Anleger-Landanker). Hier gebaut, damit die Zerlegung wie das
+   * Netz selbst nur bei Strukturänderungen entsteht — nie pro Read (§15.5).
+   */
+  roadSegments: RoadSegmentIndex;
   /** Location bonus percent per producing building (terrain-dependent). */
   productionBonus: Record<string, number>;
   /** Environment score per residential building (ambience auras; zoning). */
@@ -63,6 +70,7 @@ interface RadiusSource {
 
 export function recomputeDerived(state: GameState, config: GameConfig): Derived {
   const roadNetwork = computeRoadNetwork(state, config);
+  const roadSegments = computeRoadSegments(state, config, roadNetwork);
   const storageCaps: Record<ResourceId, number> = { money: Number.POSITIVE_INFINITY, wood: 0, stone: 0, food: 0, freshwater: 0 };
   const capacity: Record<NeedId, number> = { housing: 0, water: 0, food: 0, work: 0, leisure: 0, energy: 0, safety: 0, health: 0, freshwater: 0 };
   const productionPerMin: Record<ResourceId, number> = { money: 0, wood: 0, stone: 0, food: 0, freshwater: 0 };
@@ -245,6 +253,7 @@ export function recomputeDerived(state: GameState, config: GameConfig): Derived 
     distributionCoverage,
     fireProtected,
     roadNetwork,
+    roadSegments,
     productionBonus,
     ambience,
     avgAmbience,

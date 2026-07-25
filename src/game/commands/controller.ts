@@ -130,6 +130,13 @@ import {
   type ShippingRoutePreview,
   type WaterNavigationGraph,
 } from '../infrastructure/waterNavigation.ts';
+import {
+  getHarborNetworkOverview,
+  getHarborNodeStatus,
+  type HarborNetworkOverview,
+  type HarborNodeStatus,
+} from '../infrastructure/harborNodes.ts';
+import type { RoadSegment } from '../infrastructure/networkSegments.ts';
 
 export type CommandError =
   | PlacementError
@@ -2219,6 +2226,30 @@ export class GameController {
 
   getWaterNavigationGraph(): WaterNavigationGraph {
     return getWaterNavigationGraph();
+  }
+
+  /**
+   * Anleger als Netzknoten (§I3): Landseite (Teilnetz + Stadtanschluss), Wasserseite
+   * und die über Wasser erreichbaren Anleger. Kapazität/Reisezeit/Warenfluss folgen
+   * erst mit den persistenten Schiffsrouten (I4) — hier wird nichts vorgetäuscht.
+   */
+  getHarborNodeStatus(harborId: string): HarborNodeStatus | undefined {
+    return getHarborNodeStatus(
+      this.state,
+      this.config,
+      this.derived.roadNetwork,
+      this.derived.roadSegments,
+      harborId,
+    );
+  }
+
+  getHarborNetworkOverview(): HarborNetworkOverview {
+    return getHarborNetworkOverview(this.state, this.config, this.derived.roadNetwork, this.derived.roadSegments);
+  }
+
+  /** Straßen-Teilnetze: trennt das Stadtnetz von lokalen Netzen hinter Wasser (§I3). */
+  getRoadSegments(): RoadSegment[] {
+    return this.derived.roadSegments.segments;
   }
 
   getAvailableHarborConnections(harborId: string): AvailableHarborConnection[] {

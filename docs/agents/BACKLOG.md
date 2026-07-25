@@ -20,7 +20,9 @@ Transport (A5), zentraler Start (S1/S2), Fog/Kamera (S3).
   `RoadClassDef` (Wasser/Klippe/Steigung queren), Def `road_elevated`, Placement/Planung
   je Straßentyp, Brückendeck+Pfeiler im Renderer. Additiv.
 - ❌ `[P0]` **I2 Saubere Straßenstruktur** (Snap/Kurven, grün/gelb/rot) → **erledigt zugleich R6**.
-- ❌ `[P0]` **I3 Küste/Ufer + Anleger als Netzknoten** → **erledigt zugleich R9**.
+- 🟡 `[P0]` **I3 Küste/Ufer + Anleger als Netzknoten**: ✅ Netzknoten-Modell (v0.96,
+  `networkSegments.ts` + `harborNodes.ts` — Stadtnetz vs. lokales Netz, `linksToCityVia`);
+  ❌ R9 adaptive Uferplattform (Renderer/Bake) offen.
 - ❌ `[P0]` **I4 Schifffahrtsnetz** (persistente Routen, Stadtarbeit-Legs; lineare Migration).
 - ❌ `[P1]` **I5 Bevölkerungs-Rebalancing + Infrastruktur-Netz-UI**.
 
