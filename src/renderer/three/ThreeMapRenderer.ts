@@ -88,6 +88,7 @@ import { regionOfTile, samplePlacementSurface, worldTerrainAt } from '../../game
 import { BAKED_REGIONS, WORLD_TILES, regionBounds, regionIdAt } from '../../game/config/startRegion.config.ts';
 import { oceanDepthGrid, shoreTypeGrid, waterfrontBuildableGrid } from './worldMasks.gen.ts';
 import { validatePlacement } from '../../game/buildings/placement.ts';
+import { plinthDepthFor } from '../../game/buildings/terrainFit.ts';
 import { locationBonusPct } from '../../game/buildings/location.ts';
 import { effectiveEffects } from '../../game/buildings/effects.ts';
 import {
@@ -3616,14 +3617,32 @@ export class ThreeMapRenderer implements IMapRenderer {
       return node;
     }
 
-    const foundationDepth = Math.max(0.12, baseY - surface.minHeight + 0.06);
-    const foundation = new Mesh(
-      new BoxGeometry(def.size.w * 0.94, foundationDepth, def.size.h * 0.94),
-      FOUNDATION_MATERIAL,
-    );
-    foundation.position.y = -foundationDepth / 2;
-    foundation.receiveShadow = true;
-    group.add(foundation);
+    // § Map Flattening C3 — Sockel als Stützmauer. Seit Phase C darf ein
+    // Footprint deutlich mehr Höhenunterschied überspannen (`footprintHeightBudget`).
+    // Ein einzelner, exakt bis `minHeight` reichender Kasten sähe dabei an der
+    // Talseite abgeschnitten aus, weil das Gelände AUSSERHALB des Footprints noch
+    // weiter abfällt. Deshalb reicht das Fundament bis unter den tiefsten Punkt
+    // eines Rings um das Gebäude — nichts schwebt, nichts klafft (§4.1/§8) —
+    // und wird ab einer sichtbaren Höhe als abgetreppte Mauer gebaut statt als
+    // glatter Block (§4.3 „terrassierte Platzierung/Stützmauern").
+    const skirtRadius = Math.max(def.size.w, def.size.h) / 2 + 0.7;
+    const groundLow = Math.min(surface.minHeight, terrainMinHeightAround(cx, cz, skirtRadius));
+    const foundationDepth = plinthDepthFor(baseY - groundLow);
+    const steps = foundationDepth > 0.9 ? 3 : foundationDepth > 0.5 ? 2 : 1;
+    for (let step = 0; step < steps; step++) {
+      const stepDepth = foundationDepth / steps;
+      // Jede tiefere Stufe steht etwas weiter vor: das liest sich als Sockel mit
+      // Mauerfuß statt als Kiste, und die unterste Stufe deckt den Übergang zum
+      // umliegenden Gelände sicher ab.
+      const spread = 0.94 + step * 0.05;
+      const tier = new Mesh(
+        new BoxGeometry(def.size.w * spread, stepDepth, def.size.h * spread),
+        FOUNDATION_MATERIAL,
+      );
+      tier.position.y = -stepDepth * (step + 0.5);
+      tier.receiveShadow = true;
+      group.add(tier);
+    }
 
     // Cosmetic facing chosen at placement time (§ Gebäude-Rotation): rotates the
     // whole node — model, construction site, selection ring, floating UI — around

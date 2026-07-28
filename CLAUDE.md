@@ -246,6 +246,23 @@ Rathaus-/Lagerübersicht · **P-D** Anleger-zu-Anleger-Netz (Straßenstart am is
 Landanker, gemeinsamer Infrastrukturgraph, Schiffsrouten; = I3/I4) · **P-E**
 Performance-Pass + dauerhafte gedrosselte FPS-Anzeige. Nichts Fehlendes vortäuschen.
 
+## Status: Map Flattening + Buildability Overhaul erledigt (v1.11, Save v25, D-040)
+Die Insel ist **außerhalb des zentralen Massivs eingeebnet**; Bauplätze für 3×3/4×4
+haben sich ungefähr **verdoppelt** (Bebaubar-Maske 25.161 → 38.126). Das Massiv ist
+unangetastet — entfernt wurden 1.647 Streu-„Gebirgs"-Kacheln **unter Höhe 4**
+(Steilheits-Artefakte im Tiefland). Küste gekippt: flaches Ufer 1.453 → 2.485 gegen
+Steilküste 1.937 → 905. **Entscheidend (D-040): Das Terraforming läuft im Bake NACH
+der Regionssegmentierung** (`tools/bakeWorld.mjs` §8a-flat) — deshalb sind
+`islandRegions.gen.ts`, Startregion 9 und Rathaus (127,250) **bitgleich** und
+`regions.config.ts`/Balancing/Spielstände bleiben gültig (Save v25 = reine
+Weltmarkierung, **kein Neustart**). Wer am Bake arbeitet, muss diese Reihenfolge
+erhalten. Toleranzen liegen im reinen Sim-Modul `src/game/buildings/terrainFit.ts`
+(Höhenbudget nach Footprint-Kantenlänge, Bebaubar-Toleranz, `GROUND_ROAD_MAX_SLOPE`,
+Sockelhöhe); `validatePlacement` bleibt die **einzige** Platzierungsinstanz (§2), der
+Renderer liest dieselben Werte. Verbindlich vor Gelände-/Platzierungsarbeit:
+`docs/agents/MAP_FLATTENING_AND_BUILDABILITY_PLAN.md`. Offen (nicht vortäuschen):
+echtes Mesh-Einebnen unter dem Footprint, Pfahl-/Steglogik für Wassergebäude.
+
 Verbindlicher Einstieg für die Weiterarbeit:
 `docs/HANDOFF_CLAUDE.md` → `docs/agents/PROJECT_STATE.md` →
 `docs/agents/OPEN_TASKS.md`. Keine zweite Verkehrs- oder Missionssimulation

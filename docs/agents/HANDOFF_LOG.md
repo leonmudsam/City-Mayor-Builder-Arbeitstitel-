@@ -1,5 +1,27 @@
 # Handoff-Log
 
+## 2026-07-28 — Map Flattening + Buildability Overhaul (v1.11, Save v25)
+
+**Gelände + Platzierung, Weltstruktur unverändert.** Die Insel ist außerhalb des
+Massivs eingeebnet; Bauplätze für 3×3/4×4 haben sich ungefähr verdoppelt.
+
+- Bake `tools/bakeWorld.mjs`: neuer Nachlauf **§8a-flat** (Uferprofil →
+  Terraforming → Ufer/Biome/Bebaubarkeit neu ableiten → glätten). Läuft **nach**
+  Regionen/Startwahl, deshalb ist `islandRegions.gen.ts` bitgleich (D-040).
+- Bebaubar-Maske 25.161 → 38.126; Streu-Gebirge unter Höhe 4: 1.647 → 0; flaches
+  Ufer 1.453 → 2.485 gegen Steilküste 1.937 → 905; Massiv unverändert.
+- Neues Sim-Modul `src/game/buildings/terrainFit.ts` (Höhenbudget nach
+  Footprint-Größe, Bebaubar-Toleranz, `GROUND_ROAD_MAX_SLOPE`, Sockelhöhe);
+  `validatePlacement` bleibt die einzige Instanz.
+- Renderer: Fundament ist jetzt eine abgetreppte Stützmauer bis unter das
+  **umliegende** Gelände (kein Klaffen an der Talseite).
+- `tests/mapBuildability.test.ts` (28 Tests) auf **echtem** Bake-Gelände, ohne
+  `flattenTerrain`; gegen die alten Konstanten gegengeprüft.
+- Save **v25**, Migration v24→v25 ohne Strukturänderung; kein Neustart nötig
+  (0 Landkacheln wurden zu Wasser — gemessen gegen den vorherigen Bake).
+- Offen und dokumentiert: echtes Mesh-Einebnen unter dem Footprint, Pfahl-/
+  Steglogik für Wassergebäude, 5×5 bleibt der schwierigste Fall (30,9 %).
+
 ## 2026-07-23 — Visual Active Operations & Infrastructure UI (v0.82)
 
 **Rein visuell/UI, Save unverändert v19.** Das überladene Referenz-Dashboard wurde

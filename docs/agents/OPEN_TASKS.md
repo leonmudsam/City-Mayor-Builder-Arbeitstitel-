@@ -4,6 +4,26 @@
 
 # Offene Aufgaben nach v0.82
 
+## ✅ ERLEDIGT: Map Flattening + Buildability Overhaul (v1.11, Save v25, D-040)
+
+Auftrag vom 28.07.2026 („Die Insel soll weiterhin spektakulär aussehen, aber sich
+endlich wie eine wirklich gut spielbare City-Builder-Map anfühlen"). Phasen A–E
+vollständig; Kennzahlen und Begründungen in
+[`MAP_FLATTENING_AND_BUILDABILITY_PLAN.md`](MAP_FLATTENING_AND_BUILDABILITY_PLAN.md).
+
+**Daraus offen geblieben (bewusst, nicht vorgetäuscht):**
+- **Echtes Einebnen des Terrain-Meshes unter dem Footprint** (§4.1). Umgesetzt ist
+  die ebenfalls von §4.1 genannte Sockel-/Stützmauer-Variante. Eine echte
+  Geländemutation braucht eine Pad-Überlagerung, die Simulation **und**
+  Renderer-Höhenfeld gemeinsam lesen, plus Chunk-Neuaufbau bei jeder Platzierung.
+- **Pfahl-/Steglogik für Gebäude, die wirklich ins Wasser ragen** (§4.4).
+  `dock_small`/`river_port` nutzen weiter den vorhandenen Waterfront-Footprint
+  mit Tiefenprüfung; echte Pfähle sind Renderer-Arbeit.
+- **5×5-Footprints** bleiben mit 30,9 % der Ankerkacheln der schwierigste Fall.
+
+> **Danach geht es mit den zurückgestellten Active-Simplicity-Phasen AS-3…AS-9
+> weiter** ([`ACTIVE_SIMPLICITY_PLAN.md`](ACTIVE_SIMPLICITY_PLAN.md), D-039).
+
 ## AKTIVER AUFTRAG: § Spielbarkeit 9.1 — Stadtarbeit/Zeit/Frühlogistik/Anlegernetz/Perf (P0)
 
 > **Vorgezogen auf ausdrücklichen Nutzerwunsch (24.07.2026):** „Ich teste im Moment

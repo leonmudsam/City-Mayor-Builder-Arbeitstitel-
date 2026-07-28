@@ -38,7 +38,7 @@ import { allRegionIds, createRegionStub, occupyTiles } from './map/world.ts';
  * v12 (§ Stadtarbeit 2D): laufende Fahrmissionen speichern Fahrzeugklasse und
  * manuell gezeichnete Straßenkette.
  */
-export const SCHEMA_VERSION = 24;
+export const SCHEMA_VERSION = 25;
 
 export function createNewGame(config: GameConfig, cityName: string, now: number): GameState {
   const state: GameState = {

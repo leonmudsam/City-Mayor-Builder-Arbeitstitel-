@@ -18,7 +18,7 @@ import type { Derived } from '../simulation/derived.ts';
 import type { BuildingDef } from '../config/types.ts';
 import { validatePlacement } from '../buildings/placement.ts';
 import { worldTerrainAt } from '../map/world.ts';
-import { WORLD_TILES } from '../config/startRegion.config.ts';
+import { WORLD_TILES, bakedSurfaceAt } from '../config/startRegion.config.ts';
 
 export interface RoadRouteContext {
   state: GameState;
@@ -42,6 +42,9 @@ const DIRS = [
 const WEIGHT_EXISTING = 0.25;
 const WEIGHT_LAND = 1;
 const WEIGHT_BRIDGE = 6;
+/** Aufpreis je Welt-Einheit Steigung: ein Hang an der Obergrenze (1,1) kostet
+ *  wie ~2,2 flache Kacheln, bleibt also gangbar, wird aber gemieden. */
+const WEIGHT_SLOPE = 2;
 // Sicherheitsrand um die Segment-Bounding-Box, damit ein Umweg um eine Bucht
 // möglich ist, ohne je die ganze 512²-Insel zu durchsuchen.
 const SEARCH_MARGIN = 22;
@@ -71,7 +74,13 @@ export function tileWeight(ctx: RoadRouteContext, x: number, y: number): number 
   const spanned =
     (rc?.crossesWater === true && (terrain === 'water' || terrain === 'river')) ||
     (rc?.crossesCliff === true && terrain === 'mountain');
-  return spanned ? WEIGHT_BRIDGE : WEIGHT_LAND;
+  if (spanned) return WEIGHT_BRIDGE;
+  // § Map Flattening Phase D: Seit dem Einebnen darf eine Bodenstraße spürbar
+  // steileres Gelände nehmen (GROUND_ROAD_MAX_SLOPE). Damit sie das nicht
+  // beiläufig tut, kostet Steigung extra — der Router legt die Trasse von
+  // selbst ins flache Land und klettert nur, wenn der Umweg teurer wäre.
+  // Passierbarkeit bleibt allein Sache von `validatePlacement` (§2).
+  return WEIGHT_LAND + bakedSurfaceAt(x, y).slope * WEIGHT_SLOPE;
 }
 
 /** Orthogonaler L-Rückfall (früheres `extendRoadDraft`), falls kein Weg gefunden

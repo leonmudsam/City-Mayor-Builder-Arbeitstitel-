@@ -1,5 +1,128 @@
 # Patch Notes
 
+## Claude – Map Flattening + Buildability Overhaul
+
+## v1.11 — Die Insel wird bespielbar (Save v25)
+
+> Die Insel sah gut aus, ließ sich aber kaum bebauen. Jetzt beides.
+> **Bauplätze für mittlere und große Gebäude haben sich ungefähr verdoppelt** —
+> das zentrale Gebirge bleibt genauso hoch und dramatisch wie vorher.
+
+### Was
+
+- **Endlich Platz zum Bauen.** Außerhalb des Gebirges ist die Insel deutlich
+  ruhiger: weniger Mikro-Hügel, weniger abrupte Kanten, große zusammenhängende
+  Flächen. Wo vorher jede zweite Stelle „hier nicht baubar" sagte, steht jetzt
+  ein Gebäude.
+
+  | Gebäudegröße | Bauplätze vorher | jetzt | |
+  | --- | ---: | ---: | ---: |
+  | 1×1 (Haus) | 57,9 % | 80,8 % | +52 % |
+  | 2×2 | 46,4 % | 75,3 % | +76 % |
+  | 3×3 (Markt) | 32,2 % | 60,7 % | **+105 %** |
+  | 4×4 (Sägewerk) | 26,0 % | 50,3 % | **+110 %** |
+  | 5×5 | 21,9 % | 30,9 % | +54 % |
+
+- **Das Gebirge bleibt das Highlight.** Gipfelhöhe, Massiv und Hochgebirge sind
+  **unverändert**. Was verschwunden ist, waren nie Berge: 1.647 einzelne
+  „Gebirgs"-Kacheln lagen unter Höhe 4 — verstreute Steilheits-Artefakte im
+  Tiefland und an der Küste, die jedes Gebäude und jede Straße blockierten.
+  Jetzt sind es **null**. Am Gebirgsfuß entstehen dadurch echte Randsiedlungen.
+- **Küsten und Ufer sind endlich nutzbar.** Die Küste war mehrheitlich
+  Steilküste (1.937 Kacheln, davon 1 % bebaubar). Jetzt ist das flache Ufer die
+  klare Mehrheit: **2.485 flache Ufer** gegen **905 Steilküste**. Direkt am
+  Wasser bebaubare Kacheln: 1.210 → **2.242**. Garantierte 5×5-Hafenplattformen:
+  16 → **44**. Strand-, Fluss- und Seeuferstädte sind damit wirklich möglich.
+- **Die Bauprüfung blockiert nicht mehr grundlos.** Bisher galt für **jede**
+  Gebäudegröße dieselbe starre Höhengrenze — ein 5×5 auf gleichmäßig sanftem
+  Hang war unbaubar, obwohl derselbe Hang für ein kleines Haus zählte. Jetzt
+  wächst der erlaubte Höhenunterschied mit der Gebäudegröße, und eine einzelne
+  Randkachel kippt einen sonst passenden Bauplatz nicht mehr.
+- **Gebäude am Hang bekommen eine sichtbare Stützmauer.** Der Sockel reicht bis
+  unter das umliegende Gelände und wird ab einer sichtbaren Höhe abgetreppt.
+  Nichts schwebt, nichts klafft — das Gebäude steht waagerecht im Hang.
+- **Straßen kommen überall hin, wo Gebäude stehen dürfen.** Die alte
+  Straßen-Steilheitsgrenze lag **unter** der Bebaubar-Schwelle: es gab Kacheln,
+  auf denen ein Haus stehen durfte, das nie eine Straße erreichen konnte —
+  ausgerechnet an den Uferkacheln für Anleger und Häfen. Diese Lücke ist zu.
+  Neu bevorzugen Straßen flaches Land, können aber klettern, wenn der Umweg
+  länger wäre.
+
+### Warum
+
+Die Insel war nach drei Weltverdichtungen visuell stark, aber als City-Builder-
+Karte zu eng: nur **45 %** des Landes trug überhaupt das Bebaubar-Bit, und für
+ein 4×4-Gebäude funktionierte nur jede vierte Stelle. Die Ursache war ein
+struktureller Fehler im Welt-Bake, kein Balancing-Problem — siehe unten.
+
+### Architektur
+
+- **Der Kernfehler:** Der Bake bestimmte die Bebaubar-Maske **einmal** aus dem
+  **rohen** Hang und glättete danach ausschließlich Kacheln, die schon in der
+  Maske lagen. Eine Kachel mit Hang 0,90 fiel heraus, wurde nie geglättet und
+  blieb für immer unbebaubar. Die Glättung konnte vorhandene Baufläche
+  vertiefen, aber **niemals neue erzeugen**. Jetzt wechseln Klassifikation und
+  Glättung einander ab (4 Runden), und steiles, aber nicht gebirgiges Land
+  wandert Runde für Runde in die Baufläche.
+- **Geglättet wird nur, was zu steil ist.** Eine reine Glättung zog auch ebene
+  Plateaus in Richtung ihrer Nachbarn und kippte sie in Rampen — gemessen fielen
+  die praktisch ebenen Kacheln dabei von 14.834 auf 11.307. Ebene Flächen
+  bleiben jetzt exakt eben.
+- **Regionen, Startregion und Rathaus sind bitgleich geblieben.** Das
+  Terraforming läuft bewusst **nach** der Regionssegmentierung. Der erste
+  Versuch (davor) ergab 11 statt 13 Regionen und ein Rathaus an anderer Stelle —
+  das hätte `regions.config.ts`, das Balancing und jeden Spielstand zerstört,
+  für einen Auftrag, der von Weltstruktur gar nicht spricht.
+- **Kein zweites Platzierungssystem** (CLAUDE.md §2): `validatePlacement` bleibt
+  die einzige Instanz, `analyseRoadPath` die einzige Straßenwahrheit. Die
+  Toleranzen liegen in einem neuen reinen Sim-Modul
+  `src/game/buildings/terrainFit.ts`, aus dem der Renderer die Sockelhöhe liest.
+- **Konsistenzriegel im Bake:** Eine Kachel darf nicht gleichzeitig „bebaubar"
+  und „Steilwand" sein, und ihr Hang darf die Straßengrenze nicht überschreiten.
+  Ohne diesen Riegel entstanden 57 Bauplätze **ohne mögliche Anbindung**.
+- **Terrassen wurden gebaut, gemessen und wieder verworfen.** Eine
+  Höhenquantisierung senkte die Zahl ebener Bauplätze in beiden Varianten
+  (11.370 → 10.563), weil das Schnappen an Plateaurändern neue Kanten erzeugt.
+
+### Auswirkung
+
+- **Bestehende Spielstände bleiben gültig; kein Neustart.** Gemessen gegen den
+  vorherigen Bake: **0** Landkacheln wurden zu Wasser, Regionen und Rathaus sind
+  identisch. ~3,5 % der Landkacheln werden am Rand eingeebneter Flächen steiler;
+  ein dort bereits stehendes Gebäude bleibt stehen (geprüft wird nur beim
+  Bauen/Versetzen), Straßen stammen ohnehin aus den Gebäudedaten, und ein
+  weggefallener Baum pausiert den Betrieb regulär, statt ihn zu brechen.
+- Der Stadtaufbau im frühen und mittleren Spiel wird spürbar entspannter; die
+  Startregion behält ihre 1.668 Bauflächen, hat aber ruhigeres Gelände.
+
+### Zukunft
+
+- Echtes Einebnen des Terrain-Meshes unter dem Footprint (statt Sockel) — braucht
+  eine Pad-Überlagerung für Sim **und** Renderer-Höhenfeld plus Chunk-Neuaufbau.
+- Pfahl-/Steglogik für Gebäude, die wirklich ins Wasser ragen.
+- 5×5-Footprints bleiben mit 30,9 % der Stellen der schwierigste Fall.
+
+### Dateien
+
+- `tools/bakeWorld.mjs` — Nachlauf §8a-flat (Uferprofil, Terraforming,
+  Neuableitung), `smoothAndClamp(onlyRough)`, `clampSweep`, `classifyShoreTypes`,
+  `classifyBiomes`, `classifyBuildable`, Konsistenzriegel
+- `src/game/buildings/terrainFit.ts` — **neu**: Höhenbudget, Bebaubar-Toleranz,
+  Straßen-Steilheit, Sockelhöhe
+- `src/game/buildings/placement.ts` · `src/game/roads/roadRouting.ts`
+- `src/renderer/three/ThreeMapRenderer.ts` — abgetreppter Sockel/Stützmauer
+- `src/game/newGame.ts` (Save v25) · `src/game/storage/migrations.ts`
+- `tests/mapBuildability.test.ts` — **neu**, 28 Tests auf echtem Gelände;
+  `tests/newIslandBake.test.ts` — Bauflächen-Korridor neu gesetzt
+- `docs/agents/MAP_FLATTENING_AND_BUILDABILITY_PLAN.md` — **neu** (Audit + Plan)
+- Neu gebacken: `islandTerrain/Buildability/Infrastructure.gen.ts`,
+  `worldHeight.gen.ts`, `worldMasks.gen.ts`, Minimap-/Übersichts-PNGs
+  (`islandRegions.gen.ts` **unverändert**)
+
+### Assets
+
+Keine neuen Assets. Die Insel-/Minimap-Bilder wurden aus dem Bake neu erzeugt.
+
 ## v1.10 — Active Simplicity / AS-1+AS-2: Die Stadt liefert selbst (Save v24)
 
 > **Neue oberste Designregel (D-039): Der Spieler entscheidet. Die Stadt arbeitet.**

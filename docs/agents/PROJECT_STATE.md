@@ -1,4 +1,38 @@
-# Projektstand — v0.82
+# Projektstand — v1.11
+
+Stand: 28. Juli 2026
+
+## Map Flattening + Buildability Overhaul (v1.11, Save v25) — AKTUELL
+
+- Die Insel ist **außerhalb des zentralen Massivs eingeebnet**. Bauplätze für
+  3×3- und 4×4-Gebäude haben sich ungefähr **verdoppelt** (32,2 % → 60,7 % bzw.
+  26,0 % → 50,3 % der Ankerkacheln); Bebaubar-Maske 25.161 → 38.126 Kacheln.
+- **Das Massiv ist unangetastet** (Gipfelhöhe 52, Kacheln ≥ 13 und ≥ 25
+  unverändert). Entfernt wurden 1.647 Streu-„Gebirgs"-Kacheln **unter Höhe 4** —
+  Steilheits-Artefakte im Tiefland, die Gebäude und Straßen blockierten.
+- **Küste gekippt:** flaches Ufer 1.453 → 2.485 gegen Steilküste 1.937 → 905;
+  wassernah bebaubar 1.210 → 2.242; garantierte 5×5-Uferplattformen 16 → 44.
+- **Weltstruktur bitgleich** (D-040): Terraforming läuft im Bake **nach** der
+  Regionssegmentierung, deshalb sind `islandRegions.gen.ts`, Startregion 9 und
+  Rathaus (127,250) unverändert. `regions.config.ts` und das Balancing gelten
+  weiter; **bestehende Spielstände bleiben gültig, kein Neustart**.
+- **Platzierung:** neues reines Sim-Modul `src/game/buildings/terrainFit.ts` —
+  Höhenbudget wächst mit der Footprint-Kantenlänge (statt pauschal 0,85),
+  einzelne Randkacheln kippen einen Bauplatz nicht mehr, `GROUND_ROAD_MAX_SLOPE`
+  deckt den gesamten bebaubaren Hangbereich ab. `validatePlacement` bleibt die
+  **einzige** Instanz; der Renderer liest dieselben Werte für den Sockel.
+- **Renderer:** Fundament ist eine abgetreppte Stützmauer bis unter das
+  umliegende Gelände — nichts schwebt, nichts klafft an der Talseite.
+- Verifiziert: TypeScript, ESLint, **473/473 Tests**, Produktionsbuild,
+  3D-Screenshot-Smoke ohne Konsolenfehler.
+- Offen (dokumentiert, nicht vorgetäuscht): echtes Einebnen des Terrain-Meshes
+  unter dem Footprint, Pfahl-/Steglogik für Wassergebäude, 5×5 bleibt mit
+  30,9 % der Ankerkacheln der schwierigste Fall.
+- Details: `MAP_FLATTENING_AND_BUILDABILITY_PLAN.md`, **D-040**, `PATCHNOTES.md`.
+
+---
+
+# Projektstand — v0.82 (historisch)
 
 Stand: 23. Juli 2026
 

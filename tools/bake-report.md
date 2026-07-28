@@ -11,28 +11,30 @@
 - Ozeanrand: 99 Kacheln; separate Y-Skalierung: Gipfel ≈ 52 Welt-Einheiten
 - Wasserlinie (normalisiert): 0.0065 → 0.0075; Höhenbereich Welt: [-2.40, 51.98]
 - Bebaubare Kacheln: 44.755 → 25.092 (56.1 %, Änderung -43.9 %)
-- Glättung bebaubaren Landes: 20 Iterationen, max. Schritt 0.25/Sample
+- Terraforming (§ Map Flattening B1): 4 Runden × 8 Iterationen, Hang-Tor 1.5, Massiv > 13 ausgenommen
+- Glättung bebaubaren Landes: 20 Iterationen, max. Schritt 0.25/Sample, Bebaubar-Hang ≤ 0.86
+- Gebirge: ab Höhe 13, ODER Hang ≥ 1.8 oberhalb Höhe -Infinity
 - Regions-Parameter: Ziel ~6200 Kacheln, min. 2400 (sonst Merge), Kosten fremdes Biom +4 / Fluss +6 / Höhe ×4
-- Infrastruktur-Hooks: 23 Brücken, 24 Viadukte, 16 Tunnel, 16 Häfen, 759 Wasserwegknoten
+- Infrastruktur-Hooks: 48 Brücken, 24 Viadukte, 9 Tunnel, 16 Häfen, 759 Wasserwegknoten
 
 ## Biomverteilung
 
 - water: 205.782 (78.5 %)
 - river: 713 (0.3 %)
-- sand: 7.861 (3.0 %)
-- fertile: 2.506 (1.0 %)
-- grass: 23.443 (8.9 %)
-- forest: 9.224 (3.5 %)
-- mountain: 12.615 (4.8 %)
+- sand: 11.866 (4.5 %)
+- fertile: 5.701 (2.2 %)
+- grass: 21.181 (8.1 %)
+- forest: 7.993 (3.0 %)
+- mountain: 8.908 (3.4 %)
 
 ## Wasser und Ufer
 
-- Flache Meeresküste: 897 Kacheln
-- Sanftes Flussufer: 542 Kacheln
-- Sanftes Seeufer: 14 Kacheln
-- Bewusste Steilküste: 1.937 Kacheln
-- Direkt wassernahe und bebaubare Uferkacheln: 1.210
-- Garantierte 5×5-Uferplattformen: 16
+- Flache Meeresküste: 1.578 Kacheln
+- Sanftes Flussufer: 884 Kacheln
+- Sanftes Seeufer: 23 Kacheln
+- Bewusste Steilküste: 905 Kacheln
+- Direkt wassernahe und bebaubare Uferkacheln: 2.242
+- Garantierte 5×5-Uferplattformen: 44
 
 ## Zentraler Start (vom Bake gewählt und validiert)
 

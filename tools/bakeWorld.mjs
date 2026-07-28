@@ -71,10 +71,66 @@ const SHORE_BLEND_TILES = 9;
 const SHORE_PLATFORM_HEIGHT = 0.30;
 const SHORE_RISE_PER_TILE = 0.28;
 const SHORE_CLIFF_HEIGHT = 9.0;
+/** Anteil der Küstenzonen, die bewusst Steilküste bleiben. */
+const SHORE_CLIFF_ZONE_RATIO = 0.24;
+/** Ab wann eine direkte Uferkachel als „flach begehbar" gilt (Höhe / Hang). */
+const SHORE_ACCESSIBLE_MAX_HEIGHT = 3.2;
+const SHORE_ACCESSIBLE_MAX_SLOPE = 0.9;
+/** Garantierte 5×5-Uferplattformen für Hafen-/Wassergebäude. */
+const SHORE_APRON_TARGET = 16;
+const SHORE_APRON_MIN_DISTANCE = 28;
 
 // Klassifikations-Schwellen (Welt-Einheiten / Kacheln)
-const MOUNTAIN_HEIGHT = 13;       // ab dieser Höhe: Gebirge
+const MOUNTAIN_HEIGHT = 13;       // ab dieser Höhe: Gebirge (Massiv — bleibt Highlight)
 const MOUNTAIN_SLOPE = 1.8;       // ODER ab diesem Höhendelta je Kachelschritt
+/** Höhe, ab der Hang ALLEIN eine Kachel zum Gebirge macht. `-Infinity` = wie
+ *  bis v1.10 (überall, auch unter der Wasserlinie liegendes Land). Der
+ *  Map-Flattening-Nachlauf setzt hier eine echte Basishöhe. Der Ur-Wert MUSS
+ *  neutral bleiben, sonst verschiebt sich die Regionssegmentierung. */
+const MOUNTAIN_SLOPE_MIN_HEIGHT = -Infinity;
+
+// ---------------------------------------------------------------------------
+// § MAP FLATTENING + BUILDABILITY OVERHAUL (Auftrag 28.07.2026) — Nachlauf
+// ---------------------------------------------------------------------------
+// WICHTIG — Reihenfolge ist Absicht: Regionen (§7), Startregion-Carve (§7d-bis)
+// und Rathauswahl (§8) laufen WEITERHIN auf dem unveränderten Ur-Gelände. Nur so
+// bleiben Regions-Ids, Regionsgrenzen, Startregion und Rathausposition
+// bitgleich zum vorherigen Bake — `regions.config.ts` (13 handgeschriebene
+// Regionen mit Progression/Kosten/Hafenabhängigkeit), das Balancing und ALLE
+// bestehenden Spielstände hängen daran. Der Auftrag verlangt eine bespielbarere
+// KARTE, nicht eine neue Weltstruktur.
+//
+// Erst DANACH (§8a-flat) wird das Gelände eingeebnet und Ufer, Biome und
+// Bebaubarkeit werden neu abgeleitet. Infrastruktur-Hooks (§8b) und alle
+// Ausgaben (§9) sehen ausschließlich dieses neue Gelände.
+const FLAT_SHORE_BLEND_TILES = 11;
+const FLAT_SHORE_PLATFORM_HEIGHT = 0.26;
+const FLAT_SHORE_RISE_PER_TILE = 0.20;
+const FLAT_SHORE_CLIFF_HEIGHT = 12.0;
+/** Der Ist-Stand war mehrheitlich Steilküste: 1.937 Steilküsten-Kacheln (davon
+ *  1 % bebaubar) gegen 897 flache Küsten + 542 Flussufer. Größter Einzelgrund
+ *  war `shoreHash >= 0.24` — jede vierte 18×18-Küstenzone war absichtlich VOM
+ *  flachen Profil ausgeschlossen. Jetzt bleiben ~8 % bewusste Steilküste. */
+const FLAT_SHORE_CLIFF_ZONE_RATIO = 0.08;
+const FLAT_SHORE_ACCESSIBLE_MAX_HEIGHT = 4.6;
+const FLAT_SHORE_ACCESSIBLE_MAX_SLOPE = 1.35;
+const FLAT_SHORE_APRON_TARGET = 44;
+const FLAT_SHORE_APRON_MIN_DISTANCE = 17;
+/** § Map Flattening B3: Hang allein macht unterhalb dieser Höhe kein Gebirge
+ *  mehr. Vorher lagen 5.634 der 12.615 „Gebirgs"-Kacheln unter Höhe 13, davon
+ *  1.647 unter Höhe 4 — verstreute Steilheits-Artefakte im Tiefland und an der
+ *  Küste, die jedes normale Gebäude (`cliffOverlap > 0`) und jede Bodenstraße
+ *  blockierten und mit dem zentralen Massiv nichts zu tun haben. */
+const FLAT_MOUNTAIN_SLOPE_MIN_HEIGHT = 6;
+/** § Map Flattening B2 (vorher 0,86). */
+const FLAT_MAX_BUILDABLE_TILE_SLOPE = 1.0;
+/** § Map Flattening B2: Die Erosion verlangte bisher ALLE VIER orthogonalen
+ *  Nachbarn. Damit fiel jeder Plateaurand und jede Talkante pauschal weg,
+ *  obwohl das Gelände dort nach dem Terraforming eben ist. */
+const FLAT_MIN_ORTHOGONAL_BUILDABLE = 3;
+/** MUSS mit `GROUND_ROAD_MAX_SLOPE` in `src/game/buildings/terrainFit.ts`
+ *  übereinstimmen: kein Bauplatz ohne mögliche Straßenanbindung (§5). */
+const FLAT_MAX_ROAD_SLOPE = 1.25;
 const SAND_MAX_HEIGHT = 2.2;      // § 10.0: breiteres Strandband (flacher Uferübergang) …
 const SAND_WATER_DIST = 4;        // … und ≤ 4 Kacheln vom Wasser (mehr sichtbare Strandtextur)
 const FERTILE_MAX_HEIGHT = 4.5;   // fruchtbares Land: tief, flach, gewässernah
@@ -103,6 +159,40 @@ const SMOOTH_ITERATIONS = 20;
 const SMOOTH_BLEND = 0.6;         // Anteil 4-Nachbar-Mittel je Iteration
 const MAX_BUILDABLE_STEP = 0.25;  // max. Höhendelta je Halbkachel (≈ 2 m pro Kachel)
 const MAX_BUILDABLE_TILE_SLOPE = 0.86; // 10.0: kompakterer X/Z-Maßstab; Bake glättet anschließend hart auf 0,25/Sample
+const MIN_ORTHOGONAL_BUILDABLE = 4;    // Rand-Erosion: alle vier orthogonalen Nachbarn
+
+// § Map Flattening — Phase B1: TERRAFORMING (der eigentliche Hebel).
+// Bis v1.10 wurde die Bebaubar-Maske EINMAL aus dem ROHEN Hang bestimmt und
+// danach ausschließlich INNERHALB dieser Maske geglättet. Eine Kachel mit Hang
+// 0,90 fiel damit heraus, wurde nie geglättet und blieb für immer unbebaubar:
+// die Glättung konnte vorhandene Baufläche vertiefen, aber niemals neue
+// erzeugen (Audit `MAP_FLATTENING_AND_BUILDABILITY_PLAN.md` A.2 (1)).
+//
+// Jetzt wechseln Klassifikation und Glättung einander ab: jede Runde bestimmt
+// aus den AKTUELLEN Höhen neu, welches Land eingeebnet wird, glättet es und
+// kappt die Stufen. So wandert steiles, aber nicht gebirgiges Land Runde für
+// Runde in die Baufläche. Das zentrale Massiv (h > MOUNTAIN_HEIGHT) ist in
+// JEDER Runde ausgenommen und bleibt vollständig unangetastet (§3.2/§8).
+const TERRAFORM_ROUNDS = 4;
+const TERRAFORM_ITERATIONS = 8;   // Glättungsdurchgänge je Runde
+/** Hänge bis hierher werden eingeebnet; steileres Land bleibt natürliches Relief
+ *  (Klippen, Grate, Bruchkanten) — sonst würde die Insel steril (§8). */
+const TERRAFORM_SLOPE_GATE = 1.5;
+/** Maximale Stufe auf terraformtem/bebaubarem Land (Halbkachel) = 0,5 je
+ *  Kachel. Ein 4×4-Footprint hat damit höchstens ≈1,5 Welt-Einheiten
+ *  Höhenunterschied — das kaschiert der Gebäudesockel als Stützmauer sauber
+ *  (§4.1/§4.3). Strengere Werte (0,18) sind geometrisch erreichbar, brauchen
+ *  aber Zehntausende Relaxationsdurchläufe und konvergieren im Bake nicht. */
+const FLAT_MAX_BUILDABLE_STEP = 0.25;
+
+// § Map Flattening B4 — TERRASSEN: BEWUSST NICHT UMGESETZT.
+// Eine zusätzliche Höhenquantisierung („Stufen statt Rampen") wurde gebaut und
+// gemessen — pro Knoten UND pro Kachel, mit fbm-gestreuter Stufenlage. Ergebnis
+// beide Male: die Zahl praktisch ebener Footprints SANK leicht (3×3 mit ΔH≤0,85:
+// 11.370 ohne → 10.563 mit), weil das Schnappen an Plateaurändern neue Kanten
+// erzeugt. Zusammen mit §8 („nichts steril/künstlich") ist das ein klares Nein.
+// Die vom Auftrag gewünschte Terrassenwirkung entsteht stattdessen dort, wo sie
+// wirklich sichtbar ist: am Gebäude, über den gestuften Sockel (Phase C3).
 
 // Organische Regionen (§ Welt 2.0 / § Final World Compaction 8.1 §4).
 // Ziel ist NICHT mehr eine feingliedrige Landschaftskarte, sondern genau eine
@@ -388,6 +478,14 @@ function shoreHash(tx, ty) {
 }
 const accessibleShoreZone = new Uint8Array(WORLD_TILES * WORLD_TILES);
 
+/** Uferrampe: blendet eine Höhe zur flachen Plattform hin aus, je näher am
+ *  Wasser desto stärker. Eine Quelle für den Ur-Bake und den Flachlauf. */
+function shoreBlendHeight(height, waterDistance, blendTiles, platformHeight, risePerTile) {
+  const target = platformHeight + Math.max(0, waterDistance - 1) * risePerTile;
+  const blend = Math.pow((blendTiles - waterDistance + 1) / blendTiles, 1.25);
+  return height + (target - height) * blend;
+}
+
 // Welt-Höhen-Grid: bedeckt = (h - Wasserlinie) · Faktor; unbedeckt = Tiefenrampe.
 const HW = new Float32Array(GRID * GRID);
 for (let gz = 0; gz < GRID; gz++) {
@@ -402,12 +500,10 @@ for (let gz = 0; gz < GRID; gz++) {
       const enclosedWaterNear = enclosedLabel[to] >= 0;
       const accessible = waterDistance > 0 && waterDistance <= SHORE_BLEND_TILES
         && rawHeight < SHORE_CLIFF_HEIGHT
-        && (enclosedWaterNear || shoreHash(tx, ty) >= 0.24);
+        && (enclosedWaterNear || shoreHash(tx, ty) >= SHORE_CLIFF_ZONE_RATIO);
       if (accessible) {
         accessibleShoreZone[to] = 1;
-        const target = SHORE_PLATFORM_HEIGHT + Math.max(0, waterDistance - 1) * SHORE_RISE_PER_TILE;
-        const blend = Math.pow((SHORE_BLEND_TILES - waterDistance + 1) / SHORE_BLEND_TILES, 1.25);
-        HW[o] = rawHeight + (target - rawHeight) * blend;
+        HW[o] = shoreBlendHeight(rawHeight, waterDistance, SHORE_BLEND_TILES, SHORE_PLATFORM_HEIGHT, SHORE_RISE_PER_TILE);
       } else {
         HW[o] = rawHeight;
       }
@@ -495,46 +591,189 @@ function bfsDistance(isSource) {
 const distWater = bfsDistance((o) => isWaterCand[o] === 1);
 const distFresh = bfsDistance((o) => terrain[o] === T.river || (terrain[o] === T.water && enclosedLabel[o] >= 0));
 
+// ---------------------------------------------------------------------------
+// 5b². Terraforming: Land AUSSERHALB des Massivs iterativ einebnen (Phase B1)
+// ---------------------------------------------------------------------------
+// Siehe die ausführliche Begründung bei TERRAFORM_ROUNDS. Kurz: Klassifikation
+// und Glättung wechseln sich ab, damit die Glättung Baufläche ERZEUGEN kann.
+// Beide Helfer werden anschließend von §6 unverändert wiederverwendet — es gibt
+// nur EINEN Glättungs-/Kappungs-Code im Bake.
+
+/** Erzwingt |ΔHW| ≤ maxStep zwischen benachbarten Knoten der Maske. Gibt die
+ *  Zahl der korrigierten Kanten zurück (0 = konvergiert). */
+function clampSweep(nodeMask, maxStep) {
+  let violations = 0;
+  for (let gz = 0; gz < GRID; gz++) {
+    for (let gx = 0; gx < GRID - 1; gx++) {
+      const a = gz * GRID + gx, b = a + 1;
+      if (!nodeMask[a] || !nodeMask[b]) continue;
+      const d = HW[b] - HW[a];
+      if (Math.abs(d) > maxStep + 1e-5) {
+        const ex = (Math.abs(d) - maxStep) / 2 * Math.sign(d);
+        HW[a] += ex; HW[b] -= ex; violations++;
+      }
+    }
+  }
+  for (let gx = 0; gx < GRID; gx++) {
+    for (let gz = 0; gz < GRID - 1; gz++) {
+      const a = gz * GRID + gx, b = a + GRID;
+      if (!nodeMask[a] || !nodeMask[b]) continue;
+      const d = HW[b] - HW[a];
+      if (Math.abs(d) > maxStep + 1e-5) {
+        const ex = (Math.abs(d) - maxStep) / 2 * Math.sign(d);
+        HW[a] += ex; HW[b] -= ex; violations++;
+      }
+    }
+  }
+  return violations;
+}
+
+/**
+ * Laplace-Glättung + Hangkappung auf den Knoten der Maske. Mutiert HW.
+ *
+ * `onlyRough` ist der Unterschied zwischen „einebnen" und „verschmieren":
+ * eine reine Laplace-Glättung zieht auch bereits EBENE Flächen in Richtung
+ * ihrer Nachbarn und kippt dadurch Plateaus in sanfte Rampen — genau das
+ * Gegenteil von „größere zusammenhängende Bauflächen" (§3.1). Mit `onlyRough`
+ * werden ausschließlich Knoten angefasst, deren größter Nachbarschritt die
+ * erlaubte Stufe überschreitet; alles, was schon eben ist, bleibt exakt eben.
+ */
+function smoothAndClamp(nodeMask, iterations, { onlyRough = false, maxStep = MAX_BUILDABLE_STEP } = {}) {
+  for (let it = 0; it < iterations; it++) {
+    const src = HW.slice();
+    for (let gz = 1; gz < GRID - 1; gz++) {
+      for (let gx = 1; gx < GRID - 1; gx++) {
+        const o = gz * GRID + gx;
+        if (!nodeMask[o]) continue;
+        if (onlyRough) {
+          const step = Math.max(
+            Math.abs(src[o] - src[o - 1]), Math.abs(src[o] - src[o + 1]),
+            Math.abs(src[o] - src[o - GRID]), Math.abs(src[o] - src[o + GRID]),
+          );
+          if (step <= maxStep) continue;
+        }
+        const avg = (src[o - 1] + src[o + 1] + src[o - GRID] + src[o + GRID]) / 4;
+        HW[o] = src[o] + (avg - src[o]) * SMOOTH_BLEND;
+      }
+    }
+    clampSweep(nodeMask, maxStep);
+  }
+}
+
+/** Hebt eine Kachelmaske auf das Knotenraster (ein Knoten gehört zur Maske,
+ *  sobald seine Kachel dazugehört). */
+function nodeMaskFromTiles(tileMask, out) {
+  out.fill(0);
+  for (let gz = 0; gz < GRID; gz++) {
+    for (let gx = 0; gx < GRID; gx++) {
+      const tx = Math.min(WORLD_TILES - 1, (gx / SAMPLES_PER_TILE) | 0);
+      const ty = Math.min(WORLD_TILES - 1, (gz / SAMPLES_PER_TILE) | 0);
+      if (tileMask[ty * WORLD_TILES + tx]) out[gz * GRID + gx] = 1;
+    }
+  }
+  return out;
+}
+
+/**
+ * § Map Flattening Phase B1 — Terraforming. Ebnet Land AUSSERHALB des Massivs
+ * iterativ ein. Läuft bewusst ERST NACH Regionen/Startwahl (§8a-flat), damit
+ * die Weltstruktur unverändert bleibt.
+ */
+function terraformNonMassifLand() {
+  const terraformTiles = new Uint8Array(WORLD_TILES * WORLD_TILES);
+  const terraformNodes = new Uint8Array(GRID * GRID);
+  for (let round = 0; round < TERRAFORM_ROUNDS; round++) {
+    terraformTiles.fill(0);
+    let selected = 0;
+    for (let ty = 0; ty < WORLD_TILES; ty++) {
+      for (let tx = 0; tx < WORLD_TILES; tx++) {
+        const o = ty * WORLD_TILES + tx;
+        if (isWaterCand[o]) continue;
+        // Das Massiv ist in JEDER Runde tabu — es bleibt das visuelle Highlight.
+        if (tileH(tx, ty) > MOUNTAIN_HEIGHT) continue;
+        if (tileSlope(tx, ty) > TERRAFORM_SLOPE_GATE) continue;
+        terraformTiles[o] = 1;
+        selected++;
+      }
+    }
+    // Übergangsband: Ohne die Randkacheln endet die eingeebnete Fläche an einer
+    // WAND — das Gefälle, das im Inneren verschwindet, sammelt sich an der
+    // Grenze zum unangetasteten Gelände. Genau dort entstanden neue steile
+    // Kacheln (und damit neues „Gebirge"), was §3.1 („weniger abrupte
+    // Höhenwechsel", „weichere Übergänge") widerspricht. Eine Kachel Dilatation
+    // verteilt den Übergang, ohne das Massiv anzufassen.
+    const withBand = terraformTiles.slice();
+    for (let ty = 1; ty < WORLD_TILES - 1; ty++) {
+      for (let tx = 1; tx < WORLD_TILES - 1; tx++) {
+        const o = ty * WORLD_TILES + tx;
+        if (terraformTiles[o] || isWaterCand[o]) continue;
+        if (tileH(tx, ty) > MOUNTAIN_HEIGHT) continue;
+        const touchesFlattened = terraformTiles[o - 1] || terraformTiles[o + 1]
+          || terraformTiles[o - WORLD_TILES] || terraformTiles[o + WORLD_TILES];
+        if (touchesFlattened) withBand[o] = 1;
+      }
+    }
+    nodeMaskFromTiles(withBand, terraformNodes);
+    smoothAndClamp(terraformNodes, TERRAFORM_ITERATIONS, { onlyRough: true, maxStep: FLAT_MAX_BUILDABLE_STEP });
+    // Terraformtes Land darf nicht unter die Wasserlinie sacken.
+    for (let o = 0; o < HW.length; o++) if (terraformNodes[o] && HW[o] < 0.05) HW[o] = 0.05;
+    console.log(`  Terraforming Runde ${round + 1}/${TERRAFORM_ROUNDS}: ${selected} Kacheln eingeebnet`);
+  }
+}
+
 // 0 = kein Ufer, 1 = flache Meeresküste, 2 = Flussufer, 3 = Seeufer,
 // 4 = bewusste Steilküste. Die Typisierung ist Bake-Wahrheit für Renderer,
 // Brückenkandidaten und künftige wasserbezogene Gebäude.
 const shoreTypeGrid = new Uint8Array(WORLD_TILES * WORLD_TILES);
-for (let ty = 1; ty < WORLD_TILES - 1; ty++) {
-  for (let tx = 1; tx < WORLD_TILES - 1; tx++) {
-    const o = ty * WORLD_TILES + tx;
-    if (isWaterCand[o] || distWater[o] !== 1) continue;
-    const neighbors = [[1, 0], [-1, 0], [0, 1], [0, -1]]
-      .map(([dx, dy]) => (ty + dy) * WORLD_TILES + tx + dx)
-      .filter((no) => isWaterCand[no]);
-    const isAccessible = accessibleShoreZone[o] && tileH(tx, ty) < 3.2 && tileSlope(tx, ty) <= 0.9;
-    if (!isAccessible) { shoreTypeGrid[o] = 4; continue; }
-    if (neighbors.some((no) => terrain[no] === T.river)) shoreTypeGrid[o] = 2;
-    else if (neighbors.some((no) => enclosedLabel[no] >= 0)) shoreTypeGrid[o] = 3;
-    else shoreTypeGrid[o] = 1;
+function classifyShoreTypes(maxHeight, maxSlope) {
+  shoreTypeGrid.fill(0);
+  for (let ty = 1; ty < WORLD_TILES - 1; ty++) {
+    for (let tx = 1; tx < WORLD_TILES - 1; tx++) {
+      const o = ty * WORLD_TILES + tx;
+      if (isWaterCand[o] || distWater[o] !== 1) continue;
+      const neighbors = [[1, 0], [-1, 0], [0, 1], [0, -1]]
+        .map(([dx, dy]) => (ty + dy) * WORLD_TILES + tx + dx)
+        .filter((no) => isWaterCand[no]);
+      const isAccessible = accessibleShoreZone[o]
+        && tileH(tx, ty) < maxHeight
+        && tileSlope(tx, ty) <= maxSlope;
+      if (!isAccessible) { shoreTypeGrid[o] = 4; continue; }
+      if (neighbors.some((no) => terrain[no] === T.river)) shoreTypeGrid[o] = 2;
+      else if (neighbors.some((no) => enclosedLabel[no] >= 0)) shoreTypeGrid[o] = 3;
+      else shoreTypeGrid[o] = 1;
+    }
   }
 }
+classifyShoreTypes(SHORE_ACCESSIBLE_MAX_HEIGHT, SHORE_ACCESSIBLE_MAX_SLOPE);
 
-// 5c. Land-Biome.
-for (let ty = 0; ty < WORLD_TILES; ty++) {
-  for (let tx = 0; tx < WORLD_TILES; tx++) {
-    const o = ty * WORLD_TILES + tx;
-    if (isWaterCand[o]) continue;
-    const h = tileH(tx, ty);
-    const s = tileSlope(tx, ty);
-    if (h > MOUNTAIN_HEIGHT || s > MOUNTAIN_SLOPE) { terrain[o] = T.mountain; continue; }
-    if (h < SAND_MAX_HEIGHT && distWater[o] <= SAND_WATER_DIST) { terrain[o] = T.sand; continue; }
-    if (h < FERTILE_MAX_HEIGHT && s < FERTILE_MAX_SLOPE && distFresh[o] <= FERTILE_WATER_DIST && fbm(tx * 0.11 + 40, ty * 0.11 + 8) > 0.42) {
-      terrain[o] = T.fertile;
-      continue;
+// 5c. Land-Biome. `mountainSlopeMinHeight` = Höhe, ab der Hang ALLEIN Gebirge
+// macht (0 = überall, wie bis v1.10; § Map Flattening B3 setzt eine Basishöhe).
+function classifyBiomes(mountainSlopeMinHeight) {
+  for (let ty = 0; ty < WORLD_TILES; ty++) {
+    for (let tx = 0; tx < WORLD_TILES; tx++) {
+      const o = ty * WORLD_TILES + tx;
+      if (isWaterCand[o]) continue;
+      const h = tileH(tx, ty);
+      const s = tileSlope(tx, ty);
+      if (h > MOUNTAIN_HEIGHT || (s > MOUNTAIN_SLOPE && h > mountainSlopeMinHeight)) {
+        terrain[o] = T.mountain;
+        continue;
+      }
+      if (h < SAND_MAX_HEIGHT && distWater[o] <= SAND_WATER_DIST) { terrain[o] = T.sand; continue; }
+      if (h < FERTILE_MAX_HEIGHT && s < FERTILE_MAX_SLOPE && distFresh[o] <= FERTILE_WATER_DIST && fbm(tx * 0.11 + 40, ty * 0.11 + 8) > 0.42) {
+        terrain[o] = T.fertile;
+        continue;
+      }
+      const forestNoise = fbm(tx * 0.055 + 17, ty * 0.055 + 71);
+      if (h > FOREST_MIN_HEIGHT && h < FOREST_MAX_HEIGHT && s < FOREST_MAX_SLOPE && forestNoise > 0.58) {
+        terrain[o] = T.forest;
+        continue;
+      }
+      terrain[o] = T.grass;
     }
-    const forestNoise = fbm(tx * 0.055 + 17, ty * 0.055 + 71);
-    if (h > FOREST_MIN_HEIGHT && h < FOREST_MAX_HEIGHT && s < FOREST_MAX_SLOPE && forestNoise > 0.58) {
-      terrain[o] = T.forest;
-      continue;
-    }
-    terrain[o] = T.grass;
   }
 }
+classifyBiomes(MOUNTAIN_SLOPE_MIN_HEIGHT);
 
 // ---------------------------------------------------------------------------
 // 6. Bebaubares Land glätten (Sim hat keine Hangprüfung)
@@ -545,163 +784,166 @@ for (let ty = 0; ty < WORLD_TILES; ty++) {
 // die Simulation ausgegeben und ist damit dieselbe Wahrheit wie der Bake.
 const prelimBuildable = new Uint8Array(WORLD_TILES * WORLD_TILES);
 const buildableMask = new Uint8Array(WORLD_TILES * WORLD_TILES);
-for (let ty = 0; ty < WORLD_TILES; ty++) {
-  for (let tx = 0; tx < WORLD_TILES; tx++) {
-    const o = ty * WORLD_TILES + tx;
-    const slope = tileSlope(tx, ty);
-    const gentleWaterfront = shoreTypeGrid[o] >= 1 && shoreTypeGrid[o] <= 3 && slope <= 1.2;
-    if (BUILDABLE.has(terrain[o]) && (slope <= MAX_BUILDABLE_TILE_SLOPE || gentleWaterfront)) prelimBuildable[o] = 1;
-  }
-}
-for (let ty = 1; ty < WORLD_TILES - 1; ty++) {
-  for (let tx = 1; tx < WORLD_TILES - 1; tx++) {
-    const o = ty * WORLD_TILES + tx;
-    if (!prelimBuildable[o]) continue;
-    let safe = 1, buildableNeighbors = 0, landNeighbors = 0;
-    for (let dy = -1; dy <= 1; dy++) {
-      for (let dx = -1; dx <= 1; dx++) {
-        const no = (ty + dy) * WORLD_TILES + tx + dx;
-        if (!isWaterCand[no]) landNeighbors++;
-        if (prelimBuildable[no]) buildableNeighbors++;
-        if ((dx === 0 || dy === 0) && !prelimBuildable[no]) safe = 0;
-      }
-    }
-    // Direkte flache Uferkacheln dürfen die sonst richtige Erosion bewusst
-    // durchbrechen. So kann ein 3×3/5×5-Footprint bis ans Wasser reichen, ohne
-    // dass Steilküsten oder unsichere Einzelkacheln freigegeben werden.
-    const waterfrontSafe = shoreTypeGrid[o] >= 1 && shoreTypeGrid[o] <= 3
-      && buildableNeighbors >= 4 && landNeighbors >= 4 && tileSlope(tx, ty) <= 1.2;
-    buildableMask[o] = safe || waterfrontSafe ? 1 : 0;
-  }
+const waterfrontBuildableMask = new Uint8Array(WORLD_TILES * WORLD_TILES);
+let waterfrontAprons = [];
+
+/** Steilwand-Kachel: Hang über MOUNTAIN_SLOPE UND oberhalb der Basishöhe. */
+function isCliffTile(tx, ty, minHeight) {
+  return tileSlope(tx, ty) >= MOUNTAIN_SLOPE && tileH(tx, ty) > minHeight;
 }
 
-// Wenige echte 5×5-Uferplattformen garantieren ausreichend Tiefe für Hafen-,
-// Pumpen- und spätere Wassergebäude. Sie werden aus bereits als flach
-// klassifizierten Uferzonen gewählt, bleiben weit auseinander und erweitern
-// ausschließlich bestehendes Land — niemals Wasser oder Gebirge.
-const waterfrontAprons = [];
-for (let ty = 4; ty < WORLD_TILES - 5; ty++) {
-  for (let tx = 4; tx < WORLD_TILES - 5; tx++) {
-    const o = ty * WORLD_TILES + tx;
-    if (shoreTypeGrid[o] < 1 || shoreTypeGrid[o] > 3) continue;
-    if (waterfrontAprons.some((apron) => Math.hypot(apron.center.x - tx, apron.center.y - ty) < 28)) continue;
-    const waterDirection = [[1, 0], [-1, 0], [0, 1], [0, -1]]
-      .find(([dx, dy]) => isWaterCand[(ty + dy) * WORLD_TILES + tx + dx]);
-    if (!waterDirection) continue;
-    const [wx, wy] = waterDirection;
-    const lx = -wx, ly = -wy;
-    const px = -ly, py = lx;
-    const cells = [];
-    let valid = true;
-    for (let depth = 0; depth < 5 && valid; depth++) {
-      for (let side = -2; side <= 2; side++) {
-        const x = tx + lx * depth + px * side;
-        const y = ty + ly * depth + py * side;
-        const co = y * WORLD_TILES + x;
-        if (isWaterCand[co] || !BUILDABLE.has(terrain[co]) || distWater[co] > SHORE_BLEND_TILES || tileH(x, y) >= 5.5) {
-          valid = false;
-          break;
+function classifyBuildable(maxTileSlope, minOrthogonal, apronTarget, apronMinDistance, blendTiles, cliffMinHeight) {
+  prelimBuildable.fill(0);
+  buildableMask.fill(0);
+  waterfrontBuildableMask.fill(0);
+  waterfrontAprons = [];
+  for (let ty = 0; ty < WORLD_TILES; ty++) {
+    for (let tx = 0; tx < WORLD_TILES; tx++) {
+      const o = ty * WORLD_TILES + tx;
+      const slope = tileSlope(tx, ty);
+      const gentleWaterfront = shoreTypeGrid[o] >= 1 && shoreTypeGrid[o] <= 3 && slope <= 1.2;
+      if (BUILDABLE.has(terrain[o]) && (slope <= maxTileSlope || gentleWaterfront)) prelimBuildable[o] = 1;
+    }
+  }
+  for (let ty = 1; ty < WORLD_TILES - 1; ty++) {
+    for (let tx = 1; tx < WORLD_TILES - 1; tx++) {
+      const o = ty * WORLD_TILES + tx;
+      if (!prelimBuildable[o]) continue;
+      let orthogonalBuildable = 0, buildableNeighbors = 0, landNeighbors = 0;
+      for (let dy = -1; dy <= 1; dy++) {
+        for (let dx = -1; dx <= 1; dx++) {
+          const no = (ty + dy) * WORLD_TILES + tx + dx;
+          if (!isWaterCand[no]) landNeighbors++;
+          if (prelimBuildable[no]) buildableNeighbors++;
+          if ((dx === 0) !== (dy === 0) && prelimBuildable[no]) orthogonalBuildable++;
         }
-        cells.push(co);
+      }
+      const safe = orthogonalBuildable >= minOrthogonal ? 1 : 0;
+      // Direkte flache Uferkacheln dürfen die sonst richtige Erosion bewusst
+      // durchbrechen. So kann ein 3×3/5×5-Footprint bis ans Wasser reichen, ohne
+      // dass Steilküsten oder unsichere Einzelkacheln freigegeben werden.
+      const waterfrontSafe = shoreTypeGrid[o] >= 1 && shoreTypeGrid[o] <= 3
+        && buildableNeighbors >= 4 && landNeighbors >= 4 && tileSlope(tx, ty) <= 1.2;
+      buildableMask[o] = safe || waterfrontSafe ? 1 : 0;
+    }
+  }
+
+  // Echte 5×5-Uferplattformen garantieren ausreichend Tiefe für Hafen-, Pumpen-
+  // und spätere Wassergebäude. Sie werden aus bereits als flach klassifizierten
+  // Uferzonen gewählt, bleiben auseinander und erweitern ausschließlich
+  // bestehendes Land — niemals Wasser oder Gebirge.
+  for (let ty = 4; ty < WORLD_TILES - 5; ty++) {
+    for (let tx = 4; tx < WORLD_TILES - 5; tx++) {
+      const o = ty * WORLD_TILES + tx;
+      if (shoreTypeGrid[o] < 1 || shoreTypeGrid[o] > 3) continue;
+      if (waterfrontAprons.some((apron) => Math.hypot(apron.center.x - tx, apron.center.y - ty) < apronMinDistance)) continue;
+      const waterDirection = [[1, 0], [-1, 0], [0, 1], [0, -1]]
+        .find(([dx, dy]) => isWaterCand[(ty + dy) * WORLD_TILES + tx + dx]);
+      if (!waterDirection) continue;
+      const [wx, wy] = waterDirection;
+      const lx = -wx, ly = -wy;
+      const px = -ly, py = lx;
+      const cells = [];
+      let valid = true;
+      for (let depth = 0; depth < 5 && valid; depth++) {
+        for (let side = -2; side <= 2; side++) {
+          const x = tx + lx * depth + px * side;
+          const y = ty + ly * depth + py * side;
+          const co = y * WORLD_TILES + x;
+          if (isWaterCand[co] || !BUILDABLE.has(terrain[co]) || distWater[co] > blendTiles || tileH(x, y) >= 5.5) {
+            valid = false;
+            break;
+          }
+          cells.push(co);
+        }
+      }
+      if (!valid) continue;
+      for (const co of cells) {
+        prelimBuildable[co] = 1;
+        buildableMask[co] = 1;
+      }
+      waterfrontAprons.push({ center: { x: tx, y: ty }, cells });
+      if (waterfrontAprons.length >= apronTarget) break;
+    }
+    if (waterfrontAprons.length >= apronTarget) break;
+  }
+  // Konsistenzgarantie (§ Map Flattening): eine Kachel darf nicht gleichzeitig
+  // „bebaubar" und „Steilwand" sein. Die Uferplattformen (aprons) setzen das
+  // Bebaubar-Bit bewusst unabhängig vom Hang — ohne diesen Riegel entstanden
+  // Kacheln, die `validatePlacement` über `cliffOverlap` trotzdem ablehnt, und
+  // auf denen weder Gebäude noch Straße möglich waren. `undefined` = kein
+  // Riegel (Ur-Durchlauf, muss bitgleich bleiben).
+  //
+  // Derselbe Riegel deckelt den Hang auf das, was eine BODENSTRASSE noch
+  // schafft (`GROUND_ROAD_MAX_SLOPE` in `src/game/buildings/terrainFit.ts`).
+  // Sonst entstünden Bauplätze, die niemals ans Straßennetz kommen — eine
+  // Falle für den Spieler und ein Verstoß gegen §5 des Auftrags
+  // („Infrastruktur muss dort anschließbar sein"). `tests/mapBuildability.test.ts`
+  // hält beide Werte über die Orphan-Prüfung zusammen.
+  if (cliffMinHeight !== undefined) {
+    for (let ty = 0; ty < WORLD_TILES; ty++) {
+      for (let tx = 0; tx < WORLD_TILES; tx++) {
+        const o = ty * WORLD_TILES + tx;
+        if (!buildableMask[o]) continue;
+        if (isCliffTile(tx, ty, cliffMinHeight) || tileSlope(tx, ty) > FLAT_MAX_ROAD_SLOPE) buildableMask[o] = 0;
       }
     }
-    if (!valid) continue;
-    for (const co of cells) {
-      prelimBuildable[co] = 1;
-      buildableMask[co] = 1;
-    }
-    waterfrontAprons.push({ center: { x: tx, y: ty }, cells });
-    if (waterfrontAprons.length >= 16) break;
   }
-  if (waterfrontAprons.length >= 16) break;
+  for (let o = 0; o < waterfrontBuildableMask.length; o++) {
+    if (buildableMask[o] && shoreTypeGrid[o] >= 1 && shoreTypeGrid[o] <= 3) waterfrontBuildableMask[o] = 1;
+  }
 }
-const waterfrontBuildableMask = new Uint8Array(WORLD_TILES * WORLD_TILES);
-for (let o = 0; o < waterfrontBuildableMask.length; o++) {
-  if (buildableMask[o] && shoreTypeGrid[o] >= 1 && shoreTypeGrid[o] <= 3) waterfrontBuildableMask[o] = 1;
-}
+classifyBuildable(
+  MAX_BUILDABLE_TILE_SLOPE, MIN_ORTHOGONAL_BUILDABLE,
+  SHORE_APRON_TARGET, SHORE_APRON_MIN_DISTANCE, SHORE_BLEND_TILES,
+);
 const nodeBuildable = new Uint8Array(GRID * GRID);
-for (let gz = 0; gz < GRID; gz++) {
-  for (let gx = 0; gx < GRID; gx++) {
-    const tx = Math.min(WORLD_TILES - 1, (gx / SAMPLES_PER_TILE) | 0);
-    const ty = Math.min(WORLD_TILES - 1, (gz / SAMPLES_PER_TILE) | 0);
-    if (buildableMask[ty * WORLD_TILES + tx]) nodeBuildable[gz * GRID + gx] = 1;
+/** Glättet + kappt das aktuell bebaubare Land und hält es über der Wasserlinie. */
+function flattenBuildableLand(sweeps = 800, options = {}) {
+  const maxStep = options.maxStep ?? MAX_BUILDABLE_STEP;
+  nodeMaskFromTiles(buildableMask, nodeBuildable);
+  smoothAndClamp(nodeBuildable, SMOOTH_ITERATIONS, { ...options, maxStep });
+  // Abschließende Kappungs-Sweeps bis zur Konvergenz: ein einzelner Gauss-Seidel-
+  // Durchlauf je Iteration lässt an Klippenrändern Rest-Verletzungen stehen —
+  // hier wird die Bebaubar-Garantie (max. Schritt) hart erzwungen.
+  let violations = -1;
+  for (let sweep = 0; sweep < sweeps; sweep++) {
+    violations = clampSweep(nodeBuildable, maxStep);
+    if (violations === 0) break;
   }
+  // Die Kappung ist eine Glättungshilfe, KEINE Garantie: seit dem Map-Flattening
+  // umfasst die Maske auch echtes Hügelland, dessen vollständige Relaxation
+  // Zehntausende Gauss-Seidel-Durchläufe bräuchte. Die verbindliche Zusage für
+  // Gebäude ist die Höhendelta-Prüfung in `validatePlacement` (Phase C), die den
+  // TATSÄCHLICHEN Footprint misst. Deshalb hier eine ehrliche Kennzahl statt
+  // einer Warnung, die nach Fehler aussieht.
+  if (violations > 0) {
+    const edges = nodeBuildable.reduce((sum, v) => sum + v, 0) * 2;
+    console.log(`  Restgefälle über ${maxStep}/Sample: ${violations} Kanten (${(100 * violations / Math.max(1, edges)).toFixed(2)} % der bebaubaren Kanten)`);
+  }
+  // Bebaubares Land darf nach der Glättung nicht unter die Wasserlinie rutschen.
+  for (let o = 0; o < HW.length; o++) if (nodeBuildable[o] && HW[o] < 0.05) HW[o] = 0.05;
+  return violations;
 }
-for (let it = 0; it < SMOOTH_ITERATIONS; it++) {
-  const src = HW.slice();
-  for (let gz = 1; gz < GRID - 1; gz++) {
-    for (let gx = 1; gx < GRID - 1; gx++) {
-      const o = gz * GRID + gx;
-      if (!nodeBuildable[o]) continue;
-      const avg = (src[o - 1] + src[o + 1] + src[o - GRID] + src[o + GRID]) / 4;
-      HW[o] = src[o] + (avg - src[o]) * SMOOTH_BLEND;
-    }
-  }
-  // Hang-Kappung zwischen bebaubaren Nachbarn.
-  for (let gz = 0; gz < GRID; gz++) {
-    for (let gx = 0; gx < GRID - 1; gx++) {
-      const a = gz * GRID + gx, b = a + 1;
-      if (!nodeBuildable[a] || !nodeBuildable[b]) continue;
-      const d = HW[b] - HW[a];
-      if (Math.abs(d) > MAX_BUILDABLE_STEP + 1e-5) {
-        const ex = (Math.abs(d) - MAX_BUILDABLE_STEP) / 2 * Math.sign(d);
-        HW[a] += ex; HW[b] -= ex;
-      }
-    }
-  }
-  for (let gx = 0; gx < GRID; gx++) {
-    for (let gz = 0; gz < GRID - 1; gz++) {
-      const a = gz * GRID + gx, b = a + GRID;
-      if (!nodeBuildable[a] || !nodeBuildable[b]) continue;
-      const d = HW[b] - HW[a];
-      if (Math.abs(d) > MAX_BUILDABLE_STEP + 1e-5) {
-        const ex = (Math.abs(d) - MAX_BUILDABLE_STEP) / 2 * Math.sign(d);
-        HW[a] += ex; HW[b] -= ex;
-      }
-    }
-  }
-}
-// Abschließende Kappungs-Sweeps bis zur Konvergenz: ein einzelner Gauss-Seidel-
-// Durchlauf je Iteration lässt an Klippenrändern Rest-Verletzungen stehen —
-// hier wird die Bebaubar-Garantie (max. Schritt) hart erzwungen.
-let lastViolations = -1;
-for (let sweep = 0; sweep < 800; sweep++) {
-  let violations = 0;
-  for (let gz = 0; gz < GRID; gz++) {
-    for (let gx = 0; gx < GRID - 1; gx++) {
-      const a = gz * GRID + gx, b = a + 1;
-      if (!nodeBuildable[a] || !nodeBuildable[b]) continue;
-      const d = HW[b] - HW[a];
-      if (Math.abs(d) > MAX_BUILDABLE_STEP + 1e-5) {
-        const ex = (Math.abs(d) - MAX_BUILDABLE_STEP) / 2 * Math.sign(d);
-        HW[a] += ex; HW[b] -= ex; violations++;
-      }
-    }
-  }
-  for (let gx = 0; gx < GRID; gx++) {
-    for (let gz = 0; gz < GRID - 1; gz++) {
-      const a = gz * GRID + gx, b = a + GRID;
-      if (!nodeBuildable[a] || !nodeBuildable[b]) continue;
-      const d = HW[b] - HW[a];
-      if (Math.abs(d) > MAX_BUILDABLE_STEP + 1e-5) {
-        const ex = (Math.abs(d) - MAX_BUILDABLE_STEP) / 2 * Math.sign(d);
-        HW[a] += ex; HW[b] -= ex; violations++;
-      }
-    }
-  }
-  lastViolations = violations;
-  if (violations === 0) break;
-}
-if (lastViolations > 0) console.warn(`  WARNUNG: ${lastViolations} Kappungs-Verletzungen nach 800 Sweeps übrig`);
-// Bebaubares Land darf nach der Glättung nicht unter die Wasserlinie rutschen.
-for (let o = 0; o < HW.length; o++) if (nodeBuildable[o] && HW[o] < 0.05) HW[o] = 0.05;
+flattenBuildableLand();
 
 // Konservativer Sicherheitsgurt für sehr schmale, nicht exakt senkrechte
 // Quellpolygone: ausschließlich im direkten Küstenband und ausschließlich,
 // wenn ein Hochpunkt von höchstens einem seiner acht Nachbarn gestützt wird.
 // Zusammenhängende Klippen und Berggrate bleiben damit unangetastet.
-let coastIsolatedPeaksRepaired = 0;
-{
+/** Acht Nachbarhöhen eines Knotens (nur im direkten Küstenband relevant). */
+function coastNeighborhood(source, o) {
+  const neighbors = [
+    source[o - GRID - 1], source[o - GRID], source[o - GRID + 1],
+    source[o - 1], source[o + 1],
+    source[o + GRID - 1], source[o + GRID], source[o + GRID + 1],
+  ];
+  const ordered = neighbors.slice().sort((a, b) => a - b);
+  return { neighbors, median: (ordered[3] + ordered[4]) / 2 };
+}
+
+function repairCoastPeaks() {
+  let repaired = 0;
   const source = HW.slice();
   for (let gz = 1; gz < GRID - 1; gz++) {
     for (let gx = 1; gx < GRID - 1; gx++) {
@@ -709,19 +951,14 @@ let coastIsolatedPeaksRepaired = 0;
       const tx = Math.min(WORLD_TILES - 1, (gx / SAMPLES_PER_TILE) | 0);
       const ty = Math.min(WORLD_TILES - 1, (gz / SAMPLES_PER_TILE) | 0);
       if (distToWaterRaw[ty * WORLD_TILES + tx] > 2) continue;
-      const neighbors = [
-        source[o - GRID - 1], source[o - GRID], source[o - GRID + 1],
-        source[o - 1], source[o + 1],
-        source[o + GRID - 1], source[o + GRID], source[o + GRID + 1],
-      ];
-      const ordered = neighbors.slice().sort((a, b) => a - b);
-      const median = (ordered[3] + ordered[4]) / 2;
+      const { neighbors, median } = coastNeighborhood(source, o);
       const supportingNeighbors = neighbors.filter((height) => height >= source[o] - 2.5).length;
       if (source[o] <= median + 6 || supportingNeighbors > 1) continue;
       HW[o] = median;
-      coastIsolatedPeaksRepaired++;
+      repaired++;
     }
   }
+  return repaired;
 }
 
 // Regression-Diagnose für den ursprünglichen Küstenkegel-Fehler. Ein echter
@@ -729,26 +966,26 @@ let coastIsolatedPeaksRepaired = 0;
 // als 6 Weltmeter über dem Median seiner acht Nachbarn ist im regelmäßigen
 // Heightfield dagegen geometrisch unplausibel. Dieser Wert wird mitgebacken und
 // in tests/newIslandBake.test.ts hart auf 0 geprüft.
-let coastIsolatedPeakCount = 0;
-let coastMaxNeighborStep = 0;
-for (let gz = 1; gz < GRID - 1; gz++) {
-  for (let gx = 1; gx < GRID - 1; gx++) {
-    const o = gz * GRID + gx;
-    const tx = Math.min(WORLD_TILES - 1, (gx / SAMPLES_PER_TILE) | 0);
-    const ty = Math.min(WORLD_TILES - 1, (gz / SAMPLES_PER_TILE) | 0);
-    if (distToWaterRaw[ty * WORLD_TILES + tx] > 2) continue;
-    const neighbors = [
-      HW[o - GRID - 1], HW[o - GRID], HW[o - GRID + 1],
-      HW[o - 1], HW[o + 1],
-      HW[o + GRID - 1], HW[o + GRID], HW[o + GRID + 1],
-    ];
-    const ordered = neighbors.slice().sort((a, b) => a - b);
-    const median = (ordered[3] + ordered[4]) / 2;
-    const supportingNeighbors = neighbors.filter((height) => height >= HW[o] - 2.5).length;
-    if (HW[o] > median + 6 && supportingNeighbors <= 1) coastIsolatedPeakCount++;
-    for (const height of neighbors) coastMaxNeighborStep = Math.max(coastMaxNeighborStep, Math.abs(HW[o] - height));
+function measureCoastGeometry() {
+  let isolatedPeaks = 0;
+  let maxNeighborStep = 0;
+  for (let gz = 1; gz < GRID - 1; gz++) {
+    for (let gx = 1; gx < GRID - 1; gx++) {
+      const o = gz * GRID + gx;
+      const tx = Math.min(WORLD_TILES - 1, (gx / SAMPLES_PER_TILE) | 0);
+      const ty = Math.min(WORLD_TILES - 1, (gz / SAMPLES_PER_TILE) | 0);
+      if (distToWaterRaw[ty * WORLD_TILES + tx] > 2) continue;
+      const { neighbors, median } = coastNeighborhood(HW, o);
+      const supportingNeighbors = neighbors.filter((height) => height >= HW[o] - 2.5).length;
+      if (HW[o] > median + 6 && supportingNeighbors <= 1) isolatedPeaks++;
+      for (const height of neighbors) maxNeighborStep = Math.max(maxNeighborStep, Math.abs(HW[o] - height));
+    }
   }
+  return { isolatedPeaks, maxNeighborStep };
 }
+
+let coastIsolatedPeaksRepaired = repairCoastPeaks();
+let { isolatedPeaks: coastIsolatedPeakCount, maxNeighborStep: coastMaxNeighborStep } = measureCoastGeometry();
 console.log(`  Küstengeometrie: ${coastIsolatedPeakCount} isolierte Peaks, max. Nachbarschritt ${coastMaxNeighborStep.toFixed(2)} m`);
 
 // ---------------------------------------------------------------------------
@@ -1358,6 +1595,92 @@ for (const road of startRoads) {
 }
 
 // ---------------------------------------------------------------------------
+// 8a-flat. § MAP FLATTENING + BUILDABILITY OVERHAUL — Gelände bespielbar machen
+// ---------------------------------------------------------------------------
+// Alles oberhalb (Regionen, Startregion-Carve, Rathauswahl) lief auf dem
+// unveränderten Ur-Gelände und ist deshalb bitgleich zum vorherigen Bake —
+// Regions-Ids, Regionsgrenzen, Startregion und Rathaus bleiben stabil, sodass
+// `regions.config.ts`, das Balancing und bestehende Spielstände gültig bleiben.
+//
+// Ab hier wird das Gelände eingeebnet und Ufer/Biome/Bebaubarkeit werden neu
+// abgeleitet. Alles Folgende (Infrastruktur-Hooks §8b, sämtliche Ausgaben §9)
+// sieht ausschließlich diese neue, bespielbare Welt.
+console.log('— Map Flattening: Gelände einebnen …');
+const flattenBefore = buildableMask.reduce((sum, v) => sum + v, 0);
+
+// (1) Ufer: breiteres, flacheres Strandprofil und deutlich weniger bewusste
+//     Steilküste (§3.3/B5). Quelle ist die AKTUELLE Höhe, nicht die Rohhöhe —
+//     der Ur-Blend bleibt dadurch erhalten und wird nur weiter abgeflacht.
+function applyFlatShoreProfile() {
+  let widened = 0;
+  accessibleShoreZone.fill(0);
+  for (let gz = 0; gz < GRID; gz++) {
+    for (let gx = 0; gx < GRID; gx++) {
+      const o = gz * GRID + gx;
+      if (Number.isNaN(H[o])) continue; // Wasserflächen behalten ihre Tiefenrampe
+      const tx = Math.min(WORLD_TILES - 1, (gx / SAMPLES_PER_TILE) | 0);
+      const ty = Math.min(WORLD_TILES - 1, (gz / SAMPLES_PER_TILE) | 0);
+      const to = ty * WORLD_TILES + tx;
+      const waterDistance = distToWaterRaw[to];
+      const accessible = waterDistance > 0 && waterDistance <= FLAT_SHORE_BLEND_TILES
+        && HW[o] < FLAT_SHORE_CLIFF_HEIGHT
+        && (enclosedLabel[to] >= 0 || shoreHash(tx, ty) >= FLAT_SHORE_CLIFF_ZONE_RATIO);
+      if (!accessible) continue;
+      if (!accessibleShoreZone[to]) widened++;
+      accessibleShoreZone[to] = 1;
+      HW[o] = shoreBlendHeight(
+        HW[o], waterDistance,
+        FLAT_SHORE_BLEND_TILES, FLAT_SHORE_PLATFORM_HEIGHT, FLAT_SHORE_RISE_PER_TILE,
+      );
+    }
+  }
+  return widened;
+}
+console.log(`  Uferprofil verbreitert: ${applyFlatShoreProfile()} Uferkacheln im flachen Band`);
+
+// (2) Terraforming außerhalb des Massivs (B1).
+terraformNonMassifLand();
+// Das Terraforming zieht das Hinterland herunter und macht dadurch genau die
+// Uferkante wieder relativ steiler. Ein zweiter Durchlauf legt das flache
+// Strandprofil auf das FERTIGE Gelände — sonst gewinnt das Einebnen gegen §3.3.
+applyFlatShoreProfile();
+
+// (3) Ufer, Biome und Bebaubarkeit aus dem neuen Gelände neu ableiten (B2/B3/B5).
+classifyShoreTypes(FLAT_SHORE_ACCESSIBLE_MAX_HEIGHT, FLAT_SHORE_ACCESSIBLE_MAX_SLOPE);
+classifyBiomes(FLAT_MOUNTAIN_SLOPE_MIN_HEIGHT);
+classifyBuildable(
+  FLAT_MAX_BUILDABLE_TILE_SLOPE, FLAT_MIN_ORTHOGONAL_BUILDABLE,
+  FLAT_SHORE_APRON_TARGET, FLAT_SHORE_APRON_MIN_DISTANCE, FLAT_SHORE_BLEND_TILES,
+  FLAT_MOUNTAIN_SLOPE_MIN_HEIGHT,
+);
+
+// (4) Die neue, deutlich größere Baufläche final glätten und kappen. Die Maske
+//     ist jetzt großflächig zusammenhängend, deshalb braucht die Gauss-Seidel-
+//     Relaxation spürbar mehr Sweeps bis zur Konvergenz als früher.
+flattenBuildableLand(6000, { onlyRough: true, maxStep: FLAT_MAX_BUILDABLE_STEP });
+
+// (5) Nach dem Kappen kann eine Kachel knapp über die Bebaubar-Schwelle
+//     gerutscht sein (die Glättung senkt Hänge weiter ab). Ein letzter,
+//     billiger Durchlauf erntet diese Kacheln — ohne erneut zu glätten, damit
+//     die Geometrie stabil bleibt.
+classifyShoreTypes(FLAT_SHORE_ACCESSIBLE_MAX_HEIGHT, FLAT_SHORE_ACCESSIBLE_MAX_SLOPE);
+classifyBiomes(FLAT_MOUNTAIN_SLOPE_MIN_HEIGHT);
+classifyBuildable(
+  FLAT_MAX_BUILDABLE_TILE_SLOPE, FLAT_MIN_ORTHOGONAL_BUILDABLE,
+  FLAT_SHORE_APRON_TARGET, FLAT_SHORE_APRON_MIN_DISTANCE, FLAT_SHORE_BLEND_TILES,
+  FLAT_MOUNTAIN_SLOPE_MIN_HEIGHT,
+);
+nodeMaskFromTiles(buildableMask, nodeBuildable);
+
+// (6) Küsten-Sicherheitsgurt und Regressions-Diagnose auf dem FINALEN Gelände.
+coastIsolatedPeaksRepaired += repairCoastPeaks();
+({ isolatedPeaks: coastIsolatedPeakCount, maxNeighborStep: coastMaxNeighborStep } = measureCoastGeometry());
+console.log(`  Küstengeometrie (final): ${coastIsolatedPeakCount} isolierte Peaks, max. Nachbarschritt ${coastMaxNeighborStep.toFixed(2)} m`);
+
+const flattenAfter = buildableMask.reduce((sum, v) => sum + v, 0);
+console.log(`  Bebaubare Kacheln: ${flattenBefore} → ${flattenAfter} (${(100 * (flattenAfter / flattenBefore - 1)).toFixed(1)} %)`);
+
+// ---------------------------------------------------------------------------
 // 8b. Reine Infrastruktur-Kandidaten (noch kein zweites Gameplay-System)
 // ---------------------------------------------------------------------------
 const inWorld = (x, y) => x >= 0 && y >= 0 && x < WORLD_TILES && y < WORLD_TILES;
@@ -1810,7 +2133,13 @@ for (let y = 0; y < WORLD_TILES; y++) {
     surfaceSlope[o] = Math.min(65535, Math.round(tileSlope(x, y) * 1000));
     if (buildableMask[o]) buildabilityFlags[o] |= 1;
     if (terrainId === T.water || terrainId === T.river) buildabilityFlags[o] |= 2;
-    if (terrainId === T.mountain || tileSlope(x, y) >= MOUNTAIN_SLOPE) buildabilityFlags[o] |= 4;
+    // CLIFF_BIT folgt derselben höhenabhängigen Regel wie die Gebirgs-
+    // Klassifikation (§ Map Flattening B3). Sonst hätte die neue Regel keine
+    // Wirkung auf `validatePlacement`: dort blockt `surface.cliff` unabhängig
+    // vom Terraintyp, und eine steile Tiefland-Kachel wäre weiterhin gesperrt.
+    if (terrainId === T.mountain || isCliffTile(x, y, FLAT_MOUNTAIN_SLOPE_MIN_HEIGHT)) {
+      buildabilityFlags[o] |= 4;
+    }
     if (distToOcean[o] > 0 && distToOcean[o] <= 2) buildabilityFlags[o] |= 8;
     if (waterfrontBuildableMask[o]) buildabilityFlags[o] |= 16;
     if (isWaterCand[o]) {
@@ -2148,7 +2477,9 @@ console.log('— geschrieben: src/renderer/three/worldMasks.gen.ts');
 - Ozeanrand: ${OCEAN_MARGIN_TILES} Kacheln; separate Y-Skalierung: Gipfel ≈ ${PEAK_WORLD_HEIGHT} Welt-Einheiten
 - Wasserlinie (normalisiert): ${PREVIOUS_WATERLINE_N} → ${WATERLINE_N}; Höhenbereich Welt: [${hMin.toFixed(2)}, ${hMax.toFixed(2)}]
 - Bebaubare Kacheln: ${BASELINE_BUILDABLE_TILES.toLocaleString('de-DE')} → ${totalBuildable.toLocaleString('de-DE')} (${(buildableRatio * 100).toFixed(1)} %, Änderung ${((buildableRatio - 1) * 100).toFixed(1)} %)
-- Glättung bebaubaren Landes: ${SMOOTH_ITERATIONS} Iterationen, max. Schritt ${MAX_BUILDABLE_STEP}/Sample
+- Terraforming (§ Map Flattening B1): ${TERRAFORM_ROUNDS} Runden × ${TERRAFORM_ITERATIONS} Iterationen, Hang-Tor ${TERRAFORM_SLOPE_GATE}, Massiv > ${MOUNTAIN_HEIGHT} ausgenommen
+- Glättung bebaubaren Landes: ${SMOOTH_ITERATIONS} Iterationen, max. Schritt ${MAX_BUILDABLE_STEP}/Sample, Bebaubar-Hang ≤ ${MAX_BUILDABLE_TILE_SLOPE}
+- Gebirge: ab Höhe ${MOUNTAIN_HEIGHT}, ODER Hang ≥ ${MOUNTAIN_SLOPE} oberhalb Höhe ${MOUNTAIN_SLOPE_MIN_HEIGHT}
 - Regions-Parameter: Ziel ~${REGION_TARGET_TILES} Kacheln, min. ${REGION_MIN_TILES} (sonst Merge), Kosten fremdes Biom +${COST_FOREIGN_BIOME} / Fluss +${COST_CROSS_RIVER} / Höhe ×${COST_HEIGHT_FACTOR}
 - Infrastruktur-Hooks: ${bridgeCandidates.length} Brücken, ${elevatedRoadCandidates.length} Viadukte, ${tunnelCandidates.length} Tunnel, ${harborCandidates.length} Häfen, ${waterRouteNodes.length} Wasserwegknoten
 

@@ -444,6 +444,33 @@ const migrateV23ToV24: Migration = (raw) => {
 };
 
 /**
+ * v24 → v25: § Map Flattening + Buildability Overhaul — neu gebackenes Gelände.
+ *
+ * Keine Strukturänderung: der Save behält jedes Feld. Die Version markiert, aus
+ * welcher WELT der Stand stammt. Ein Neustart wie beim v19-Weltumbau ist hier
+ * ausdrücklich NICHT nötig und wäre schädlich — das wurde gegen den vorherigen
+ * Bake gemessen:
+ *
+ * - Regionsraster, Regions-Ids, Startregion und Rathaus sind **bitgleich**
+ *   (das Terraforming läuft bewusst erst NACH der Regionssegmentierung).
+ * - **Keine** Landkachel wurde zu Wasser (0 von 262.144) — kein Gebäude
+ *   versinkt.
+ * - ~1.000 Kacheln (1,6 % des Landes) verlieren das Bebaubar-Bit bzw. werden am
+ *   Rand eingeebneter Flächen steiler. Ein dort BEREITS stehendes Gebäude
+ *   bleibt gültig: `validatePlacement` läuft nur beim Bauen/Versetzen, nie beim
+ *   Laden. Sichtbar wird höchstens ein etwas höherer Sockel.
+ * - Baumknoten sind aus dem Terrain ABGELEITET; `resolveNode` liefert für eine
+ *   verschwundene Kachel `undefined`, und der Dauerbetrieb pausiert dann
+ *   regulär (Status `waiting`) statt zu brechen.
+ * - Das Straßennetz stammt aus `state.buildings`, nicht aus dem Terrain —
+ *   bestehende Straßen bleiben vollständig verbunden.
+ */
+const migrateV24ToV25: Migration = (raw) => {
+  raw.schemaVersion = 25;
+  return raw;
+};
+
+/**
  * Migration chain: migrations[n] upgrades a save from schemaVersion n to n+1.
  * Beginnt bei v10 (Insel-Basis).
  */
@@ -462,6 +489,7 @@ const migrations: Record<number, Migration> = {
   21: migrateV21ToV22,
   22: migrateV22ToV23,
   23: migrateV23ToV24,
+  24: migrateV24ToV25,
 };
 
 export class SaveValidationError extends Error {}

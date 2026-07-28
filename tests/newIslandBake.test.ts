@@ -107,12 +107,16 @@ describe('Terrain & World Scale Overhaul 6.1 bake', () => {
     const areaFactor = BAKED_WORLD.horizontalScaleFromV60 ** 2;
     expect(areaFactor).toBeGreaterThanOrEqual(0.54);
     expect(areaFactor).toBeLessThanOrEqual(0.58);
-    // Kumulativ (drei Verdichtungen) bleibt die Baufläche bei ~45 % der V60-Referenz
-    // (55.941 bebaubare Kacheln) — die Insel schrumpft deutlich; das angehobene,
-    // flachere Uferprofil (Nutzerwunsch) fängt den Bauflächenverlust teils ab.
+    // § Map Flattening + Buildability Overhaul (Phase B): Nach drei
+    // Verdichtungen lag die Baufläche bei ~45 % der V60-Referenz (55.941
+    // bebaubare Kacheln) — die Karte war fast überall zu hügelig, um sie
+    // wirklich zu bebauen. Das Terraforming außerhalb des Massivs hebt sie auf
+    // ~66 %. Die Untergrenze ist der eigentliche Regressionsschutz: sie darf
+    // nicht wieder unter 0,60 fallen. Die Obergrenze hält gleichzeitig fest,
+    // dass die Insel NICHT komplett eingeebnet wurde (§8 des Auftrags).
     const buildable = [...buildabilityGrid].filter((flags) => (flags & BUILDABLE_BIT) !== 0).length;
-    expect(buildable / 55_941).toBeGreaterThanOrEqual(0.40);
-    expect(buildable / 55_941).toBeLessThanOrEqual(0.50);
+    expect(buildable / 55_941).toBeGreaterThanOrEqual(0.60);
+    expect(buildable / 55_941).toBeLessThanOrEqual(0.80);
     // § 10.0 flacher Uferübergang: der weiche Strandsaum verdoppelt die direkt
     // wassernahen, bebaubaren Uferkacheln — bewusst reichlich für Häfen/Wassergebäude.
     const waterfront = [...buildabilityGrid].filter((flags) => (flags & WATERFRONT_BIT) !== 0).length;

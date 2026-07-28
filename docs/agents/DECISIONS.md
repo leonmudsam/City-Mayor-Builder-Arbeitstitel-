@@ -1,5 +1,40 @@
 # Entscheidungen
 
+## D-040 — Die Karte wird bespielbar gemacht, die Weltstruktur bleibt unangetastet
+
+**Entscheidung (Map Flattening + Buildability Overhaul, 28.07.2026):** Das
+Gelände außerhalb des zentralen Massivs wird eingeebnet und die Platzierung
+toleranter — aber **Regionen, Startregion und Rathaus bleiben bitgleich**. Im
+Bake läuft das Terraforming deshalb bewusst **nach** der Regionssegmentierung
+(`tools/bakeWorld.mjs` §8a-flat), nicht davor.
+
+**Befund:** Die Regionssegmentierung wächst kostenbasiert über Höhendeltas und
+Biome. Der erste Umsetzungsversuch ebnete das Gelände vor der Segmentierung ein —
+Ergebnis: **11 statt 13 Regionen** und ein Rathaus an (156,205) statt (127,250).
+Das hätte `regions.config.ts` (13 handgeschriebene Regionen mit Progression,
+Kosten, Hafenabhängigkeit), das Balancing, die Quest-Ziele und **jeden
+bestehenden Spielstand** entwertet — für einen Auftrag, der von Weltstruktur
+überhaupt nicht spricht.
+
+**Konsequenz:** `islandRegions.gen.ts` ist nach dem Rebake unverändert
+(per `git diff` verifiziert). Save **v25** ist eine reine Weltmarkierung ohne
+Strukturänderung; ein Neustart wie beim v19-Weltumbau ist ausdrücklich **nicht**
+nötig (0 Landkacheln wurden zu Wasser, gemessen).
+
+**Ebenfalls entschieden:**
+- **Kein zweites Platzierungssystem (§2).** Die Toleranzen (Höhenbudget nach
+  Footprint-Größe, Bebaubar-Toleranz, Straßen-Steilheit, Sockelhöhe) liegen in
+  einem reinen Sim-Modul `src/game/buildings/terrainFit.ts`; `validatePlacement`
+  bleibt die einzige Instanz und der Renderer liest dieselben Werte.
+- **Terrassen (B4) verworfen.** Zweimal gebaut und gemessen (pro Knoten und pro
+  Kachel): die Zahl ebener Bauplätze **sank** (11.370 → 10.563). Mit §8
+  („nichts steril/künstlich") ein klares Nein — die Terrassenwirkung entsteht
+  stattdessen sichtbar am Gebäudesockel.
+- **Kein Bauplatz ohne mögliche Anbindung.** Der Bake deckelt die Bebaubar-Maske
+  auf dieselbe Steilheit, die eine Bodenstraße schafft. Vorher lag die
+  Straßengrenze (0,8) unter der Bebaubar-Schwelle — es entstanden Bauplätze, die
+  nie ans Netz kommen konnten, ausgerechnet an den Uferkacheln für Anleger.
+
 ## D-038 — EINE verbindliche Ingame-Zeit; sichtbare Uhr als reine Projektion der Simulationszeit
 
 **Entscheidung (P-B des Spielbarkeits-Auftrags):** Es gibt genau **eine** Zeit —

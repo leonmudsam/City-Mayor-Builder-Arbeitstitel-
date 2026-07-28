@@ -5,6 +5,7 @@ import type { Derived } from '../simulation/derived.ts';
 import { isTerrainBuildable, regionOfTile, samplePlacementSurface, tileAt } from '../map/world.ts';
 import { unlockedBuildings } from '../progression/levels.ts';
 import { buildLimitAt, countOf } from './limits.ts';
+import { GROUND_ROAD_MAX_SLOPE, footprintHeightBudget, minimumBuildableRatio } from './terrainFit.ts';
 import {
   BUILDABILITY_WORLD_TILES,
   WATER_DEPTH_SCALE,
@@ -70,7 +71,7 @@ export function validatePlacement(
     // höheres `maxSlope`) überwindet genau diese Hindernisse. Deck/Pfeiler sind
     // reine Renderer-Darstellung — hier zählt nur, ob das Terrain überbaubar ist.
     const rc = def.road;
-    const maxSlope = rc?.maxSlope ?? 0.8;
+    const maxSlope = rc?.maxSlope ?? GROUND_ROAD_MAX_SLOPE;
     const waterBlocked = surface.waterOverlap > 0 && rc?.crossesWater !== true;
     const cliffBlocked = surface.cliffOverlap > 0 && rc?.crossesCliff !== true;
     if (waterBlocked || cliffBlocked || surface.slope > maxSlope) return 'terrain';
@@ -85,10 +86,18 @@ export function validatePlacement(
       return 'terrain';
     }
   } else if (
-    surface.buildableRatio < 1 ||
+    // Wasser, Fluss und Fels bleiben hart gesperrt — hier wird nichts toleriert.
     surface.waterOverlap > 0 ||
     surface.cliffOverlap > 0 ||
-    heightDelta > 0.85
+    // § Map Flattening C1: Das gebackene Bebaubar-Bit ist eine Kachel-
+    // Klassifikation mit erodiertem Rand. Eine einzelne Randkachel neben einer
+    // sonst ebenen Fläche darf ein Gebäude nicht mehr komplett verhindern.
+    surface.buildableRatio < minimumBuildableRatio(def.size.w, def.size.h) ||
+    // § Map Flattening C2: Das Höhenbudget wächst mit der Kantenlänge. Ein
+    // gleichmäßig sanfter Hang ist für ein 5×5 genauso baubar wie für ein 1×1 —
+    // er braucht nur ein höheres Fundament, das der Renderer als Stützmauer
+    // ausbaut (C3). Vorher galt pauschal 0,85 für jede Gebäudegröße.
+    heightDelta > footprintHeightBudget(def.size.w, def.size.h)
   ) {
     return 'terrain';
   }
