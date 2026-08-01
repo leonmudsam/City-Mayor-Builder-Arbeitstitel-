@@ -117,8 +117,16 @@ Transport (A5), zentraler Start (S1/S2), Fog/Kamera (S3).
   `cameraInputMapping.ts` (`deriveDragMode`/`deriveClickAction`) — Mitteltaste
   schwenkt, Rechts-Zug dreht, Rechts-Klick bricht ab, `Strg`+Links dreht; Bauentwurf
   überlebt jede Kamerabewegung. 6 Tests. Keine Save-Änderung.
-- ❌ `[P1]` ③ Echter GLB-Ghost (Rotation/Sockel/Anschluss/Radius, `placementDiagnostics`).
+- ✅ `[P1]` ③ **Echter GLB-Ghost inkl. Anschlusspunkt** (v1.26, D-047): GLB/Rotation/
+  Sockel/Radius waren vorhanden; neu sind `connectedRoadTiles` als **einzige**
+  Aufzählung der Anschlusskacheln, `PlacementDiagnostics.roadTiles`/`requiresRoad`,
+  **eine** Diagnose statt drei Einzelabfragen im Ghost, Marker auf den
+  Anschlusskacheln und eine eigene Warnstufe „baubar, aber ohne Wirkung"
+  (`requiresRoad` blockiert nicht — im Startzustand 3.652 von 3.721 Kacheln gültig
+  UND unverbunden). 7 Tests. Keine Save-/Sim-Änderung.
 - ❌ `[P1]` ④ Verschieben als Entwurf (Ghost, Ursprung, Bestätigung = 1 Command).
+  ⚠️ `setMoving()` ist ein No-op mit Kommentar auf den entfernten 2D-/Iso-Modus —
+  Verschieben hat im 3D-Renderer derzeit gar keine Vorschau.
 - ❌ `[P1]` ⑤ Wirkungsradien terrainfolgend (`getCoverageOverlay`).
 - ❌ `[P1]` ⑥ Straßenbau als Plan→Vorschau→Bestätigen (= Thema 1).
 - ❌ `[P2]` G3–G8: Weltmaßstab-Klärung, Bevölkerungsmodell (Save-Migration),

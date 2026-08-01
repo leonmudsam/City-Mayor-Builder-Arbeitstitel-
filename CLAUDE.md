@@ -265,7 +265,34 @@ Renderer liest dieselben Werte. Verbindlich vor Gelände-/Platzierungsarbeit:
 `docs/agents/MAP_FLATTENING_AND_BUILDABILITY_PLAN.md`. Offen (nicht vortäuschen):
 echtes Mesh-Einebnen unter dem Footprint, Pfahl-/Steglogik für Wassergebäude.
 
-## Status: A6 Steinbruch + A7 Farm — DREI AKTIVE BETRIEBE (v1.25, Save v29, D-046) — AKTUELL
+## Status: G2 ③ — DER GHOST ZEIGT DEN ANSCHLUSSPUNKT (v1.26, Save v29, D-047) — AKTUELL
+Die Platzierungsvorschau beantwortet zwei Fragen statt einer: „darf hier gebaut
+werden?" **und** „wird das hier arbeiten?". Von den fünf Punkten, die OPEN_TASKS für
+③ nannte, waren vier längst umgesetzt (GLB-Ghost, Rotation, Sockel, Radius) — wieder
+gilt: **erst den Code prüfen, dann die Aufgabenliste.** Der offene fünfte war kein
+Schönheitsfehler: **`requiresRoad` tragen 23 von 34 Gebäuden, aber `needs_road`
+blockiert ausschließlich Straßen selbst.** Ein unverbundenes Wohnhaus ist legal
+platzierbar und liefert danach laut `isInfrastructureOperational` weder Produktion
+noch Kapazität noch Versorgung; im Startzustand waren **3.652 von 3.721** geprüften
+Kacheln gültig UND ohne Anschluss (die Startstadt hat fünf Straßenkacheln).
+**Zwingend (D-047): `connectedRoadTiles` in `placement.ts` ist die EINZIGE Aufzählung
+der Anschlusskacheln** — `isConnectedToRoad` leitet sein Ja/Nein daraus ab, sonst
+könnte ein Marker auf eine Kachel zeigen, die die Prüfung nicht zählt (Fortsetzung
+D-042). Der Ghost liest außerdem **eine** `placementDiagnostics`-Projektion statt drei
+Einzelabfragen (`validatePlacement` + `getWaterfrontPlacementPreview` +
+`locationBonusPct`); Ghost, Banner und Wasserfront-HUD können dieselbe Kachel damit
+nicht mehr unterschiedlich beschreiben. Sichtbar: Marker auf den Anschlusskacheln
+sowie eine eigene **Warnstufe zwischen gültig und ungültig** — bernsteinfarbener
+Ghost + Banner „Baubar — aber ohne Straßenanschluss bleibt der Betrieb ohne Wirkung"
+(bei der Stadtgründung unterdrückt, dort gibt es planmäßig noch keine Straße). Wer
+eine weitere „erlaubt, aber wirkungslos"-Bedingung findet (Energie, Arbeitskräfte,
+Wasserzugang), ergänzt sie als **Warnstufe, nie als Platzierungsregel**. Keine Save-/
+Sim-Änderung, **v29**. Offen (nicht vortäuschen): **G2 ④ Verschieben** — dort ist
+`ThreeMapRenderer.setMoving()` ein No-op, dessen Kommentar auf den seit Ausbaustufe
+2.0 entfernten 2D-/Iso-Modus verweist; Verschieben hat im 3D-Renderer aktuell gar
+keine Vorschau. Danach ⑤ Radien-Overlays, ⑥ Straßenbau als Plan→Vorschau→Bestätigen.
+
+## Status: A6 Steinbruch + A7 Farm — DREI AKTIVE BETRIEBE (v1.25, Save v29, D-046)
 Das Sägewerk ist nicht mehr der einzige aktive Betrieb. Steinbruch und Farm nutzen
 **dieselbe** Knoten-/Arbeiter-/Lagerschleife (§2, kein zweites System):
 Ressourcenknoten sind auf `tree`/`rock`/`crop` verallgemeinert

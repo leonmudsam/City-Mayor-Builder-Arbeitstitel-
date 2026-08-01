@@ -16,6 +16,14 @@ export interface HoverInfo {
   bonusPct: number;
   x: number;
   y: number;
+  /** Grenzt die Grundfläche ans verbundene Straßennetz? (§ G2 ③) */
+  roadAccess: boolean;
+  /**
+   * Baubar, aber ohne Wirkung: Das Gebäude braucht eine Straße und hat hier
+   * keine. Die Platzierung scheitert daran **nicht** — deshalb ist dieser
+   * Hinweis die einzige Warnung, die der Spieler vor dem Klick bekommt.
+   */
+  roadWarning: boolean;
   rotation?: BuildingRotation;
   waterfront?: WaterfrontPlacementPreview;
 }

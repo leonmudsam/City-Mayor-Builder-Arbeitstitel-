@@ -1,5 +1,40 @@
 # Handoff-Log
 
+## 2026-08-01 — G2 ③ Platzierungs-Ghost mit Anschlusspunkt (v1.26, Save v29, D-047)
+
+**Ausgangslage:** v1.12–v1.25 waren inzwischen als `64fca3c` gesichert (vorher lagen
+vierzehn Versionen uncommittet nebeneinander, inklusive komplettem Weltaustausch).
+Danach der nächste Schritt der zwingenden G2-Reihenfolge: ③ Platzierungs-Ghost.
+
+**Wieder derselbe Befund wie bei A6: erst den Code prüfen, dann die Aufgabenliste.**
+Von den fünf in OPEN_TASKS genannten Punkten waren vier längst umgesetzt — GLB-Ghost,
+Rotation, Sockel und Radius. Offen waren nur „Anschlusspunkt" und
+„`placementDiagnostics` nutzen".
+
+**Der Anschlusspunkt war kein Schönheitsfehler.** `requiresRoad` tragen 23 von 34
+Gebäuden, aber `needs_road` blockiert ausschließlich Straßen selbst — ein unverbundenes
+Wohnhaus ist also legal platzierbar und liefert danach laut
+`isInfrastructureOperational` weder Produktion noch Kapazität noch Versorgung.
+Gemessen im Startzustand: **3.652 von 3.721** geprüften Kacheln gültig UND ohne
+Anschluss, bei genau fünf Straßenkacheln in der Startstadt.
+
+**Umbau.** `connectedRoadTiles` in `placement.ts` ist die **einzige** Aufzählung der
+Anschlusskacheln (`isConnectedToRoad` leitet sich daraus ab — kein Marker kann auf
+eine Kachel zeigen, die die Prüfung nicht zählt, vgl. D-042);
+`PlacementDiagnostics` führt `roadTiles` + `requiresRoad`; der Ghost liest **eine**
+Diagnose statt drei Einzelabfragen und markiert die Anschlusskacheln im Gelände;
+neue Warnstufe „baubar, aber ohne Wirkung" in Ghost (bernstein) und Banner (**D-047**).
+
+**Verifikation.** `tsc`, `eslint`, **69 Dateien / 572 Tests**, `npm run build` grün.
+3D-Smoke gegen `vite preview` (SwiftShader, Basis-URL `/`): alle drei Zustände live
+belegt — `banner-ok` mit Anschluss an der Startstraße, `banner-warn` daneben,
+`banner-bad` auf dem Rathaus, **0 Konsolenfehler**.
+
+**Für den Nächsten:** G2 ④ (Verschieben) hat eine Altlast — `ThreeMapRenderer.setMoving()`
+ist ein No-op, dessen Kommentar auf den **2D-/Iso-Modus** verweist, den es seit
+Ausbaustufe 2.0 nicht mehr gibt. Verschieben hat im 3D-Renderer derzeit gar keine
+Vorschau; das gehört vor ④ abgeräumt.
+
 ## 2026-08-01 — A6 Steinbruch + A7 Farm abgeschlossen (v1.25, Save v29, D-046)
 
 **Ausgangslage:** Die Simulation für A6/A7 lag bereits **uncommittet** im

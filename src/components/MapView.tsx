@@ -373,6 +373,13 @@ function PlacementBanner({ info, moving }: { info: HoverInfo | undefined; moving
     className += ' banner-bad';
     icon = <AlertTriangle size={18} />;
     text = `${defName}: ${t(`error.${info.error}`)}`;
+  } else if (info?.roadWarning) {
+    // Baubar, aber wirkungslos (§ G2 ③): `requiresRoad` blockiert die Platzierung
+    // nicht, ein unverbundenes Gebäude produziert und versorgt aber nichts. Ohne
+    // diesen Hinweis war der Ghost grün und das Gebäude danach still.
+    className += ' banner-warn';
+    icon = <AlertTriangle size={18} />;
+    text = `${defName}: ${t('ui.placement.no_road_yet')}`;
   } else if (info && info.bonusPct > 0) {
     className += ' banner-bonus';
     icon = <Sparkles size={18} />;

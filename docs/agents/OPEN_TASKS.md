@@ -341,10 +341,23 @@ Dateistellen: `CORE_GAMEPLAY_OVERHAUL_AUDIT.md`.
    Bauentwurf überlebt jede Kamerabewegung (Zug ↔ Klick strikt getrennt). Der
    `CameraInputController` nutzt nur noch diese Funktionen; kein neues Eingabesystem,
    keine Save-Änderung. 6 Tests (`camera.test.ts`).
-3. Echter GLB-Ghost inkl. Rotation, Sockel, Anschlusspunkt und Radius;
-   `placementDiagnostics` nutzen.
+3. ✅ **ERLEDIGT (v1.26, D-047) — Echter GLB-Ghost inkl. Anschlusspunkt.** GLB,
+   Rotation, Sockel und Radius waren bereits vorhanden; offen waren
+   Anschlusspunkt und `placementDiagnostics`. Neu: `connectedRoadTiles` in
+   `placement.ts` ist die **einzige** Aufzählung der Anschlusskacheln
+   (`isConnectedToRoad` leitet sich daraus ab), `PlacementDiagnostics` führt
+   `roadTiles`/`requiresRoad`, der Ghost liest **eine** Diagnose statt drei
+   Einzelabfragen und markiert die Anschlusskacheln im Gelände.
+   **Kern des Befunds:** `requiresRoad` (23 von 34 Gebäuden) blockiert die
+   Platzierung nicht — im Startzustand waren 3.652 von 3.721 geprüften Kacheln
+   gültig UND ohne Anschluss, das Gebäude danach ohne Wirkung. Dafür gibt es
+   jetzt eine eigene bernsteinfarbene Warnstufe in Ghost und Banner.
+   7 Tests (`placementRoadLink.test.ts`). Keine Save-/Sim-Änderung.
 4. Verschieben als Entwurf: Ghost an der Zielposition, Ursprung markiert,
    Abbruch ohne Wirkung, Bestätigung = genau ein Command.
+   ⚠️ **Vorher abräumen:** `ThreeMapRenderer.setMoving()` ist ein No-op, dessen
+   Kommentar auf den **2D-/Iso-Modus** verweist — den es seit Ausbaustufe 2.0
+   nicht mehr gibt. Verschieben hat im 3D-Renderer aktuell keinerlei Vorschau.
 5. Wirkungsradien terrainfolgend projizieren (`getCoverageOverlay`).
 6. Straßenbau als Planen → Vorschau → Bestätigen → Command.
 

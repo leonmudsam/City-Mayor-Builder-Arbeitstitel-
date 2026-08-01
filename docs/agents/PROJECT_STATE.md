@@ -1,8 +1,40 @@
-# Projektstand — v1.25
+# Projektstand — v1.26
 
 Stand: 1. August 2026
 
-## A6 Steinbruch + A7 Farm abgeschlossen (v1.25, Save v29, D-046) — AKTUELL
+## G2 ③ — der Ghost zeigt den Anschlusspunkt (v1.26, Save v29, D-047) — AKTUELL
+
+Die Platzierungsvorschau beantwortet jetzt zwei Fragen statt einer: „darf hier
+gebaut werden?" **und** „wird das hier arbeiten?".
+
+Von den fünf Punkten, die OPEN_TASKS für ③ auflistete, waren vier längst
+umgesetzt (GLB-Ghost, Rotation, Sockel, Radius). Der offene fünfte war kein
+Schönheitsfehler: **`requiresRoad` tragen 23 von 34 Gebäuden, aber `needs_road`
+blockiert ausschließlich Straßen selbst.** Ein unverbundenes Wohnhaus ist legal
+platzierbar und liefert danach laut `isInfrastructureOperational` weder
+Produktion noch Kapazität noch Versorgung. Im Startzustand waren **3.652 von
+3.721** geprüften Kacheln gültig UND ohne Anschluss — die Startstadt hat fünf
+Straßenkacheln. Der Ghost war grün, das Gebäude danach still.
+
+**Zwingend (D-047):** `connectedRoadTiles` in `placement.ts` ist die **einzige**
+Aufzählung der Anschlusskacheln; `isConnectedToRoad` leitet sein Ja/Nein daraus
+ab. Ein Marker kann damit nie auf eine Kachel zeigen, die die Prüfung nicht
+zählt (Fortsetzung von D-042). Der Ghost liest außerdem **eine**
+`placementDiagnostics`-Projektion statt drei Einzelabfragen — Ghost, Banner und
+Wasserfront-HUD können dieselbe Kachel nicht mehr unterschiedlich beschreiben.
+
+Sichtbar: Marker auf den Anschlusskacheln, bernsteinfarbener Ghost + Banner
+„Baubar — aber ohne Straßenanschluss bleibt der Betrieb ohne Wirkung" (bei der
+Stadtgründung unterdrückt, dort gibt es planmäßig noch keine Straße). Wer eine
+weitere „erlaubt, aber wirkungslos"-Bedingung findet, ergänzt sie als **Warnstufe**,
+nicht als Platzierungsregel. Keine Save-/Sim-Änderung, **v29**.
+
+Offen (nicht vortäuschen): **G2 ④ Verschieben** — `ThreeMapRenderer.setMoving()`
+ist ein No-op, dessen Kommentar auf den entfernten 2D-/Iso-Modus verweist;
+Verschieben hat im 3D-Renderer derzeit gar keine Vorschau. Danach ⑤ Radien-Overlays
+und ⑥ Straßenbau als Plan→Vorschau→Bestätigen.
+
+## A6 Steinbruch + A7 Farm (v1.25, Save v29, D-046)
 
 Das Sägewerk ist nicht mehr der einzige aktive Betrieb. Steinbruch und Farm
 laufen über **dieselbe** Knoten-, Arbeiter- und Lagerschleife: Ressourcenknoten
