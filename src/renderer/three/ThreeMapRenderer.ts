@@ -129,9 +129,7 @@ import {
   startRegionConfig,
 } from '../../game/config/startRegion.config.ts';
 import { oceanDepthGrid, shoreTypeGrid, waterfrontBuildableGrid } from './worldMasks.gen.ts';
-import { validatePlacement } from '../../game/buildings/placement.ts';
 import { plinthDepthFor } from '../../game/buildings/terrainFit.ts';
-import { locationBonusPct } from '../../game/buildings/location.ts';
 import { effectiveEffects } from '../../game/buildings/effects.ts';
 import {
   buildingModel,
@@ -1520,7 +1518,16 @@ export class ThreeMapRenderer implements IMapRenderer {
       return;
     }
     const { x, y } = t;
-    const waterfront = this.controller.getWaterfrontPlacementPreview(def.id, { x, y }, this.placingRotation);
+    // § G2 ③: EINE gebündelte Read-Projektion statt drei Einzelabfragen. Gültigkeit,
+    // Wasserfront, Grundfläche, Standortbonus und Straßenanschluss stammen damit
+    // garantiert aus demselben Zustand — vorher konnten Ghost, Banner und
+    // Wasserfront-HUD dieselbe Kachel unterschiedlich beschreiben.
+    const diagnostics = this.controller.placementDiagnostics(def.id, x, y, undefined, this.placingRotation);
+    if (!diagnostics) {
+      this.clearGhost();
+      return;
+    }
+    const waterfront = diagnostics.waterfront;
     const displayRotation = waterfront?.valid ? waterfront.suggestedRotation : this.placingRotation;
     const key = `${defId}|${x}|${y}|${displayRotation}`;
     if (key === this.lastHoverKey) return;
@@ -1532,26 +1539,21 @@ export class ThreeMapRenderer implements IMapRenderer {
     // Command benutzt (`getFoundingBlocker`), damit Vorschau und Ergebnis nie
     // auseinanderlaufen.
     const founding = def.id === 'town_hall' && !this.controller.isCityFounded();
-    const error = founding
-      ? this.controller.getFoundingBlocker(x, y)
-      : waterfront
-        ? waterfront.reason
-        : validatePlacement(
-            this.controller.state,
-            this.controller.config,
-            this.controller.derived,
-            def,
-            x,
-            y,
-            {},
-          );
-    const bonusPct = error ? 0 : locationBonusPct(this.controller.state, def, x, y);
+    const error = founding ? this.controller.getFoundingBlocker(x, y) : diagnostics.reason;
+    const bonusPct = error ? 0 : diagnostics.locationBonusPct;
+    // Baubar, aber ohne Wirkung: `requiresRoad` blockiert die Platzierung nicht,
+    // ein unverbundenes Gebäude liefert aber weder Produktion noch Kapazität noch
+    // Versorgung (`isInfrastructureOperational`). Das muss VOR dem Klick sichtbar
+    // sein — bei der Gründung noch nicht, da gibt es planmäßig keine Straße.
+    const roadWarning = !error && !founding && diagnostics.requiresRoad && !diagnostics.roadAccess;
     this.callbacks.onHoverInfo({
       defId: def.id,
       error,
       bonusPct,
       x,
       y,
+      roadAccess: diagnostics.roadAccess,
+      roadWarning,
       ...(waterfront ? { rotation: displayRotation, waterfront } : {}),
     });
 
@@ -1561,9 +1563,15 @@ export class ThreeMapRenderer implements IMapRenderer {
     }
     const w = def.size.w;
     const h = def.size.h;
-    const col = error ? 0xe5533b : bonusPct > 0 ? 0x58c470 : 0x49b7ff;
+    const col = error
+      ? 0xe5533b
+      : roadWarning
+        ? 0xf0a63a
+        : bonusPct > 0
+          ? 0x58c470
+          : 0x49b7ff;
     const grp = new Group();
-    const surface = samplePlacementSurface(this.controller.state, x, y, w, h);
+    const surface = diagnostics.surface;
     const ghostBase = def.category === 'roads'
       ? terrainHeightAt(x + w / 2, y + h / 2)
       : surface.maxHeight + 0.04;
@@ -1612,6 +1620,30 @@ export class ThreeMapRenderer implements IMapRenderer {
         const waterPad = new Mesh(new BoxGeometry(0.94, 0.035, 0.94), waterMaterial);
         waterPad.position.set(cell.x + 0.5 - (x + w / 2), WATER_LEVEL - ghostBase + 0.08, cell.y + 0.5 - (y + h / 2));
         grp.add(waterPad);
+      }
+    }
+    // § G2 ③ Anschlusspunkt: die Kacheln, über die das Gebäude wirklich ans
+    // Straßennetz anschließt — aus `connectedRoadTiles`, derselben Aufzählung, aus
+    // der auch `roadAccess` entsteht. Ein Marker kann deshalb nie auf eine Kachel
+    // zeigen, die die Prüfung nicht zählt.
+    if (diagnostics.roadTiles.length > 0) {
+      const linkColor = 0x7ce0b4;
+      const linkMaterial = new MeshBasicMaterial({
+        color: linkColor,
+        transparent: true,
+        opacity: 0.72,
+        depthWrite: false,
+      });
+      for (const tile of diagnostics.roadTiles) {
+        const worldX = tile.x + 0.5;
+        const worldZ = tile.y + 0.5;
+        const marker = new Mesh(new CylinderGeometry(0.3, 0.3, 0.05, 14), linkMaterial);
+        marker.position.set(
+          worldX - (x + w / 2),
+          terrainHeightAt(worldX, worldZ) + 0.1 - ghostBase,
+          worldZ - (y + h / 2),
+        );
+        grp.add(marker);
       }
     }
     // Bright footprint outline so the exact tiles are unmistakable.

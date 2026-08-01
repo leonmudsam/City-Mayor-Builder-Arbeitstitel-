@@ -276,24 +276,44 @@ function touchesTerrain(state: GameState, def: BuildingDef, x: number, y: number
 }
 
 /**
+ * Die orthogonal an das Footprint grenzenden Kacheln des **verbundenen**
+ * Straßennetzes — also die Stellen, an denen das Gebäude tatsächlich anschließt.
+ *
+ * Das ist die einzige Aufzählung dieser Kacheln: `isConnectedToRoad` leitet sein
+ * Ja/Nein daraus ab, und die Platzierungsvorschau zeigt genau diese Liste. Ein
+ * Marker, der woanders herkäme, könnte auf eine Kachel zeigen, die die Prüfung
+ * gar nicht zählt (dieselbe Disziplin wie D-042: Messung und Gegenstand teilen
+ * sich die Quelle).
+ */
+export function connectedRoadTiles(
+  derived: Pick<Derived, 'roadNetwork'>,
+  def: BuildingDef,
+  x: number,
+  y: number,
+): { x: number; y: number }[] {
+  const tiles: { x: number; y: number }[] = [];
+  const add = (tx: number, ty: number): void => {
+    if (derived.roadNetwork.has(`${tx},${ty}`)) tiles.push({ x: tx, y: ty });
+  };
+  for (let dx = 0; dx < def.size.w; dx++) {
+    add(x + dx, y - 1);
+    add(x + dx, y + def.size.h);
+  }
+  for (let dy = 0; dy < def.size.h; dy++) {
+    add(x - 1, y + dy);
+    add(x + def.size.w, y + dy);
+  }
+  return tiles;
+}
+
+/**
  * Whether a placed building of this footprint at (x,y) borders the connected
  * road network. Exported so the diagnostics layer can flag a building that lost
  * (or never had) road access the same way placement validates it — one source
  * of truth, no parallel check.
  */
 export function isConnectedToRoad(derived: Pick<Derived, 'roadNetwork'>, def: BuildingDef, x: number, y: number): boolean {
-  return touchesConnectedRoad(derived, def, x, y);
-}
-
-/** Any tile orthogonally adjacent to the footprint is a connected road. */
-function touchesConnectedRoad(derived: Pick<Derived, 'roadNetwork'>, def: BuildingDef, x: number, y: number): boolean {
-  for (let dx = 0; dx < def.size.w; dx++) {
-    if (derived.roadNetwork.has(`${x + dx},${y - 1}`) || derived.roadNetwork.has(`${x + dx},${y + def.size.h}`)) return true;
-  }
-  for (let dy = 0; dy < def.size.h; dy++) {
-    if (derived.roadNetwork.has(`${x - 1},${y + dy}`) || derived.roadNetwork.has(`${x + def.size.w},${y + dy}`)) return true;
-  }
-  return false;
+  return connectedRoadTiles(derived, def, x, y).length > 0;
 }
 
 /** New road tiles must attach to the network or to a district center. */

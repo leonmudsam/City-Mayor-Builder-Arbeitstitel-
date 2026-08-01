@@ -1,5 +1,37 @@
 # Entscheidungen
 
+## D-047 — Die Vorschau zeigt auch, was erlaubt ist, aber nicht funktioniert
+
+**Datum:** 01.08.2026 · **Status:** aktiv · **Version:** v1.26 (Save v29)
+
+**Entscheidung.** Die Platzierungsvorschau meldet nicht nur „darf hier gebaut
+werden?", sondern auch „wird das hier arbeiten?". Ein gültiger Platz, an dem das
+Gebäude wirkungslos bliebe, bekommt eine **eigene Stufe** zwischen gültig und
+ungültig — bernsteinfarbener Ghost, benanntes Banner. Und: Wo eine Bedingung an
+konkreten Kacheln hängt, **zeigt** die Vorschau diese Kacheln, statt ein Ja/Nein
+zu behaupten (erster Fall: der Straßenanschluss über `connectedRoadTiles`).
+
+**Warum.** `requiresRoad` blockiert die Platzierung nicht — `needs_road` gilt nur
+für Straßen selbst. 23 von 34 Gebäuden tragen das Flag, und ein unverbundenes
+Gebäude liefert laut `isInfrastructureOperational` weder Produktion noch
+Kapazität noch Versorgung. Im Startzustand waren **3.652 von 3.721** geprüften
+Kacheln gültig **und** ohne Anschluss (die Startstadt hat fünf Straßenkacheln).
+Die Vorschau war dort grün und sagte nichts; der Fehler fiel erst Minuten später
+am stillen Gebäude auf. Das Regelwerk zu verschärfen wäre falsch gewesen: erst
+bauen, dann anschließen ist ein legitimer Spielzug.
+
+**Folgen.**
+- Anzeige und Prüfung teilen sich **eine** Aufzählung (`connectedRoadTiles`;
+  `isConnectedToRoad` leitet sich daraus ab) — ein Marker kann nie auf eine
+  Kachel zeigen, die die Prüfung nicht zählt. Fortsetzung von D-042.
+- Der Ghost liest **eine** `placementDiagnostics`-Projektion statt drei
+  Einzelabfragen; Ghost, Banner und Wasserfront-HUD können dieselbe Kachel nicht
+  mehr unterschiedlich beschreiben.
+- Wer eine weitere „erlaubt, aber wirkungslos"-Bedingung findet (Wasserzugang,
+  Energie, Arbeitskräfte), ergänzt sie als Warnstufe — nicht als Platzierungsregel.
+- Bei der Stadtgründung ist die Warnung unterdrückt: dort gibt es planmäßig noch
+  keine Straße.
+
 ## D-046 — Zustände, die die UI beschriftet, werden als Liste exportiert
 
 **Datum:** 01.08.2026 · **Status:** aktiv · **Version:** v1.25 (Save v29)

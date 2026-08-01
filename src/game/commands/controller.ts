@@ -23,7 +23,7 @@ import { advance, moveInPerMin } from '../simulation/tick.ts';
 import { updateQuests, objectiveTarget, questFocus, type QuestFocus } from '../simulation/quests.ts';
 import {
   validatePlacement,
-  isConnectedToRoad,
+  connectedRoadTiles,
   waterfrontPlacementPreview,
   type BuildingRotation,
   type PlacementError,
@@ -274,6 +274,19 @@ export interface PlacementDiagnostics {
   surface: PlacementSurfaceSample;
   /** Orthogonaler Anschluss an das verbundene Straßennetz. */
   roadAccess: boolean;
+  /**
+   * Die konkreten Anschlusskacheln aus `connectedRoadTiles` — die Vorschau kann
+   * damit **zeigen**, wo angeschlossen wird, statt nur ja/nein zu behaupten.
+   */
+  roadTiles: { x: number; y: number }[];
+  /**
+   * Braucht dieses Gebäude eine Straße, um überhaupt zu arbeiten? Wichtig, weil
+   * die Platzierung daran **nicht** scheitert (`needs_road` gilt nur für Straßen
+   * selbst): ein `requiresRoad`-Gebäude ohne Anschluss ist baubar, liefert aber
+   * laut `isInfrastructureOperational` weder Produktion noch Kapazität noch
+   * Versorgung. Ohne diesen Hinweis ist der Ghost grün und das Gebäude danach tot.
+   */
+  requiresRoad: boolean;
   waterfront?: WaterfrontPlacementPreview;
   /** Standort-/Regionsbonus in Prozentpunkten auf die Produktion (kann negativ sein). */
   locationBonusPct: number;
@@ -2115,13 +2128,16 @@ export class GameController {
       ignoreBuildingId,
     );
     const reason = waterfront ? waterfront.reason : baseReason;
+    const roadTiles = connectedRoadTiles(this.derived, def, x, y);
     return {
       valid: waterfront ? waterfront.valid : reason === undefined,
       ...(reason ? { reason } : {}),
       terrain: worldTerrainAt(this.state, x, y),
       regionId: regionIdAt(x, y),
       surface: samplePlacementSurface(this.state, x, y, def.size.w, def.size.h),
-      roadAccess: isConnectedToRoad(this.derived, def, x, y),
+      roadAccess: roadTiles.length > 0,
+      roadTiles,
+      requiresRoad: def.requiresRoad === true || def.infrastructureModes?.includes('road') === true,
       ...(waterfront ? { waterfront } : {}),
       locationBonusPct: Math.round(locationBonusPct(this.state, def, x, y)),
       buildCost: this.getBuildCost(defId, x, y),

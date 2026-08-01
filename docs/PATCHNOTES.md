@@ -1,5 +1,87 @@
 # Patch Notes
 
+## v1.26 — Core Gameplay G2 ③: Der Ghost zeigt den Anschlusspunkt (Save v29, D-047)
+
+> Auftrag: „weiter mit deiner empfehlung" — nach dem Sichern von v1.12–v1.25 der
+> nächste Schritt der Bau-Interaktion. Die Reihenfolge in G2 ist zwingend; ① Picking
+> (v0.94) und ② Kamera im Baumodus (v0.95) stehen, ③ ist der Platzierungs-Ghost.
+
+### Der Befund vor der Arbeit
+
+Die Aufgabenliste verlangte für ③ „echter GLB-Ghost inkl. Rotation, Sockel,
+**Anschlusspunkt** und Radius; `placementDiagnostics` nutzen". Vier davon waren
+längst da — das GLB wird geladen und transparent gemacht, die Rotation dreht
+Modell und Frontpfeil, der Sockel erscheint bei Höhenunterschied, der
+Versorgungsradius liegt terrainfolgend unter dem Ghost. Offen waren genau die zwei
+zuletzt genannten Punkte, und der erste davon war kein Schönheitsfehler:
+
+**23 von 34 Gebäuden tragen `requiresRoad` — aber `needs_road` blockiert
+ausschließlich Straßen selbst.** Ein Wohnhaus ohne Straßenanschluss ist also
+vollkommen legal platzierbar, und danach meldet `isInfrastructureOperational` es
+als `disconnected`: keine Produktion, keine Kapazität, keine Versorgung.
+Gemessen im Startzustand rund um das Rathaus: von **3.721 geprüften Kacheln sind
+3.652 gültig UND ohne Anschluss** — die Startstadt besitzt ganze **fünf**
+Straßenkacheln. Der Ghost war dort grün, der Bau ging durch, das Gebäude blieb
+still, und nichts in der Oberfläche hatte vorher etwas gesagt.
+
+Zweitens fragte der Ghost dieselbe Kachel **dreimal getrennt** ab
+(`validatePlacement`, `getWaterfrontPlacementPreview`, `locationBonusPct`) und
+sampelte die Grundfläche noch einmal selbst — während `placementDiagnostics`
+genau dieses Bündel längst als eine Read-Projektion anbietet.
+
+### Was sich geändert hat
+
+**Eine Aufzählung für Anzeige und Prüfung.** `connectedRoadTiles` in
+`placement.ts` nennt die orthogonal ans Footprint grenzenden Kacheln des
+verbundenen Netzes; `isConnectedToRoad` leitet sein Ja/Nein daraus ab statt
+parallel zu suchen. Ein Marker kann damit nie auf eine Kachel zeigen, die die
+Prüfung gar nicht zählt — dieselbe Disziplin wie D-042.
+
+**Der Anschlusspunkt ist sichtbar.** Der Ghost setzt auf jede dieser Kacheln eine
+flache grüne Scheibe auf Geländehöhe. Der Spieler sieht vor dem Klick, **wo**
+das Gebäude ans Netz geht — und ob überhaupt.
+
+**Baubar ≠ wirksam, und das steht jetzt da.** Ist ein `requiresRoad`-Gebäude
+gültig, aber unverbunden, färbt sich der Ghost bernstein (weder rot — es ist
+erlaubt — noch grün — so funktioniert es nicht) und das Banner sagt: „Baubar —
+aber ohne Straßenanschluss bleibt der Betrieb ohne Wirkung." Bei der
+Stadtgründung erscheint die Warnung bewusst nicht; dort gibt es planmäßig noch
+keine Straße.
+
+**Der Ghost liest eine Diagnose statt drei Einzelabfragen.** Gültigkeit,
+Wasserfront, Grundfläche, Standortbonus und Straßenanschluss stammen jetzt
+garantiert aus demselben Zustand. Vorher konnten Ghost, Banner und
+Wasserfront-HUD dieselbe Kachel unterschiedlich beschreiben.
+
+### Auswirkung auf laufende Spiele
+
+Keine. Reine Vorschau- und Anzeigearbeit: keine Platzierungsregel wurde
+verschärft oder gelockert, keine Simulation berührt, **Save bleibt v29**.
+Sichtbar ändert sich eine Kleinigkeit am Rand: der Ghost verwendet nun den
+gerundeten Standortbonus aus der Diagnose — ein Bonus, den das Banner als „+0 %"
+ausweist, färbt den Ghost nicht länger grün. Vorschau und Text stimmen damit
+überein.
+
+### Zukunft
+
+Der nächste Schritt der zwingenden Reihenfolge ist **G2 ④ „Verschieben als
+Entwurf"**. Dabei ist ein Fund abzuräumen: `ThreeMapRenderer.setMoving()` ist ein
+No-op, dessen Kommentar auf den **2D-/Iso-Modus** verweist — den es seit
+Ausbaustufe 2.0 nicht mehr gibt. Verschieben hat im 3D-Renderer derzeit also
+keinerlei Vorschau. Nicht vorgetäuscht bleiben außerdem: freie
+Kontrollpunkt-Griffe im Straßenbau (⑥) und Radien-Overlays für Gebäude ohne
+`coverage`-Effekt.
+
+### Dateien
+
+`src/game/buildings/placement.ts` (`connectedRoadTiles`),
+`src/game/commands/controller.ts` (`PlacementDiagnostics.roadTiles`/`requiresRoad`),
+`src/renderer/three/ThreeMapRenderer.ts` (eine Diagnose, Anschlussmarker,
+Warnfarbe), `src/renderer/IMapRenderer.ts` (`HoverInfo.roadAccess`/`roadWarning`),
+`src/components/MapView.tsx` (Banner-Warnstufe), `src/styles.css`
+(`.banner-warn`), `src/i18n/de.json` (`ui.placement.no_road_yet`),
+`tests/placementRoadLink.test.ts` (7 Tests).
+
 ## v1.25 — A6 Steinbruch + A7 Farm: die Betriebe heißen nicht mehr alle Sägewerk (Save v29, D-046)
 
 > Auftrag: „dann los mit deiner Empfehlung" — A6 Steinbruch als größte Lücke

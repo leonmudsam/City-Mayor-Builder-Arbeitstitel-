@@ -446,6 +446,7 @@
   "ui.move.hint": "Ziehe das Gebäude an einen neuen Platz — Klick setzt es ab.",
   "ui.move.valid": "Hier ablegen möglich.",
   "ui.placement.valid": "Hier kann gebaut werden.",
+  "ui.placement.no_road_yet": "Baubar — aber ohne Straßenanschluss bleibt der Betrieb ohne Wirkung.",
   "ui.placement.waterfront_valid": "Wasserzugang geeignet · Mindesttiefe {depth} m · Straße {road}",
   "ui.yes": "ja",
   "ui.not_yet": "noch nicht vorhanden",
