@@ -41,6 +41,16 @@ interface MiniMarker {
 const clamp = (value: number, min: number, max: number) => Math.max(min, Math.min(max, value));
 
 /**
+ * Kennzeichnung gesperrter Gebiete auf der Minikarte — bewusst dieselbe Sprache
+ * wie im 3D-Renderer (`LOCKED_DESATURATION`/`LOCKED_DARKENING` in
+ * `ThreeMapRenderer.ts`). Die Werte sind hier gespiegelt statt importiert, weil
+ * eine React-Komponente nichts aus dem Renderer ziehen soll (CLAUDE.md §1).
+ */
+const MINIMAP_LOCKED_DESATURATION = 0.7;
+const MINIMAP_LOCKED_BRIGHTNESS = 0.84;
+
+
+/**
  * Live island minimap. Terrain/region ownership comes from the same baked world
  * grid as the renderer; buildings, mission stops and diagnostics come from the
  * current controller snapshot. Only the camera outline is polled, avoiding a
@@ -55,6 +65,7 @@ export function WorldMiniMap() {
   const setPanel = useUiStore((s) => s.setPanel);
   const revealLockedRegionsVisually = useUiStore((s) => s.revealLockedRegionsVisually);
   const [focusRegionId, setFocusRegionId] = useState(startRegionConfig.startRegionId);
+  const currentLevel = game.state.level.current;
 
   const unlockedKey = Object.values(game.state.world.regions)
     .filter((region) => region.status === 'unlocked')
@@ -62,6 +73,29 @@ export function WorldMiniMap() {
     .sort((a, b) => a - b)
     .join(',');
   const unlocked = useMemo(() => new Set(unlockedKey.split(',').filter(Boolean).map(Number)), [unlockedKey]);
+  const lockedRegionTeasers = useMemo(
+    () =>
+      revealLockedRegionsVisually
+        ? []
+        : BAKED_REGIONS
+            .map((baked) => ({ baked, def: game.config.regions.get(baked.id) }))
+            .filter(
+              (entry) =>
+                !unlocked.has(entry.baked.id) &&
+                entry.def?.unlockable &&
+                entry.def.unlockLevel <= currentLevel + 2,
+            )
+            .sort((a, b) => {
+              const byLevel = (a.def?.unlockLevel ?? 0) - (b.def?.unlockLevel ?? 0);
+              if (byLevel !== 0) return byLevel;
+              const hall = startRegionConfig.townHall;
+              const distanceA = Math.hypot(a.baked.centroid.x - hall.x, a.baked.centroid.y - hall.y);
+              const distanceB = Math.hypot(b.baked.centroid.x - hall.x, b.baked.centroid.y - hall.y);
+              return distanceA - distanceB;
+            })
+            .slice(0, 3),
+    [currentLevel, game.config.regions, revealLockedRegionsVisually, unlocked],
+  );
 
   const targetIds = useMemo(
     () => new Set(game.state.activities.active?.targets.filter((target) => !target.done).map((target) => target.buildingId) ?? []),
@@ -97,25 +131,25 @@ export function WorldMiniMap() {
         const base = TERRAIN[terrainAt(wx, wy)];
         const isUnlocked = revealLockedRegionsVisually || regionId === 0 || unlocked.has(regionId);
         const offset = (py * SIZE + px) * 4;
-        if (!isUnlocked) {
-          // Gesperrte Landschaften zeigen auch auf der Minimap keine
-          // Terrain-Details. Mehrere weiche Frequenzen ergeben eine lesbare
-          // Wolkendecke, ohne ein zweites Kartenbild zu laden.
-          const cloudA = Math.sin(px * 0.19 + py * 0.13);
-          const cloudB = Math.sin(px * -0.08 + py * 0.23 + 1.7);
-          const cloudC = Math.sin((px + py) * 0.045 + regionId * 0.61);
-          const cloud = Math.round(150 + cloudA * 17 + cloudB * 13 + cloudC * 11);
-          image.data[offset] = Math.max(105, cloud - 10);
-          image.data[offset + 1] = Math.max(115, cloud);
-          image.data[offset + 2] = Math.min(220, cloud + 13);
-          image.data[offset + 3] = 255;
-          continue;
-        }
         const macro = ((px * 13 + py * 7 + wx * 3 + wy * 5) % 19) / 190 - 0.05;
         const relief = terrainAt(wx, wy) === 'mountain' ? 0.9 + ((wx + wy) % 9) / 32 : 1 + macro;
-        image.data[offset] = Math.round(base[0] * relief);
-        image.data[offset + 1] = Math.round(base[1] * relief);
-        image.data[offset + 2] = Math.min(255, Math.round(base[2] * relief));
+        let red = base[0] * relief;
+        let green = base[1] * relief;
+        let blue = base[2] * relief;
+        if (!isUnlocked) {
+          // § Welt lädt vollständig (v1.24): Auch die Minikarte zeigt gesperrte
+          // Landschaften jetzt als GELÄNDE statt als Wolkendecke — sonst würde
+          // sie der 3D-Ansicht widersprechen, in der die Insel vollständig
+          // sichtbar ist. Dieselbe Sprache wie dort: entsättigt und leicht
+          // abgedunkelt, mit denselben Konstanten wie der Renderer.
+          const luminance = red * 0.299 + green * 0.587 + blue * 0.114;
+          red = (red + (luminance - red) * MINIMAP_LOCKED_DESATURATION) * MINIMAP_LOCKED_BRIGHTNESS;
+          green = (green + (luminance - green) * MINIMAP_LOCKED_DESATURATION) * MINIMAP_LOCKED_BRIGHTNESS;
+          blue = (blue + (luminance - blue) * MINIMAP_LOCKED_DESATURATION) * MINIMAP_LOCKED_BRIGHTNESS * 1.06;
+        }
+        image.data[offset] = Math.round(red);
+        image.data[offset + 1] = Math.round(green);
+        image.data[offset + 2] = Math.min(255, Math.round(blue));
         image.data[offset + 3] = 255;
       }
     }
@@ -173,39 +207,31 @@ export function WorldMiniMap() {
       ctx.strokeStyle = '#fff4cc';
       ctx.stroke();
 
-      // Dieselben kanonischen Regionszentren wie im 3D-Renderer: Schloss plus
-      // Mindestlevel, damit die Minimap den Sperrstatus nicht nur durch Farbe
-      // kommuniziert. Die Teaser-Insel zeigt bewusst „…“ statt eines Fake-Levels.
-      for (const baked of BAKED_REGIONS) {
-        if (revealLockedRegionsVisually || unlocked.has(baked.id)) continue;
-        const def = game.config.regions.get(baked.id);
-        if (!def) continue;
+      // Die Minimap ist ein Wegweiser, kein Freischaltbaum: maximal drei nahe,
+      // bald erreichbare Regionen erhalten ein kleines Schloss. Level und alle
+      // späteren Ziele bleiben in der großen Regionsansicht.
+      for (const { baked } of lockedRegionTeasers) {
         const x = baked.centroid.x * scale;
         const y = baked.centroid.y * scale;
         ctx.save();
         ctx.translate(x, y);
-        ctx.shadowColor = 'rgba(0,0,0,.75)';
-        ctx.shadowBlur = 3;
-        ctx.fillStyle = 'rgba(6,22,33,.94)';
-        ctx.strokeStyle = '#e2a72f';
-        ctx.lineWidth = 1.1;
+        ctx.shadowColor = 'rgba(0,0,0,.68)';
+        ctx.shadowBlur = 2;
+        ctx.fillStyle = 'rgba(6,22,33,.9)';
+        ctx.strokeStyle = 'rgba(226,167,47,.82)';
+        ctx.lineWidth = 0.9;
         ctx.beginPath();
-        ctx.roundRect(-6.5, -7.5, 13, 15, 3);
+        ctx.roundRect(-4.5, -5, 9, 10, 2.5);
         ctx.fill();
         ctx.stroke();
         ctx.shadowColor = 'transparent';
         ctx.strokeStyle = '#f8edc9';
-        ctx.lineWidth = 1.4;
+        ctx.lineWidth = 1.1;
         ctx.beginPath();
-        ctx.arc(0, -2.8, 2.5, Math.PI, 0);
+        ctx.arc(0, -1.8, 1.8, Math.PI, 0);
         ctx.stroke();
         ctx.fillStyle = '#f8edc9';
-        ctx.fillRect(-3, -2.8, 6, 5);
-        ctx.font = '700 5px Inter, Arial, sans-serif';
-        ctx.textAlign = 'center';
-        ctx.textBaseline = 'middle';
-        ctx.fillStyle = '#f2b43b';
-        ctx.fillText(def.unlockable ? `L${def.unlockLevel}` : '…', 0, 5.1);
+        ctx.fillRect(-2.2, -1.8, 4.4, 3.8);
         ctx.restore();
       }
 
@@ -240,7 +266,7 @@ export function WorldMiniMap() {
     draw();
     const timer = window.setInterval(draw, 120);
     return () => window.clearInterval(timer);
-  }, [game, markers, revealLockedRegionsVisually, unlocked]);
+  }, [game, lockedRegionTeasers, markers]);
 
   const focusRegion = game.config.regions.get(focusRegionId);
   const focusRegionState = game.state.world.regions[String(focusRegionId)];
@@ -256,7 +282,9 @@ export function WorldMiniMap() {
     const x = clamp(((clientX - rect.left) / rect.width) * WORLD_TILES, 0, WORLD_TILES - 1);
     const z = clamp(((clientY - rect.top) / rect.height) * WORLD_TILES, 0, WORLD_TILES - 1);
     setCameraPreset('city');
-    api.focusGround(x, z, Math.min(api.getCameraView().dist, 92));
+    // Ein Minimap-Klick soll einen lesbaren Stadtsektor zeigen. Der bisherige
+    // Maximalwert 92 überschieb den City-Preset direkt wieder mit Welt-Zoom.
+    api.focusGround(x, z, 42);
   };
 
   return (

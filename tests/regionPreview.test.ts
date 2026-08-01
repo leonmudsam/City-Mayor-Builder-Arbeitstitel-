@@ -9,8 +9,9 @@ describe('regionPreview — begünstigte Gebäude (§ C5)', () => {
   });
 
   it('empfiehlt das Sägewerk in einer Holz-Region', () => {
-    // § 10.0 R8: Zentralwald (11) ist Wald mit wood ×1.45.
-    const preview = regionPreview(11)!;
+    // § Modelltreue 13.1: Nordwald (7) ist die Holzregion mit wood ×1,45 —
+    // direkter Startnachbar und die erste Erweiterung (L2).
+    const preview = regionPreview(7)!;
     const wood = preview.favouredBuildings.find((f) => f.defId === 'sawmill');
     expect(wood).toBeDefined();
     expect(wood!.resource).toBe('wood');
@@ -18,13 +19,13 @@ describe('regionPreview — begünstigte Gebäude (§ C5)', () => {
   });
 
   it('empfiehlt den Bauernhof in einer fruchtbaren Region', () => {
-    // § 10.0 R8: Ostfelder (4) ist Ebene mit food ×1.3.
-    const preview = regionPreview(4)!;
+    // § Modelltreue 13.1: Die Nordküste (6) ist die Kornkammer mit food ×1,4.
+    const preview = regionPreview(6)!;
     expect(preview.favouredBuildings.some((f) => f.defId === 'farm' && f.resource === 'food')).toBe(true);
   });
 
   it('bleibt leer für die neutrale Startregion (keine Modifikatoren)', () => {
-    // § 10.0 R8: Zentralland (9) ist die bewusst neutrale Startregion ohne Boni.
+    // § Modelltreue 13.1: Gruenderland (9) ist die bewusst neutrale Startregion.
     const preview = regionPreview(9)!;
     expect(preview.favouredBuildings).toEqual([]);
   });

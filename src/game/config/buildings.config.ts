@@ -409,13 +409,22 @@ export const buildingsConfig: BuildingDef[] = [
     operation: {
       resource: 'wood',
       nodeType: 'tree',
-      nodeTerrain: 'forest',
       efficientRadius: 8,
       maxRadius: 14,
       stages: [
-        { workerSlots: 2, movementSpeed: 7, workSpeed: 30, carryCapacity: 12, storageCapacity: 120 },
-        { workerSlots: 4, movementSpeed: 8, workSpeed: 40, carryCapacity: 18, storageCapacity: 260 },
-        { workerSlots: 7, movementSpeed: 9, workSpeed: 55, carryCapacity: 26, storageCapacity: 600 },
+        // § 12.1 §3 — KALIBRIERUNG NACHGEHOLT. Gemessen lieferte Stufe 1 nur
+        // 13,5 Holz/min gegen die frühere Passivrate von 45 (Stufe 2 traf sie mit
+        // 44,1). Steinbruch (38 Stein/min) und Farm (260 Nahrung/min) sind seit
+        // §A6/A7 auf ihre Passivrate kalibriert — das Sägewerk war es nie, und
+        // genau das war im Spieltest als „Holzproduktion viel zu langsam" spürbar.
+        //
+        // Die Stufen bleiben das, was §3 verlangt: nicht „+X/min", sondern bessere
+        // Infrastruktur — mehr Arbeiter, schnellere Wege, besseres Werkzeug,
+        // größere Traglast, mehr Lager und ein WEITERES Arbeitsgebiet. Der
+        // wachsende Radius fehlte dem Sägewerk als einzigem Betrieb.
+        { workerSlots: 3, movementSpeed: 12, workSpeed: 55, carryCapacity: 20, storageCapacity: 200 },
+        { workerSlots: 5, movementSpeed: 14, workSpeed: 75, carryCapacity: 30, storageCapacity: 460, efficientRadius: 10, maxRadius: 17 },
+        { workerSlots: 7, movementSpeed: 15, workSpeed: 90, carryCapacity: 38, storageCapacity: 1_100, efficientRadius: 12, maxRadius: 20 },
       ],
     },
     locationBonus: { terrain: 'forest', radius: 3, perTilePct: 5, maxPct: 50 },
@@ -480,8 +489,31 @@ export const buildingsConfig: BuildingDef[] = [
         ],
       },
     ],
+    // § Active Operations 2.0 / A6: Der Steinbruch erzeugt Stein NICHT mehr passiv.
+    // Arbeiter brechen Fels an echten Vorkommen (Gebirgskacheln) und tragen ihn ins
+    // lokale Betriebslager. Entscheidender Unterschied zum Sägewerk: **Fels wächst
+    // nicht nach** (`rock`-Knotenprofil ohne `regenerationMs`). Ein Bruch läuft
+    // irgendwann leer und muss versetzt werden — das ist eine Entscheidung des
+    // Spielers und bleibt deshalb bewusst manuell (D-039).
+    //
+    // Kalibrierung: Die Stufenwerte sind so gewählt, dass ein Steinbruch am Fels
+    // ungefähr seine frühere Passivrate erreicht (38/80/210 Stein pro Minute bei
+    // mittlerer Zielentfernung) — die Umstellung darf die Progression nicht kippen.
+    // Ein schlecht platzierter Bruch liegt darunter, ein sehr guter darüber (§12).
+    operation: {
+      resource: 'stone',
+      nodeType: 'rock',
+      efficientRadius: 8,
+      maxRadius: 13,
+      stages: [
+        { workerSlots: 3, movementSpeed: 9, workSpeed: 26, carryCapacity: 30, storageCapacity: 200 },
+        { workerSlots: 5, movementSpeed: 11, workSpeed: 36, carryCapacity: 42, storageCapacity: 480, efficientRadius: 10, maxRadius: 15 },
+        { workerSlots: 7, movementSpeed: 15, workSpeed: 65, carryCapacity: 65, storageCapacity: 1_100, efficientRadius: 12, maxRadius: 18 },
+      ],
+    },
     // Mountains matter (§12): a quarry hugging the rock face gets a big, visible
-    // stone bonus — the strategic pull toward the Gebirgs-Regionen.
+    // stone bonus — the strategic pull toward the Gebirgs-Regionen. Seit A6 wirkt
+    // der Bonus auf Arbeits- und Laufgeschwindigkeit statt auf eine Passivrate.
     locationBonus: { terrain: 'mountain', radius: 3, perTilePct: 10, maxPct: 70 },
     buildLimit: [{ level: 4, max: 2 }, { level: 7, max: 3 }, { level: 10, max: 4 }],
   },
@@ -546,8 +578,30 @@ export const buildingsConfig: BuildingDef[] = [
         ],
       },
     ],
+    // § Active Operations 2.0 / A7: Die Farm erzeugt Nahrung NICHT mehr passiv.
+    // Landarbeiter bewirtschaften echte Felder (fruchtbare Kacheln) und fahren die
+    // Ernte in die Scheune. Der „Feld-Lebenszyklus" ist bewusst KEIN zweites
+    // System (§2): Aussaat/Wachstum/Ernte fallen mit der vorhandenen
+    // Knoten-Regeneration zusammen (`crop` wächst in 10 Minuten nach).
+    //
+    // Kalibrierung wie beim Steinbruch auf die frühere Passivrate (260/500/1.100
+    // Nahrung pro Minute). Höhere Stufen bewirtschaften zusätzlich **mehr Land**
+    // (Stufen-Radien) — sonst wäre ein Agrarkomplex durch die Feldzahl statt durch
+    // seine Arbeiter begrenzt.
+    operation: {
+      resource: 'food',
+      nodeType: 'crop',
+      efficientRadius: 6,
+      maxRadius: 10,
+      stages: [
+        { workerSlots: 6, movementSpeed: 14, workSpeed: 95, carryCapacity: 65, storageCapacity: 700 },
+        { workerSlots: 8, movementSpeed: 16, workSpeed: 130, carryCapacity: 85, storageCapacity: 1_600, efficientRadius: 9, maxRadius: 13 },
+        { workerSlots: 10, movementSpeed: 20, workSpeed: 230, carryCapacity: 130, storageCapacity: 3_400, efficientRadius: 12, maxRadius: 16 },
+      ],
+    },
     // Fertile soil matters (§12): a farm on rich land gets a strong, visible food
-    // bonus — the strategic pull toward the fruchtbaren Regionen.
+    // bonus — the strategic pull toward the fruchtbaren Regionen. Seit A7 wirkt der
+    // Bonus auf Arbeits- und Laufgeschwindigkeit statt auf eine Passivrate.
     locationBonus: { terrain: 'fertile', radius: 2, perTilePct: 6, maxPct: 50 },
     buildLimit: [{ level: 4, max: 2 }, { level: 6, max: 3 }, { level: 9, max: 5 }, { level: 12, max: 8 }],
   },
@@ -1248,7 +1302,12 @@ export const buildingsConfig: BuildingDef[] = [
       landDepth: 2,
       waterWidth: 2,
       waterDepth: 2,
-      shorelineTolerance: 0,
+      // § Modelltreue 13.0: Die Uferlinie der Quell-GLB ist zackig, nicht
+      // schnurgerade — `shorelineTolerance: 0` verlangte ein perfekt
+      // rechteckiges Wasserfeld bündig am Ufer und ließ inselweit nur 32
+      // Anleger zu, den Flusshafen sogar an NULL Stellen. Ein Drittel der
+      // Wasserzellen darf jetzt Land sein (beim Anleger also eine von vier).
+      shorelineTolerance: 0.34,
       minimumWaterDepth: 0.55,
     },
     unlockLevel: 6,
@@ -1276,7 +1335,10 @@ export const buildingsConfig: BuildingDef[] = [
       landDepth: 3,
       waterWidth: 4,
       waterDepth: 3,
-      shorelineTolerance: 0,
+      /** § Modelltreue 13.0 — siehe `dock_small`: 4 von 12 Wasserzellen dürfen
+       *  Land sein, sonst ist der Flusshafen auf der zackigen Modellküste
+       *  nirgends baubar (gemessen 0 Plätze bei Toleranz 0, 42 bei 0,34). */
+      shorelineTolerance: 0.34,
       minimumWaterDepth: 0.7,
     },
     unlockLevel: 9,

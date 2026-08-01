@@ -1,11 +1,18 @@
 import { describe, expect, it } from 'vitest';
-import { nearTownHall, newController, setLevel, flattenTerrain, T0 } from './helpers.ts';
+import { nearTownHall, newController, paintTerrain, setLevel, flattenTerrain, T0 , townHallOf } from './helpers.ts';
 
 const MIN = 60_000;
 
 // Insel-Layout (v11): Rathaus 5×5, Startstraßen-Zeile bei y+5 (x..x+4);
 // Erweiterungs-Straßen ab at(5,5), Gebäude ab at(·,6).
 const at = (dx: number, dy: number) => nearTownHall(dx, dy);
+
+/** Rechteck aus Weltkoordinaten (für `paintTerrain`). */
+const forestPatch = (x0: number, y0: number, w: number, h: number): [number, number][] => {
+  const coords: [number, number][] = [];
+  for (let dy = 0; dy < h; dy++) for (let dx = 0; dx < w; dx++) coords.push([x0 + dx, y0 + dy]);
+  return coords;
+};
 
 describe('income breakdown (§5)', () => {
   it('earns residential tax from population, scaled by happiness', () => {
@@ -68,16 +75,55 @@ describe('logistics & workplaces', () => {
     flattenTerrain(controller); // isolate the logistics boost from terrain bonus
     controller.state.resources = { money: 500_000, wood: 1_000, stone: 1_000, food: 1_000, freshwater: 0 };
     for (let dx = 5; dx <= 13; dx++) controller.placeBuilding('road', at(dx, 5).x, at(dx, 5).y);
-    // § Active Operations 2.0: Logistik-Boost am passiven Steinbruch geprüft (das
-    // Sägewerk produziert nicht mehr passiv und taucht in productionPerMin nicht auf).
-    expect(controller.placeBuilding('quarry', at(1, 6).x, at(1, 6).y)).toEqual({ ok: true });
-    const quarry = Object.values(controller.state.buildings).find((b) => b.defId === 'quarry')!;
-    controller.update(T0 + 95_000); // quarry active, no depot yet
-    expect(controller.derived.productionBonus[quarry.id] ?? 0).toBe(0);
+    // § Active Operations 2.0 / A6+A7: Sägewerk, Steinbruch und Farm produzieren
+    // nicht mehr passiv. Der Passiv-Boost wird deshalb an der Bäckerei geprüft.
+    setLevel(controller, 9);
+    // 2×2 statt der früheren 5×5-Grundfläche → näher ans Depot rücken, sonst liegt
+    // der Mittelpunkt außerhalb von Radius 6.
+    expect(controller.placeBuilding('bakery', at(3, 6).x, at(3, 6).y)).toEqual({ ok: true });
+    const bakery = Object.values(controller.state.buildings).find((b) => b.defId === 'bakery')!;
+    controller.update(T0 + 245_000); // bakery active, no depot yet
+    expect(controller.derived.productionBonus[bakery.id] ?? 0).toBe(0);
     expect(controller.placeBuilding('depot', at(6, 6).x, at(6, 6).y)).toEqual({ ok: true }); // within radius 6
-    controller.update(T0 + 400_000); // depot finishes
-    expect(controller.derived.productionBonus[quarry.id]).toBe(25); // +25 % throughput
-    expect(controller.derived.productionPerMin.stone).toBeCloseTo(38 * 1.25, 5);
+    controller.update(T0 + 245_000 + 400_000); // depot finishes
+    expect(controller.derived.productionBonus[bakery.id]).toBe(25); // +25 % throughput
+    expect(controller.derived.productionPerMin.food).toBeCloseTo(90 * 1.25, 5);
+  });
+
+  // § A6/A7: Ein Logistikzentrum darf aktive Betriebe nicht ignorieren — sonst
+  // verlöre es mit der Umstellung von Sägewerk/Steinbruch/Farm fast seinen Zweck.
+  // Bei aktiven Betrieben wirkt der Zuschlag auf die Arbeitsschleife (Tempo/Weg),
+  // NICHT auf eine Passivrate: `productionPerMin` bleibt deshalb unberührt.
+  it('a depot also speeds up an active operation (§A6/A7)', () => {
+    const build = (withDepot: boolean) => {
+      const { controller } = newController();
+      setLevel(controller, 7);
+      flattenTerrain(controller);
+      controller.state.resources = { money: 900_000, wood: 1_000, stone: 1_000, food: 1_000, freshwater: 0 };
+      for (let dx = 5; dx <= 13; dx++) controller.placeBuilding('road', at(dx, 5).x, at(dx, 5).y);
+      // Wald außerhalb beider Grundflächen, aber im effizienten Radius (8).
+      paintTerrain(controller, forestPatch(at(6, 11).x, at(6, 11).y, 3, 3), 'forest');
+      expect(controller.placeBuilding('sawmill', at(1, 6).x, at(1, 6).y)).toEqual({ ok: true });
+      const sawmill = Object.values(controller.state.buildings).find((b) => b.defId === 'sawmill')!;
+      controller.update(T0 + 95_000);
+      // Depot an der Straßenzeile (ohne Anschluss zählt sein Effekt nicht) und im
+      // Radius 6 um den Sägewerks-Mittelpunkt.
+      if (withDepot) expect(controller.placeBuilding('depot', at(6, 6).x, at(6, 6).y)).toEqual({ ok: true });
+      controller.update(T0 + 95_000 + 400_000);
+      expect(controller.startBuildingOperation(sawmill.id)).toEqual({ ok: true });
+      return {
+        throughput: controller.getOperationThroughput(sawmill.id)!.perMinute,
+        boost: controller.derived.logisticsBoost[sawmill.id] ?? 0,
+        passiveWood: controller.derived.productionPerMin.wood,
+      };
+    };
+    const without = build(false);
+    const withDepot = build(true);
+    expect(without.boost).toBe(0);
+    expect(withDepot.boost).toBe(25);
+    expect(withDepot.throughput).toBeGreaterThan(without.throughput);
+    // Der Betrieb bleibt aus der Passivrechnung heraus — keine erfundene „+X/min".
+    expect(withDepot.passiveWood).toBe(0);
   });
 
   it('an office supplies a large block of jobs (§ Arbeitsversorgung)', () => {
@@ -200,7 +246,7 @@ describe('building upgrades (v0.17)', () => {
 
   it('lets the town hall be upgraded into a prestige centre (bigger central store)', () => {
     const { controller } = newController();
-    const townHall = controller.state.buildings['b_townhall']!;
+    const townHall = townHallOf(controller);
     const before = controller.derived.storageCaps.wood;
     setLevel(controller, 6); // Stadtverwaltung-Stufe (§ Gebäudesystem 2.0: Gate L6)
     controller.state.resources.money = 500_000;

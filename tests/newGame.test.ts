@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { newController, START_REGION } from './helpers.ts';
+import { nearTownHall, newController, START_REGION, T0, TOWN_HALL, townHallOf } from './helpers.ts';
 import { regionHasTerrain } from '../src/game/map/world.ts';
 import { REGION_COUNT, regionIdAt, startRegionConfig } from '../src/game/config/startRegion.config.ts';
 
@@ -18,14 +18,46 @@ describe('new game (Insel-Welt v11, organische Regionen)', () => {
     expect(lakeRegion).toBeDefined();
   });
 
-  it('pre-places the 5×5 town hall as district center with connected roads', () => {
+  // § Welt-Feinschliff 12.2 (Nutzerwunsch): Das Rathaus wird NICHT mehr
+  // vorplatziert — der Spieler wählt den Gründungsplatz selbst.
+  it('starts unfounded: no town hall, no district, no roads', () => {
+    const { controller } = newController(T0, { found: false });
+    expect(controller.isCityFounded()).toBe(false);
+    expect(Object.keys(controller.state.buildings)).toHaveLength(0);
+    expect(controller.state.world.districts['main']).toBeUndefined();
+    expect(controller.derived.roadNetwork.size).toBe(0);
+  });
+
+  it('founds the city where the player chooses and lays the tutorial axes there', () => {
+    const { controller } = newController(T0, { found: false });
+    // Bewusst NICHT der Bake-Vorschlag: die Wahl ist frei.
+    const spot = nearTownHall(6, -4);
+    expect(controller.foundCity(spot.x, spot.y)).toEqual({ ok: true });
+    const townHall = townHallOf(controller);
+    expect(townHall).toMatchObject({ x: spot.x, y: spot.y });
+    expect(controller.state.buildings[townHall.id]?.status).toBe('active');
+    expect(controller.state.world.districts['main']?.centerBuildingId).toBe(townHall.id);
+    // Die Achsen entstehen relativ zum GEWÄHLTEN Anker, nicht am Bake-Vorschlag.
+    expect(controller.derived.roadNetwork.size).toBeGreaterThan(0);
+    for (const tile of controller.derived.roadNetwork) {
+      const [rx, ry] = tile.split(',').map(Number);
+      expect(Math.abs(rx! - spot.x)).toBeLessThanOrEqual(6);
+      expect(ry!).toBeGreaterThanOrEqual(spot.y);
+    }
+  });
+
+  it('refuses a second founding and rejects unbuildable ground', () => {
     const { controller } = newController();
-    const townHall = controller.state.buildings['b_townhall'];
-    expect(townHall?.status).toBe('active');
-    expect(controller.state.world.districts['main']?.centerBuildingId).toBe('b_townhall');
-    // Zwei verlängerbare Achsen mit zusammen 16 Startstraßen (§ Welt 6.1).
-    expect(startRegionConfig.startRoads.length).toBe(16);
-    expect(controller.derived.roadNetwork.size).toBe(16);
+    expect(controller.isCityFounded()).toBe(true);
+    expect(controller.foundCity(TOWN_HALL.x, TOWN_HALL.y)).toEqual({ ok: false, error: 'unique_exists' });
+    // Ozeanecke: außerhalb jeder erschlossenen Landschaft.
+    const { controller: fresh } = newController(T0, { found: false });
+    expect(fresh.foundCity(0, 0).ok).toBe(false);
+  });
+
+  it('keeps the baked founding suggestion valid — the button must never fail', () => {
+    const { controller } = newController(T0, { flatten: false, found: false });
+    expect(controller.getFoundingBlocker(startRegionConfig.townHall.x, startRegionConfig.townHall.y)).toBeUndefined();
   });
 
   it('starts with configured resources and no population', () => {

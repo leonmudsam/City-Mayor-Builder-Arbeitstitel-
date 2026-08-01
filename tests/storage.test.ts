@@ -46,15 +46,28 @@ describe('save/load (v17 aktive Betriebe)', () => {
   // Die Migrationen v21→v22 (Schiffsrouten) und v22→v23 (Dauerbetrieb) sind rein
   // additiv — ein v21-Save ohne die neuen Felder muss über die ganze Kette ladbar
   // bleiben (Regel §3: Saves brechen nie).
-  it('migriert einen v21-Save linear bis zur aktuellen Version, ohne Daten zu verlieren', () => {
+  it('lehnt einen v21-Save über den Weltaustausch v25→v26 ab (Backup + Neustart)', () => {
+    // § World Overhaul 12.0: Die Migrationskette läuft v21 → … → v25 durch und
+    // bricht dann bewusst ab — die Welt ist eine andere Insel, jede Koordinate und
+    // jede Region-Id bedeutet etwas anderes. Statt still falscher Daten gibt es
+    // ein einmaliges Backup und einen ehrlichen Neustart.
     const { controller } = newController();
     const raw = JSON.parse(exportSave(controller.state)) as Record<string, unknown>;
     delete raw.shipping; // v21 kannte das Feld nicht
     raw.schemaVersion = 21;
+    expect(() => migrateAndValidate(raw)).toThrow(WorldRebuildSaveError);
+  });
+
+  it('migriert additive Felder verlustfrei innerhalb DERSELBEN Welt', () => {
+    // Regressionsschutz für die additiven Migrationen: ein Save der aktuellen Welt
+    // ohne optionale Felder muss vollständig und unverändert ankommen.
+    const { controller } = newController();
+    const raw = JSON.parse(exportSave(controller.state)) as Record<string, unknown>;
+    delete raw.shipping;
     const migrated = migrateAndValidate(raw);
     expect(migrated.schemaVersion).toBe(SCHEMA_VERSION);
     expect(migrated.buildings).toEqual(controller.state.buildings);
-    // Keine erfundenen Daten: ein Altsave startet ohne Schifffahrt.
+    // Keine erfundenen Daten: ohne Schifffahrt bleibt das Feld leer.
     expect(migrated.shipping).toBeUndefined();
   });
 
@@ -89,12 +102,22 @@ describe('save/load (v17 aktive Betriebe)', () => {
     expect(() => migrateAndValidate(oldIsland)).toThrow(WorldRebuildSaveError);
   });
 
-  it('starts new games at the central baked start with all 13 region stubs', () => {
-    const { controller } = newController(undefined, { flatten: false });
+  it('starts new games unfounded on the central baked start with all region stubs', () => {
+    const { controller } = newController(undefined, { flatten: false, found: false });
     expect(controller.state.schemaVersion).toBe(SCHEMA_VERSION);
-    expect(controller.state.buildings['b_townhall']).toMatchObject(startRegionConfig.townHall);
+    // § 12.2: kein vorplatziertes Rathaus mehr — nur der geprüfte Vorschlag.
+    expect(controller.isCityFounded()).toBe(false);
+    expect(controller.getFoundingBlocker(startRegionConfig.townHall.x, startRegionConfig.townHall.y)).toBeUndefined();
     expect(Object.keys(controller.state.world.regions)).toHaveLength(REGION_COUNT);
     expect(controller.state.world.regions[String(startRegionConfig.startRegionId)]?.status).toBe('unlocked');
+  });
+
+  it('rejects v25 coordinates through the explicit 25→26 world-overhaul migration', () => {
+    // § World Overhaul 12.0: neue Insel-GLB ⇒ neue Höhen, Regionen, Startregion.
+    const { controller } = newController(undefined, { flatten: false });
+    const v25 = JSON.parse(exportSave(controller.state));
+    v25.schemaVersion = 25;
+    expect(() => migrateAndValidate(v25)).toThrow(WorldRebuildSaveError);
   });
 
   it('rejects v14 coordinates through the explicit 14→15 migration', () => {

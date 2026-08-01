@@ -15,7 +15,6 @@ import {
   type CameraPreset,
 } from './CameraConfig.ts';
 import { DEFAULT_CAMERA_SETTINGS, type CameraSettings } from './cameraSettings.ts';
-import type { CameraExplorationBoundary } from './CameraExplorationBoundary.ts';
 
 const clamp = (v: number, lo: number, hi: number): number => (v < lo ? lo : v > hi ? hi : v);
 
@@ -52,16 +51,12 @@ export class CameraController3D {
   private velZ = 0;
   private panning = false;
 
-  // § Change 9.0 / S3: hält das Kamera-Ziel über den freigeschalteten Regionen.
-  // undefined = keine Grenze (alles frei oder Dev-Cheat „Kamera-Grenzen aus").
-  private boundary: CameraExplorationBoundary | undefined;
-
   constructor(bounds: CameraBounds = worldCameraBounds(), settings: () => CameraSettings = () => DEFAULT_CAMERA_SETTINGS) {
     this.bounds = bounds;
     this.settings = settings;
     const th = startRegionConfig.townHall;
-    this.targetX = this.gTargetX = th.x + 1.5;
-    this.targetZ = this.gTargetZ = th.y + 1.5;
+    this.targetX = this.gTargetX = th.x + 2.5;
+    this.targetZ = this.gTargetZ = th.y + 2.5;
     this.dist = this.gDist = CAMERA_DEFAULTS.dist;
     this.yaw = this.gYaw = CAMERA_DEFAULTS.yaw;
     this.pitch = this.gPitch = CAMERA_DEFAULTS.pitch;
@@ -156,7 +151,7 @@ export class CameraController3D {
 
   focusCity(): void {
     const th = startRegionConfig.townHall;
-    this.focusGround(th.x + 1.5, th.y + 1.5);
+    this.focusGround(th.x + 2.5, th.y + 2.5);
   }
 
   applyPreset(preset: CameraPreset): void {
@@ -171,17 +166,6 @@ export class CameraController3D {
   /** Reset the compass to the default viewing yaw. */
   resetNorth(): void {
     this.gYaw = CAMERA_DEFAULTS.yaw;
-  }
-
-  /**
-   * § Change 9.0 / S3: setzt (oder entfernt) die Erkundungsgrenze. Der Renderer
-   * baut sie bei jedem Region-Unlock aus der Freischalt-Maske neu und übergibt
-   * `undefined`, wenn alles frei ist oder der Dev-Cheat „Kamera-Grenzen aus" aktiv
-   * ist. Nach dem Setzen wird das aktuelle Ziel sofort einmal zurückgeführt.
-   */
-  setExplorationBoundary(boundary: CameraExplorationBoundary | undefined): void {
-    this.boundary = boundary;
-    this.clampTarget();
   }
 
   /**
@@ -281,20 +265,10 @@ export class CameraController3D {
     return { targetX: this.gTargetX, targetZ: this.gTargetZ, dist: this.gDist, yaw: this.gYaw, pitch: this.gPitch };
   }
 
+  // § D-045: Seit die ganze Insel geladen und gezeigt wird, gibt es keine
+  // Erkundungsgrenze mehr — nur noch das Weltrechteck.
   private clampTarget(): void {
     this.gTargetX = clamp(this.gTargetX, this.bounds.minX, this.bounds.maxX);
     this.gTargetZ = clamp(this.gTargetZ, this.bounds.minZ, this.bounds.maxZ);
-    if (this.boundary) {
-      // Ziel auf die freigeschaltete Union (+ weiches Randband) zurückführen.
-      // Nähe zur Grenze bremst zusätzlich die Pan-Inertia, damit der Übergang
-      // weich bleibt statt hart anzuschlagen (§7.2).
-      const c = this.boundary.constrain(this.gTargetX, this.gTargetZ);
-      this.gTargetX = c.x;
-      this.gTargetZ = c.z;
-      if (c.slow < 1) {
-        this.velX *= c.slow;
-        this.velZ *= c.slow;
-      }
-    }
   }
 }

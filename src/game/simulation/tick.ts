@@ -191,7 +191,7 @@ function advanceLiveEconomy(
   // 2b. Aktive Betriebe (§ Active Operations 2.0): Arbeiter fällen Bäume und
   //     lagern Holz ins lokale Betriebslager. Nur live, mit dem bereits
   //     zeitfaktor-skalierten dtMin — Pause/2×/4× wirken dadurch automatisch.
-  advanceOperations(state, config, dtMin, chunkEnd);
+  advanceOperations(state, config, dtMin, chunkEnd, derived.logisticsBoost);
 
   // 2c. Lagertransporte (§ Active Operations 2.0, A5): manuell erteilte Fahrten
   //     bringen lokal geerntete Ware ins Zentrallager (globaler Pool). Nur live,

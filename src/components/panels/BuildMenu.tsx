@@ -1,18 +1,16 @@
-import { useEffect, useState } from 'react';
-import { Anchor, Clock, Hammer, Lock, Sparkles, X } from 'lucide-react';
-import { useGame, useUiStore } from '../../state/store.ts';
-import type { BuildingCategory, NeedId, ResourceId } from '../../game/types.ts';
+import { Anchor, Check, ChevronDown, Clock, Hammer, Lock, Sparkles, X } from 'lucide-react';
+import { useState } from 'react';
+import type { GameController } from '../../game/commands/controller.ts';
 import type { BuildingDef } from '../../game/config/types.ts';
+import type { BuildingCategory, NeedId, ResourceId } from '../../game/types.ts';
 import { formatGameDuration, formatMoney, t } from '../../i18n/index.ts';
-import { ResourceIcon } from '../common/icons.tsx';
+import { useGame, useUiStore } from '../../state/store.ts';
 import { BuildingArt, CategoryArt } from '../art/index.ts';
+import { ResourceIcon } from '../common/icons.tsx';
+import { useEscapeClose } from '../common/useEscapeClose.ts';
 
 type BuildCategorySelection = 'recommended' | BuildingCategory;
 
-// Full tab order (§19). Previously `infrastructure` and the new `energy`
-// category were missing, so the coal plant / wind farm never appeared anywhere
-// — now every category a building can belong to has a tab. Empty tabs are
-// hidden below, so players only see categories that actually hold something.
 const CATEGORY_ORDER: BuildingCategory[] = [
   'roads',
   'residential',
@@ -27,7 +25,13 @@ const CATEGORY_ORDER: BuildingCategory[] = [
   'special',
 ];
 
-// Which build category best answers a struggling need (§8 problem badge on tabs).
+/**
+ * The four everyday decisions stay one click away. Less frequent categories
+ * remain fully accessible through one compact selector instead of competing
+ * with eleven permanently visible tabs.
+ */
+const PRIMARY_CATEGORIES: BuildingCategory[] = ['roads', 'residential', 'production', 'services'];
+
 const NEED_CATEGORY: Partial<Record<NeedId, BuildingCategory>> = {
   housing: 'residential',
   water: 'services',
@@ -39,360 +43,363 @@ const NEED_CATEGORY: Partial<Record<NeedId, BuildingCategory>> = {
   energy: 'energy',
 };
 
+interface BuildAvailability {
+  cost: Partial<Record<ResourceId, number>>;
+  locked: boolean;
+  affordable: boolean;
+  uniqueBuilt: boolean;
+  limitReached: boolean;
+  limit?: { count: number; max: number; nextLevel?: number | undefined };
+  firstFree: boolean;
+  isNew: boolean;
+  canBuild: boolean;
+}
+
+/**
+ * Active-Simplicity catalog: choose a building first, then use one unambiguous
+ * placement CTA. Merely inspecting a card never starts placement.
+ */
 export function BuildMenu() {
   const game = useGame();
   const { startPlacing, setPanel } = useUiStore();
+  useEscapeClose(() => setPanel(undefined));
   const [category, setCategory] = useState<BuildCategorySelection>('recommended');
   const [inspectedId, setInspectedId] = useState<string>();
   const level = game.state.level.current;
 
-  // Only show tabs that actually hold at least one buildable building, so the
-  // added infrastructure/special tabs don't appear empty (§19).
-  const nonEmpty = new Set(game.config.buildingList.filter((b) => b.buildable !== false).map((b) => b.category));
-  const tabs = CATEGORY_ORDER.filter((cat) => nonEmpty.has(cat));
+  const candidates = game.config.buildingList.filter((building) => building.buildable !== false);
+  const nonEmpty = new Set(candidates.map((building) => building.category));
+  const tabs = CATEGORY_ORDER.filter((candidate) => nonEmpty.has(candidate));
+  const primaryTabs = PRIMARY_CATEGORIES.filter((candidate) => nonEmpty.has(candidate));
+  const secondaryTabs = tabs.filter((candidate) => !primaryTabs.includes(candidate));
 
-  // Categories that hold a freshly-unlocked building ("Neu" dot) or that would
-  // fix a struggling need ("!" dot) — computed once, shown on the tabs.
   const newCategories = new Set<BuildingCategory>();
-  for (const b of game.config.buildingList) if (game.isNewBuilding(b.id)) newCategories.add(b.category);
+  for (const building of candidates) {
+    if (game.isNewBuilding(building.id)) newCategories.add(building.category);
+  }
   const problemCategories = new Set<BuildingCategory>();
   for (const need of game.config.needs) {
     if (need.unlockLevel > level || game.state.citizens.population <= 0) continue;
     if (game.state.citizens.needs[need.id].fulfillment < 0.6) {
-      const cat = NEED_CATEGORY[need.id];
-      if (cat) problemCategories.add(cat);
+      const matchingCategory = NEED_CATEGORY[need.id];
+      if (matchingCategory) problemCategories.add(matchingCategory);
     }
   }
 
-  const candidates = game.config.buildingList.filter((building) => building.buildable !== false);
-  const recommended = candidates
+  const recommended = [...candidates]
     .sort(
       (a, b) =>
         Number(a.unlockLevel > level) - Number(b.unlockLevel > level) ||
-        recommendationScore(b) - recommendationScore(a) ||
+        recommendationScore(game, b, newCategories, problemCategories) -
+          recommendationScore(game, a, newCategories, problemCategories) ||
         a.unlockLevel - b.unlockLevel,
     )
     .slice(0, 8);
   const buildings =
     category === 'recommended'
       ? recommended
-      : candidates.filter((building) => building.category === category).sort((a, b) => a.unlockLevel - b.unlockLevel);
-  const inspected = game.config.buildings.get(
-    buildings.some((building) => building.id === inspectedId) ? inspectedId! : buildings[0]?.id ?? '',
-  );
-  const [previewStage, setPreviewStage] = useState(0);
-  useEffect(() => setPreviewStage(0), [inspected?.id]);
+      : candidates
+          .filter((building) => building.category === category)
+          .sort((a, b) => a.unlockLevel - b.unlockLevel);
+  const inspected =
+    buildings.find((building) => building.id === inspectedId) ??
+    buildings.find((building) => building.unlockLevel <= level) ??
+    buildings[0];
 
-  function recommendationScore(def: BuildingDef): number {
-    const built = Object.values(game.state.buildings).some((building) => building.defId === def.id);
-    return (
-      (newCategories.has(def.category) && game.isNewBuilding(def.id) ? 100 : 0) +
-      (problemCategories.has(def.category) ? 70 : 0) +
-      (!built ? 25 : 0) +
-      Math.max(0, 20 - def.unlockLevel)
-    );
-  }
+  const selectCategory = (next: BuildCategorySelection) => {
+    setCategory(next);
+    setInspectedId(undefined);
+  };
 
   return (
-    <div className="panel build-menu">
-      <div className="build-menu-head">
-        <div className="build-menu-title">
-          <span>{t('ui.build.catalog')}</span>
-          <small>{buildings.length} Gebäude</small>
+    <section className="panel build-menu as3-build-menu" aria-label={t('ui.build.catalog')}>
+      <header className="as3-build-header">
+        <div className="as3-build-heading">
+          <span className="as3-eyebrow">Bauen</span>
+          <h2>{t('ui.build.catalog')}</h2>
+          <small>{category === 'recommended' ? 'Passend für deine Stadt' : `${buildings.length} Gebäude`}</small>
         </div>
-        <div className="build-tabs">
+
+        <nav className="as3-build-categories" aria-label="Baukategorien">
           <button
-            className={`btn-tab${category === 'recommended' ? ' active' : ''}`}
-            onClick={() => setCategory('recommended')}
+            type="button"
+            className={category === 'recommended' ? 'active' : ''}
+            aria-pressed={category === 'recommended'}
+            onClick={() => selectCategory('recommended')}
           >
-            <Sparkles size={19} />
-            <span>{t('ui.build.recommended')}</span>
+            <Sparkles size={15} />
+            {t('ui.build.recommended')}
           </button>
-          {tabs.map((cat) => (
+          {primaryTabs.map((candidate) => (
             <button
-              key={cat}
-              className={`btn-tab${category === cat ? ' active' : ''}`}
-              onClick={() => setCategory(cat)}
+              type="button"
+              key={candidate}
+              className={category === candidate ? 'active' : ''}
+              aria-pressed={category === candidate}
+              onClick={() => selectCategory(candidate)}
             >
-              <CategoryArt id={cat} px={26} />
-              <span>{t(`category.${cat}`)}</span>
-              {newCategories.has(cat) && <span className="tab-dot new" title={t('ui.new_building')} />}
-              {problemCategories.has(cat) && !newCategories.has(cat) && (
-                <span className="tab-dot problem" title={t('ui.build_recommended')} />
+              <CategoryArt id={candidate} px={20} />
+              {t(`category.${candidate}`)}
+              {newCategories.has(candidate) && <i className="as3-category-signal new" title={t('ui.new_building')} />}
+              {problemCategories.has(candidate) && !newCategories.has(candidate) && (
+                <i className="as3-category-signal problem" title={t('ui.build_recommended')} />
               )}
             </button>
           ))}
-        </div>
-        <button className="btn-icon" onClick={() => setPanel(undefined)} title={t('ui.close')}>
+          {secondaryTabs.length > 0 && (
+            <label className={`as3-build-more${category !== 'recommended' && secondaryTabs.includes(category) ? ' active' : ''}`}>
+              <span className="sr-only">Weitere Baukategorie</span>
+              <select
+                value={category !== 'recommended' && secondaryTabs.includes(category) ? category : ''}
+                onChange={(event) => {
+                  if (event.target.value) selectCategory(event.target.value as BuildingCategory);
+                }}
+              >
+                <option value="">Mehr</option>
+                {secondaryTabs.map((candidate) => (
+                  <option key={candidate} value={candidate}>
+                    {t(`category.${candidate}`)}
+                    {newCategories.has(candidate) ? ' · Neu' : ''}
+                  </option>
+                ))}
+              </select>
+              <ChevronDown size={14} />
+            </label>
+          )}
+        </nav>
+
+        <button className="as3-icon-button" type="button" onClick={() => setPanel(undefined)} title={t('ui.close')}>
           <X size={18} />
         </button>
+      </header>
+
+      <div className="as3-build-grid" aria-label={`${buildings.length} Gebäude`}>
+        {buildings.map((def) => (
+          <BuildCard
+            key={def.id}
+            def={def}
+            selected={inspected?.id === def.id}
+            onInspect={() => setInspectedId(def.id)}
+          />
+        ))}
       </div>
-      <div className="build-menu-body">
-        <div className="build-cards">
-          {buildings.map((def) => (
-            <BuildCard
-              key={def.id}
-              def={def}
-              locked={def.unlockLevel > level}
-              onInspect={() => setInspectedId(def.id)}
-              onPick={() => startPlacing(def.id)}
-            />
-          ))}
-          {category !== 'recommended' &&
-            Array.from({ length: Math.max(0, 4 - buildings.length) }).map((_, i) => (
-              <div key={`filler-${i}`} className="build-card build-card-filler" aria-hidden="true">
-                <div className="build-card-filler-art">
-                  <CategoryArt id={category} px={44} />
-                </div>
-                <span className="build-card-filler-text">{t('ui.build.more_coming')}</span>
-              </div>
-            ))}
-        </div>
-        {inspected && (
-          <aside className="build-menu-preview">
-            <span>{t('ui.build.preview')}</span>
-            <div className="build-preview-art">
-              <BuildingArt id={inspected.id} category={inspected.category} px={224} stage={previewStage} />
-            </div>
-            <h3>{t(inspected.nameKey)}</h3>
-            <div className="build-preview-meta">
-              <span>{t(`category.${inspected.category}`)}</span>
-              <b>{inspected.waterfront
-                ? `${inspected.waterfront.landWidth}×${inspected.waterfront.landDepth}`
-                : `${inspected.size.w}×${inspected.size.h}`}</b>
-            </div>
-            <p>{effectSummary(inspected) || t('ui.build.site_hint')}</p>
-            {inspected.waterfront && (
-              <div className="build-preview-bonus">
-                <Anchor size={14} />
-                {t('ui.build.waterfront_requirement', {
-                  land: `${inspected.waterfront.landWidth}×${inspected.waterfront.landDepth}`,
-                  water: `${inspected.waterfront.waterWidth}×${inspected.waterfront.waterDepth}`,
-                  depth: inspected.waterfront.minimumWaterDepth,
-                })}
-              </div>
-            )}
-            {(inspected.upgrades?.length ?? 0) > 0 && (
-              <div className="build-preview-stages" aria-label="Gebäudestufen">
-                {Array.from({ length: (inspected.upgrades?.length ?? 0) + 1 }, (_, stage) => (
-                  <button
-                    key={stage}
-                    className={previewStage === stage ? 'active' : ''}
-                    onClick={() => setPreviewStage(stage)}
-                    title={`Stufe ${stage + 1}`}
-                  >
-                    <BuildingArt id={inspected.id} category={inspected.category} px={48} stage={stage} />
-                    <span>{stage + 1}</span>
-                  </button>
-                ))}
-              </div>
-            )}
-            {inspected.locationBonus && (
-              <div className="build-preview-bonus">
-                <Sparkles size={14} />
-                {t('ui.location_bonus_hint', { terrain: t(`terrain.${inspected.locationBonus.terrain}`) })}
-              </div>
-            )}
-          </aside>
-        )}
-      </div>
-    </div>
+
+      {inspected && (
+        <BuildSelection
+          def={inspected}
+          onBuild={() => startPlacing(inspected.id)}
+        />
+      )}
+    </section>
   );
 }
 
 function BuildCard({
   def,
-  locked,
+  selected,
   onInspect,
-  onPick,
 }: {
   def: BuildingDef;
-  locked: boolean;
+  selected: boolean;
   onInspect(): void;
-  onPick(): void;
 }) {
   const game = useGame();
-  // The price actually charged for the next copy (escalating costs, §7).
-  const cost = game.getBuildCost(def.id);
-  const affordable = game.canAffordCost(cost);
-  const uniqueBuilt = def.unique && Object.values(game.state.buildings).some((b) => b.defId === def.id);
-  const limit = game.getBuildLimit(def.id);
-  const limitReached = limit ? limit.count >= limit.max : false;
-  const disabled = locked || !affordable || Boolean(uniqueBuilt) || limitReached;
-  // Big public buildings / infrastructure read as investments, not impulse buys.
-  const major = game.isMajorProject(def.id);
-  // When a major project is merely unaffordable, explain how to get there
-  // instead of a bare "too little money" (§11): show current vs. recommended
-  // steady net income.
-  const scaled = def.costScaling !== undefined && limit !== undefined && limit.count > 0;
-  // First-build discount active (§3): the first ever copy is free/cheap.
-  const firstFree = game.isFirstBuildDiscount(def.id);
-  // Freshly unlocked this level and not built yet (§7): a "Neu" badge.
-  const isNew = !locked && game.isNewBuilding(def.id);
-
-  // The single most important secondary effect, as a short capacity/output line.
-  const highlight = effectSummary(def);
+  const availability = buildAvailability(game, def);
+  const footprint = def.waterfront
+    ? `${def.waterfront.landWidth}×${def.waterfront.landDepth}`
+    : `${def.size.w}×${def.size.h}`;
+  const summary = effectSummary(def);
 
   return (
     <button
-      className={`build-card${disabled ? ' disabled' : ''}${locked ? ' locked' : ''}${major ? ' major' : ''}`}
-      onClick={onPick}
-      onMouseEnter={onInspect}
-      onFocus={onInspect}
-      disabled={disabled}
+      type="button"
+      className={`as3-build-card${selected ? ' selected' : ''}${availability.locked ? ' locked' : ''}`}
+      aria-pressed={selected}
+      onClick={onInspect}
     >
-      {/* Zone 1 — media: big thumbnail, footprint + new badge in the corners,
-          never overlapped by text (text lives in the separate body below). */}
-      <div className="build-card-media">
-        <BuildingArt id={def.id} category={def.category} px={128} />
-        <span className="build-card-size">{def.waterfront
-          ? `${def.waterfront.landWidth}×${def.waterfront.landDepth}`
-          : `${def.size.w}×${def.size.h}`}</span>
-        {isNew && <span className="build-card-new">{t('ui.new')}</span>}
-        {major && <span className="build-card-badge major">{t('ui.major_project')}</span>}
-        {firstFree && !locked && <span className="build-card-badge free">{t('ui.first_build_free')}</span>}
-      </div>
+      <span className="as3-build-card-art">
+        <BuildingArt id={def.id} category={def.category} px={126} />
+        <span className="as3-build-footprint">{footprint}</span>
+        {availability.isNew && <span className="as3-build-badge">Neu</span>}
+        {availability.locked && (
+          <span className="as3-build-lock">
+            <Lock size={13} />
+            Level {def.unlockLevel}
+          </span>
+        )}
+        {selected && (
+          <span className="as3-build-selected">
+            <Check size={13} />
+          </span>
+        )}
+      </span>
 
-      <div className="build-card-body">
-        {/* Zone 2 — title */}
-        <div className="build-card-name">{t(def.nameKey)}</div>
-
-        {/* Zone 3 — key values */}
-        <div className="build-card-info">
-          {Object.entries(cost).map(([res, amount]) => (
+      <span className="as3-build-card-copy">
+        <strong>{t(def.nameKey)}</strong>
+        <span className="as3-build-card-cost">
+          {Object.entries(availability.cost).map(([resource, amount]) => (
             <span
-              key={res}
-              className={`chip${game.state.resources[res as ResourceId] < (amount ?? 0) ? ' cost-missing' : ''}`}
+              key={resource}
+              className={game.state.resources[resource as ResourceId] < (amount ?? 0) ? 'missing' : ''}
             >
-              <ResourceIcon id={res as ResourceId} size={13} />
-              {res === 'money' ? formatMoney(amount ?? 0) : amount}
+              <ResourceIcon id={resource as ResourceId} size={13} />
+              {resource === 'money' ? formatMoney(amount ?? 0) : amount}
             </span>
           ))}
           {def.constructionSec > 0 && (
-            <span className="chip">
-              <Clock size={13} />
+            <span>
+              <Clock size={12} />
               {formatGameDuration(def.constructionSec * 1000)}
             </span>
           )}
-        </div>
-        {highlight && <div className="build-card-effect">{highlight}</div>}
-        {def.waterfront && (
-          <div className="build-card-bonus">
-            <Anchor size={12} />
-            {t('ui.build.water_footprint', {
-              width: def.waterfront.waterWidth,
-              depth: def.waterfront.waterDepth,
-              minimum: def.waterfront.minimumWaterDepth,
-            })}
-          </div>
-        )}
-        {def.locationBonus && (
-          <div className="build-card-bonus">
-            <Sparkles size={12} />
-            {t('ui.location_bonus_hint', { terrain: t(`terrain.${def.locationBonus.terrain}`) })}
-          </div>
-        )}
-
-        {/* Zone 4 — status */}
-        <div className="build-card-status">
-          {locked ? (
-            <span className="build-card-lock">
-              <Lock size={12} />
-              {t('ui.locked_at', { level: def.unlockLevel })}
-            </span>
-          ) : uniqueBuilt ? (
-            <span className="build-card-lock">{t('error.unique_exists')}</span>
-          ) : limit ? (
-            <span className={`build-card-limit${limitReached ? ' reached' : ''}`}>
-              {t('ui.limit.count', { count: limit.count, max: limit.max })}
-              {limitReached && limit.nextLevel !== undefined && ` · ${t('ui.limit.more_at', { level: limit.nextLevel })}`}
-            </span>
-          ) : (
-            <span className="build-card-ready">{t('ui.status.unlocked')}</span>
-          )}
-          {scaled && <span className="build-card-scaled">{t('ui.cost_scaled')}</span>}
-        </div>
-        {!locked && !affordable && !limitReached && !uniqueBuilt && major && (
-          <div className="build-card-invest">
-            {t('ui.major_project_hint', {
-              current: formatMoney(game.getStableIncome().net),
-              recommended: formatMoney(game.recommendedIncomeFor(def.id)),
-            })}
-          </div>
-        )}
-
-        {/* Zone 5 — action */}
-        <div className={`build-card-action${disabled ? ' is-disabled' : ''}`}>
-          {locked ? (
-            <>
-              <Lock size={13} /> {t('ui.locked_at', { level: def.unlockLevel })}
-            </>
-          ) : (
-            <>
-              <Hammer size={13} /> {t('ui.build')}
-            </>
-          )}
-        </div>
-      </div>
+        </span>
+        {summary && <small>{summary}</small>}
+      </span>
     </button>
   );
 }
 
+function BuildSelection({ def, onBuild }: { def: BuildingDef; onBuild(): void }) {
+  const game = useGame();
+  const availability = buildAvailability(game, def);
+  const reason = unavailableReason(def, availability);
+  const footprint = def.waterfront
+    ? `${def.waterfront.landWidth}×${def.waterfront.landDepth} Land`
+    : `${def.size.w}×${def.size.h}`;
+  const decisionFacts = [
+    footprint,
+    def.constructionSec > 0 ? formatGameDuration(def.constructionSec * 1000) : undefined,
+    def.locationBonus ? `bis +${def.locationBonus.maxPct}% Standort` : undefined,
+    availability.limit ? `Limit ${availability.limit.count}/${availability.limit.max}` : undefined,
+  ].filter((value): value is string => Boolean(value));
+
+  return (
+    <footer className="as3-build-selection" aria-live="polite">
+      <span className="as3-build-selection-art">
+        <BuildingArt id={def.id} category={def.category} px={72} />
+      </span>
+      <span className="as3-build-selection-copy">
+        <small>Ausgewählt</small>
+        <strong>{t(def.nameKey)}</strong>
+        <span>{reason ?? effectSummary(def) ?? t('ui.build.site_hint')}</span>
+        <span className="as3-build-selection-meta">
+          {decisionFacts.map((fact) => (
+            <span key={fact}>{fact}</span>
+          ))}
+        </span>
+      </span>
+      {def.waterfront && (
+        <span className="as3-build-selection-note">
+          <Anchor size={15} />
+          Küstenplatzierung
+        </span>
+      )}
+      <span className="as3-build-selection-cost">
+        {Object.entries(availability.cost).map(([resource, amount]) => (
+          <span key={resource}>
+            <ResourceIcon id={resource as ResourceId} size={15} />
+            {resource === 'money' ? formatMoney(amount ?? 0) : amount}
+          </span>
+        ))}
+      </span>
+      <button
+        type="button"
+        className="as3-primary-button"
+        disabled={!availability.canBuild}
+        onClick={onBuild}
+      >
+        {availability.locked ? <Lock size={16} /> : <Hammer size={16} />}
+        {availability.locked ? `Ab Level ${def.unlockLevel}` : 'Platzieren'}
+      </button>
+    </footer>
+  );
+}
+
+function buildAvailability(game: GameController, def: BuildingDef): BuildAvailability {
+  const cost = game.getBuildCost(def.id);
+  const locked = def.unlockLevel > game.state.level.current;
+  const affordable = game.canAffordCost(cost);
+  const uniqueBuilt = Boolean(
+    def.unique && Object.values(game.state.buildings).some((building) => building.defId === def.id),
+  );
+  const limit = game.getBuildLimit(def.id);
+  const limitReached = Boolean(limit && limit.count >= limit.max);
+  const firstFree = game.isFirstBuildDiscount(def.id);
+  const isNew = !locked && game.isNewBuilding(def.id);
+  return {
+    cost,
+    locked,
+    affordable,
+    uniqueBuilt,
+    limitReached,
+    ...(limit ? { limit } : {}),
+    firstFree,
+    isNew,
+    canBuild: !locked && affordable && !uniqueBuilt && !limitReached,
+  };
+}
+
+function unavailableReason(def: BuildingDef, availability: BuildAvailability): string | undefined {
+  if (availability.locked) return `Wird mit Stadtlevel ${def.unlockLevel} freigeschaltet.`;
+  if (availability.uniqueBuilt) return 'Dieses einzigartige Gebäude steht bereits.';
+  if (availability.limitReached) {
+    return availability.limit?.nextLevel
+      ? `Baulimit erreicht · mehr ab Level ${availability.limit.nextLevel}.`
+      : 'Baulimit erreicht.';
+  }
+  if (!availability.affordable) return 'Für den Bau fehlen noch Ressourcen.';
+  if (availability.firstFree) return 'Der erste Bau erhält den Startbonus.';
+  return undefined;
+}
+
+function recommendationScore(
+  game: GameController,
+  def: BuildingDef,
+  newCategories: Set<BuildingCategory>,
+  problemCategories: Set<BuildingCategory>,
+): number {
+  const built = Object.values(game.state.buildings).some((building) => building.defId === def.id);
+  return (
+    (newCategories.has(def.category) && game.isNewBuilding(def.id) ? 100 : 0) +
+    (problemCategories.has(def.category) ? 70 : 0) +
+    (!built ? 25 : 0) +
+    Math.max(0, 20 - def.unlockLevel)
+  );
+}
+
+/** One card gets one promise. Full effect lists belong to building details. */
 function effectSummary(def: BuildingDef): string {
-  const parts: string[] = [];
-  // § R2/§5: Aktive Betriebe produzieren NICHT passiv (der `produce`-Pfad ist seit
-  // Active Operations 2.0 abgeschaltet). Im Shop eine Rate zu versprechen, die es
-  // nicht gibt, wäre die irreführendste Stelle überhaupt — dort wird gekauft.
-  const isActiveOperation = def.operation !== undefined;
-  for (const eff of def.effects) {
-    switch (eff.type) {
+  if (def.operation) return 'Dauerbetrieb mit einstellbarem Arbeitsgebiet';
+  for (const effect of def.effects) {
+    switch (effect.type) {
       case 'produce':
-        if (isActiveOperation) {
-          parts.push(t('ui.build.active_operation'));
-          break;
-        }
-        parts.push(`+${eff.perMinute} ${t(`resource.${eff.resource}`)}/min`);
-        break;
+        return `+${effect.perMinute} ${t(`resource.${effect.resource}`)}/min`;
       case 'housing':
-        parts.push(`${eff.units} ${t('ui.housing.units')} · ${eff.units * eff.maxResidentsPerUnit} ${t('need.housing')}`);
-        break;
+        return `${effect.units * effect.maxResidentsPerUnit} Bewohner`;
       case 'revenue':
-        parts.push(`+${formatMoney(eff.perMinute)} ${t('resource.money')}/min`);
-        break;
+        return `+${formatMoney(effect.perMinute)} Einnahmen/min`;
       case 'capacity':
-        parts.push(
-          eff.radius !== undefined
-            ? `+${eff.amount} ${t(`need.${eff.need}`)} (${t('ui.radius')} ${eff.radius})`
-            : `+${eff.amount} ${t(`need.${eff.need}`)}`,
-        );
-        break;
+        return `+${effect.amount} ${t(`need.${effect.need}`)}`;
       case 'coverage':
-        parts.push(`${t(`need.${eff.need}`)} (${t('ui.radius')} ${eff.radius})`);
-        break;
+        return `${t(`need.${effect.need}`)} · ${effect.radius} Felder`;
       case 'storage':
-        parts.push(`+${eff.amount} ${t('ui.storage')}`);
-        break;
+        return `+${effect.amount} Lager`;
       case 'jobs':
-        parts.push(`+${eff.amount} ${t('ui.jobs')}`);
-        break;
+        return `+${effect.amount} Arbeitsplätze`;
       case 'distribution':
-        parts.push(t('ui.effect.distribution', { need: t(`need.${eff.need}`), radius: eff.radius }));
-        break;
+        return `${t(`need.${effect.need}`)} verteilen · ${effect.radius} Felder`;
       case 'protection':
-        parts.push(t('ui.effect.protection', { radius: eff.radius }));
-        break;
+        return `Schutzradius · ${effect.radius} Felder`;
       case 'ambience':
-        if (eff.amount > 0) parts.push(`${t('ui.ambience')} +${eff.amount}`);
+        if (effect.amount > 0) return `Umgebung +${effect.amount}`;
         break;
       case 'logistics':
-        parts.push(t('ui.effect.logistics', { boost: eff.boostPct, radius: eff.radius }));
-        break;
+        return `Logistik +${effect.boostPct}%`;
       case 'upkeep':
-        parts.push(t('ui.effect.upkeep', { amount: formatMoney(eff.perMinute) }));
-        break;
+        return `${formatMoney(effect.perMinute)} Unterhalt/min`;
       case 'demand':
         break;
     }
   }
-  return [...new Set(parts)].join(' · ');
+  return '';
 }

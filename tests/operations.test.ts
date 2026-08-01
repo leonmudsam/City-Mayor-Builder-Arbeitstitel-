@@ -61,8 +61,13 @@ describe('§ Active Operations 2.0 — Arbeiter, lokales Lager, Voll-Stopp', () 
     controller.update(T0 + 31_000 + 6 * MIN, true); // aktiv arbeiten
     const inv = controller.getBuildingInventory(sawmillId)!;
     expect(inv.items.wood ?? 0).toBeGreaterThan(0); // lokal eingelagert
-    // §26.9: das globale Stadtlager wächst durch das Sägewerk NICHT.
-    expect(controller.state.resources.wood).toBe(globalWoodBefore);
+    // §26.9 besagt: Das Sägewerk speist den Stadtpool NICHT über eine Passivrate.
+    // Seit AS-2 („Die Stadt liefert selbst", v1.10) darf der Pool aber über die
+    // AUTOMATISCHE Anlieferung wachsen — und tut das bei kalibriertem Durchsatz
+    // (§12.1) innerhalb dieser sechs Minuten auch. Geprüft wird deshalb die
+    // eigentliche Aussage: es gibt keinen passiven Zahlenticker.
+    expect(controller.derived.productionPerMin.wood).toBe(0);
+    expect(controller.state.resources.wood).toBeGreaterThanOrEqual(globalWoodBefore);
     // Es wurde real produziert (Lifetime-Zähler).
     expect(controller.state.stats.produced.wood).toBeGreaterThan(producedBefore);
   });
@@ -103,7 +108,7 @@ describe('§ Active Operations 2.0 — Reservierung, Regeneration, Abbruch', () 
     controller.startBuildingOperationWithNodes(sawmillId, [first.id]);
     controller.update(T0 + 31_000 + 30_000, true); // Arbeiter greift den Knoten
     // Der Knoten ist jetzt reserviert oder bereits erschöpft.
-    const during = resolveNode(controller.state, 'forest', first.id, controller.state.meta.lastSimTime);
+    const during = resolveNode(controller.state, 'tree', first.id, controller.state.meta.lastSimTime);
     expect(during?.reservedBy ?? during?.state).toBeDefined();
     controller.cancelBuildingOperation(sawmillId);
     // Nach dem Abbruch trägt kein Delta mehr eine Reservierung dieses Betriebs.
@@ -118,18 +123,21 @@ describe('§ Active Operations 2.0 — Reservierung, Regeneration, Abbruch', () 
     // In Minutenschritten laufen, bis der einzelne Baum gefällt ist (Delta trägt
     // dann eine Regenerationszeit); danach übernimmt kein Arbeiter den Knoten mehr.
     let regenAt: number | undefined;
-    for (let m = 1; m <= 30 && regenAt === undefined; m++) {
+    // Die Knotengröße ist Balancing, nicht Gegenstand dieses Semantiktests.
+    // Genug Reserve lassen, damit auch ein größerer Baum mit einem einzelnen
+    // reservierenden Arbeiter sicher bis zum Regenerationszustand gelangt.
+    for (let m = 1; m <= 60 && regenAt === undefined; m++) {
       controller.update(T0 + 31_000 + m * MIN, true);
       regenAt = controller.state.operations?.nodeDeltas[target.id]?.regenerationAt;
     }
     expect(regenAt).toBeDefined();
     // Direkt nach dem Fällen: nachwachsend (noch nicht verfügbar).
-    const felled = resolveNode(controller.state, 'forest', target.id, controller.state.meta.lastSimTime);
+    const felled = resolveNode(controller.state, 'tree', target.id, controller.state.meta.lastSimTime);
     expect(felled?.state).toBe('regrowing');
     expect(regenAt! - controller.state.meta.lastSimTime).toBeLessThanOrEqual(TREE_REGEN_MS);
     // Nach Ablauf der Regenerationszeit wieder voll verfügbar.
     controller.update(regenAt! + MIN, true);
-    const regrown = resolveNode(controller.state, 'forest', target.id, controller.state.meta.lastSimTime);
+    const regrown = resolveNode(controller.state, 'tree', target.id, controller.state.meta.lastSimTime);
     expect(regrown?.state).toBe('available');
     expect(regrown?.remainingAmount).toBe(regrown?.maxAmount);
   });

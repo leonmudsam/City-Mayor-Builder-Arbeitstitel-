@@ -14,9 +14,9 @@ describe('baked island world', () => {
     expect(WORLD_TILES).toBe(512);
     expect(terrainGrid.length).toBe(WORLD_TILES * WORLD_TILES);
     expect(regionGrid.length).toBe(WORLD_TILES * WORLD_TILES);
-    // § 10.0 R7/R8 (dritte Verdichtung + weiches Uferprofil): EINE zentrale
-    // Startregion und ZWÖLF bedeutende Freischaltungen.
-    expect(REGION_COUNT).toBe(13);
+    // § Modelltreue 13.1: EINE zentrale Startregion und ACHT über Land
+    // erreichbare Landschaften.
+    expect(REGION_COUNT).toBe(9);
     expect(BAKED_REGIONS.length).toBe(REGION_COUNT);
   });
 
@@ -89,7 +89,16 @@ describe('baked island world', () => {
         expect(regionIdAt(th.x + dx, th.y + dy)).toBe(BAKED_START.regionId);
       }
     }
-    for (const r of startRegionConfig.startRoads) expect(terrainAt(r.x, r.y)).toBe('grass');
+    // § 12.1: Die beiden Startachsen liegen auf festen Offsets (siehe Bake). Was
+    // der Bake GARANTIERT und hier geprüft wird, ist Bebaubarkeit in der
+    // Startregion — nicht die Grasfarbe. Ein Versuch, die Achsen auf Gras zu
+    // zwingen, verschob die Startbelegung und brach ein Dutzend Bauplatz-Tests;
+    // dass eine Achse zwei Waldkacheln quert, ist folgenlos (Wald ist bebaubar).
+    for (const r of startRegionConfig.startRoads) {
+      expect(['grass', 'forest', 'fertile', 'sand'], `Startstraße auf ${terrainAt(r.x, r.y)}`)
+        .toContain(terrainAt(r.x, r.y));
+      expect(regionIdAt(r.x, r.y)).toBe(BAKED_START.regionId);
+    }
     expect(startRegionConfig.startRoads).toHaveLength(16);
     expect(new Set(startRegionConfig.startRoads.map((r) => r.x)).size).toBeGreaterThan(1);
     expect(new Set(startRegionConfig.startRoads.map((r) => r.y)).size).toBeGreaterThan(1);
@@ -101,12 +110,10 @@ describe('baked island world', () => {
     const start = config.regions.get(BAKED_START.regionId)!;
     expect(start.biome).toBe('zentrum');
     expect(start.unlockCost).toBe(0);
-    // § 10.0 R7/R8 §4: keine bedeutungslosen Mini-Regionen und keine dauerhaften
-    // Teaser mehr — jede der 13 Regionen ist erreichbar (1 Start + 12
-    // Freischaltungen). Die Archipel-Erreichbarkeit über See wird durch
-    // `requiresHarbor` + `seaAdjacent` sichergestellt.
+    // § Modelltreue 13.1: 1 Start + 8 Freischaltungen, alle über Land
+    // erreichbar. Keine dauerhaften Teaser.
     expect(config.regionList.every((region) => region.unlockable)).toBe(true);
     expect(config.regionList.filter((region) => region.unlockLevel <= 1)).toHaveLength(1);
-    expect(config.regionList.filter((region) => region.unlockable && region.unlockLevel > 1)).toHaveLength(12);
+    expect(config.regionList.filter((region) => region.unlockable && region.unlockLevel > 1)).toHaveLength(8);
   });
 });

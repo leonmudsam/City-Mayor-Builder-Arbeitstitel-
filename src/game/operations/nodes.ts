@@ -1,21 +1,76 @@
-// Ressourcenknoten (§ Active Operations 2.0, Phase A3). Wie das Terrain sind
-// verfügbare Naturressourcen NICHT persistiert, sondern deterministisch aus der
-// Welt + einem Positions-Hash abgeleitet; persistiert werden in
-// `state.operations.nodeDeltas` nur Abweichungen (angearbeitet/reserviert/
-// erschöpft/nachwachsend). Das gibt jedem Baum eine stabile Id (`"x,y"`), hält
-// den Save winzig und garantiert, dass Regeneration nur auf gültigem Terrain
-// passiert (§26.14/15). Rein — kein Renderer/React (CLAUDE.md §1).
+// Ressourcenknoten (§ Active Operations 2.0, Phase A3; generalisiert in A6/A7). Wie
+// das Terrain sind verfügbare Naturressourcen NICHT persistiert, sondern
+// deterministisch aus der Welt + einem Positions-Hash abgeleitet; persistiert werden
+// in `state.operations.nodeDeltas` nur Abweichungen (angearbeitet/reserviert/
+// erschöpft/nachwachsend). Das gibt jedem Knoten eine stabile Id (`"x,y"`), hält den
+// Save winzig und garantiert, dass Regeneration nur auf gültigem Terrain passiert
+// (§26.14/15). Rein — kein Renderer/React (CLAUDE.md §1).
+//
+// § A6/A7: Der Referenzschnitt kannte nur `tree`/Holz. Jetzt beschreibt EIN
+// Profil je Knotentyp, was die Kachel trägt — Baum (Wald, wächst nach),
+// Felsvorkommen (Gebirge, **wächst nicht nach**) und Feld (fruchtbar, wächst schnell
+// nach). Kein zweites Knotensystem: dieselbe Id, dasselbe Delta, derselbe Tick (§2).
 
 import type { GameState, ResourceId, ResourceNodeType } from '../types.ts';
 import { tileAt, worldTerrainAt } from '../map/world.ts';
 import { terrainAt } from '../config/startRegion.config.ts';
 
-/** Grundmenge Holz je Baumknoten (Referenzschnitt). */
-export const TREE_MAX_AMOUNT = 32;
-/** Anteil geeigneter Wald-Kacheln, die einen Baumknoten tragen (0..1). */
-const TREE_DENSITY = 0.5;
+/**
+ * Weltseitige Eigenschaften eines Knotentyps. Bewusst **hier** und nicht am Gebäude:
+ * ein Felsvorkommen ist eine Eigenschaft der Kachel, nicht des Betriebs, der es
+ * abbaut — zwei Steinbrüche dürfen sich nie über die Ergiebigkeit derselben Kachel
+ * uneinig sein.
+ */
+export interface ResourceNodeProfile {
+  /** Ware, die der Knoten liefert. */
+  resource: ResourceId;
+  /** Terrain, das den Knoten trägt. */
+  terrain: string;
+  /** Anteil geeigneter Kacheln, die einen Knoten tragen (0..1, Positions-Hash). */
+  density: number;
+  /** Grundmenge je Knoten. Muss ≥ der größten Traglast sein, sonst laufen Arbeiter halb voll heim. */
+  maxAmount: number;
+  /**
+   * Nachwachsdauer in ms Simulationszeit — `undefined` heißt **wächst nie nach**
+   * (Stein). Ein erschöpftes Vorkommen bleibt erschöpft; der Betrieb muss umziehen.
+   * Das ist eine Entscheidung des Spielers (wo abbauen) und deshalb ausdrücklich
+   * keine Automatik (D-039).
+   */
+  regenerationMs?: number;
+}
+
+/**
+ * Ein Profil je Knotentyp. `livestock`/`water_source`/`wild_plant` sind im Typ
+ * vorgesehen, aber noch von keinem Betrieb belegt — sie stehen bewusst NICHT hier
+ * drin, damit nichts Nichtexistierendes vorgetäuscht wird (A8+).
+ */
+export const RESOURCE_NODE_PROFILES: Partial<Record<ResourceNodeType, ResourceNodeProfile>> = {
+  // Baum: Dichte und Terrain unverändert (der Hash entscheidet je Kachel — eine
+  // andere Dichte verschöbe die Knotenverteilung bestehender Spielstände).
+  // Die Menge je Baum steigt von 32 auf 100, weil die Traglast eines Holzfällers
+  // sonst nicht über 32 wachsen kann: ein Arbeiter kehrt IMMER heim, sobald der
+  // Knoten leer ist, die Traglast wäre also nur auf dem Papier größer. Das ist die
+  // Voraussetzung der Sägewerk-Kalibrierung (§A6/A7) und save-sicher — angearbeitete
+  // Bäume behalten ihre persistierte Restmenge.
+  tree: { resource: 'wood', terrain: 'forest', density: 0.5, maxAmount: 100, regenerationMs: 8 * 60 * 1000 },
+  // Felsvorkommen: ergiebig, aber endlich. ~180 Einheiten je Kachel ergeben pro
+  // Steinbruch-Standort mehrere Stunden Abbau, danach ist der Bruch leer (§A6).
+  rock: { resource: 'stone', terrain: 'mountain', density: 0.4, maxAmount: 180 },
+  // Feld: hohe Menge je Kachel, schneller Zyklus — Aussaat/Wachstum/Ernte fallen
+  // mit der vorhandenen Regeneration zusammen, es braucht keinen zweiten
+  // Lebenszyklus (§2).
+  crop: { resource: 'food', terrain: 'fertile', density: 0.6, maxAmount: 130, regenerationMs: 10 * 60 * 1000 },
+};
+
+/** Profil eines Knotentyps (undefined = von keinem Betrieb belegt). */
+export function nodeProfile(type: ResourceNodeType): ResourceNodeProfile | undefined {
+  return RESOURCE_NODE_PROFILES[type];
+}
+
+/** Grundmenge Holz je Baumknoten (Referenzschnitt, für Bestandscode/Tests). */
+export const TREE_MAX_AMOUNT = RESOURCE_NODE_PROFILES.tree!.maxAmount;
 /** Nachwachsdauer eines gefällten Baums (ms Simulationszeit). */
-export const TREE_REGEN_MS = 8 * 60 * 1000;
+export const TREE_REGEN_MS = RESOURCE_NODE_PROFILES.tree!.regenerationMs!;
 
 export type ResourceNodeRuntimeState = 'available' | 'reserved' | 'being_worked' | 'depleted' | 'regrowing';
 
@@ -62,33 +117,40 @@ function hash01(x: number, y: number): number {
 }
 
 /**
- * Trägt die Kachel grundsätzlich einen Knoten dieses Terrains? Wald-Kachel (mit
+ * Trägt die Kachel grundsätzlich einen Knoten dieses Typs? Passendes Terrain (mit
  * sparse Overrides), unbebaut und vom Dichte-Hash ausgewählt. Rein deterministisch.
+ *
+ * Der Knotentyp wird über das Terrain bestimmt, deshalb bleibt die Id `"x,y"`
+ * eindeutig: eine Kachel ist entweder Wald **oder** Gebirge **oder** fruchtbar.
  */
-export function isNodeTile(state: GameState, nodeTerrain: string, x: number, y: number): boolean {
-  if (worldTerrainAt(state, x, y) !== nodeTerrain) return false;
+export function isNodeTile(state: GameState, type: ResourceNodeType, x: number, y: number): boolean {
+  const profile = RESOURCE_NODE_PROFILES[type];
+  if (!profile) return false;
+  if (worldTerrainAt(state, x, y) !== profile.terrain) return false;
   if (tileAt(state, x, y)?.buildingId) return false; // nicht unter Gebäuden (§26.15)
-  return hash01(x, y) < TREE_DENSITY;
+  return hash01(x, y) < profile.density;
 }
 
 /**
  * Löst einen Knoten aus seiner Id auf: `undefined`, wenn die Kachel (mehr) keinen
  * Knoten trägt (Terrain geändert, überbaut). Sonst Laufzeitzustand aus Delta.
  */
-export function resolveNode(state: GameState, nodeTerrain: string, id: string, now: number): ResourceNode | undefined {
+export function resolveNode(state: GameState, type: ResourceNodeType, id: string, now: number): ResourceNode | undefined {
+  const profile = RESOURCE_NODE_PROFILES[type];
+  if (!profile) return undefined;
   const pos = parseNodeId(id);
   if (!pos) return undefined;
-  if (!isNodeTile(state, nodeTerrain, pos.x, pos.y)) return undefined;
+  if (!isNodeTile(state, type, pos.x, pos.y)) return undefined;
   const delta = state.operations?.nodeDeltas[id];
   const base: ResourceNode = {
     id,
-    type: 'tree',
+    type,
     x: pos.x,
     y: pos.y,
-    resource: 'wood',
+    resource: profile.resource,
     state: 'available',
-    remainingAmount: TREE_MAX_AMOUNT,
-    maxAmount: TREE_MAX_AMOUNT,
+    remainingAmount: profile.maxAmount,
+    maxAmount: profile.maxAmount,
   };
   if (!delta) return base;
   // Erschöpft & noch nicht nachgewachsen → regrowing.
@@ -98,7 +160,7 @@ export function resolveNode(state: GameState, nodeTerrain: string, id: string, n
     }
     return base; // nachgewachsen → wieder voll verfügbar
   }
-  const remaining = delta.remaining ?? TREE_MAX_AMOUNT;
+  const remaining = delta.remaining ?? profile.maxAmount;
   if (remaining <= 0) return { ...base, state: 'depleted', remainingAmount: 0 };
   return {
     ...base,
@@ -115,15 +177,15 @@ export function resolveNode(state: GameState, nodeTerrain: string, id: string, n
  */
 export function deriveNodesInArea(
   state: GameState,
-  nodeTerrain: string,
+  type: ResourceNodeType,
   area: { minX: number; minY: number; maxX: number; maxY: number },
   now: number,
 ): ResourceNode[] {
   const nodes: ResourceNode[] = [];
   for (let y = area.minY; y <= area.maxY; y++) {
     for (let x = area.minX; x <= area.maxX; x++) {
-      if (!isNodeTile(state, nodeTerrain, x, y)) continue;
-      const node = resolveNode(state, nodeTerrain, nodeIdOf(x, y), now);
+      if (!isNodeTile(state, type, x, y)) continue;
+      const node = resolveNode(state, type, nodeIdOf(x, y), now);
       if (node) nodes.push(node);
     }
   }

@@ -59,10 +59,17 @@ describe('Wasser-Infrastruktur 7.0', () => {
     const dock = Object.values(controller.state.buildings).find((building) => building.defId === 'dock_small')!;
     expect(dock.rotation ?? 0).toBe(position!.rotation);
     const def = controller.config.buildings.get('dock_small')!;
-    for (const cell of waterfrontWaterCells(def, dock.x, dock.y, dock.rotation ?? 0)) {
-      expect(bakedSurfaceAt(cell.x, cell.y).water).toBe(true);
+    // § Modelltreue 13.0: Die Uferlinie der Quell-GLB ist zackig; `dock_small`
+    // toleriert deshalb eine von vier Wasserzellen als Land. Geprüft wird, dass
+    // die ECHTEN Wasserzellen tief genug sind und die Mehrheit bleibt.
+    const cells = waterfrontWaterCells(def, dock.x, dock.y, dock.rotation ?? 0);
+    let realWater = 0;
+    for (const cell of cells) {
+      if (!bakedSurfaceAt(cell.x, cell.y).water) continue;
+      realWater++;
       expect(waterDepthGrid[cell.y * WORLD_TILES + cell.x]! / WATER_DEPTH_SCALE).toBeGreaterThanOrEqual(0.55);
     }
+    expect(realWater).toBeGreaterThan(cells.length / 2);
     expect(controller.getBuildingInfrastructureStatus(dock.id)).toMatchObject({ status: 'water_only' });
   });
 

@@ -9,6 +9,14 @@ Ersetzt die 3D-Straßen-/Brücken-Modelle durch texturierte, flach ins Terrain i
 
 ## Fahrbahn-Oberflächen
 
+### `road_path_cartoon.png`
+
+```text
+Seamless tileable stylized road-surface texture for a premium low-poly city-builder game. Soft painterly look, natural subtle wear, no baked lighting, no shadows, top-down orthographic view, perfect seamless edges along the tiling axis, PBR-ready — warm honey-beige packed earth, exceptionally calm broad painterly fields, virtually no gravel or micro detail, no borders and no lane markings
+```
+
+**Spec:** Ordner `textures/roads/surface/` · 1024×1024 · nahtlos kachelbar · Stil: hell, handgemalt, ruhig · Palette: Honigbeige, helles Ocker und warmes Kiesbraun · Einsatz: Frühe Bodenstraßen und Wege im zusammenhängenden geglätteten Straßennetz · Material: matt, verdichtete Erde, breite ruhige Farbflächen ohne lesbare Kiesel · Verwendung: Gespiegelte World-Space-UVs auf dem gebündelten Fahrbahnband; ersetzt die dunkle Prototyp-Fläche ohne Richtungsnaht oder Kachelraster · Maps: Normal ✓ · Roughness ✓ · AO – · Height – · Detailstufe: nah · Priorität: **Pflicht**
+
 ### `road_asphalt.png`
 
 ```text

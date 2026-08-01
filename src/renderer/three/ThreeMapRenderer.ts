@@ -15,10 +15,12 @@
 
 import {
   ACESFilmicToneMapping,
+  AdditiveBlending,
   Box3,
   BoxGeometry,
   BufferGeometry,
   CanvasTexture,
+  CircleGeometry,
   Clock,
   Color,
   ConeGeometry,
@@ -37,6 +39,7 @@ import {
   MeshBasicMaterial,
   MeshLambertMaterial,
   MeshStandardMaterial,
+  MirroredRepeatWrapping,
   NoColorSpace,
   Object3D,
   PCFSoftShadowMap,
@@ -45,8 +48,6 @@ import {
   Raycaster,
   RepeatWrapping,
   Scene,
-  Shape,
-  ShapeGeometry,
   SphereGeometry,
   SRGBColorSpace,
   Sprite,
@@ -70,14 +71,49 @@ import {
   WATER_LEVEL,
 } from './terrainHeight.ts';
 import { raycastHeightfield } from './terrainPicking.ts';
-import { blendedVisualSplat, regionVisualProfile } from './worldVisualProfiles.ts';
-import { REGION_PROP_BUDGET, selectPropTiles, type PropKind } from './vegetationBudget.ts';
+import { blendedVisualSplat, blendedVisualTint, regionVisualProfile } from './worldVisualProfiles.ts';
+import {
+  REGION_DETAIL_PROP_BUDGET,
+  selectPropTiles,
+  spatialPropChunks,
+  starterNatureFrame,
+} from './vegetationBudget.ts';
+import {
+  collectRegionNature,
+  emptyPlacement,
+  type NatureInstance,
+} from './natureDistribution.ts';
+import { NATURE_KINDS, type NatureKind } from './natureZones.ts';
+import {
+  buildNatureMass,
+  hasNatureGeometry,
+  natureSharedResources,
+  type NatureLodEntry,
+} from './natureRenderer.ts';
+import {
+  appendRoadDiscTriangles,
+  appendRoadRibbonTriangles,
+  appendVariableRibbonTriangles,
+  roadTileEdgeConnector,
+  roundedRoadPolyline,
+} from './roadSurfaceGeometry.ts';
+import {
+  marchingShoreSegments,
+  smoothShoreChain,
+  traceShoreChains,
+} from './shorelineGeometry.ts';
 import { CameraController3D } from './CameraController3D.ts';
-import { CameraExplorationBoundary } from './CameraExplorationBoundary.ts';
+import { deriveCityFrame } from './cityFraming.ts';
 import { CameraInputController, type CameraInputHost } from './CameraInputController.ts';
 import { worldCameraBounds, type CameraPreset } from './CameraConfig.ts';
+import {
+  createStylizedVehicleFallback,
+  createStylizedVehicleGeometry,
+  createStylizedVehicleMaterial,
+} from './vehicleFallback.ts';
 import { getCameraSettings } from './cameraSettings.ts';
 import { getEnvironmentSettings } from './environmentSettings.ts';
+import { sunElevation } from './environment.ts';
 import { getGraphicsProfile, subscribeGraphicsSettings } from './graphicsSettings.ts';
 import { scaledBudget, type GraphicsProfile } from './graphicsQuality.ts';
 import { setPerfStats } from './perfStats.ts';
@@ -85,7 +121,13 @@ import type { GameController } from '../../game/commands/controller.ts';
 import type { BuildingDef } from '../../game/config/types.ts';
 import type { BuildingInstance, TerrainType } from '../../game/types.ts';
 import { regionOfTile, samplePlacementSurface, worldTerrainAt } from '../../game/map/world.ts';
-import { BAKED_REGIONS, WORLD_TILES, regionBounds, regionIdAt } from '../../game/config/startRegion.config.ts';
+import {
+  BAKED_REGIONS,
+  WORLD_TILES,
+  regionBounds,
+  regionIdAt,
+  startRegionConfig,
+} from '../../game/config/startRegion.config.ts';
 import { oceanDepthGrid, shoreTypeGrid, waterfrontBuildableGrid } from './worldMasks.gen.ts';
 import { validatePlacement } from '../../game/buildings/placement.ts';
 import { plinthDepthFor } from '../../game/buildings/terrainFit.ts';
@@ -102,7 +144,7 @@ import {
   uiModel,
   terrainTextureUrl,
   roadTextureUrl,
-  environmentImage,
+
 } from '../../assets/registry.ts';
 import {
   TERRAIN_TILE_MODELS,
@@ -138,6 +180,9 @@ import { t } from '../../i18n/index.ts';
 
 const MAX_SMOKE = 40;
 const MAX_CARS = 10;
+/** Straßendecke liegt knapp über dem Terrain; Fahrzeuge stehen mit ihrem
+ * integrierten Kontaktschatten darauf statt wie zuvor 0,3 Kacheln zu schweben. */
+const VEHICLE_ROAD_CLEARANCE = 0.065;
 
 /** Ambient-traffic route endpoints (§ Verkehr Haus→Straße→Ziel): cars drive from
  *  a residential building to a workplace/destination building, never the other
@@ -190,6 +235,38 @@ const modelCache = new Map<string, Promise<TObject3D>>();
 const cacheOwned = new WeakSet<object>();
 const FOUNDATION_MATERIAL = new MeshStandardMaterial({ color: 0x756b58, roughness: 0.96, metalness: 0 });
 cacheOwned.add(FOUNDATION_MATERIAL);
+
+/**
+ * Einheitliches Cartoon-Finish für Drop-in-Modelle. Die Geometrie und Texturen
+ * bleiben unangetastet; nur die gemeinsamen PBR-Materialparameter werden einmal
+ * beim Laden auf die helle, matte Miniaturwelt-Art-Direction kalibriert.
+ */
+function stylizeModelMaterial(material: Material): void {
+  if (!(material instanceof MeshStandardMaterial)) return;
+  const role = material.name.toLowerCase();
+  const preserveSurface =
+    material.transparent ||
+    role.includes('glass') ||
+    role.includes('window') ||
+    role.includes('water') ||
+    role.includes('light') ||
+    role.includes('emiss');
+
+  if (!preserveSurface) {
+    const hsl = { h: 0, s: 0, l: 0 };
+    material.color.getHSL(hsl);
+    material.color.setHSL(
+      hsl.h,
+      MathUtils.clamp(hsl.s * 1.12 + 0.035, 0, 0.9),
+      MathUtils.clamp(hsl.l * 1.08 + 0.035, 0.08, 0.92),
+    );
+    material.roughness = Math.max(material.roughness, 0.72);
+    material.metalness = Math.min(material.metalness, 0.16);
+    material.flatShading = true;
+  }
+  material.needsUpdate = true;
+}
+
 function loadModel(url: string): Promise<TObject3D> {
   let p = modelCache.get(url);
   if (!p) {
@@ -198,8 +275,15 @@ function loadModel(url: string): Promise<TObject3D> {
         const m = o as Mesh;
         if (m.geometry) cacheOwned.add(m.geometry);
         const mat = (m as unknown as { material?: Material | Material[] }).material;
-        if (Array.isArray(mat)) mat.forEach((x) => cacheOwned.add(x));
-        else if (mat) cacheOwned.add(mat);
+        if (Array.isArray(mat)) {
+          mat.forEach((x) => {
+            stylizeModelMaterial(x);
+            cacheOwned.add(x);
+          });
+        } else if (mat) {
+          stylizeModelMaterial(mat);
+          cacheOwned.add(mat);
+        }
       });
       return g.scene;
     });
@@ -225,33 +309,56 @@ const GROUND_SUBDIV = 2;
  * Chunks neu. */
 const GROUND_CHUNK = 64;
 
+// § Welt lädt vollständig (v1.24) — KENNZEICHNUNG GESPERRTER GEBIETE.
+//
+// Bis v1.23 verdeckte eine blickdichte Wolkenwand jede gesperrte Region. Damit
+// war die halbe Insel unsichtbar: Der Spieler konnte weder sehen, wohin er
+// expandieren würde, noch die Landschaft genießen, für die die Welt gebaut ist.
+// Jetzt lädt und zeigt die Welt vollständig; gesperrtes Land wird stattdessen
+// ENTSÄTTIGT und trägt weiterhin seinen Schloss-Marker mit Name und Level.
+//
+// Die Werte sind bewusst getrennt: Entsättigung trägt die Aussage, die
+// Abdunklung setzt sie nur leicht ab. Zu viel Abdunklung ließ die Übersicht
+// wieder unfertig wirken — genau das Problem, das die frühere Dimmung hatte.
+/** Anteil, um den gesperrtes Land in Richtung Graustufe gezogen wird. */
+const LOCKED_DESATURATION = 0.7;
+/** Zusätzliche Abdunklung gesperrten Landes. */
+const LOCKED_DARKENING = 0.16;
+/**
+ * Vegetationsdichte gesperrter Regionen. Ausdünnen statt verstecken: die
+ * Landschaft bleibt lesbar, kostet aber nur einen Bruchteil der Instanzen —
+ * ohne das würde ein frisches Spiel statt ~1.400 sofort ~48.800 Props aufbauen.
+ * Beim Freischalten füllt sich die Region auf; bereits stehende Props behalten
+ * dabei Position und Größe (der Auswahl-Hash ist positionsstabil, §16).
+ */
+const LOCKED_VEGETATION_DENSITY = 0.5;
+
 /** One world unit of ground = this many texture repeats, so a 1254px "nah"-detail
  *  photo reads as close-up ground rather than a stretched smear. */
-const SPLAT_TILE_SCALE = 0.085;
+const SPLAT_TILE_SCALE = 0.065;
 // § A3 (Welt 2.0): Biom-gewichteter Splat. grass/stone/cliff/mountain/snow
 // kommen aus Höhe & Hang, forest/farm/sand aus dem Biom-Vertex-Attribut (aus
 // dem gebackenen Terrain-Grid). Jede Textur ist Drop-in — fehlt sie, blendet
 // die Ebene sauber auf die stilisierte Vertex-Farbe zurück (nie kaputt).
 const SPLAT_LAYERS = [
-  { key: 'grass', texture: 'grass_meadow_fresh', triplanar: false },
-  { key: 'forest', texture: 'forest_floor_moss', triplanar: false },
+  { key: 'grass', texture: 'grass_meadow_cartoon', triplanar: false },
+  { key: 'forest', texture: 'forest_floor_cartoon', triplanar: false },
   { key: 'farm', texture: 'fertile_valley_ground', triplanar: false },
   { key: 'dry', texture: 'dry_steppe', triplanar: false },
   { key: 'desert', texture: 'desert_sand_red', triplanar: false },
   { key: 'swamp', texture: 'swamp_mud', triplanar: false },
-  { key: 'coast', texture: 'coast_shore_accessible', triplanar: false },
-  { key: 'cliff', texture: 'mountain_cliff_faceted', triplanar: true },
-  { key: 'mountain', texture: 'mountain_granite_base', triplanar: true },
+  { key: 'coast', texture: 'coast_sand_cartoon', triplanar: false },
+  { key: 'cliff', texture: 'mountain_cliff_cartoon', triplanar: true },
+  { key: 'mountain', texture: 'mountain_cliff_cartoon', triplanar: true },
   { key: 'ridge', texture: 'mountain_strata', triplanar: true },
   { key: 'snow', texture: 'mountain_snow', triplanar: false },
 ] as const;
 
-const SPLAT_DETAILS = {
-  grassNormal: 'grass_meadow_fresh_normal',
-  rockNormal: 'mountain_granite_base_normal',
-  rockRoughness: 'mountain_granite_base_roughness',
-  forestAo: 'forest_floor_moss_ao',
-} as const;
+// Die aktive Cartoon-Art-Direction lebt von breiten Albedo-/Vertexformen.
+// Foto-Normalen und altes Wald-AO legten erneut feines Rauschen und doppelte
+// Lichtführung darüber; Detailmaps bleiben deshalb als Drop-in-System
+// vorbereitet, im verbindlichen Cartoon-Profil aber bewusst leer.
+const SPLAT_DETAILS: Record<string, string> = {};
 
 /** Loads (and caches, by URL) any drop-in texture — shared by the terrain splat
  *  layers and the road/bridge surfaces below, so the same file is never fetched
@@ -260,8 +367,12 @@ function loadTextureByUrl(url: string, srgb = true): Promise<Texture> {
   let p = textureCache.get(url);
   if (!p) {
     p = textureLoader.loadAsync(url).then((tex) => {
-      tex.wrapS = RepeatWrapping;
-      tex.wrapT = RepeatWrapping;
+      // Gespiegelte Wiederholung hält die breiten gemalten Cartoon-Flächen an
+      // jeder Kachelgrenze stetig, selbst wenn ein Drop-in-Bild nicht pixelgenau
+      // an seiner gegenüberliegenden Kante endet.
+      const mirroredCartoon = /(?:grass_meadow_cartoon|forest_floor_cartoon|mountain_cliff_cartoon|coast_sand_cartoon|road_path_cartoon)/.test(url);
+      tex.wrapS = mirroredCartoon ? MirroredRepeatWrapping : RepeatWrapping;
+      tex.wrapT = mirroredCartoon ? MirroredRepeatWrapping : RepeatWrapping;
       tex.colorSpace = srgb ? SRGBColorSpace : NoColorSpace;
       return tex;
     });
@@ -284,12 +395,6 @@ function loadRoadTexture(name: string): Promise<Texture> | undefined {
   return url ? loadTextureByUrl(url) : undefined;
 }
 
-/** Optional generated atmosphere texture shared by region fog layers. */
-function loadEnvironmentTexture(name: string): Promise<Texture> | undefined {
-  const url = environmentImage(name);
-  return url ? loadTextureByUrl(url) : undefined;
-}
-
 /** Small deterministic hash → 0..1, so per-building colour jitter is stable. */
 function hash01(s: string): number {
   let h = 2166136261;
@@ -302,6 +407,10 @@ function hash01(s: string): number {
  *  role, so a dropped-in texture only has to load once and every tile picks it
  *  up together via `material.map` + `needsUpdate` (no per-tile shader work). */
 interface RoadMaterials {
+  /** Helle prozedurale Hauptstraße ohne unpassende Foto-UVs. */
+  groundPath: MeshStandardMaterial;
+  /** Breiter heller Rand/Bankett, damit die Straße sich vom Terrain absetzt. */
+  groundShoulder: MeshStandardMaterial;
   asphalt: MeshStandardMaterial;
   mountain: MeshStandardMaterial;
   edge: MeshStandardMaterial;
@@ -309,10 +418,8 @@ interface RoadMaterials {
   roundabout: MeshStandardMaterial;
   bridgeDeck: MeshStandardMaterial;
   boardwalk: MeshStandardMaterial;
-  // § A5 Straßen-Redesign: heller Gehweg-Beton, Laternenmast + emissiver Kopf.
+  // § A5 Straßen-Redesign: heller Gehweg-Beton.
   sidewalk: MeshStandardMaterial;
-  lampPost: MeshStandardMaterial;
-  lampHead: MeshStandardMaterial;
 }
 
 function loadSplatDataTexture(name: string): Promise<Texture> | undefined {
@@ -320,11 +427,21 @@ function loadSplatDataTexture(name: string): Promise<Texture> | undefined {
   return url ? loadTextureByUrl(url, false) : undefined;
 }
 
-interface LockedRegionFogVolume {
+/** Ruhezustand des Regionsmarkers: kompaktes Schloss ohne Text (§10). */
+const LOCKED_REGION_ICON_SCALE: [number, number, number] = [3.2, 3.2, 1];
+/** Hover-/Freischaltzustand: volles Banner mit Name und Level (§10). */
+const LOCKED_REGION_LABEL_SCALE: [number, number, number] = [10, 3.75, 1];
+
+interface LockedRegionMarker {
   group: Group;
   mats: { mat: MeshStandardMaterial | SpriteMaterial; base: number }[];
   marker: Sprite;
+  /** Voller Marker mit Name + Level — nur bei Hover/Freischaltung (§10). */
   markerTexture: CanvasTexture;
+  /** Kompaktes Schloss ohne Text — der Ruhezustand (§10). */
+  iconTexture: CanvasTexture;
+  /** Zeigt der Marker aktuell den vollen Namen? */
+  labelled: boolean;
   fading: number;
 }
 
@@ -370,6 +487,24 @@ export class ThreeMapRenderer implements IMapRenderer {
   private roadMats: RoadMaterials | undefined;
 
   private buildingGroup = new Group();
+  /** Zusammenhängende, geglättete Darstellung des bestehenden Kachel-
+   * Straßennetzes. Die Simulation bleibt unverändert rasterbasiert; nur die
+   * sichtbare Fahrbahn wird aus denselben belegten Kacheln als zwei gebündelte
+   * Meshes (Bankett + Asphalt) aufgebaut. */
+  private roadSurfaceGroup = new Group();
+  private roadSurfaceKey = '';
+  /** Rein visuelle Stützen der vorhandenen Höhenstraße. Die Straße bleibt ein
+   * normales Building/Command; diese Gruppe bündelt nur Pfeiler und Querträger
+   * in zwei InstancedMeshes, statt pro Kachel neue Draw-Calls zu erzeugen. */
+  private roadSupportGroup = new Group();
+  private roadSupportKey = '';
+  /** Straßenmöblierung als gebündelter Nachtlicht-Pass. Lichtköpfe und kleine
+   * Bodenreflexe sitzen an derselben, terrainabgetasteten Mastposition. Es gibt
+   * bewusst keine frei geschätzten Fassadenfenster mehr. */
+  private cityLightGroup = new Group();
+  private streetLampHeadMesh: InstancedMesh | undefined;
+  private streetGlowMesh: InstancedMesh | undefined;
+  private cityLightKey = '';
   private terrainGroup = new Group();
   // Chunk-Boden (§ MVP4 P3): persistente Gruppe + Cache — bei Sektor-Unlock
   // werden nur die betroffenen Chunks neu gebaut, nie das ganze Inselmesh.
@@ -380,23 +515,25 @@ export class ThreeMapRenderer implements IMapRenderer {
   // Blickdichte Regions-Wolkenwand (§ Welt 2.0 / A3): ein instanziertes Volumen
   // plus Schloss-/Level-Marker je gesperrter Region; Unlock startet die
   // bestehende Aufdeck-Animation.
-  private fogGroup = new Group();
-  private fogVolumes = new Map<number, LockedRegionFogVolume>();
+  private lockedMarkerGroup = new Group();
+  private lockedMarkers = new Map<number, LockedRegionMarker>();
   private worldReveal: WorldRevealState = {
     fogDisabled: false,
     revealLockedRegionsVisually: false,
     unlockAllRegionsGameplay: false,
-    cameraBoundsDisabled: false,
   };
-  /** Signatur der zuletzt gebauten Kamera-Grenze (Unlock-Set + Cheat) — die
-   *  Nearest-Feature-Berechnung läuft nur, wenn sich diese Signatur ändert. */
-  private cameraBoundaryKey = '';
-  /** § Change 9.0 / S3a: globale absolute Nebeloberkante. Einmal aus dem gebackenen
-   *  Höhenfeld bestimmt (hohe Perzentile → flaches/hügeliges Land wird verdeckt,
-   *  echte Gebirgsgipfel ragen heraus). Ersetzt die frühere Pro-Region-Höhe. */
-  private fogTopY: number | undefined;
   private vegetationGroup = new Group();
+  /** Vegetation gesperrter Regionen — eigener Aufbau, eigener Schlüssel. */
+  private lockedVegetationGroup = new Group();
+  private lockedVegetationLod: NatureLodEntry[] = [];
+  private lockedVegKey = '';
   private nearVegetation: Object3D[] = [];
+  private vegetationDistanceLod: {
+    object: Object3D;
+    centerX: number;
+    centerZ: number;
+    maxDistance: number;
+  }[] = [];
   /** § Säule B: beim letzten Vegetationsaufbau verwendetes Qualitätsprofil —
    *  steuert Sichtweiten/Nahdetail im Frame und speist das Dev-Performance-Panel. */
   private activeVegProfile: GraphicsProfile = getGraphicsProfile();
@@ -419,8 +556,7 @@ export class ThreeMapRenderer implements IMapRenderer {
   private vehicleGroup = new Group();
   private vehiclePool: Group[] = [];
   private vehicleAssets?: {
-    body: BoxGeometry;
-    cab: BoxGeometry;
+    geometry: BufferGeometry;
     mat: MeshStandardMaterial;
   };
   private vehicleLastPos = new Map<string, { x: number; z: number }>();
@@ -430,6 +566,10 @@ export class ThreeMapRenderer implements IMapRenderer {
   private workAreaOverlayGroup = new Group();
   private roadPlanOverlayGroup = new Group();
   private infrastructureOverlayGroup = new Group();
+  /** Generisches, terrainfolgendes Versorgungsradius-Overlay. Die Daten kommen
+   * ausschließlich aus GameController.getCoverageOverlay(). */
+  private coverageOverlayGroup = new Group();
+  private coverageOverlayKey = '';
   private markerGroup = new Group();
   private ground: Mesh | undefined; // invisible pick plane
   private ghost: Group | undefined;
@@ -552,7 +692,10 @@ export class ThreeMapRenderer implements IMapRenderer {
     // new terraced terrain would otherwise show. Exposure is tuned in tandem with
     // the day/night grade in environment.ts.
     renderer.toneMapping = ACESFilmicToneMapping;
-    renderer.toneMappingExposure = 1.2;
+    // Die isometrische Übersicht zeigt wesentlich mehr schattige Nordhänge als
+    // eine bodennahe Kamera. 1.28 hält Abend und Bewölkung lesbar, ohne die
+    // Mittagslichter des ACES-Mappings ausbrennen zu lassen.
+    renderer.toneMappingExposure = 1.28;
     renderer.shadowMap.type = PCFSoftShadowMap;
     this.renderer = renderer;
     if (this.destroyed) {
@@ -582,9 +725,13 @@ export class ThreeMapRenderer implements IMapRenderer {
       this.oceanGroup,
       this.terrainGroup,
       this.vegetationGroup,
+      this.roadSurfaceGroup,
+      this.roadSupportGroup,
       this.buildingGroup,
+      this.cityLightGroup,
       this.liveGroup,
       this.infrastructureOverlayGroup,
+      this.coverageOverlayGroup,
       this.workAreaOverlayGroup,
       this.roadPlanOverlayGroup,
       this.overlayGroup,
@@ -627,10 +774,19 @@ export class ThreeMapRenderer implements IMapRenderer {
     this.disposeGroup(this.groundChunkGroup);
     this.disposeGroup(this.oceanGroup);
     this.groundChunks.clear();
-    for (const volume of this.fogVolumes.values()) volume.markerTexture.dispose();
-    this.disposeGroup(this.fogGroup);
-    this.fogVolumes.clear();
+    for (const volume of this.lockedMarkers.values()) {
+      volume.markerTexture.dispose();
+      volume.iconTexture.dispose();
+    }
+    this.disposeGroup(this.lockedMarkerGroup);
+    this.lockedMarkers.clear();
     this.disposeGroup(this.vegetationGroup);
+    this.disposeGroup(this.lockedVegetationGroup);
+    this.disposeGroup(this.roadSurfaceGroup);
+    this.disposeGroup(this.roadSupportGroup);
+    this.disposeGroup(this.cityLightGroup);
+    this.streetLampHeadMesh = undefined;
+    this.streetGlowMesh = undefined;
     this.disposeGroup(this.liveGroup);
     // § Active Operations 2.0: gepoolte Arbeiter + ihre geteilten Assets.
     this.disposeGroup(this.workerGroup);
@@ -643,12 +799,11 @@ export class ThreeMapRenderer implements IMapRenderer {
       delete this.workerAssets;
     }
     // § A5: gepoolte Transportfahrzeuge + geteilte Assets.
-    this.disposeGroup(this.vehicleGroup);
+    this.vehicleGroup.clear();
     this.vehiclePool.length = 0;
     this.vehicleLastPos.clear();
     if (this.vehicleAssets) {
-      this.vehicleAssets.body.dispose();
-      this.vehicleAssets.cab.dispose();
+      this.vehicleAssets.geometry.dispose();
       this.vehicleAssets.mat.dispose();
       delete this.vehicleAssets;
     }
@@ -656,6 +811,7 @@ export class ThreeMapRenderer implements IMapRenderer {
     this.disposeGroup(this.workAreaOverlayGroup);
     this.disposeGroup(this.roadPlanOverlayGroup);
     this.disposeGroup(this.infrastructureOverlayGroup);
+    this.disposeGroup(this.coverageOverlayGroup);
     for (const m of this.markers) this.disposeGroup(m.obj);
     for (const t of this.markerTex.values()) t.dispose();
   }
@@ -685,6 +841,7 @@ export class ThreeMapRenderer implements IMapRenderer {
     if (id) this.focusBuilding(id);
     this.lastVersion = -1; // refresh selection ring
     this.rebuildInfrastructureOverlay();
+    this.rebuildCoverageOverlay();
   }
 
   setInfoLayer(mode: InfoLayerMode): void {
@@ -885,17 +1042,39 @@ export class ThreeMapRenderer implements IMapRenderer {
   /** MapApi "Karte zentrieren" / Zentrum-preset. */
   centerOnCity(): void {
     this.cam.applyPreset('center');
+    this.focusCityFrame();
   }
 
   /** Camera-preset from the view controls (§ Presets). */
   applyPreset(preset: CameraPreset): void {
     this.cam.applyPreset(preset);
+    if (preset === 'city') this.focusCityFrame();
+  }
+
+  /**
+   * Zentriert die normale Ansicht auf den tatsächlich bebauten Stadtkern.
+   * Entfernte Rohstoff-Außenposten und Straßen ziehen die Kamera nicht wieder
+   * zur Regionsübersicht auf; die Simulation bleibt vollständig unangetastet.
+   */
+  private focusCityFrame(): void {
+    const townHallX = startRegionConfig.townHall.x + 2.5;
+    const townHallZ = startRegionConfig.townHall.y + 2.5;
+    const footprints = Object.values(this.controller.state.buildings).flatMap((building) => {
+      const def = this.controller.config.buildings.get(building.defId);
+      if (!def || def.category === 'roads') return [];
+      const centerX = building.x + def.size.w / 2;
+      const centerZ = building.y + def.size.h / 2;
+      if (Math.hypot(centerX - townHallX, centerZ - townHallZ) > 44) return [];
+      return [{ x: building.x, y: building.y, w: def.size.w, h: def.size.h }];
+    });
+    const frame = deriveCityFrame(footprints, townHallX, townHallZ);
+    this.cam.focusGround(frame.x, frame.z, frame.dist);
   }
 
   /** Focus the currently selected building (F / focus button). */
   focusSelected(): void {
     if (this.selectedId) this.focusBuilding(this.selectedId);
-    else this.cam.focusCity();
+    else this.focusCityFrame();
   }
 
   /** Reset the compass to the default viewing direction. */
@@ -1082,7 +1261,7 @@ export class ThreeMapRenderer implements IMapRenderer {
     }
     d.x = nx;
     d.z = nz;
-    const y = terrainHeightAt(d.x, d.z) + 0.32;
+    const y = terrainHeightAt(d.x, d.z) + VEHICLE_ROAD_CLEARANCE;
     d.mesh.position.set(d.x, y, d.z);
     d.mesh.rotation.y = d.heading;
 
@@ -1174,7 +1353,7 @@ export class ThreeMapRenderer implements IMapRenderer {
       ghostMove: (cx, cy) => this.updateGhostAt(cx, cy),
       hoverAt: (cx, cy) => this.hoverWorkAreaAt(cx, cy),
       cancel: () => this.callbacks.onCancelPlacement(),
-      focusCity: () => this.cam.focusCity(),
+      focusCity: () => this.focusCityFrame(),
       focusSelected: () => this.focusSelected(),
       groundAt: (cx, cy) => this.groundPointAt(cx, cy),
     };
@@ -1251,23 +1430,21 @@ export class ThreeMapRenderer implements IMapRenderer {
     if (
       state.fogDisabled === this.worldReveal.fogDisabled &&
       state.revealLockedRegionsVisually === this.worldReveal.revealLockedRegionsVisually &&
-      state.unlockAllRegionsGameplay === this.worldReveal.unlockAllRegionsGameplay &&
-      state.cameraBoundsDisabled === this.worldReveal.cameraBoundsDisabled
+      state.unlockAllRegionsGameplay === this.worldReveal.unlockAllRegionsGameplay
     ) return;
     const visualChanged = state.fogDisabled !== this.worldReveal.fogDisabled
       || state.revealLockedRegionsVisually !== this.worldReveal.revealLockedRegionsVisually;
-    const boundsChanged = state.cameraBoundsDisabled !== this.worldReveal.cameraBoundsDisabled;
     this.worldReveal = { ...state };
-    if (boundsChanged) this.updateCameraBoundary();
     if (state.fogDisabled) {
       // Testmodus bedeutet wirklich frei sichtbare Insel: keine 1,8-s-Unlock-
       // Animation und keine unsichtbar weiterlaufenden Marker/Canvas-Texturen.
-      for (const volume of this.fogVolumes.values()) {
-        this.fogGroup.remove(volume.group);
+      for (const volume of this.lockedMarkers.values()) {
+        this.lockedMarkerGroup.remove(volume.group);
         this.disposeGroup(volume.group);
         volume.markerTexture.dispose();
+        volume.iconTexture.dispose();
       }
-      this.fogVolumes.clear();
+      this.lockedMarkers.clear();
     }
     if (visualChanged) {
       // Terrain-Deko, Vegetation und Landmarken werden mit der visuellen
@@ -1281,9 +1458,9 @@ export class ThreeMapRenderer implements IMapRenderer {
    *  Marker werden geraycastet, nicht die vielen Wolkeninstanzen. */
   private pickLockedRegionMarkerAt(clientX: number, clientY: number): number | undefined {
     const ndc = this.ndc(clientX, clientY);
-    if (!ndc || this.fogVolumes.size === 0) return undefined;
+    if (!ndc || this.lockedMarkers.size === 0) return undefined;
     this.raycaster.setFromCamera(ndc, this.camera);
-    const markers = [...this.fogVolumes.values()].map((volume) => volume.marker);
+    const markers = [...this.lockedMarkers.values()].map((volume) => volume.marker);
     const hit = this.raycaster.intersectObjects(markers, false)[0];
     return hit?.object.userData['regionId'] as number | undefined;
   }
@@ -1319,6 +1496,8 @@ export class ThreeMapRenderer implements IMapRenderer {
   }
 
   private hoverWorkAreaAt(clientX: number, clientY: number): void {
+    // § World Overhaul 12.0 §10: Der Regionsname erscheint nur unter dem Zeiger.
+    this.setLockedRegionLabel(this.pickLockedRegionMarkerAt(clientX, clientY));
     if (!this.workAreaOverlay) return;
     const tile = this.pickTileAt(clientX, clientY);
     const node = tile
@@ -1347,17 +1526,25 @@ export class ThreeMapRenderer implements IMapRenderer {
     if (key === this.lastHoverKey) return;
     this.lastHoverKey = key;
 
-    const error = waterfront
-      ? waterfront.reason
-      : validatePlacement(
-          this.controller.state,
-          this.controller.config,
-          this.controller.derived,
-          def,
-          x,
-          y,
-          {},
-        );
+    // § 12.2 Gründung: Das Rathaus ist `buildable:false` und `unique` — die
+    // normale Prüfung würde den Ghost dauerhaft rot färben. Solange die Stadt
+    // nicht gegründet ist, entscheidet deshalb dieselbe Instanz, die auch der
+    // Command benutzt (`getFoundingBlocker`), damit Vorschau und Ergebnis nie
+    // auseinanderlaufen.
+    const founding = def.id === 'town_hall' && !this.controller.isCityFounded();
+    const error = founding
+      ? this.controller.getFoundingBlocker(x, y)
+      : waterfront
+        ? waterfront.reason
+        : validatePlacement(
+            this.controller.state,
+            this.controller.config,
+            this.controller.derived,
+            def,
+            x,
+            y,
+            {},
+          );
     const bonusPct = error ? 0 : locationBonusPct(this.controller.state, def, x, y);
     this.callbacks.onHoverInfo({
       defId: def.id,
@@ -1397,6 +1584,21 @@ export class ThreeMapRenderer implements IMapRenderer {
     );
     pad.position.y = 0.27;
     grp.add(pad);
+    // Der Versorgungsradius gehört zur Platzierungsentscheidung und muss daher
+    // VOR dem Bau sichtbar sein. Dieselbe generische Effect-Auswertung versorgt
+    // Wasser, Nahrung, Freizeit, Schutz und spätere Radiusdienste.
+    const placementCoverage = this.placementCoverage(def);
+    if (placementCoverage) {
+      this.addTerrainCoverageVisual(
+        grp,
+        x + w / 2,
+        y + h / 2,
+        placementCoverage.radius,
+        error ? 0xe5533b : placementCoverage.color,
+        { x: x + w / 2, y: ghostBase, z: y + h / 2 },
+        true,
+      );
+    }
     if (waterfront) {
       const waterColor = waterfront.valid ? 0x2ab7d6 : 0xf09a39;
       const waterMaterial = new MeshStandardMaterial({
@@ -1564,16 +1766,13 @@ export class ThreeMapRenderer implements IMapRenderer {
     // Wasserlinie und teilen dieselbe Fläche. Einmalig gebaut, bleibt stehen.
     this.buildOcean();
 
-    // Organischer Nebel über gesperrten Landschaften (§ Welt 2.0 / A3).
-    this.buildRegionFog(regions);
-    // Kamera-Grenze an das aktuelle Freischalt-Set anpassen (§ Change 9.0 / S3b).
-    this.updateCameraBoundary();
+    // Schloss-Marker gesperrter Regionen (die Welt selbst bleibt sichtbar).
+    this.updateLockedRegionMarkers(regions);
 
-    // Drop-in terrain models (§ Gebirge/Map): nur für FREIGESCHALTETE Regionen
-    // eingesammelt (147k-Kachel-Scans über die ganze Insel wären Verschwendung).
+    // Drop-in terrain models (§ Gebirge/Map). § v1.24: für ALLE Regionen —
+    // die Welt lädt vollständig, gesperrte Gebiete sind entsättigt, nicht leer.
     const tiles: { x: number; y: number; terrain: TerrainType; locked: boolean }[] = [];
     for (const r of regions) {
-      if (!this.worldReveal.revealLockedRegionsVisually && r.status !== 'unlocked') continue;
       const b = regionBounds(r.id);
       if (!b) continue;
       for (let y = b.minY; y <= b.maxY; y++) {
@@ -1653,15 +1852,16 @@ export class ThreeMapRenderer implements IMapRenderer {
     const cornerAlpine = new Float32Array(nx0 * ny0);
     const tmp = new Color();
     const out = new Color();
-    const mountainMoss = new Color(0x536b4f);
-    const warmRock = new Color(0x8a887d);
-    const sunlitRock = new Color(0xb1aaa0);
-    const summitSnow = new Color(0xe7edf0);
+    const mountainMoss = new Color(0x667b5c);
+    const warmRock = new Color(0xa89278);
+    const sunlitRock = new Color(0xc7b394);
+    const summitSnow = new Color(0xf0f3ef);
     const desertTint = new Color(0xc96632);
     const swampTint = new Color(0x526140);
     const dryTint = new Color(0xbca363);
     const coastTint = new Color(0xaeb9aa);
     const alpineTint = new Color(0xc8cec9);
+    const lockedGrey = new Color();
     const state = this.controller.state;
 
     for (let iy = 0; iy < ny0; iy++) {
@@ -1713,18 +1913,51 @@ export class ThreeMapRenderer implements IMapRenderer {
         // Helle alpine Staffelung statt einer dunklen, einfarbigen Bergmasse:
         // Moos an den Hängen, warmer Fels auf steilen Flächen und Schnee nur
         // an hohen Gipfeln. Rein visuell; das gebackene Höhenfeld bleibt Quelle.
-        if (height > 3.5 || slope > 1.7) {
-          out.lerp(mountainMoss, MathUtils.clamp((height - 6) / 14, 0, 0.32));
-          out.lerp(warmRock, MathUtils.clamp((height - 4.5 + slope * 0.45) / 6.5, 0, 0.82));
-          out.lerp(sunlitRock, MathUtils.clamp((height - 8.5) / 5.5, 0, 0.42));
-          out.lerp(summitSnow, MathUtils.clamp((height - 12.5) / 4.2, 0, 0.9));
+        if (height > 3 || slope > 1.45) {
+          out.lerp(mountainMoss, MathUtils.clamp((height - 4.5) / 10, 0, 0.38));
+          out.lerp(warmRock, MathUtils.clamp((height - 3.4 + slope * 0.58) / 5.6, 0, 0.86));
+          out.lerp(sunlitRock, MathUtils.clamp((height - 11) / 11, 0, 0.46));
+          // Das nahe Startplateau liegt nur bei ~16 und darf nicht bereits wie
+          // ein riesiger grauer Schneeblock aussehen. Schnee folgt demselben
+          // Hochgebirgsband wie der Splat-Shader.
+          out.lerp(
+            summitSnow,
+            MathUtils.clamp(
+              (height - SPLAT_BANDS.snowStart) / (SPLAT_BANDS.snowFull - SPLAT_BANDS.snowStart),
+              0,
+              0.9,
+            ),
+          );
         }
-        // A faint per-corner lightness jitter so large fields aren't a flat sheet.
-        out.offsetHSL(0, 0, (hash01(`${vx},${vy}`) - 0.5) * 0.03);
-        // Locked regions remain geographically readable in the island view.
-        // The cloud layer communicates the lock state; crushing the terrain to
-        // near-black made the overview look unfinished and hid future goals.
-        if (lock / cnt > 0.5) out.multiplyScalar(0.64);
+        // Breite, weiche Farbinseln brechen große Grünflächen auf, ohne ein
+        // technisches Kachelmuster sichtbar zu machen. Der feine Hash nimmt
+        // anschließend nur die letzte digitale Gleichförmigkeit heraus.
+        const macroVariation =
+          Math.sin(vx * 0.087 + vy * 0.051) * 0.018 +
+          Math.cos(vx * 0.034 - vy * 0.073) * 0.014;
+        out.offsetHSL(
+          Math.sin((vx + vy) * 0.031) * 0.006,
+          Math.cos(vx * 0.043 + vy * 0.029) * 0.018,
+          macroVariation + (hash01(`${vx},${vy}`) - 0.5) * 0.024,
+        );
+        // § Welt lädt vollständig (v1.24): Gesperrtes Land wird ENTSÄTTIGT,
+        // nicht mehr verdeckt. Die frühere Wolkenwand hat die halbe Insel
+        // unsichtbar gemacht; jetzt bleibt die Geografie vollständig lesbar und
+        // signalisiert allein über die Farbe „gehört dir noch nicht".
+        //
+        // Bewusst weich über `lock / cnt` (vier Kachelproben je Ecke): die
+        // Grenze folgt damit der organischen Regionskontur statt einer
+        // Kachelkante — dieselbe Eigenschaft, die schon die alte Dimmung hatte.
+        const lockAmount = lock / cnt;
+        if (lockAmount > 0) {
+          const luminance = out.r * 0.299 + out.g * 0.587 + out.b * 0.114;
+          lockedGrey.setRGB(luminance, luminance, luminance);
+          out.lerp(lockedGrey, LOCKED_DESATURATION * lockAmount);
+          // Ein Hauch kühler und dunkler trennt es zusätzlich vom eigenen Land,
+          // ohne die Höhenstaffelung oder die Biome zu verschlucken.
+          out.multiplyScalar(1 - LOCKED_DARKENING * lockAmount);
+          out.b = Math.min(1, out.b * (1 + 0.05 * lockAmount));
+        }
         cornerColors[o] = out.r;
         cornerColors[o + 1] = out.g;
         cornerColors[o + 2] = out.b;
@@ -1742,6 +1975,7 @@ export class ThreeMapRenderer implements IMapRenderer {
           regionIdAt(Math.round(vx + 1.75), Math.round(vy + 1.75)),
         ];
         const visual = blendedVisualSplat(sampleRegionIds);
+        const regionTint = blendedVisualTint(sampleRegionIds);
         const vo = (iy * nx0 + ix) * 4;
         cornerVisual[vo] = visual.desert;
         cornerVisual[vo + 1] = visual.swamp;
@@ -1753,6 +1987,10 @@ export class ThreeMapRenderer implements IMapRenderer {
         // fehlen. Die gleichen weichen Profile geben auch dann Wüste, Moor,
         // Küste und Hochland eine klar erkennbare Makropalette.
         out.setRGB(cornerColors[o]!, cornerColors[o + 1]!, cornerColors[o + 2]!);
+        if (regionTint !== undefined) {
+          tmp.set(regionTint);
+          out.lerp(tmp, 0.1);
+        }
         out.lerp(desertTint, visual.desert * 0.48);
         out.lerp(swampTint, visual.swamp * 0.38);
         out.lerp(dryTint, visual.dry * 0.24);
@@ -2036,13 +2274,27 @@ export class ThreeMapRenderer implements IMapRenderer {
              float wTotal = ${sumTerms};
              if (wTotal > 0.0005) {
                vec3 splatColor = (${sampleTerms}) / wTotal;
-               // Cap the blend: the clean, stylized vertex colour stays the base
-               // (Tiny-Glade/Fabledom look) and the photo material is only a subtle
-               // detail on top — never a full photographic replace.
-               float coverage = clamp(wTotal, 0.0, 1.0) * 0.82;
+               // Fototexturen dürfen das Massiv nicht wieder zu einem dunklen
+               // Block zusammendrücken. Helle Gesteinsflächen behalten einen
+               // Teil der stilisierten Vertex-Staffelung und bekommen auf
+               // Gipfeln etwas mehr Lichtreserve.
+               float mountainShare = clamp((wStone + wMountain + wRidge + wSnow) / wTotal, 0.0, 1.0);
+               splatColor *= 1.0 + mountainShare * 0.12;
+               // Die helle, stilisierte Vertex-Farbe bleibt klar lesbar. Die
+               // Materialbibliothek liefert Makrostruktur, ersetzt aber nicht
+               // mehr die komplette Farbwelt durch dunkle Fototexturen.
+               float coverage = clamp(wTotal, 0.0, 1.0) * 0.44;
                float forestAo = 1.0;
                ${details.has('forestAo') ? "forestAo = mix(1.0, texture2D(uDetail_forestAo, vSplatUv * 1.7).r, clamp(wForest / wTotal, 0.0, 1.0) * 0.3);" : ''}
                diffuseColor.rgb = mix(diffuseColor.rgb, splatColor * forestAo, coverage);
+               // Sanfte Cartoon-Farbverdichtung statt harter Cel-Shading-Kanten:
+               // leicht mehr Sättigung, wenige breite Helligkeitsstufen und
+               // genügend Lichtreserve für lesbare Morgen-/Abendszenen.
+               float cmbLum = dot(diffuseColor.rgb, vec3(0.2126, 0.7152, 0.0722));
+               vec3 cmbSat = mix(vec3(cmbLum), diffuseColor.rgb, 1.1);
+               float cmbBandedLum = floor(cmbLum * 11.0 + 0.5) / 11.0;
+               vec3 cmbBanded = cmbSat * (cmbBandedLum / max(cmbLum, 0.045));
+               diffuseColor.rgb = min(mix(cmbSat, cmbBanded, 0.16) * 1.045, vec3(1.0));
                float rainDarken = uGroundWetness * (0.055 + bShore * 0.035);
                diffuseColor.rgb *= 1.0 - rainDarken;
              }
@@ -2056,7 +2308,7 @@ export class ThreeMapRenderer implements IMapRenderer {
           vec3 cmbDetailN = vec3(0.5, 0.5, 1.0);
           ${details.has('grassNormal') ? 'cmbDetailN = texture2D(uDetail_grassNormal, vSplatUv * 1.55).xyz;' : ''}
           ${details.has('rockNormal') ? 'cmbDetailN = mix(cmbDetailN, texture2D(uDetail_rockNormal, vSplatUv * 1.12).xyz, cmbRockMix);' : ''}
-          vec2 cmbPerturb = (cmbDetailN.xy * 2.0 - 1.0) * mix(0.08, 0.2, cmbRockMix) * cmbNearDetail;
+          vec2 cmbPerturb = (cmbDetailN.xy * 2.0 - 1.0) * mix(0.04, 0.11, cmbRockMix) * cmbNearDetail;
           normal = normalize(normal + vec3(cmbPerturb.x, cmbPerturb.y, 0.0));`
         : '';
       shader.fragmentShader = shader.fragmentShader.replace(
@@ -2132,8 +2384,8 @@ export class ThreeMapRenderer implements IMapRenderer {
     geo.computeVertexNormals();
     const positions = geo.getAttribute('position');
     const waterColors = new Float32Array(positions.count * 3);
-    const shallowWater = new Color(0x45c9c0);
-    const deepWater = new Color(0x0a416f);
+    const shallowWater = new Color(0x62ddd0);
+    const deepWater = new Color(0x12659a);
     const waterColor = new Color();
     for (let i = 0; i < positions.count; i++) {
       const worldX = positions.getX(i) + WORLD_TILES / 2;
@@ -2164,10 +2416,10 @@ export class ThreeMapRenderer implements IMapRenderer {
     const mat = new MeshStandardMaterial({
       color: 0xffffff,
       vertexColors: true,
-      roughness: 0.24,
-      metalness: 0.18,
-      emissive: 0x06283d,
-      emissiveIntensity: 0.32,
+      roughness: 0.38,
+      metalness: 0.06,
+      emissive: 0x0b4a63,
+      emissiveIntensity: 0.24,
       fog: true,
       side: DoubleSide,
     });
@@ -2195,7 +2447,9 @@ export class ThreeMapRenderer implements IMapRenderer {
           `#include <color_fragment>
            float broad = 0.5 + 0.5 * sin(vWaterPos.x * 0.035 + vWaterPos.y * 0.027 + uTime * 0.42);
            float cross = 0.5 + 0.5 * sin(vWaterPos.x * -0.071 + vWaterPos.y * 0.043 - uTime * 0.61);
-           diffuseColor.rgb *= 0.9 + broad * 0.08 + cross * 0.04;`,
+           diffuseColor.rgb *= 0.93 + broad * 0.08 + cross * 0.045;
+           float crest = smoothstep(0.87, 1.0, broad) * 0.12 + smoothstep(0.93, 1.0, cross) * 0.08;
+           diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.72, 0.98, 0.98), crest);`,
         );
     };
 
@@ -2253,9 +2507,9 @@ export class ThreeMapRenderer implements IMapRenderer {
     geo.setAttribute('position', new Float32BufferAttribute(positions, 3));
     geo.setAttribute('aRiverUv', new Float32BufferAttribute(flowUv, 2));
     const mat = new MeshBasicMaterial({
-      color: 0x8ee7e4,
+      color: 0xa3f3ec,
       transparent: true,
-      opacity: 0.32,
+      opacity: 0.44,
       depthWrite: false,
       side: DoubleSide,
     });
@@ -2281,8 +2535,11 @@ export class ThreeMapRenderer implements IMapRenderer {
   }
 
   /**
-   * One batched shoreline ribbon over every land↔water edge. This adds the
-   * bright coastal read from the mockups without spawning per-tile meshes.
+   * Ein gebündelter, geglätteter Küstensaum aus derselben gebackenen
+   * Wasser-/Landmaske. Marching Squares ersetzt die sichtbare Treppenkante
+   * durch diagonalfähige Konturen; eine Chaikin-Runde beruhigt die Silhouette.
+   * Es bleiben genau zwei Meshes (Seichtwasser + Schaum), unabhängig von der
+   * Küstenlänge.
    */
   private buildCoastFoam(): void {
     const foamPositions: number[] = [];
@@ -2291,75 +2548,63 @@ export class ThreeMapRenderer implements IMapRenderer {
       const terrain = worldTerrainAt(this.controller.state, x, y);
       return terrain === 'water' || terrain === 'river';
     };
-    const pushQuad = (
-      target: number[],
-      ax: number,
-      az: number,
-      bx: number,
-      bz: number,
-      ix: number,
-      iz: number,
-      width: number,
-      height: number,
-    ): void => {
-      target.push(
-        ax, height, az,
-        bx, height, bz,
-        bx + ix * width, height, bz + iz * width,
-        ax, height, az,
-        bx + ix * width, height, bz + iz * width,
-        ax + ix * width, height, az + iz * width,
-      );
-    };
-    const addQuad = (
-      ax: number,
-      az: number,
-      bx: number,
-      bz: number,
-      ix: number,
-      iz: number,
-      shoreType: number,
-    ): void => {
-      const flat = shoreType >= 1 && shoreType <= 3;
-      pushQuad(shoalPositions, ax, az, bx, bz, ix, iz, flat ? 1.42 : 0.42, WATER_LEVEL + 0.025);
-      pushQuad(foamPositions, ax, az, bx, bz, ix, iz, flat ? 0.42 : 0.2, WATER_LEVEL + 0.06);
-    };
-
-    for (let y = 1; y < WORLD_TILES - 1; y++) {
-      for (let x = 1; x < WORLD_TILES - 1; x++) {
-        if (!water(x, y)) continue;
-        if (!water(x, y - 1)) addQuad(x, y, x + 1, y, 0, 1, shoreTypeGrid[(y - 1) * WORLD_TILES + x] ?? 0);
-        if (!water(x + 1, y)) addQuad(x + 1, y, x + 1, y + 1, -1, 0, shoreTypeGrid[y * WORLD_TILES + x + 1] ?? 0);
-        if (!water(x, y + 1)) addQuad(x + 1, y + 1, x, y + 1, 0, -1, shoreTypeGrid[(y + 1) * WORLD_TILES + x] ?? 0);
-        if (!water(x - 1, y)) addQuad(x, y + 1, x, y, 1, 0, shoreTypeGrid[y * WORLD_TILES + x - 1] ?? 0);
+    const segments = marchingShoreSegments(WORLD_TILES, WORLD_TILES, water);
+    const chains = traceShoreChains(segments);
+    const flatShoreAt = (x: number, z: number): boolean => {
+      // Die Marching-Squares-Linie liegt zwischen Land und Wasser. Deshalb
+      // prüfen wir mehrere nahe Landproben, statt zufällig die Wasserkachel
+      // unter `floor()` als „keine flache Küste“ zu werten.
+      for (const [dx, dz] of [[0, 0], [0.55, 0], [-0.55, 0], [0, 0.55], [0, -0.55]] as const) {
+        const tx = MathUtils.clamp(Math.floor(x + dx), 0, WORLD_TILES - 1);
+        const ty = MathUtils.clamp(Math.floor(z + dz), 0, WORLD_TILES - 1);
+        const shoreType = shoreTypeGrid[ty * WORLD_TILES + tx] ?? 0;
+        if (shoreType >= 1 && shoreType <= 3) return true;
       }
+      return false;
+    };
+    for (const raw of chains) {
+      const chain = smoothShoreChain(raw, 1);
+      if (chain.points.length < 2) continue;
+      const flat = chain.points.map((point) => flatShoreAt(point.x, point.z));
+      appendVariableRibbonTriangles(
+        shoalPositions,
+        chain.points,
+        flat.map((isFlat) => isFlat ? 0.54 : 0.24),
+        0.026,
+        () => WATER_LEVEL,
+      );
+      appendVariableRibbonTriangles(
+        foamPositions,
+        chain.points,
+        flat.map((isFlat) => isFlat ? 0.105 : 0.065),
+        0.055,
+        () => WATER_LEVEL,
+      );
     }
     if (foamPositions.length === 0) return;
     const shoalGeo = new BufferGeometry();
     shoalGeo.setAttribute('position', new Float32BufferAttribute(shoalPositions, 3));
     const shoalMat = new MeshBasicMaterial({
-      color: 0x4fc1c3,
+      color: 0x7de5dc,
       transparent: true,
-      opacity: 0.18,
+      opacity: 0.17,
       depthWrite: false,
       side: DoubleSide,
     });
     const shoal = new Mesh(shoalGeo, shoalMat);
     shoal.renderOrder = 1;
-    shoal.frustumCulled = false;
 
     const foamGeo = new BufferGeometry();
     foamGeo.setAttribute('position', new Float32BufferAttribute(foamPositions, 3));
     const foamMat = new MeshBasicMaterial({
-      color: 0xdaf5f2,
+      color: 0xf3ffff,
       transparent: true,
-      opacity: 0.52,
+      opacity: 0.25,
       depthWrite: false,
       side: DoubleSide,
     });
     const foam = new Mesh(foamGeo, foamMat);
     foam.renderOrder = 2;
-    foam.frustumCulled = false;
     this.oceanGroup.add(shoal, foam);
   }
 
@@ -2577,347 +2822,65 @@ export class ThreeMapRenderer implements IMapRenderer {
     }
   }
 
-  // ---- Organischer Regions-Nebel (§ Welt 2.0 / A3) ---------------------------
-  // Jede gesperrte Landschaft trägt ein Nebel-Volumen entlang ihrer ECHTEN
-  // organischen Grenze: die Randkontur wird aus dem Region-Grid extrahiert
-  // (gerichtete Randkanten → Loop-Verkettung, entspricht Marching Squares auf
-  // Binärmasken), zweifach Chaikin-geglättet und zu einem halbtransparenten
-  // Volumen extrudiert. Silhouetten des dominanten Bioms (Gipfel, Baumwipfel,
-  // Hügel) ragen als Teaser aus dem Dunst (§6 Auftrag B: man ahnt, was dort
-  // wartet). Ein Unlock startet die weiche Aufdeck-Animation (aufsteigender,
-  // ausdünnender Nebel), danach wird das Volumen entsorgt.
-
-  /** Größte geschlossene Randkontur einer Region (Kachel-Ecken, Uhrzeigersinn). */
-  private regionContour(id: number): { x: number; y: number }[] | undefined {
-    const b = regionBounds(id);
-    if (!b) return undefined;
-    // Gerichtete Randkanten mit Regions-Innenseite links einsammeln.
-    const edges = new Map<string, { x: number; y: number }[]>();
-    const pk = (x: number, y: number): string => `${x},${y}`;
-    const addEdge = (x1: number, y1: number, x2: number, y2: number): void => {
-      const list = edges.get(pk(x1, y1));
-      if (list) list.push({ x: x2, y: y2 });
-      else edges.set(pk(x1, y1), [{ x: x2, y: y2 }]);
-    };
-    for (let y = b.minY; y <= b.maxY; y++) {
-      for (let x = b.minX; x <= b.maxX; x++) {
-        if (regionIdAt(x, y) !== id) continue;
-        if (regionIdAt(x, y - 1) !== id) addEdge(x, y, x + 1, y);
-        if (regionIdAt(x + 1, y) !== id) addEdge(x + 1, y, x + 1, y + 1);
-        if (regionIdAt(x, y + 1) !== id) addEdge(x + 1, y + 1, x, y + 1);
-        if (regionIdAt(x - 1, y) !== id) addEdge(x, y + 1, x, y);
-      }
-    }
-    // Kanten zu geschlossenen Loops verketten; die flächengrößte ist der
-    // Außenrand (innere Loops sind Löcher — Seen etc. — und bleiben vernebelt).
-    let best: { x: number; y: number }[] | undefined;
-    let bestArea = 0;
-    while (edges.size > 0) {
-      const [startKey, startList] = edges.entries().next().value as [string, { x: number; y: number }[]];
-      const [sx, sy] = startKey.split(',').map(Number) as [number, number];
-      const loop: { x: number; y: number }[] = [{ x: sx, y: sy }];
-      let cur = startList.pop()!;
-      if (startList.length === 0) edges.delete(startKey);
-      let guard = 200_000;
-      while ((cur.x !== sx || cur.y !== sy) && guard-- > 0) {
-        loop.push(cur);
-        const key = pk(cur.x, cur.y);
-        const list = edges.get(key);
-        if (!list || list.length === 0) break; // offene Kette (sollte nicht passieren)
-        const next = list.pop()!;
-        if (list.length === 0) edges.delete(key);
-        cur = next;
-      }
-      // Shoelace-Fläche des Loops.
-      let area = 0;
-      for (let i = 0; i < loop.length; i++) {
-        const a = loop[i]!;
-        const c = loop[(i + 1) % loop.length]!;
-        area += a.x * c.y - c.x * a.y;
-      }
-      area = Math.abs(area) / 2;
-      if (area > bestArea) {
-        bestArea = area;
-        best = loop;
-      }
-    }
-    return best && best.length >= 8 ? best : undefined;
-  }
-
-  /** Chaikin-Eckenschnitt (geschlossen) — macht die Kachel-Treppen organisch. */
-  private static chaikin(pts: { x: number; y: number }[], iterations: number): { x: number; y: number }[] {
-    let cur = pts;
-    for (let it = 0; it < iterations; it++) {
-      const next: { x: number; y: number }[] = [];
-      for (let i = 0; i < cur.length; i++) {
-        const a = cur[i]!;
-        const c = cur[(i + 1) % cur.length]!;
-        next.push(
-          { x: a.x * 0.75 + c.x * 0.25, y: a.y * 0.75 + c.y * 0.25 },
-          { x: a.x * 0.25 + c.x * 0.75, y: a.y * 0.25 + c.y * 0.75 },
-        );
-      }
-      cur = next;
-    }
-    return cur;
-  }
-
-  /** Baut Nebel-Volumen für gesperrte Regionen; startet Aufdecken bei Unlock. */
-  private buildRegionFog(regions: { id: number; status: string }[]): void {
-    if (!this.fogGroup.parent) this.scene.add(this.fogGroup);
+  /**
+   * Hält die Schloss-Marker gesperrter Regionen aktuell und startet beim Unlock
+   * die Aufdeck-Animation. Verdeckt wird seit v1.24 nichts mehr — die Welt ist
+   * vollständig geladen und sichtbar (siehe `LOCKED_DESATURATION`).
+   */
+  private updateLockedRegionMarkers(regions: { id: number; status: string }[]): void {
+    if (!this.lockedMarkerGroup.parent) this.scene.add(this.lockedMarkerGroup);
     const locked = new Set(
       this.worldReveal.fogDisabled ? [] : regions.filter((r) => r.status !== 'unlocked').map((r) => r.id),
     );
     for (const id of locked) {
-      if (!this.fogVolumes.has(id)) {
-        const vol = this.createFogVolume(id);
-        if (vol) this.fogVolumes.set(id, vol);
+      if (!this.lockedMarkers.has(id)) {
+        const vol = this.createLockedRegionMarker(id);
+        if (vol) this.lockedMarkers.set(id, vol);
       }
     }
-    for (const [id, vol] of this.fogVolumes) {
-      if (!locked.has(id) && vol.fading < 0) vol.fading = 0; // Aufdeck-Animation starten
-    }
-  }
-
-  /**
-   * § Change 9.0 / S3b: baut die Kamera-Erkundungsgrenze aus dem aktuellen
-   * Freischalt-Set neu. Die zulässige Target-Fläche ist die Union der
-   * freigeschalteten Regionen (aus derselben `regionIdAt`-Maske wie der Nebel) plus
-   * weiches Randband. Neu berechnet wird nur bei geändertem Unlock-Set oder Cheat
-   * (Signatur `cameraBoundaryKey`). Rein visuell/navigatorisch — keine Sim-Wirkung.
-   */
-  private updateCameraBoundary(): void {
-    const regions = Object.values(this.controller.state.world.regions);
-    const unlocked = new Set(regions.filter((r) => r.status === 'unlocked').map((r) => r.id));
-    const key = `${[...unlocked].sort((a, b) => a - b).join(',')}|cheat:${this.worldReveal.cameraBoundsDisabled ? 1 : 0}`;
-    if (key === this.cameraBoundaryKey) return;
-    this.cameraBoundaryKey = key;
-    const everyUnlocked = [...this.controller.config.regions.values()]
-      .filter((r) => r.unlockable)
-      .every((r) => unlocked.has(r.id));
-    // Dev-Cheat, alles frei oder (theoretisch) nichts frei → keine Einengung.
-    if (this.worldReveal.cameraBoundsDisabled || everyUnlocked || unlocked.size === 0) {
-      this.cam.setExplorationBoundary(undefined);
-      return;
-    }
-    this.cam.setExplorationBoundary(
-      new CameraExplorationBoundary({
-        worldTiles: WORLD_TILES,
-        allowed: (x, y) => unlocked.has(regionIdAt(x, y)),
-        softDistance: 10,
-        hardDistance: 18,
-        step: 4,
-      }),
-    );
-  }
-
-  /**
-   * § Change 9.0 / S3a: eine EINZIGE globale, absolute Nebeloberkante für die
-   * gesamte Welt (§6.4) — nicht mehr pro Region. Aus dem gebackenen Höhenfeld als
-   * hohes Perzentil aller Landhöhen bestimmt: flaches und hügeliges Land liegt
-   * darunter (blickdicht verdeckt), nur echte Gebirgsgipfel ragen als Silhouette
-   * heraus. So bilden benachbarte gesperrte Regionen EINE zusammenhängende
-   * Wolkendecke statt gestufter Einzelkuppeln. Einmal berechnet und gecacht.
-   */
-  private worldFogTopY(): number {
-    if (this.fogTopY !== undefined) return this.fogTopY;
-    const heights: number[] = [];
-    for (let y = 1; y < WORLD_TILES; y += 3) {
-      for (let x = 1; x < WORLD_TILES; x += 3) {
-        const terrain = worldTerrainAt(this.controller.state, x, y);
-        if (terrain === 'water' || terrain === 'river') continue; // nur Land
-        heights.push(terrainHeightAt(x + 0.5, y + 0.5));
+    for (const [id, vol] of this.lockedMarkers) {
+      if (!locked.has(id) && vol.fading < 0) {
+        vol.fading = 0; // Aufdeck-Animation starten
+        // §10: „beim Freischalten" ist einer der drei erlaubten Momente für den
+        // vollen Namen — der Marker beschriftet sich für die Aufdeck-Animation.
+        this.setLockedRegionLabel(id);
       }
     }
-    if (heights.length === 0) {
-      this.fogTopY = WATER_LEVEL + 6;
-      return this.fogTopY;
-    }
-    heights.sort((a, b) => a - b);
-    // 86. Perzentil: die oberen ~14 % (reale Gebirgsflanken) dürfen herausragen.
-    const p = heights[Math.min(heights.length - 1, Math.floor(heights.length * 0.86))]!;
-    this.fogTopY = Math.max(WATER_LEVEL + 6, p + 1.5);
-    return this.fogTopY;
   }
 
-  private createFogVolume(
-    id: number,
-  ): LockedRegionFogVolume | undefined {
-    const contour = this.regionContour(id);
-    const bounds = regionBounds(id);
+
+
+  /**
+   * Baut den Schloss-Marker einer gesperrten Region.
+   *
+   * § Welt lädt vollständig (v1.24): Früher entstand hier ein komplettes
+   * Nebel-VOLUMEN — geglättete Regionskontur, blickdichte Grunddecke, drei
+   * Alpha-Lagen und eine geschlossene Wolkenwand bis zum Boden. Es hat die
+   * Region vollständig verdeckt. Übrig bleibt bewusst nur der Marker: Die
+   * Sperrung liest sich jetzt am entsättigten Gelände (`LOCKED_DESATURATION`),
+   * und der Marker liefert die Auskunft, die der Nebel nie geben konnte —
+   * WELCHE Region das ist und ab welchem Level sie öffnet.
+   */
+  private createLockedRegionMarker(id: number): LockedRegionMarker | undefined {
     const baked = BAKED_REGIONS[id - 1];
     const def = this.controller.config.regions.get(id);
-    if (!contour || !bounds || !baked || !def) return undefined;
-
-    // § Change 9.0 / S3a: globale absolute Oberkante (siehe worldFogTopY). Flaches
-    // Land wird vollständig verdeckt; Gipfel über fogY ragen bewusst als Silhouette
-    // heraus (§6.4) — die frühere Pro-Region-Höhe (Stufen zwischen Nachbarn) entfällt.
-    const fogY = this.worldFogTopY();
+    if (!baked || !def) return undefined;
 
     const group = new Group();
     group.userData['regionId'] = id;
     const mats: { mat: MeshStandardMaterial | SpriteMaterial; base: number }[] = [];
 
-    // Die geglättete Kontur wird leicht nach außen aufgeblasen. So können die
-    // oberen Wolkenlagen driften, ohne an der technischen Polygongrenze einen
-    // Spalt zum verdeckten Gelände aufzureißen.
-    const smooth = ThreeMapRenderer.chaikin(contour, 2).map((point) => {
-      const dx = point.x - baked.centroid.x;
-      const dz = point.y - baked.centroid.y;
-      const length = Math.max(0.001, Math.hypot(dx, dz));
-      return { x: point.x + (dx / length) * 1.8, y: point.y + (dz / length) * 1.8 };
-    });
-    const shape = new Shape();
-    shape.moveTo(smooth[0]!.x, -smooth[0]!.y);
-    for (let i = 1; i < smooth.length; i++) shape.lineTo(smooth[i]!.x, -smooth[i]!.y);
-    shape.closePath();
-    const cloudTexture = loadEnvironmentTexture('cloud_bank');
-
-    // Blickdichte Grunddecke: Sie garantiert die vollständige Verdeckung auch
-    // bevor die optionale KI-Wolkentextur geladen ist. Die weichen Lagen und das
-    // Volumen darüber verhindern, dass sie als flaches Polygon wahrgenommen wird.
-    const coverGeo = new ShapeGeometry(shape, 8);
-    coverGeo.rotateX(-Math.PI / 2);
-    const coverMat = new MeshStandardMaterial({
-      color: 0x8998a5,
-      transparent: true,
-      opacity: 1,
-      roughness: 1,
-      metalness: 0,
-      depthWrite: true,
-      side: DoubleSide,
-    });
-    const cover = new Mesh(coverGeo, coverMat);
-    cover.position.y = fogY - 0.7;
-    cover.renderOrder = 3;
-    cover.userData['regionId'] = id;
-    group.add(cover);
-    mats.push({ mat: coverMat, base: coverMat.opacity });
-
-    const layers = [
-      { y: -0.1, opacity: 0.72, color: 0x9caab6 },
-      { y: 0.55, opacity: 0.82, color: 0xc8d2d9 },
-      { y: 1.3, opacity: 0.66, color: 0xe1e7eb },
-    ];
-    for (let i = 0; i < layers.length; i++) {
-      const layer = layers[i]!;
-      const geo = new ShapeGeometry(shape, 6);
-      geo.rotateX(-Math.PI / 2);
-      const fogMat = new MeshStandardMaterial({
-        color: layer.color,
-        transparent: true,
-        opacity: layer.opacity,
-        roughness: 1,
-        metalness: 0,
-        depthWrite: false,
-        side: DoubleSide,
-        fog: false,
-      });
-      const fog = new Mesh(geo, fogMat);
-      fog.position.set((i - 1) * 0.65, fogY + layer.y, (1 - i) * 0.5);
-      fog.userData['driftPhase'] = id * 0.73 + i * 1.61;
-      fog.userData['driftOriginX'] = fog.position.x;
-      fog.userData['driftOriginZ'] = fog.position.z;
-      fog.userData['driftAmount'] = 0.3 + i * 0.13;
-      fog.userData['regionId'] = id;
-      fog.renderOrder = 4 + i;
-      group.add(fog);
-      mats.push({ mat: fogMat, base: fogMat.opacity });
-      if (cloudTexture) {
-        void cloudTexture
-          .then((texture) => {
-            if (this.destroyed || !fog.parent) return;
-            fogMat.alphaMap = texture;
-            fogMat.needsUpdate = true;
-          })
-          .catch(() => undefined);
-      }
-    }
-
-    // § Change 9.0 / S3a: weiche, zusammenhängende Wolkenfront statt harter
-    // Einzelkuppeln. Ein InstancedMesh je Region, aber mit ALPHA-HASH-Dithering
-    // (ordnungsunabhängig, kein Sortierfehler) und geringerer Deckkraft — dicht
-    // überlappende, kleinere Ballen verschmelzen so zu einer fluffigen Masse ohne
-    // sichtbare „Kapsel"-Silhouetten (§6.1/§6.3). Rand-Ballen bilden die weiche
-    // Wand vom lokalen Boden bis zur globalen Decke, Innenballen die Oberseite.
-    const cloudGeo = new SphereGeometry(1, 12, 8);
-    const cloudMat = new MeshStandardMaterial({
-      color: 0xdae1e8,
-      roughness: 1,
-      metalness: 0,
-      alphaHash: true,
-      opacity: 0.8,
-      depthWrite: true,
-      fog: false,
-    });
-    const cloudInstances: { x: number; y: number; z: number; sx: number; sy: number; sz: number; shade: number }[] = [];
-    const edgeStep = Math.max(1, Math.ceil(smooth.length / 120));
-    for (let i = 0; i < smooth.length; i += edgeStep) {
-      const point = smooth[i]!;
-      const localGround = terrainHeightAt(point.x, point.y);
-      const columnHeight = Math.max(4.5, fogY - localGround + 2.2);
-      const width = 2.6 + hash01(`${id}:edge-width:${i}`) * 1.9;
-      cloudInstances.push({
-        x: point.x,
-        y: localGround + columnHeight * 0.5,
-        z: point.y,
-        sx: width,
-        sy: columnHeight * 0.6,
-        sz: width * (0.82 + hash01(`${id}:edge-depth:${i}`) * 0.34),
-        shade: 0.82 + hash01(`${id}:edge-shade:${i}`) * 0.18,
-      });
-    }
-    const interiorStep = 4;
-    for (let z = bounds.minY; z <= bounds.maxY; z += interiorStep) {
-      for (let x = bounds.minX; x <= bounds.maxX; x += interiorStep) {
-        if (regionIdAt(x, z) !== id || hash01(`${id}:cloud:${x},${z}`) < 0.28) continue;
-        const width = 2.6 + hash01(`${id}:cloud-width:${x},${z}`) * 2.9;
-        // Leichte vertikale Streuung um die globale Decke (auch etwas darunter),
-        // damit die Oberseite aufgewühlt wirkt und Lücken zwischen Ballen füllt.
-        cloudInstances.push({
-          x: x + (hash01(`${id}:cloud-x:${x},${z}`) - 0.5) * 3,
-          y: fogY - 0.6 + hash01(`${id}:cloud-y:${x},${z}`) * 2.6,
-          z: z + (hash01(`${id}:cloud-z:${x},${z}`) - 0.5) * 3,
-          sx: width,
-          sy: 1.5 + hash01(`${id}:cloud-height:${x},${z}`) * 2,
-          sz: width * (0.75 + hash01(`${id}:cloud-depth:${x},${z}`) * 0.42),
-          shade: 0.88 + hash01(`${id}:cloud-shade:${x},${z}`) * 0.12,
-        });
-      }
-    }
-    const cappedInstances = cloudInstances.slice(0, 240);
-    const cloudWall = new InstancedMesh(cloudGeo, cloudMat, cappedInstances.length);
-    const dummy = new Object3D();
-    const color = new Color();
-    for (let i = 0; i < cappedInstances.length; i++) {
-      const cloud = cappedInstances[i]!;
-      dummy.position.set(cloud.x, cloud.y, cloud.z);
-      dummy.rotation.set(0, hash01(`${id}:cloud-rot:${i}`) * Math.PI * 2, 0);
-      dummy.scale.set(cloud.sx, cloud.sy, cloud.sz);
-      dummy.updateMatrix();
-      cloudWall.setMatrixAt(i, dummy.matrix);
-      color.setRGB(cloud.shade, cloud.shade * 1.01, Math.min(1, cloud.shade * 1.035));
-      cloudWall.setColorAt(i, color);
-    }
-    cloudWall.instanceMatrix.needsUpdate = true;
-    if (cloudWall.instanceColor) cloudWall.instanceColor.needsUpdate = true;
-    cloudWall.userData['driftPhase'] = id * 0.91;
-    cloudWall.userData['driftOriginX'] = 0;
-    cloudWall.userData['driftOriginZ'] = 0;
-    cloudWall.userData['driftAmount'] = 0.22;
-    cloudWall.userData['regionId'] = id;
-    cloudWall.renderOrder = 7;
-    group.add(cloudWall);
-    mats.push({ mat: cloudMat, base: cloudMat.opacity });
-
-    // Mockuptreuer Weltmarker: Schloss, Regionsname und Freischaltlevel bleiben
-    // unabhängig von Wetter/Nebel lesbar und öffnen per Klick den Regionsdialog.
+    // Weltmarker: Schloss bleibt unabhängig von Wetter und Tageszeit lesbar und
+    // öffnet per Klick den Regionsdialog. § World Overhaul 12.0 §10: Der
+    // Regionsname wird NICHT dauerhaft eingeblendet — Ruhezustand ist das
+    // kompakte Schloss, der volle Marker erscheint bei Hover und Freischaltung.
     const levelLabel = def.unlockable
       ? t('ui.region.marker_level', { level: def.unlockLevel })
       : t('ui.region.marker_future');
     const markerTexture = makeLockedRegionMarkerTexture(t(def.nameKey), levelLabel);
+    const iconTexture = makeLockedRegionIconTexture();
     const markerMat = new SpriteMaterial({
-      map: markerTexture,
+      map: iconTexture,
       transparent: true,
       opacity: 1,
       depthTest: false,
@@ -2925,8 +2888,12 @@ export class ThreeMapRenderer implements IMapRenderer {
       fog: false,
     });
     const marker = new Sprite(markerMat);
-    marker.position.set(baked.centroid.x, fogY + 8.2, baked.centroid.y);
-    marker.scale.set(30, 11.25, 1);
+    // Ohne Wolkendecke gibt es keine globale Oberkante mehr, an der der Marker
+    // hängen könnte. Er schwebt jetzt über dem EIGENEN Gelände der Region —
+    // dadurch folgt er dem Relief statt über einem Berg zu versinken.
+    const centroidY = terrainHeightAt(baked.centroid.x + 0.5, baked.centroid.y + 0.5);
+    marker.position.set(baked.centroid.x, centroidY + 11, baked.centroid.y);
+    marker.scale.set(...LOCKED_REGION_ICON_SCALE);
     marker.userData['regionId'] = id;
     marker.userData['markerBaseY'] = marker.position.y;
     marker.userData['markerPhase'] = id * 0.67;
@@ -2934,43 +2901,59 @@ export class ThreeMapRenderer implements IMapRenderer {
     group.add(marker);
     mats.push({ mat: markerMat, base: markerMat.opacity });
 
-    this.fogGroup.add(group);
-    return { group, mats, marker, markerTexture, fading: -1 };
+    this.lockedMarkerGroup.add(group);
+    return { group, mats, marker, markerTexture, iconTexture, labelled: false, fading: -1 };
+  }
+
+
+  /**
+   * § World Overhaul 12.0 §10 — Regionsname nur bei Bedarf einblenden.
+   * `regionId === undefined` blendet alle Namen wieder aus. Fadende Volumen
+   * (gerade freigeschaltete Regionen) behalten ihren vollen Marker.
+   */
+  private setLockedRegionLabel(regionId: number | undefined): void {
+    for (const [id, volume] of this.lockedMarkers) {
+      const wanted = id === regionId || volume.fading >= 0;
+      if (volume.labelled === wanted) continue;
+      volume.labelled = wanted;
+      const mat = volume.marker.material as SpriteMaterial;
+      mat.map = wanted ? volume.markerTexture : volume.iconTexture;
+      mat.needsUpdate = true;
+      volume.marker.scale.set(...(wanted ? LOCKED_REGION_LABEL_SCALE : LOCKED_REGION_ICON_SCALE));
+    }
   }
 
   /** Aufdeck-Animation: Nebel steigt und dünnt aus, dann wird er entsorgt. */
-  private animateFog(dt: number): void {
-    if (this.fogVolumes.size === 0) return;
+  private animateLockedRegionMarkers(dt: number): void {
+    if (this.lockedMarkers.size === 0) return;
     const DURATION = 1.8;
     const now = performance.now() / 1000;
-    for (const [id, vol] of this.fogVolumes) {
+    for (const [id, vol] of this.lockedMarkers) {
       if (vol.fading < 0) {
-        for (const child of vol.group.children) {
-          const markerBaseY = child.userData['markerBaseY'] as number | undefined;
-          if (markerBaseY !== undefined) {
-            const markerPhase = child.userData['markerPhase'] as number;
-            child.position.y = markerBaseY + Math.sin(now * 0.9 + markerPhase) * 0.22;
-            continue;
-          }
-          const phase = child.userData['driftPhase'] as number | undefined;
-          if (phase === undefined) continue;
-          const originX = child.userData['driftOriginX'] as number;
-          const originZ = child.userData['driftOriginZ'] as number;
-          const amount = (child.userData['driftAmount'] as number | undefined) ?? 0.35;
-          child.position.x = originX + Math.sin(now * 0.12 + phase) * amount;
-          child.position.z = originZ + Math.cos(now * 0.095 + phase) * amount * 0.8;
-        }
+        const markerBaseY = vol.marker.userData['markerBaseY'] as number;
+        const markerPhase = vol.marker.userData['markerPhase'] as number;
+        vol.marker.position.y = markerBaseY + Math.sin(now * 0.9 + markerPhase) * 0.22;
+        // Regionsmarker sind Orientierung, kein dauerhaftes Hauptpanel.
+        // Nah klein und diskret, in der Inselübersicht gerade groß genug
+        // zum Anklicken; der Text verdrängt die Stadt nicht mehr.
+        const markerWidth = MathUtils.clamp(this.cam.getDist() * 0.04, 5.5, 18);
+        vol.marker.scale.set(markerWidth, markerWidth * 0.375, 1);
         continue;
       }
+      // Freischalt-Animation: Der Marker steigt auf und löst sich auf. Früher
+      // hob sich hier die ganze Wolkendecke — die gibt es nicht mehr, die
+      // Region war ja bereits sichtbar. Was sich ändert, ist ihre Sättigung
+      // (durch den Terrain-Neuaufbau) und dass das Schloss verschwindet.
       vol.fading += dt;
       const k = Math.min(1, vol.fading / DURATION);
-      vol.group.position.y = k * 6; // Nebel hebt ab …
-      for (const { mat, base } of vol.mats) mat.opacity = base * (1 - k) * (1 - k); // … und löst sich auf
+      vol.group.position.y = k * 6;
+      for (const { mat, base } of vol.mats) mat.opacity = base * (1 - k) * (1 - k);
       if (k >= 1) {
-        this.fogGroup.remove(vol.group);
+        this.lockedMarkerGroup.remove(vol.group);
         this.disposeGroup(vol.group);
         vol.markerTexture.dispose();
-        this.fogVolumes.delete(id);
+        vol.iconTexture.dispose();
+        this.lockedMarkers.delete(id);
       }
     }
   }
@@ -3011,429 +2994,209 @@ export class ThreeMapRenderer implements IMapRenderer {
     }
   }
 
-  /** Vegetation is a separate, culled pass (§7): trees/bushes only on FREE tiles
-   *  (never on a building or road footprint), rebuilt when the city changes. */
+  /**
+   * Vegetation ist ein eigener, gecullter Durchlauf (§7): Natur wächst nur auf
+   * FREIEN Kacheln — nie auf einem Gebäude- oder Straßen-Footprint — und wird
+   * neu aufgebaut, wenn sich Stadt oder sichtbare Regionen ändern.
+   *
+   * § NATUR-OVERHAUL 14.0: Diese Methode entscheidet NICHT mehr, wo etwas
+   * wächst. Die Verteilung liegt in `natureDistribution.ts` (rein und testbar,
+   * Regeln in `natureZones.ts`), die Massengeometrie in `natureRenderer.ts`.
+   * Hier bleibt nur noch die Zusammenführung: Verteilung holen, seltene
+   * Hero-`.glb` abzweigen, Rest als stilisierte Instanzen aufbauen.
+   *
+   * Warum überhaupt eine Abzweigung? Jedes vorhandene Natur-`.glb` wiegt rund
+   * 29.000 Dreiecke. Als Masse ist das unbezahlbar (deshalb bestand die Welt
+   * früher aus Kegeln), als seltener Blickfang ist es genau richtig.
+   */
   private rebuildVegetation(): void {
-    const regions = Object.values(this.controller.state.world.regions).filter(
-      (r) => this.worldReveal.revealLockedRegionsVisually || r.status === 'unlocked',
-    );
-    // Only rebuild when the occupancy or region set actually changed.
-    const key = `${regions.map((r) => r.id).join(',')}|${this.occupied.size}|${[...this.occupied].join(',')}`;
+    const profile = getGraphicsProfile();
+    this.activeVegProfile = profile;
+    const regions = Object.values(this.controller.state.world.regions);
+    const unlocked = regions.filter((r) => r.status === 'unlocked');
+    const locked = regions.filter((r) => r.status !== 'unlocked');
+
+    // § Welt lädt vollständig (v1.24) — ZWEI GETRENNTE AUFBAUTEN.
+    //
+    // Seit gesperrte Regionen mitgebaut werden, umfasst die Vegetation der Insel
+    // rund 27.000 Instanzen statt 1.400. Hinge das an EINEM Schlüssel, müsste
+    // jedes gesetzte Gebäude die ganze Insel neu aufbauen — 51.000 Kacheln
+    // scannen für eine 3×3-Änderung.
+    //
+    // Gesperrte Regionen hängen aber gar nicht an der Belegung: Dort baut
+    // niemand. Ihr Bestand ändert sich nur beim Freischalten oder bei einem
+    // Wechsel der Qualitätsstufe. Deshalb zwei Gruppen mit eigenen Schlüsseln —
+    // der teure Teil steht still, während der Spieler baut.
+    const lockedKey = `${locked.map((r) => r.id).join(',')}|${profile.level}`;
+    if (lockedKey !== this.lockedVegKey) {
+      this.lockedVegKey = lockedKey;
+      this.disposeGroup(this.lockedVegetationGroup);
+      this.lockedVegetationGroup.clear();
+      this.lockedVegetationLod = [];
+      if (!this.lockedVegetationGroup.parent) this.scene.add(this.lockedVegetationGroup);
+      this.buildVegetationFor(
+        locked,
+        LOCKED_VEGETATION_DENSITY,
+        this.lockedVegetationGroup,
+        this.lockedVegetationLod,
+        // Gesperrtes Land ist Kulisse: keine Schatten. Das Schattenbudget ist
+        // mit wenigen hundert Instanzen ohnehin knapp und gehört der Stadt.
+        () => false,
+        () => this.lockedVegKey !== lockedKey,
+        profile,
+      );
+    }
+
+    const key = `${unlocked.map((r) => r.id).join(',')}|${this.occupied.size}|${[...this.occupied].join(',')}|${profile.level}`;
     if (key === this.vegKey) return;
     this.vegKey = key;
     this.disposeGroup(this.vegetationGroup);
     this.vegetationGroup.clear();
     this.nearVegetation = [];
+    this.vegetationDistanceLod = [];
 
-    // § Säule B: aktives Qualitätsprofil. Die Dichte skaliert die Pro-Region-
-    // Budgets (echte Instanzreduktion), und ein striktes Schattenbudget deckelt
-    // die schattenwerfenden Groß-Props (Bäume/Felsen). Kleine Props werfen ohnehin
-    // nie Schatten. `shadowBudget` wird beim Erzeugen jeder Groß-Prop-Gruppe
-    // dekrementiert — ist er aufgebraucht, werfen weitere Gruppen keine Schatten.
-    const profile = getGraphicsProfile();
-    this.activeVegProfile = profile;
+    // § Säule B: striktes Schattenbudget für die schattenwerfenden Groß-Props.
+    // Ist es aufgebraucht, wirft nichts weiteres Schatten.
     let shadowBudget = profile.vegetationShadows ? profile.shadowInstanceBudget : 0;
     const vegShadow = (count: number): boolean => {
       if (shadowBudget < count) return false;
       shadowBudget -= count;
       return true;
     };
+    this.buildVegetationFor(
+      unlocked,
+      1,
+      this.vegetationGroup,
+      this.vegetationDistanceLod,
+      vegShadow,
+      () => this.vegKey !== key,
+      profile,
+    );
+  }
 
-    const dummy = new Object3D();
-    // § Overhaul 8.0 / §16: je Proptyp die FERTIGE Weltliste, aber pro Region
-    // deterministisch gedeckelt. Ein Region-Unlock hängt nur eigene Kacheln an
-    // und verändert die Auswahl bereits sichtbarer Regionen nicht mehr.
-    const pineTrees: { x: number; y: number }[] = [];
-    const broadleafTrees: { x: number; y: number }[] = [];
-    const largePines: { x: number; y: number }[] = [];
-    const bushes: { x: number; y: number }[] = [];
-    // § A7 Biom-Deko: Findlinge im Gebirge, Schilf am Wasser.
-    const rocks: { x: number; y: number }[] = [];
-    const reeds: { x: number; y: number }[] = [];
-    const flowers: { x: number; y: number }[] = [];
-    const fieldRows: { x: number; y: number }[] = [];
-    const deadwood: { x: number; y: number }[] = [];
-    const dryShrubs: { x: number; y: number }[] = [];
-    const microGrass: { x: number; y: number }[] = [];
-    const isWater = (tx: number, ty: number): boolean => {
-      const tt = worldTerrainAt(this.controller.state, tx, ty);
-      return tt === 'water' || tt === 'river';
-    };
+  /**
+   * Baut die Vegetation einer Regionsmenge in eine Zielgruppe.
+   *
+   * Die Verteilung kommt aus `collectRegionNature` — genau derselben Funktion,
+   * die auch die Tests messen (D-042: Messung und Gegenstand teilen sich
+   * zwingend den Code). Hier passiert nur noch die Aufteilung in seltene
+   * Hero-`.glb` und stilisierte Masse.
+   */
+  private buildVegetationFor(
+    regions: { id: number; status: string }[],
+    densityScale: number,
+    target: Group,
+    lod: NatureLodEntry[],
+    claimShadow: (count: number) => boolean,
+    stale: () => boolean,
+    profile: GraphicsProfile,
+  ): void {
+    if (regions.length === 0) return;
+    const mass = emptyPlacement();
+    const detailed = emptyPlacement();
+    const townHallX = startRegionConfig.townHall.x + 2.5;
+    const townHallZ = startRegionConfig.townHall.y + 2.5;
     for (const r of regions) {
-      const visualProfile = regionVisualProfile(r.id);
-      const b = regionBounds(r.id);
-      if (!b) continue;
-      // Kandidaten NUR dieser Region — sie werden am Schleifenende einzeln
-      // gedeckelt, damit andere Regionen die Auswahl nicht verschieben (§16).
-      const regionCandidates: Record<PropKind, { x: number; y: number }[]> = {
-        pine: [],
-        broadleaf: [],
-        largePine: [],
-        bush: [],
-        rock: [],
-        reed: [],
-        flower: [],
-        fieldRow: [],
-        deadwood: [],
-        dryShrub: [],
-        microGrass: [],
-      };
-      for (let y = b.minY; y <= b.maxY; y++) {
-        for (let x = b.minX; x <= b.maxX; x++) {
-          if (regionIdAt(x, y) !== r.id) continue;
-          if (this.occupied.has(`${x},${y}`)) continue; // never on the city
-          const terrain = worldTerrainAt(this.controller.state, x, y); // § v10: aus dem Insel-Grid
-          const h = hash01(`${x},${y}`);
-          const cluster = hash01(`cluster:${Math.floor(x / 5)},${Math.floor(y / 5)}`);
-          const isDesert = visualProfile?.biome === 'wueste';
-          const isSwamp = visualProfile?.biome === 'sumpf';
-          const isDry = visualProfile?.biome === 'trockene_ebene';
-          const isAlpine = visualProfile?.vegetation === 'alpin';
-          const groundY = terrainHeightAt(x + 0.5, y + 0.5);
-          if (
-            (terrain === 'grass' || terrain === 'fertile') &&
-            !isDesert &&
-            !isSwamp &&
-            hash01(`micro:${x},${y}`) > 0.974
-          ) {
-            regionCandidates.microGrass.push({ x, y });
-          }
-          if (!isDesert && !isSwamp && (terrain === 'grass' || terrain === 'fertile') && hash01(`fl${x},${y}`) > 0.91) {
-            regionCandidates.flower.push({ x, y });
-          }
-          if (!isDesert && !isSwamp && terrain === 'fertile' && hash01(`row${x},${y}`) > 0.78) regionCandidates.fieldRow.push({ x, y });
-          if ((terrain === 'forest' || isSwamp) && hash01(`log${x},${y}`) > (isSwamp ? 0.91 : 0.965)) regionCandidates.deadwood.push({ x, y });
-          if (terrain === 'forest' && h > (isDesert ? 0.91 : 0.2) && cluster > 0.12) {
-            if (isAlpine && hash01(`alpine${x},${y}`) > 0.58) regionCandidates.largePine.push({ x, y });
-            else if (isSwamp || hash01(`leaf${x},${y}`) > 0.62) regionCandidates.broadleaf.push({ x, y });
-            else regionCandidates.pine.push({ x, y });
-          } else if (terrain === 'grass' && !isDesert && !isSwamp && h > 0.965) {
-            // Vereinzelte Solitaerbäume und Baumgruppen brechen offene Wiesen,
-            // ohne die bebaubaren Lichtungen zuzustellen.
-            regionCandidates.broadleaf.push({ x, y });
-          } else if (terrain === 'grass' && !isDesert && h > (isDry ? 0.94 : 0.88)) regionCandidates.bush.push({ x, y });
-          else if ((terrain === 'mountain' || isDesert) && h > (isDesert ? 0.48 : 0.62)) regionCandidates.rock.push({ x, y });
-          if ((isDesert || isDry) && terrain !== 'water' && terrain !== 'river' && hash01(`dry${x},${y}`) > 0.88) {
-            regionCandidates.dryShrub.push({ x, y });
-          }
-          else if (
-            (terrain === 'grass' || terrain === 'sand' || terrain === 'fertile') &&
-            h > (isSwamp ? 0.28 : 0.55) &&
-            ((isWater(x + 1, y) || isWater(x - 1, y) || isWater(x, y + 1) || isWater(x, y - 1)) ||
-              (isSwamp && groundY < 1.35))
-          ) {
-            regionCandidates.reed.push({ x, y });
-          }
+      const placement = collectRegionNature(r.id, {
+        terrainAt: (x, y) => worldTerrainAt(this.controller.state, x, y),
+        heightAt: (x, y) => terrainHeightAt(x + 0.5, y + 0.5),
+        isOccupied: (x, y) => this.occupied.has(`${x},${y}`),
+        scaleBudget: (base) => scaledBudget(base, profile),
+        densityScale,
+        clearing: r.id === startRegionConfig.startRegionId
+          ? (x, y) => starterNatureFrame(Math.hypot(x + 0.5 - townHallX, y + 0.5 - townHallZ))
+          : undefined,
+      });
+      for (const kind of NATURE_KINDS) {
+        const list = placement[kind];
+        if (list.length === 0) continue;
+        const detailBudget = scaledBudget(REGION_DETAIL_PROP_BUDGET[kind], profile);
+        if (detailBudget <= 0) {
+          mass[kind].push(...list);
+          continue;
+        }
+        // Eine kleine, positionsstabile Teilmenge bekommt das echte Modell.
+        const picked = new Set(
+          selectPropTiles(`detail:${kind}:${r.id}`, list, detailBudget)
+            .map((tile) => `${tile.x},${tile.y}`),
+        );
+        for (const instance of list) {
+          (picked.has(`${instance.x},${instance.y}`) ? detailed : mass)[kind].push(instance);
         }
       }
-
-      // §16: Budget pro Region und Proptyp — die Auswahl hängt allein an
-      // Proptyp, Region und Kachelposition, nie am Unlock-Zustand der Welt.
-      const take = (kind: PropKind): { x: number; y: number }[] =>
-        selectPropTiles(`${kind}:${r.id}`, regionCandidates[kind], scaledBudget(REGION_PROP_BUDGET[kind], profile));
-      pineTrees.push(...take('pine'));
-      broadleafTrees.push(...take('broadleaf'));
-      largePines.push(...take('largePine'));
-      bushes.push(...take('bush'));
-      rocks.push(...take('rock'));
-      reeds.push(...take('reed'));
-      flowers.push(...take('flower'));
-      fieldRows.push(...take('fieldRow'));
-      deadwood.push(...take('deadwood'));
-      dryShrubs.push(...take('dryShrub'));
-      microGrass.push(...take('microGrass'));
     }
 
-    // Drop-in props (§ Props): a `pine_tree.glb` / `bush_small.glb` (etc.) in
-    // models/props/nature/ replaces the procedural cones. Fire-and-forget so a
-    // slow model never blocks a frame; the staleness guard drops it if the city
-    // changed meanwhile. Falls back to the instanced procedural greenery below.
-    const stale = () => this.vegKey !== key;
-    const pineUrl = firstModel(propModel, PINE_TREE_MODELS);
-    const broadleafUrl = firstModel(propModel, BROADLEAF_TREE_MODELS);
-    const largePineUrl = firstModel(propModel, LARGE_PINE_TREE_MODELS);
-    const bushUrl = firstModel(propModel, BUSH_MODELS);
-    const rockUrl = firstModel(propModel, ROCK_CLUSTER_MODELS);
-    const reedUrl = firstModel(propModel, REED_MODELS);
-    const deadwoodUrl = firstModel(propModel, DEADWOOD_MODELS);
-    if (pineUrl && pineTrees.length) {
-      // yBase 0: the model's base sits on the sampled ground (placeModelInstances
-      // rides the heightfield). footprint keeps the model's own tall aspect ratio.
-      void this.placeModelInstances(
-        pineUrl,
-        this.vegetationGroup,
-        pineTrees,
-        { footprint: 1.15, jitterRot: true, jitterScale: 0.54, jitterPosition: 0.52, yBase: 0, castShadow: vegShadow(pineTrees.length) },
-        stale,
-      );
-    }
-    if (broadleafUrl && broadleafTrees.length) {
-      void this.placeModelInstances(
-        broadleafUrl,
-        this.vegetationGroup,
-        broadleafTrees,
-        { footprint: 1.18, jitterRot: true, jitterScale: 0.5, jitterPosition: 0.48, yBase: 0, castShadow: vegShadow(broadleafTrees.length) },
-        stale,
-      );
-    }
-    if (largePineUrl && largePines.length) {
-      void this.placeModelInstances(
-        largePineUrl,
-        this.vegetationGroup,
-        largePines,
-        { footprint: 1.38, jitterRot: true, jitterScale: 0.42, jitterPosition: 0.38, yBase: 0, castShadow: vegShadow(largePines.length) },
-        stale,
-      );
-    }
-    if (bushUrl && bushes.length) {
-      void this.placeModelInstances(
-        bushUrl,
-        this.vegetationGroup,
-        bushes,
-        { footprint: 0.62, jitterRot: true, jitterScale: 0.45, jitterPosition: 0.38, yBase: 0 },
-        stale,
-      );
-    }
-
-    const fallbackTrees = [
-      ...(pineUrl ? [] : pineTrees),
-      ...(broadleafUrl ? [] : broadleafTrees),
-      ...(largePineUrl ? [] : largePines),
-    ];
-    const nT = Math.min(fallbackTrees.length, 600);
-    if (nT > 0) {
-      const trunkG = new CylinderGeometry(0.06, 0.09, 0.5, 5);
-      const crownG = new ConeGeometry(0.36, 1.0, 6);
-      const trunkM = new MeshLambertMaterial({ color: 0x7a5230 });
-      const crownM = new MeshLambertMaterial({ color: 0x2f6b34 });
-      const trunks = new InstancedMesh(trunkG, trunkM, nT);
-      const crowns = new InstancedMesh(crownG, crownM, nT);
-      crowns.castShadow = vegShadow(nT);
-      for (let i = 0; i < nT; i++) {
-        const t = fallbackTrees[i]!;
-        const gy = terrainHeightAt(t.x + 0.5, t.y + 0.5);
-        const jt = hash01(`${t.x}.${t.y}`);
-        const sc = 0.8 + jt * 0.5;
-        dummy.rotation.set(0, jt * Math.PI * 2, 0);
-        dummy.position.set(t.x + 0.5, gy + 0.25 * sc, t.y + 0.5);
-        dummy.scale.set(sc, sc, sc);
-        dummy.updateMatrix();
-        trunks.setMatrixAt(i, dummy.matrix);
-        dummy.position.set(t.x + 0.5, gy + 0.75 * sc, t.y + 0.5);
-        dummy.updateMatrix();
-        crowns.setMatrixAt(i, dummy.matrix);
+    // ---- Seltene Hero-Modelle (echte `.glb`) -------------------------------
+    const heroModel = (
+      kind: NatureKind,
+      names: readonly string[],
+      tiles: NatureInstance[],
+      footprint: number,
+      extra: { groundRadius?: number; sink?: number; cullFactor?: number; jitterScale?: number } = {},
+    ): void => {
+      if (tiles.length === 0) return;
+      const url = firstModel(propModel, names);
+      if (!url) {
+        // Kein Modell vorhanden → die Kacheln fallen in die stilisierte Masse
+        // zurück, statt ersatzlos zu verschwinden (§5 Drop-in, nie crashen).
+        if (hasNatureGeometry(kind)) mass[kind].push(...tiles);
+        return;
       }
-      trunks.instanceMatrix.needsUpdate = true;
-      crowns.instanceMatrix.needsUpdate = true;
-      this.vegetationGroup.add(trunks, crowns);
-    }
-
-    const nB = bushUrl ? 0 : Math.min(bushes.length, 300);
-    if (nB > 0) {
-      const bG = new ConeGeometry(0.28, 0.42, 6);
-      const bM = new MeshLambertMaterial({ color: 0x4f8f45 });
-      const bush = new InstancedMesh(bG, bM, nB);
-      for (let i = 0; i < nB; i++) {
-        const b = bushes[i]!;
-        dummy.rotation.set(0, hash01(`b${b.x},${b.y}`) * Math.PI, 0);
-        dummy.position.set(b.x + 0.5, terrainHeightAt(b.x + 0.5, b.y + 0.5) + 0.2, b.y + 0.5);
-        dummy.scale.set(1, 1, 1);
-        dummy.updateMatrix();
-        bush.setMatrixAt(i, dummy.matrix);
-      }
-      bush.instanceMatrix.needsUpdate = true;
-      this.vegetationGroup.add(bush);
-    }
-
-    // Nur in der Nahsicht sichtbare, instanzierte Grasbueschel: eine kleine
-    // dreieckige Silhouette statt tausender Einzelhalme. Die Textur traegt die
-    // Mittel-/Fernwirkung; dieses eine LOD-Draw-Call liefert Parallaxe am Boden.
-    const nMicro = Math.min(microGrass.length, 1400);
-    if (nMicro > 0) {
-      const bladeG = new ConeGeometry(0.105, 0.34, 3);
-      const bladeM = new MeshLambertMaterial({ color: 0x6e9f3f });
-      const blades = new InstancedMesh(bladeG, bladeM, nMicro);
-      blades.castShadow = false;
-      blades.receiveShadow = false;
-      for (let i = 0; i < nMicro; i++) {
-        const t = microGrass[i]!;
-        const j = hash01(`blade:${t.x},${t.y}`);
-        const px = t.x + 0.16 + j * 0.68;
-        const pz = t.y + 0.14 + hash01(`blade-z:${t.x},${t.y}`) * 0.72;
-        dummy.position.set(px, terrainHeightAt(px, pz) + 0.15, pz);
-        dummy.rotation.set(0, j * Math.PI * 2, (j - 0.5) * 0.12);
-        dummy.scale.set(0.72 + j * 0.7, 0.78 + j * 0.62, 0.72 + j * 0.7);
-        dummy.updateMatrix();
-        blades.setMatrixAt(i, dummy.matrix);
-      }
-      blades.instanceMatrix.needsUpdate = true;
-      this.vegetationGroup.add(blades);
-      this.nearVegetation.push(blades);
-    }
-
-    // § A7 Findlinge (Gebirge): graue Blöcke in zwei Größen, instanziert.
-    if (rockUrl && rocks.length) {
       void this.placeModelInstances(
-        rockUrl,
-        this.vegetationGroup,
-        rocks,
+        url,
+        target,
+        tiles,
         {
-          footprint: 0.72,
+          footprint,
           jitterRot: true,
-          jitterScale: 0.72,
-          jitterPosition: 0.34,
+          jitterScale: extra.jitterScale ?? 0.5,
+          jitterPosition: 0.44,
           yBase: 0,
-          // Felsen liegen fast nur auf Hängen — auf dem tiefsten Punkt erden und
-          // leicht eingraben, sonst steht die Bergseite frei in der Luft.
-          groundRadius: 0.36,
-          sink: 0.12,
-          castShadow: vegShadow(rocks.length),
+          ...(extra.groundRadius === undefined ? {} : { groundRadius: extra.groundRadius }),
+          ...(extra.sink === undefined ? {} : { sink: extra.sink }),
+          castShadow: claimShadow(tiles.length),
+          cullDistance: profile.vegetationViewDistance * (extra.cullFactor ?? 1),
         },
         stale,
       );
-    }
-    const nR = rockUrl ? 0 : Math.min(rocks.length, 400);
-    if (nR > 0) {
-      const rockG = new BoxGeometry(0.5, 0.4, 0.55);
-      const rockM = new MeshStandardMaterial({ color: 0x8b8d90, roughness: 1 });
-      const rock = new InstancedMesh(rockG, rockM, nR);
-      rock.castShadow = vegShadow(nR);
-      rock.receiveShadow = true;
-      for (let i = 0; i < nR; i++) {
-        const t = rocks[i]!;
-        const jt = hash01(`r${t.x},${t.y}`);
-        const sc = 0.5 + jt * 1.1;
-        dummy.rotation.set(jt * 0.4, jt * Math.PI * 2, jt * 0.3);
-        dummy.position.set(
-          t.x + 0.5,
-          terrainMinHeightAround(t.x + 0.5, t.y + 0.5, 0.28 * sc) + 0.08 * sc,
-          t.y + 0.5,
-        );
-        dummy.scale.set(sc, sc * (0.7 + jt * 0.5), sc);
-        dummy.updateMatrix();
-        rock.setMatrixAt(i, dummy.matrix);
-      }
-      rock.instanceMatrix.needsUpdate = true;
-      this.vegetationGroup.add(rock);
-    }
+    };
 
-    // § A7 Schilf (Wasserkante): schmale grüne Halme, instanziert.
-    if (reedUrl && reeds.length) {
-      void this.placeModelInstances(
-        reedUrl,
-        this.vegetationGroup,
-        reeds,
-        { footprint: 0.42, jitterRot: true, jitterScale: 0.52, jitterPosition: 0.34, yBase: 0 },
-        stale,
-      );
-    }
-    const nRe = reedUrl ? 0 : Math.min(reeds.length, 420);
-    if (nRe > 0) {
-      const reedG = new ConeGeometry(0.06, 0.6, 4);
-      const reedM = new MeshLambertMaterial({ color: 0x5f7a37 });
-      const reed = new InstancedMesh(reedG, reedM, nRe);
-      for (let i = 0; i < nRe; i++) {
-        const t = reeds[i]!;
-        const jt = hash01(`re${t.x},${t.y}`);
-        const sc = 0.7 + jt * 0.7;
-        dummy.rotation.set(0, jt * Math.PI * 2, (jt - 0.5) * 0.3);
-        dummy.position.set(t.x + 0.5, terrainHeightAt(t.x + 0.5, t.y + 0.5) + 0.3 * sc, t.y + 0.5);
-        dummy.scale.set(1, sc, 1);
-        dummy.updateMatrix();
-        reed.setMatrixAt(i, dummy.matrix);
-      }
-      reed.instanceMatrix.needsUpdate = true;
-      this.vegetationGroup.add(reed);
-    }
+    heroModel('pine', PINE_TREE_MODELS, detailed.pine, 1.34);
+    heroModel('broadleaf', BROADLEAF_TREE_MODELS, [...detailed.broadleaf, ...detailed.meadowTree], 1.38, { jitterScale: 0.48 });
+    heroModel('largePine', LARGE_PINE_TREE_MODELS, detailed.largePine, 1.62, { jitterScale: 0.38 });
+    heroModel('bush', BUSH_MODELS, detailed.bush, 0.72, { jitterScale: 0.42 });
+    heroModel('rock', ROCK_CLUSTER_MODELS, detailed.rock, 0.72, { jitterScale: 0.72, groundRadius: 0.36, sink: 0.12 });
+    heroModel('reed', REED_MODELS, detailed.reed, 0.42, { jitterScale: 0.52 });
+    heroModel('deadwood', DEADWOOD_MODELS, detailed.deadwood, 0.82, { jitterScale: 0.46 });
 
-    // Farbakzente und Nutzspuren brechen große Grünflächen auf, bleiben durch
-    // Instancing aber auf drei zusätzliche Draw-Calls begrenzt.
-    const nFl = Math.min(flowers.length, 180);
-    if (nFl > 0) {
-      const flowerG = new SphereGeometry(0.055, 5, 4);
-      const flowerM = new MeshLambertMaterial({ color: 0xf2c84b });
-      const flower = new InstancedMesh(flowerG, flowerM, nFl);
-      for (let i = 0; i < nFl; i++) {
-        const t = flowers[i]!;
-        const jt = hash01(`flower${t.x},${t.y}`);
-        dummy.rotation.set(0, 0, 0);
-        dummy.position.set(
-          t.x + 0.22 + jt * 0.56,
-          terrainHeightAt(t.x + 0.5, t.y + 0.5) + 0.075,
-          t.y + 0.2 + hash01(`flowerz${t.x},${t.y}`) * 0.6,
-        );
-        dummy.scale.setScalar(0.75 + jt * 0.65);
-        dummy.updateMatrix();
-        flower.setMatrixAt(i, dummy.matrix);
-      }
-      flower.instanceMatrix.needsUpdate = true;
-      this.vegetationGroup.add(flower);
-    }
+    // § 12.2 — HOCHSKALIERTE ALTBÄUME UND FINDLINGE bleiben der Maßstabsanker
+    // der Welt: dieselben vorhandenen Modelle, aber in zwei Staffeln deutlich
+    // vergrößert. Der Größenunterschied IST der Effekt.
+    const giantTreeNames = [...LARGE_PINE_TREE_MODELS, ...BROADLEAF_TREE_MODELS];
+    const tierOf = (tiles: NatureInstance[], salt: string, cut: number) => ({
+      low: tiles.filter((tile) => hash01(`${salt}:${tile.x},${tile.y}`) <= cut),
+      high: tiles.filter((tile) => hash01(`${salt}:${tile.x},${tile.y}`) > cut),
+    });
+    const giants = tierOf(mass.giantTree, 'giant-tier', 0.62);
+    mass.giantTree = [];
+    heroModel('giantTree', giantTreeNames, giants.low, 3.1, { jitterScale: 0.85, cullFactor: 1.6 });
+    heroModel('giantTree', giantTreeNames, giants.high, 4.4, { jitterScale: 0.85, cullFactor: 1.6 });
+    const bouldersByTier = tierOf(mass.boulder, 'boulder-tier', 0.7);
+    mass.boulder = [];
+    heroModel('boulder', ROCK_CLUSTER_MODELS, bouldersByTier.low, 1.9, { jitterScale: 0.9, groundRadius: 0.5, sink: 0.22, cullFactor: 1.4 });
+    heroModel('boulder', ROCK_CLUSTER_MODELS, bouldersByTier.high, 3.2, { jitterScale: 0.9, groundRadius: 0.5, sink: 0.22, cullFactor: 1.4 });
 
-    const nRows = Math.min(fieldRows.length, 220);
-    if (nRows > 0) {
-      const rowG = new BoxGeometry(0.72, 0.035, 0.11);
-      const rowM = new MeshLambertMaterial({ color: 0xb8a348 });
-      const rows = new InstancedMesh(rowG, rowM, nRows);
-      for (let i = 0; i < nRows; i++) {
-        const t = fieldRows[i]!;
-        const jt = hash01(`field${t.x},${t.y}`);
-        dummy.rotation.set(0, jt > 0.5 ? Math.PI / 2 : 0, 0);
-        dummy.position.set(t.x + 0.5, terrainHeightAt(t.x + 0.5, t.y + 0.5) + 0.025, t.y + 0.5);
-        dummy.scale.set(0.82 + jt * 0.28, 1, 1);
-        dummy.updateMatrix();
-        rows.setMatrixAt(i, dummy.matrix);
-      }
-      rows.instanceMatrix.needsUpdate = true;
-      this.vegetationGroup.add(rows);
-    }
-
-    // Trockene Zonen erhalten wenige, klar gruppierte Bueschel statt eines
-    // gleichmaessigen Noise-Teppichs. Ein Draw-Call deckt Wüste und Steppe ab.
-    const nDry = Math.min(dryShrubs.length, 150);
-    if (nDry > 0) {
-      const dryG = new ConeGeometry(0.2, 0.34, 5);
-      const dryM = new MeshLambertMaterial({ color: 0x9a7b42 });
-      const dry = new InstancedMesh(dryG, dryM, nDry);
-      for (let i = 0; i < nDry; i++) {
-        const t = dryShrubs[i]!;
-        const jt = hash01(`dryshrub${t.x},${t.y}`);
-        dummy.rotation.set((jt - 0.5) * 0.16, jt * Math.PI * 2, (jt - 0.5) * 0.28);
-        dummy.position.set(t.x + 0.5, terrainHeightAt(t.x + 0.5, t.y + 0.5) + 0.15, t.y + 0.5);
-        dummy.scale.set(0.62 + jt * 0.62, 0.7 + jt * 0.5, 0.62 + jt * 0.62);
-        dummy.updateMatrix();
-        dry.setMatrixAt(i, dummy.matrix);
-      }
-      dry.instanceMatrix.needsUpdate = true;
-      this.vegetationGroup.add(dry);
-    }
-
-    if (deadwoodUrl && deadwood.length) {
-      void this.placeModelInstances(
-        deadwoodUrl,
-        this.vegetationGroup,
-        deadwood,
-        { footprint: 0.82, jitterRot: true, jitterScale: 0.46, jitterPosition: 0.28, yBase: 0 },
-        stale,
-      );
-    }
-    const nLogs = deadwoodUrl ? 0 : Math.min(deadwood.length, 110);
-    if (nLogs > 0) {
-      const logG = new CylinderGeometry(0.07, 0.09, 0.75, 6);
-      const logM = new MeshLambertMaterial({ color: 0x725139 });
-      const logs = new InstancedMesh(logG, logM, nLogs);
-      for (let i = 0; i < nLogs; i++) {
-        const t = deadwood[i]!;
-        const jt = hash01(`deadwood${t.x},${t.y}`);
-        dummy.rotation.set(Math.PI / 2, jt * Math.PI, 0);
-        dummy.position.set(t.x + 0.5, terrainHeightAt(t.x + 0.5, t.y + 0.5) + 0.09, t.y + 0.5);
-        dummy.scale.setScalar(0.75 + jt * 0.55);
-        dummy.updateMatrix();
-        logs.setMatrixAt(i, dummy.matrix);
-      }
-      logs.instanceMatrix.needsUpdate = true;
-      this.vegetationGroup.add(logs);
-    }
+    // ---- Stilisierte Masse -------------------------------------------------
+    const built = buildNatureMass(mass, {
+      viewDistance: profile.vegetationViewDistance,
+      smallPropDistance: profile.smallPropCullDistance,
+      claimShadow,
+    });
+    target.add(built.group);
+    lod.push(...built.lod);
+    // Geteilte Geometrie/Material dürfen beim nächsten Neuaufbau NICHT
+    // freigegeben werden — sonst stünde die zweite Runde ohne Formen da.
+    for (const resource of natureSharedResources()) cacheOwned.add(resource);
   }
 
   // ---- buildings ------------------------------------------------------------
@@ -3484,9 +3247,325 @@ export class ThreeMapRenderer implements IMapRenderer {
       this.disposeGroup(node.group);
       this.nodes.delete(id);
     }
+    this.rebuildRoadNetworkSurface();
+    this.rebuildRoadSupports();
+    this.rebuildCityLights();
+    this.rebuildCoverageOverlay();
     this.rebuildVegetation();
     this.seedCars();
     this.seedAnimals();
+  }
+
+  /**
+   * Baut das vorhandene Raster-Straßennetz als durchgehende, abgerundete
+   * Oberfläche. Kachelmittelpunkte bleiben die einzige Datenquelle; Catmull-
+   * Kurven glätten ausschließlich die sichtbare Verbindung zwischen ihnen.
+   * Zwei Meshes für das gesamte Bodennetz ersetzen die vielen schwarzen
+   * Einzelplatten und hohen weißen Kachel-Bordsteine.
+   */
+  private rebuildRoadNetworkSurface(): void {
+    type RoadNode = { key: string; x: number; z: number; half: number };
+    const nodes = new Map<string, RoadNode>();
+    const allRoads = new Map<string, RoadNode>();
+    for (const building of Object.values(this.controller.state.buildings)) {
+      const def = this.controller.config.buildings.get(building.defId);
+      if (!def || def.category !== 'roads') continue;
+      const key = `${building.x},${building.y}`;
+      const node = {
+        key,
+        x: building.x + 0.5,
+        z: building.y + 0.5,
+        half: ROAD_SPECS[roadClassFor(def.id)].half,
+      };
+      allRoads.set(key, node);
+      const terrain = worldTerrainAt(this.controller.state, building.x, building.y);
+      if (def.id === 'road_elevated' || terrain === 'water' || terrain === 'river') continue;
+      nodes.set(key, node);
+    }
+    const key = [...nodes.values()]
+      .map((node) => `${node.key}:${node.half}`)
+      .sort()
+      .join('|');
+    if (key === this.roadSurfaceKey) return;
+    this.roadSurfaceKey = key;
+    this.clearOwnedGroup(this.roadSurfaceGroup);
+    if (nodes.size === 0) return;
+
+    const offsets = [
+      [0, -1],
+      [1, 0],
+      [0, 1],
+      [-1, 0],
+    ] as const;
+    const neighbours = (node: RoadNode): RoadNode[] =>
+      offsets
+        .map(([dx, dz]) => nodes.get(`${node.x - 0.5 + dx},${node.z - 0.5 + dz}`))
+        .filter((candidate): candidate is RoadNode => candidate !== undefined);
+    const edgeKey = (a: RoadNode, b: RoadNode): string =>
+      a.key < b.key ? `${a.key}>${b.key}` : `${b.key}>${a.key}`;
+    const visited = new Set<string>();
+    const chains: RoadNode[][] = [];
+    const walk = (start: RoadNode, first: RoadNode): RoadNode[] => {
+      const chain = [start];
+      let previous = start;
+      let current = first;
+      let guard = nodes.size + 4;
+      visited.add(edgeKey(start, first));
+      while (guard-- > 0) {
+        chain.push(current);
+        const nextOptions = neighbours(current).filter(
+          (candidate) => candidate.key !== previous.key && !visited.has(edgeKey(current, candidate)),
+        );
+        if (neighbours(current).length !== 2 || nextOptions.length === 0) break;
+        const next = nextOptions[0]!;
+        visited.add(edgeKey(current, next));
+        previous = current;
+        current = next;
+      }
+      return chain;
+    };
+
+    // Erst echte Enden/Kreuzungen, danach geschlossene Ringe ohne Endpunkt.
+    for (const node of nodes.values()) {
+      if (neighbours(node).length === 2) continue;
+      for (const next of neighbours(node)) {
+        if (!visited.has(edgeKey(node, next))) chains.push(walk(node, next));
+      }
+    }
+    for (const node of nodes.values()) {
+      for (const next of neighbours(node)) {
+        if (!visited.has(edgeKey(node, next))) chains.push(walk(node, next));
+      }
+    }
+
+    const shoulderPositions: number[] = [];
+    const asphaltPositions: number[] = [];
+    for (const chain of chains) {
+      if (chain.length < 2) continue;
+      const points = roundedRoadPolyline(chain, 0.27, 4);
+      const half = Math.max(...chain.map((node) => node.half));
+      appendRoadRibbonTriangles(shoulderPositions, points, half + 0.13, 0.052, terrainHeightAt);
+      appendRoadRibbonTriangles(asphaltPositions, points, half, 0.068, terrainHeightAt);
+    }
+    // Übergänge zu Brücken- und Höhenstraßen reichen bis an deren Deck. Die
+    // Rundscheibe des letzten Bodenknotens allein endet deutlich vorher.
+    for (const node of nodes.values()) {
+      for (const [dx, dz] of offsets) {
+        const neighbour = allRoads.get(`${node.x - 0.5 + dx},${node.z - 0.5 + dz}`);
+        if (!neighbour || nodes.has(neighbour.key)) continue;
+        const connector = roadTileEdgeConnector(node, dx, dz);
+        const half = Math.max(node.half, neighbour.half);
+        appendRoadRibbonTriangles(shoulderPositions, connector, half + 0.13, 0.052, terrainHeightAt);
+        appendRoadRibbonTriangles(asphaltPositions, connector, half, 0.068, terrainHeightAt);
+      }
+    }
+    for (const node of nodes.values()) {
+      appendRoadDiscTriangles(shoulderPositions, node, node.half + 0.13, 0.052, terrainHeightAt);
+      appendRoadDiscTriangles(asphaltPositions, node, node.half, 0.068, terrainHeightAt);
+    }
+
+    const makeSurface = (positions: number[], material: MeshStandardMaterial, order: number): Mesh => {
+      const geometry = new BufferGeometry();
+      geometry.setAttribute('position', new Float32BufferAttribute(positions, 3));
+      // Die geglättete Netzgeometrie besitzt keine Kachel-UVs. Eine stabile
+      // World-Space-Projektion macht die neue richtungsneutrale Wegtextur auf
+      // Kurven und Kreuzungen trotzdem nahtlos nutzbar.
+      const uv = new Float32Array((positions.length / 3) * 2);
+      for (let positionIndex = 0, uvIndex = 0; positionIndex < positions.length; positionIndex += 3, uvIndex += 2) {
+        uv[uvIndex] = positions[positionIndex]! * 0.24;
+        uv[uvIndex + 1] = positions[positionIndex + 2]! * 0.24;
+      }
+      geometry.setAttribute('uv', new Float32BufferAttribute(uv, 2));
+      geometry.computeVertexNormals();
+      const mesh = new Mesh(geometry, material);
+      mesh.receiveShadow = true;
+      mesh.renderOrder = order;
+      // Sicherheitsnetz für extreme Geländegradienten und alte Grafiktreiber:
+      // Die korrekte Oberseite bleibt FrontSide, die schmale Unterseite darf
+      // dennoch sichtbar bleiben, statt ein ganzes Netz verschwinden zu lassen.
+      material.side = DoubleSide;
+      return mesh;
+    };
+    const mats = this.getRoadMats();
+    this.roadSurfaceGroup.add(
+      makeSurface(shoulderPositions, mats.groundShoulder, 3),
+      makeSurface(asphaltPositions, mats.groundPath, 4),
+    );
+  }
+
+  /**
+   * Höhenstraßen-Stützen als zwei globale InstancedMeshes. Das erhöht die
+   * visuelle Glaubwürdigkeit, ohne die Kosten mit der Straßenlänge in Draw-Calls
+   * wachsen zu lassen. Wasserquerungen verwenden weiterhin buildBridgeDeck().
+   */
+  private rebuildRoadSupports(): void {
+    const elevated = Object.values(this.controller.state.buildings).filter((building) => {
+      if (building.defId !== 'road_elevated') return false;
+      const terrain = worldTerrainAt(this.controller.state, building.x, building.y);
+      return terrain !== 'water' && terrain !== 'river';
+    });
+    const key = elevated
+      .map((building) => `${building.id}:${building.x},${building.y}:${this.roadNeighborMask(building.x, building.y)}`)
+      .sort()
+      .join('|');
+    if (key === this.roadSupportKey) return;
+    this.roadSupportKey = key;
+    this.clearOwnedGroup(this.roadSupportGroup);
+    if (elevated.length === 0) return;
+
+    const columnGeometry = new CylinderGeometry(0.075, 0.11, 0.64, 8);
+    const columnMaterial = new MeshStandardMaterial({ color: 0x9a927f, roughness: 0.92, metalness: 0.04 });
+    const columns = new InstancedMesh(columnGeometry, columnMaterial, elevated.length * 2);
+    const beamGeometry = new BoxGeometry(0.78, 0.11, 0.12);
+    const beamMaterial = new MeshStandardMaterial({ color: 0x79766e, roughness: 0.94, metalness: 0.06 });
+    const beams = new InstancedMesh(beamGeometry, beamMaterial, elevated.length);
+    const dummy = new Object3D();
+    let columnIndex = 0;
+
+    elevated.forEach((building, index) => {
+      const x = building.x + 0.5;
+      const z = building.y + 0.5;
+      const ground = terrainHeightAt(x, z);
+      const mask = this.roadNeighborMask(building.x, building.y);
+      const horizontal = Boolean(mask & (2 | 8)) && !(mask & (1 | 4));
+      for (const side of [-1, 1]) {
+        dummy.position.set(
+          x + (horizontal ? 0 : side * 0.27),
+          ground + 0.32,
+          z + (horizontal ? side * 0.27 : 0),
+        );
+        dummy.rotation.set(0, 0, 0);
+        dummy.scale.set(1, 1, 1);
+        dummy.updateMatrix();
+        columns.setMatrixAt(columnIndex++, dummy.matrix);
+      }
+      dummy.position.set(x, ground + 0.59, z);
+      dummy.rotation.set(0, horizontal ? Math.PI / 2 : 0, 0);
+      dummy.scale.set(1, 1, 1);
+      dummy.updateMatrix();
+      beams.setMatrixAt(index, dummy.matrix);
+    });
+    columns.instanceMatrix.needsUpdate = true;
+    beams.instanceMatrix.needsUpdate = true;
+    columns.castShadow = true;
+    columns.receiveShadow = true;
+    beams.castShadow = true;
+    beams.receiveShadow = true;
+    this.roadSupportGroup.add(columns, beams);
+  }
+
+  /**
+   * Baut physisch verankerte Straßenlaternen. Die frühere Fenster-Heuristik
+   * legte leuchtende Rechtecke anhand theoretischer Footprint-Abmessungen in die
+   * Luft; echte GLBs besitzen dort nicht zwingend eine Fassade. Deshalb gibt es
+   * Licht nur noch an einem sichtbaren Mast und der Bodenreflex teilt exakt
+   * dessen terrainabgetastete Position.
+   */
+  private rebuildCityLights(): void {
+    const roads = Object.values(this.controller.state.buildings).filter((building) => {
+      const def = this.controller.config.buildings.get(building.defId);
+      if (!def || def.category !== 'roads' || def.id === 'road_elevated') return false;
+      const terrain = worldTerrainAt(this.controller.state, building.x, building.y);
+      return terrain !== 'water' && terrain !== 'river';
+    });
+    const key = roads
+      .map((building) => `${building.id}:${building.x},${building.y}:${this.roadNeighborMask(building.x, building.y)}`)
+      .sort()
+      .join('|');
+    if (key === this.cityLightKey) return;
+    this.cityLightKey = key;
+    this.clearOwnedGroup(this.cityLightGroup);
+    this.streetLampHeadMesh = undefined;
+    this.streetGlowMesh = undefined;
+
+    const directions = [
+      { bit: 1, dx: 0, dz: -1 },
+      { bit: 2, dx: 1, dz: 0 },
+      { bit: 4, dx: 0, dz: 1 },
+      { bit: 8, dx: -1, dz: 0 },
+    ] as const;
+    const lamps = roads.flatMap((road) => {
+      const mask = this.roadNeighborMask(road.x, road.y);
+      const open = directions.filter((direction) => !(mask & direction.bit));
+      if (open.length === 0 || hash01(`${road.x},${road.y}:lamp`) >= 0.13) return [];
+      const side = open[Math.floor(hash01(`${road.x},${road.y}:side`) * open.length)]!;
+      const x = road.x + 0.5 + side.dx * 0.43;
+      const z = road.y + 0.5 + side.dz * 0.43;
+      return [{ x, z, y: terrainHeightAt(x, z) + 0.075 }];
+    });
+    if (lamps.length > 0) {
+      const dummy = new Object3D();
+      const post = new InstancedMesh(
+        new CylinderGeometry(0.022, 0.032, 0.72, 7),
+        new MeshStandardMaterial({ color: 0x34383c, roughness: 0.78, metalness: 0.34 }),
+        lamps.length,
+      );
+      const headMaterial = new MeshStandardMaterial({
+        color: 0x7c6a45,
+        emissive: 0xffb84f,
+        emissiveIntensity: 0.08,
+        roughness: 0.46,
+      });
+      const heads = new InstancedMesh(new SphereGeometry(0.045, 8, 6), headMaterial, lamps.length);
+      const glowMaterial = new MeshBasicMaterial({
+        color: 0xffbd55,
+        transparent: true,
+        opacity: 0,
+        blending: AdditiveBlending,
+        depthTest: false,
+        depthWrite: false,
+        side: DoubleSide,
+        toneMapped: false,
+      });
+      const glows = new InstancedMesh(new CircleGeometry(0.27, 18), glowMaterial, lamps.length);
+      lamps.forEach((lamp, index) => {
+        dummy.position.set(lamp.x, lamp.y + 0.36, lamp.z);
+        dummy.rotation.set(0, 0, 0);
+        dummy.scale.set(1, 1, 1);
+        dummy.updateMatrix();
+        post.setMatrixAt(index, dummy.matrix);
+        dummy.position.set(lamp.x, lamp.y + 0.735, lamp.z);
+        dummy.updateMatrix();
+        heads.setMatrixAt(index, dummy.matrix);
+        dummy.position.set(lamp.x, lamp.y + 0.008, lamp.z);
+        dummy.rotation.set(-Math.PI / 2, 0, 0);
+        dummy.updateMatrix();
+        glows.setMatrixAt(index, dummy.matrix);
+      });
+      post.instanceMatrix.needsUpdate = true;
+      heads.instanceMatrix.needsUpdate = true;
+      glows.instanceMatrix.needsUpdate = true;
+      post.castShadow = true;
+      heads.renderOrder = 5;
+      glows.renderOrder = 3;
+      this.streetLampHeadMesh = heads;
+      this.streetGlowMesh = glows;
+      this.cityLightGroup.add(post, heads, glows);
+    }
+    this.updateNightLighting();
+  }
+
+  /** Ein Material-Update pro Frame statt hunderter dynamischer Lichter. */
+  private updateNightLighting(): void {
+    // SkyEnvironment führt bei aktivem Zyklus eine eigene fortgeschriebene Zeit.
+    // Lampen und Straßen müssen exakt dieselbe Uhr lesen wie Sonne und Himmel.
+    const elevation = sunElevation(this.env?.timeOfDay ?? getEnvironmentSettings().timeOfDay);
+    const night = 1 - MathUtils.smoothstep(elevation, -0.14, 0.2);
+    if (this.streetLampHeadMesh) {
+      const material = this.streetLampHeadMesh.material as MeshStandardMaterial;
+      material.emissiveIntensity = 0.08 + night * 1.55;
+    }
+    if (this.streetGlowMesh) {
+      const material = this.streetGlowMesh.material as MeshBasicMaterial;
+      material.opacity = night * 0.06;
+      this.streetGlowMesh.visible = night > 0.025;
+    }
+    if (this.roadMats) {
+      this.roadMats.asphalt.emissiveIntensity = 0.06 + night * 0.14;
+      this.roadMats.mountain.emissiveIntensity = 0.04 + night * 0.1;
+      this.roadMats.groundPath.emissiveIntensity = 0.035 + night * 0.08;
+      this.roadMats.groundShoulder.emissiveIntensity = 0.025 + night * 0.055;
+    }
   }
 
   /**
@@ -3852,6 +3931,8 @@ export class ThreeMapRenderer implements IMapRenderer {
       groundRadius?: number;
       /** Zusätzliches Eingraben in den Hang (Kacheln), skaliert mit der Instanz. */
       sink?: number;
+      /** Sichtweite echter Detailmodelle; aktiviert räumliche Instanz-Chunks. */
+      cullDistance?: number;
     },
     stale: () => boolean,
   ): Promise<void> {
@@ -3880,6 +3961,16 @@ export class ThreeMapRenderer implements IMapRenderer {
       (groundRadius > 0 ? terrainMinHeightAround(gx, gz, groundRadius * sc) : terrainHeightAt(gx, gz)) +
       yBase -
       sink * sc;
+    const chunks = opts.cullDistance ? spatialPropChunks(list) : [list];
+    const registerDistanceLod = (object: Object3D, chunk: readonly { x: number; y: number }[]): void => {
+      if (!opts.cullDistance || chunk.length === 0) return;
+      this.vegetationDistanceLod.push({
+        object,
+        centerX: chunk.reduce((sum, tile) => sum + tile.x + 0.5, 0) / chunk.length,
+        centerZ: chunk.reduce((sum, tile) => sum + tile.y + 0.5, 0) / chunk.length,
+        maxDistance: opts.cullDistance,
+      });
+    };
 
     // Fast path: a single-mesh model → one InstancedMesh (one draw call).
     const meshes: Mesh[] = [];
@@ -3900,48 +3991,56 @@ export class ThreeMapRenderer implements IMapRenderer {
       const geo = gm.geometry.clone();
       geo.applyMatrix4(gm.matrixWorld); // bake the fit transform into the geometry
       const mat = gm.material as Material;
-      const inst = new InstancedMesh(geo, mat, list.length);
-      inst.castShadow = opts.castShadow ?? true;
-      inst.receiveShadow = true;
-      for (let i = 0; i < list.length; i++) {
-        const t = list[i]!;
-        const j = hash01(`${t.x}.${t.y}`);
-        const jx = (hash01(`jx:${t.x}.${t.y}`) - 0.5) * (opts.jitterPosition ?? 0);
-        const jz = (hash01(`jz:${t.x}.${t.y}`) - 0.5) * (opts.jitterPosition ?? 0);
-        const sc = opts.jitterScale ? 1 - opts.jitterScale / 2 + j * opts.jitterScale : 1;
-        dummy.position.set(t.x + 0.5 + jx, groundAt(t.x + 0.5 + jx, t.y + 0.5 + jz, sc), t.y + 0.5 + jz);
-        dummy.rotation.set(0, opts.jitterRot ? j * Math.PI * 2 : (opts.rotationY ?? 0), 0);
-        dummy.scale.setScalar(sc);
-        dummy.updateMatrix();
-        inst.setMatrixAt(i, dummy.matrix);
-      }
-      inst.instanceMatrix.needsUpdate = true;
       if (this.destroyed || stale()) {
         geo.dispose();
         return;
       }
-      group.add(inst);
+      for (const chunk of chunks) {
+        const inst = new InstancedMesh(geo, mat, chunk.length);
+        inst.castShadow = opts.castShadow ?? true;
+        inst.receiveShadow = true;
+        for (let i = 0; i < chunk.length; i++) {
+          const t = chunk[i]!;
+          const j = hash01(`${t.x}.${t.y}`);
+          const jx = (hash01(`jx:${t.x}.${t.y}`) - 0.5) * (opts.jitterPosition ?? 0);
+          const jz = (hash01(`jz:${t.x}.${t.y}`) - 0.5) * (opts.jitterPosition ?? 0);
+          const sc = opts.jitterScale ? 1 - opts.jitterScale / 2 + j * opts.jitterScale : 1;
+          dummy.position.set(t.x + 0.5 + jx, groundAt(t.x + 0.5 + jx, t.y + 0.5 + jz, sc), t.y + 0.5 + jz);
+          dummy.rotation.set(0, opts.jitterRot ? j * Math.PI * 2 : (opts.rotationY ?? 0), 0);
+          dummy.scale.setScalar(sc);
+          dummy.updateMatrix();
+          inst.setMatrixAt(i, dummy.matrix);
+        }
+        inst.instanceMatrix.needsUpdate = true;
+        inst.computeBoundingSphere();
+        group.add(inst);
+        registerDistanceLod(inst, chunk);
+      }
       return;
     }
 
     // General path: clone the fitted model per tile.
-    for (let i = 0; i < list.length; i++) {
-      const t = list[i]!;
-      const j = hash01(`${t.x}.${t.y}`);
-      const jx = (hash01(`jx:${t.x}.${t.y}`) - 0.5) * (opts.jitterPosition ?? 0);
-      const jz = (hash01(`jz:${t.x}.${t.y}`) - 0.5) * (opts.jitterPosition ?? 0);
-      const clone = probe.clone(true);
-      const sc = opts.jitterScale ? 1 - opts.jitterScale / 2 + j * opts.jitterScale : 1;
-      clone.position.set(t.x + 0.5 + jx, groundAt(t.x + 0.5 + jx, t.y + 0.5 + jz, sc), t.y + 0.5 + jz);
-      clone.rotation.y = opts.jitterRot ? j * Math.PI * 2 : (opts.rotationY ?? 0);
-      clone.scale.multiplyScalar(sc);
-      clone.traverse((o) => {
-        if ((o as Mesh).isMesh) {
-          o.castShadow = opts.castShadow ?? true;
-          o.receiveShadow = true;
-        }
-      });
-      group.add(clone);
+    for (const chunk of chunks) {
+      const chunkGroup = opts.cullDistance ? new Group() : group;
+      if (chunkGroup !== group) group.add(chunkGroup);
+      for (const t of chunk) {
+        const j = hash01(`${t.x}.${t.y}`);
+        const jx = (hash01(`jx:${t.x}.${t.y}`) - 0.5) * (opts.jitterPosition ?? 0);
+        const jz = (hash01(`jz:${t.x}.${t.y}`) - 0.5) * (opts.jitterPosition ?? 0);
+        const clone = probe.clone(true);
+        const sc = opts.jitterScale ? 1 - opts.jitterScale / 2 + j * opts.jitterScale : 1;
+        clone.position.set(t.x + 0.5 + jx, groundAt(t.x + 0.5 + jx, t.y + 0.5 + jz, sc), t.y + 0.5 + jz);
+        clone.rotation.y = opts.jitterRot ? j * Math.PI * 2 : (opts.rotationY ?? 0);
+        clone.scale.multiplyScalar(sc);
+        clone.traverse((o) => {
+          if ((o as Mesh).isMesh) {
+            o.castShadow = opts.castShadow ?? true;
+            o.receiveShadow = true;
+          }
+        });
+        chunkGroup.add(clone);
+      }
+      registerDistanceLod(chunkGroup, chunk);
     }
     if (this.destroyed || stale()) this.disposeGroup(group);
   }
@@ -3958,6 +4057,7 @@ export class ThreeMapRenderer implements IMapRenderer {
     const cls = roadClassFor(def.id);
     const terrain = worldTerrainAt(this.controller.state, b.x, b.y);
     const overWater = terrain === 'water' || terrain === 'river';
+    const elevated = def.id === 'road_elevated';
 
     if (overWater) {
       const rot = mask & 2 || mask & 8 ? (mask & 1 || mask & 4 ? 0 : Math.PI / 2) : 0;
@@ -3965,11 +4065,30 @@ export class ThreeMapRenderer implements IMapRenderer {
       return;
     }
 
+    if (!elevated) {
+      // Die sichtbare Bodenstraße wird netzweit in
+      // rebuildRoadNetworkSurface() geglättet. Dieses transparente Pad bewahrt
+      // Auswahl/Raycast pro Simulationskachel, ohne wieder schwarze Platten oder
+      // hohe Bordsteinblöcke einzuführen.
+      const pickPad = new Mesh(
+        new BoxGeometry(0.96, 0.025, 0.96),
+        new MeshBasicMaterial({ transparent: true, opacity: 0, depthWrite: false }),
+      );
+      pickPad.position.y = 0.055;
+      holder.add(pickPad);
+      this.fitRoadToTerrain(holder, b.x + 0.5, b.y + 0.5, false);
+      return;
+    }
+
     this.buildRoadTile(holder, mask, cls, terrain, b.x, b.y);
+    // Die bestehende Höhenstraße erhält endlich eine eindeutige, glaubwürdige
+    // Silhouette: Deck anheben, lokale Neigung beibehalten, Stützen separat und
+    // instanziert in rebuildRoadSupports(). Gameplay/Route bleiben unverändert.
+    if (elevated) holder.position.y = 0.62;
     // Straßen dürfen niemals schweben (§ Gelände-Anpassung): tilt the tile to the
     // local ground gradient and skirt its edges, so neighbouring segments on
     // sloped land (forest/grass) never show a floating gap or step.
-    this.fitRoadToTerrain(holder, b.x + 0.5, b.y + 0.5);
+    this.fitRoadToTerrain(holder, b.x + 0.5, b.y + 0.5, !elevated);
   }
 
   /** Contiguous water/river run through (x,y), whichever axis is longer — sizes
@@ -3998,19 +4117,21 @@ export class ThreeMapRenderer implements IMapRenderer {
    * now sits close to y=0 (see buildRoadTile), so the skirt only needs to hide a
    * small gap, not a full raised-plate step.
    */
-  private fitRoadToTerrain(holder: Group, cx: number, cz: number): void {
+  private fitRoadToTerrain(holder: Group, cx: number, cz: number, addSkirt = true): void {
     const MAX_TILT = 0.35; // ≈20°, keeps steep noise spikes from flipping the deck
     const dHdx = terrainHeightAt(cx + 0.5, cz) - terrainHeightAt(cx - 0.5, cz);
     const dHdz = terrainHeightAt(cx, cz + 0.5) - terrainHeightAt(cx, cz - 0.5);
     holder.rotation.z = MathUtils.clamp(Math.atan(dHdx), -MAX_TILT, MAX_TILT);
     holder.rotation.x = MathUtils.clamp(-Math.atan(dHdz), -MAX_TILT, MAX_TILT);
 
-    const skirtMat = new MeshStandardMaterial({ color: 0x5b4a3a, roughness: 1 });
-    const skirtDepth = 0.22;
-    const skirt = new Mesh(new BoxGeometry(1.02, skirtDepth, 1.02), skirtMat);
-    skirt.position.y = -skirtDepth / 2;
-    skirt.receiveShadow = true;
-    holder.add(skirt);
+    if (addSkirt) {
+      const skirtMat = new MeshStandardMaterial({ color: 0x5b4a3a, roughness: 1 });
+      const skirtDepth = 0.22;
+      const skirt = new Mesh(new BoxGeometry(1.02, skirtDepth, 1.02), skirtMat);
+      skirt.position.y = -skirtDepth / 2;
+      skirt.receiveShadow = true;
+      holder.add(skirt);
+    }
   }
 
   /**
@@ -4056,22 +4177,41 @@ export class ThreeMapRenderer implements IMapRenderer {
   private getRoadMats(): RoadMaterials {
     if (this.roadMats) return this.roadMats;
     const mats: RoadMaterials = {
+      // Das gebündelte Straßennetz besitzt keine kachelweisen UVs. Deshalb
+      // erhält es eigene, warme Miniaturwelt-Materialien statt einer dunklen,
+      // auf undefinierte UVs gemappten Asphaltfotografie.
+      groundPath: new MeshStandardMaterial({
+        color: 0xf1d8b4,
+        roughness: 0.98,
+        metalness: 0,
+        emissive: 0x4a321c,
+        emissiveIntensity: 0.05,
+      }),
+      groundShoulder: new MeshStandardMaterial({
+        color: 0xcdb78f,
+        roughness: 1,
+        metalness: 0,
+        emissive: 0x40331f,
+        emissiveIntensity: 0.035,
+      }),
       // § A5: Asphalt spürbar aufgehellt (vorher 0x474d57 „zu schwarz"). Da die
       // Drop-in-Textur `road_asphalt` die Farbe nur MULTIPLIZIERT (also nie
       // aufhellen kann), hebt ein dezenter Emissiv-Term die Schwärze — Fahrbahn
       // bleibt gut lesbar, auch nachts (leichte Eigenhelligkeit ist erwünscht).
-      asphalt: new MeshStandardMaterial({ color: 0x7a808a, roughness: 0.92, emissive: 0x2b2e34, emissiveIntensity: 1 }),
-      mountain: new MeshStandardMaterial({ color: 0x8a8074, roughness: 1, emissive: 0x2e2a24, emissiveIntensity: 1 }),
-      edge: new MeshStandardMaterial({ color: 0x9aa2ac, roughness: 1 }),
-      dash: new MeshStandardMaterial({ color: 0xf0e6a0, roughness: 1, transparent: true }),
-      roundabout: new MeshStandardMaterial({ color: 0x5f656f, roughness: 0.9 }),
-      bridgeDeck: new MeshStandardMaterial({ color: 0x6a7079, roughness: 0.95 }),
-      boardwalk: new MeshStandardMaterial({ color: 0x7a5a3a, roughness: 0.9 }),
-      sidewalk: new MeshStandardMaterial({ color: 0xb7bcc4, roughness: 1 }),
-      lampPost: new MeshStandardMaterial({ color: 0x3a3f47, roughness: 0.8, metalness: 0.3 }),
-      lampHead: new MeshStandardMaterial({ color: 0xffe9a8, emissive: 0xffcf6b, emissiveIntensity: 0.9 }),
+      asphalt: new MeshStandardMaterial({ color: 0x999a96, roughness: 0.94, emissive: 0x282a2a, emissiveIntensity: 0.06 }),
+      mountain: new MeshStandardMaterial({ color: 0x9b8c76, roughness: 0.99, emissive: 0x29231d, emissiveIntensity: 0.04 }),
+      edge: new MeshStandardMaterial({ color: 0xa2947e, roughness: 1 }),
+      dash: new MeshStandardMaterial({ color: 0xe7d7a7, roughness: 0.95, transparent: true }),
+      roundabout: new MeshStandardMaterial({ color: 0x666b70, roughness: 0.94 }),
+      bridgeDeck: new MeshStandardMaterial({ color: 0x777a7a, roughness: 0.9, metalness: 0.08 }),
+      boardwalk: new MeshStandardMaterial({ color: 0x8a6540, roughness: 0.86 }),
+      sidewalk: new MeshStandardMaterial({ color: 0x9d9484, roughness: 0.98 }),
     };
+    // Diese Materialien werden von allen Straßenkacheln und vom gebündelten
+    // Netzmesh geteilt. Einzelne Building-Rebuilds dürfen sie nicht entsorgen.
+    Object.values(mats).forEach((material) => cacheOwned.add(material));
     this.roadMats = mats;
+    this.applyRoadTex(loadRoadTexture('road_path_cartoon'), mats.groundPath);
     this.applyRoadTex(loadRoadTexture('road_asphalt'), mats.asphalt);
     this.applyRoadTex(loadRoadTexture('road_mountain'), mats.mountain);
     // Reuses the already-documented terrain edge texture (docs/TERRAIN_TEXTURES.md
@@ -4176,28 +4316,11 @@ export class ThreeMapRenderer implements IMapRenderer {
       }
     }
 
-    // § A5: Straßenlaternen — sparsam (deterministisch ~ jede 4. Kachel) an einer
-    // offenen Kante, damit Straßenzüge belebt wirken ohne die Draw-Calls zu
-    // sprengen. Nachts leuchtet der emissive Kopf (Material ist immer emissiv).
-    const openDirs = dirs.filter((d) => !(mask & d.bit));
-    if (openDirs.length > 0 && hash01(`${gx},${gz}lamp`) < 0.28) {
-      const spot = openDirs[Math.floor(hash01(`${gx},${gz}spot`) * openDirs.length)]!;
-      const lamp = new Group();
-      const post = new Mesh(new CylinderGeometry(0.03, 0.04, 0.9, 6), mats.lampPost);
-      post.position.y = 0.45;
-      post.castShadow = true;
-      lamp.add(post);
-      const arm = new Mesh(new BoxGeometry(0.18, 0.04, 0.04), mats.lampPost);
-      arm.position.set(0.09, 0.88, 0);
-      lamp.add(arm);
-      const head = new Mesh(new SphereGeometry(0.07, 8, 6), mats.lampHead);
-      head.position.set(0.18, 0.86, 0);
-      lamp.add(head);
-      // An die offene Kante stellen, Arm zeigt zur Fahrbahn.
-      lamp.position.set(spot.dx * 0.46, 0, spot.dz * 0.46);
-      lamp.rotation.y = Math.atan2(-spot.dx, -spot.dz);
-      g.add(lamp);
-    }
+    // Laternen werden netzweit in rebuildCityLights() an exakt derselben
+    // terrainabgetasteten Position instanziert. Pro-Kachel-Lampen würden auf
+    // geneigten/angehobenen Holdern erneut doppelte oder schwebende Köpfe erzeugen.
+    void gx;
+    void gz;
   }
 
   /** Procedural block: body + roof (+ rotor/scaffold), sized by footprint & stage. */
@@ -4473,7 +4596,9 @@ export class ThreeMapRenderer implements IMapRenderer {
     while (this.cars.length < cap && this.roadTiles.length > 1 && guard-- > 0) {
       const path = this.buildCarPath();
       if (!path) continue;
-      const mesh = makeCarMesh();
+      const start = path[0]!;
+      const end = path[path.length - 1]!;
+      const mesh = makeCarMesh(`${start.x},${start.y}:${end.x},${end.y}:${this.cars.length}`);
       const car: Car = { mesh, path, idx: 0, t: 0, speed: 0.85 + Math.random() * 0.5 };
       this.liveGroup.add(mesh);
       this.cars.push(car);
@@ -4592,7 +4717,7 @@ export class ThreeMapRenderer implements IMapRenderer {
       const hz = to.y - from.y;
       const rx = hz * 0.16;
       const rz = -hx * 0.16;
-      car.mesh.position.set(cx + rx, terrainHeightAt(cx, cz) + 0.3, cz + rz);
+      car.mesh.position.set(cx + rx, terrainHeightAt(cx, cz) + VEHICLE_ROAD_CLEARANCE, cz + rz);
       if (hx !== 0 || hz !== 0) car.mesh.rotation.y = Math.atan2(hx, hz);
     }
   }
@@ -4773,7 +4898,7 @@ export class ThreeMapRenderer implements IMapRenderer {
     const hz = b.y - a.y;
     const vanX = MathUtils.lerp(a.x + 0.5, b.x + 0.5, tt) + hz * 0.16;
     const vanZ = MathUtils.lerp(a.y + 0.5, b.y + 0.5, tt) - hx * 0.16;
-    v.mesh.position.set(vanX, terrainHeightAt(vanX, vanZ) + 0.32, vanZ);
+    v.mesh.position.set(vanX, terrainHeightAt(vanX, vanZ) + VEHICLE_ROAD_CLEARANCE, vanZ);
     if (hx !== 0 || hz !== 0) v.mesh.rotation.y = Math.atan2(hx, hz);
     if (this.missionFollow) this.cam.focusGround(vanX, vanZ, Math.min(this.cam.getDist(), 34));
 
@@ -4803,7 +4928,208 @@ export class ThreeMapRenderer implements IMapRenderer {
 
   // ---- markers (camera-facing billboards, §15) ------------------------------
 
-  /** Approximate a building's top height (for anchoring markers/smoke). */
+  /** Erstes radiusfähiges Effect-Profil für die Bauvorschau. */
+  private placementCoverage(def: BuildingDef): { radius: number; color: number } | undefined {
+    const colorForNeed = (need: string): number => {
+      if (need === 'water' || need === 'freshwater') return 0x55cbed;
+      if (need === 'food') return 0xf1b24a;
+      if (need === 'leisure') return 0x68da8d;
+      if (need === 'safety' || need === 'health') return 0xff7662;
+      return 0xb18cff;
+    };
+    for (const effect of effectiveEffects(def, 0)) {
+      if (effect.type === 'coverage' || effect.type === 'distribution') {
+        return { radius: effect.radius, color: colorForNeed(effect.need) };
+      }
+      if (effect.type === 'capacity' && effect.radius !== undefined) {
+        return { radius: effect.radius, color: colorForNeed(effect.need) };
+      }
+      if (effect.type === 'protection') return { radius: effect.radius, color: 0xff7662 };
+    }
+    return undefined;
+  }
+
+  /**
+   * Terrainfolgende, weiche Kreisfläche mit präzisem Außenring. Mehrere
+   * Radialstufen verhindern, dass die Fläche auf Hügeln als flache Scheibe durch
+   * den Boden schneidet. `origin` erlaubt dieselbe Geometrie im absoluten
+   * Coverage-Layer und relativ im Platzierungs-Ghost.
+   */
+  private addTerrainCoverageVisual(
+    target: Group,
+    cx: number,
+    cz: number,
+    radius: number,
+    color: number,
+    origin: { x: number; y: number; z: number },
+    selected: boolean,
+  ): void {
+    const radialSteps = Math.max(4, Math.min(12, Math.ceil(radius / 2.4)));
+    const segments = Math.max(64, Math.min(128, Math.ceil(radius * 8)));
+    const positions: number[] = [];
+    const addVertex = (r: number, angle: number): void => {
+      const worldX = cx + Math.cos(angle) * r;
+      const worldZ = cz + Math.sin(angle) * r;
+      positions.push(
+        worldX - origin.x,
+        terrainHeightAt(worldX, worldZ) + 0.09 - origin.y,
+        worldZ - origin.z,
+      );
+    };
+    for (let radial = 0; radial < radialSteps; radial++) {
+      const inner = (radial / radialSteps) * radius;
+      const outer = ((radial + 1) / radialSteps) * radius;
+      for (let segment = 0; segment < segments; segment++) {
+        const a0 = (segment / segments) * Math.PI * 2;
+        const a1 = ((segment + 1) / segments) * Math.PI * 2;
+        addVertex(inner, a0);
+        addVertex(outer, a0);
+        addVertex(outer, a1);
+        addVertex(inner, a0);
+        addVertex(outer, a1);
+        addVertex(inner, a1);
+      }
+    }
+    const geometry = new BufferGeometry();
+    geometry.setAttribute('position', new Float32BufferAttribute(positions, 3));
+    geometry.computeVertexNormals();
+    const fill = new Mesh(
+      geometry,
+      new MeshBasicMaterial({
+        color,
+        transparent: true,
+        opacity: selected ? 0.115 : 0.065,
+        depthWrite: false,
+        side: DoubleSide,
+        polygonOffset: true,
+        polygonOffsetFactor: -2,
+      }),
+    );
+    fill.renderOrder = 11;
+    target.add(fill);
+
+    const ringPoints: Vector3[] = [];
+    for (let segment = 0; segment <= segments; segment++) {
+      const angle = (segment / segments) * Math.PI * 2;
+      const worldX = cx + Math.cos(angle) * radius;
+      const worldZ = cz + Math.sin(angle) * radius;
+      ringPoints.push(
+        new Vector3(
+          worldX - origin.x,
+          terrainHeightAt(worldX, worldZ) + 0.14 - origin.y,
+          worldZ - origin.z,
+        ),
+      );
+    }
+    const ringGeometry = new BufferGeometry().setFromPoints(ringPoints);
+    const ringMaterial = selected
+      ? new LineBasicMaterial({ color, transparent: true, opacity: 0.98, depthTest: false })
+      : new LineDashedMaterial({
+          color,
+          transparent: true,
+          opacity: 0.62,
+          dashSize: 0.75,
+          gapSize: 0.42,
+          depthTest: false,
+        });
+    const ring = new Line(ringGeometry, ringMaterial);
+    if (!selected) ring.computeLineDistances();
+    ring.renderOrder = 13;
+    target.add(ring);
+  }
+
+  /**
+   * Ein Radius-System für sämtliche Dienste. Die Simulation liefert Quellen,
+   * Verbraucherzustände, Kapazität und Zählwerte; der Renderer projiziert nur.
+   */
+  private rebuildCoverageOverlay(): void {
+    const overlay = this.selectedId ? this.controller.getCoverageOverlay(this.selectedId) : undefined;
+    const key = overlay
+      ? [
+          this.selectedId,
+          overlay.colorKey,
+          overlay.underCapacity ? 1 : 0,
+          overlay.capacity ? `${overlay.capacity.used}/${overlay.capacity.servable}` : '',
+          overlay.sources.map((source) => `${source.x},${source.y}:${source.radius}:${source.selected ? 1 : 0}`).join(';'),
+          overlay.consumers.map((consumer) => `${consumer.x},${consumer.y}:${consumer.state}`).join(';'),
+        ].join('|')
+      : '';
+    if (key === this.coverageOverlayKey) return;
+    this.coverageOverlayKey = key;
+    this.clearOwnedGroup(this.coverageOverlayGroup);
+    if (!overlay) {
+      this.callbacks.onCoverageInfo(undefined);
+      return;
+    }
+
+    const palette: Record<string, number> = {
+      water: 0x55cbed,
+      food: 0xf1b24a,
+      leisure: 0x68da8d,
+      protection: 0xff7662,
+    };
+    const color = palette[overlay.colorKey] ?? 0xb18cff;
+    for (const source of overlay.sources) {
+      this.addTerrainCoverageVisual(
+        this.coverageOverlayGroup,
+        source.x + source.w / 2,
+        source.y + source.h / 2,
+        source.radius,
+        color,
+        { x: 0, y: 0, z: 0 },
+        source.selected,
+      );
+    }
+
+    if (overlay.consumers.length > 0) {
+      const geometry = new BoxGeometry(1, 0.07, 1);
+      const material = new MeshBasicMaterial({
+        vertexColors: true,
+        transparent: true,
+        opacity: 0.52,
+        depthWrite: false,
+        depthTest: false,
+      });
+      const consumers = new InstancedMesh(geometry, material, overlay.consumers.length);
+      const consumerColors = {
+        source: 0xffffff,
+        supplied: 0x55d98a,
+        redundant: 0x5ea9f3,
+        partial: 0xf0bd4f,
+        unsupplied: 0xed625d,
+      } as const;
+      const dummy = new Object3D();
+      overlay.consumers.forEach((consumer, index) => {
+        const cx = consumer.x + consumer.w / 2;
+        const cz = consumer.y + consumer.h / 2;
+        const base = samplePlacementSurface(
+          this.controller.state,
+          consumer.x,
+          consumer.y,
+          consumer.w,
+          consumer.h,
+        ).maxHeight;
+        dummy.position.set(cx, base + 0.13, cz);
+        dummy.rotation.set(0, 0, 0);
+        dummy.scale.set(consumer.w + 0.24, 1, consumer.h + 0.24);
+        dummy.updateMatrix();
+        consumers.setMatrixAt(index, dummy.matrix);
+        consumers.setColorAt(index, new Color(consumerColors[consumer.state]));
+      });
+      consumers.instanceMatrix.needsUpdate = true;
+      if (consumers.instanceColor) consumers.instanceColor.needsUpdate = true;
+      consumers.renderOrder = 14;
+      this.coverageOverlayGroup.add(consumers);
+    }
+
+    this.callbacks.onCoverageInfo({
+      label: t(overlay.labelKey),
+      underCapacity: overlay.underCapacity,
+      counts: overlay.counts,
+      ...(overlay.capacity ? { capacity: overlay.capacity } : {}),
+    });
+  }
+
   /** Rendererprojektion des Controller-Netzes; keinerlei Routenlogik hier. */
   private rebuildInfrastructureOverlay(): void {
     this.disposeGroup(this.infrastructureOverlayGroup);
@@ -5082,6 +5408,19 @@ export class ThreeMapRenderer implements IMapRenderer {
     else this.input?.update(dt);
     this.cam.update(dt);
     this.writeCamera();
+    // Beide Vegetationsaufbauten (freigeschaltet + gesperrt) teilen sich dieselbe
+    // Distanzregel — sie liegen nur deshalb in getrennten Listen, weil sie zu
+    // unterschiedlichen Zeitpunkten neu gebaut werden.
+    for (const lodList of [this.vegetationDistanceLod, this.lockedVegetationLod]) {
+      for (const lod of lodList) {
+        const distance = Math.hypot(
+          this.camera.position.x - lod.centerX,
+          this.camera.position.z - lod.centerZ,
+        );
+        // Halbe Chunk-Diagonale verhindert sichtbares Aufpoppen an der Grenze.
+        lod.object.visible = distance <= lod.maxDistance + 34;
+      }
+    }
 
     // § Overhaul 8.0 / §26: Alles, was die WELT zeigt (Tageszeit, Verkehr,
     // Missionsfahrt, Tiere, Rauch, Windräder), läuft in Simulationszeit — bei
@@ -5094,6 +5433,7 @@ export class ThreeMapRenderer implements IMapRenderer {
     // the lake pick up the current sky tint. Runs after the camera write so the
     // sky dome/sun follow the freshly-updated camera pose.
     this.env?.update(simDt);
+    this.updateNightLighting();
     this.waterTime.value += dt;
     if (this.waterMat && this.env) this.waterMat.color.copy(this.env.waterColor);
     this.groundWetness.value = getEnvironmentSettings().weather === 'rain' ? 1 : 0;
@@ -5113,7 +5453,7 @@ export class ThreeMapRenderer implements IMapRenderer {
     this.updateWorkers();
     this.updateVehicles();
     this.animateMarkers();
-    this.animateFog(dt);
+    this.animateLockedRegionMarkers(dt);
 
     this.renderer.render(this.scene, this.camera);
     this.samplePerf(dt);
@@ -5169,9 +5509,8 @@ export class ThreeMapRenderer implements IMapRenderer {
   private ensureVehicleAssets(): NonNullable<ThreeMapRenderer['vehicleAssets']> {
     if (!this.vehicleAssets) {
       this.vehicleAssets = {
-        body: new BoxGeometry(0.34, 0.22, 0.66),
-        cab: new BoxGeometry(0.32, 0.24, 0.24),
-        mat: new MeshStandardMaterial({ color: 0x4a6a8a, roughness: 0.7, metalness: 0.15 }),
+        geometry: createStylizedVehicleGeometry('van', 'betriebslogistik'),
+        mat: createStylizedVehicleMaterial(),
       };
     }
     return this.vehicleAssets;
@@ -5190,11 +5529,10 @@ export class ThreeMapRenderer implements IMapRenderer {
     if (!this.vehicleGroup.parent) this.scene.add(this.vehicleGroup);
     while (this.vehiclePool.length < states.length) {
       const g = new Group();
-      const body = new Mesh(assets.body, assets.mat);
-      body.position.y = 0.16;
-      const cab = new Mesh(assets.cab, assets.mat);
-      cab.position.set(0, 0.2, 0.2);
-      g.add(body, cab);
+      const vehicle = new Mesh(assets.geometry, assets.mat);
+      vehicle.castShadow = true;
+      vehicle.receiveShadow = true;
+      g.add(vehicle);
       this.vehicleGroup.add(g);
       this.vehiclePool.push(g);
     }
@@ -5206,7 +5544,7 @@ export class ThreeMapRenderer implements IMapRenderer {
       seen.add(s.id);
       const wx = s.x + 0.5;
       const wz = s.y + 0.5;
-      g.position.set(wx, terrainHeightAt(wx, wz) + 0.12, wz);
+      g.position.set(wx, terrainHeightAt(wx, wz) + VEHICLE_ROAD_CLEARANCE, wz);
       const prev = this.vehicleLastPos.get(s.id);
       if (prev && (prev.x !== wx || prev.z !== wz)) g.rotation.y = Math.atan2(wx - prev.x, wz - prev.z);
       this.vehicleLastPos.set(s.id, { x: wx, z: wz });
@@ -5231,13 +5569,17 @@ export class ThreeMapRenderer implements IMapRenderer {
     const fps = this.perfAccumFrames / Math.max(1e-3, this.perfAccumTime);
     let vegInstances = 0;
     let vegGroups = 0;
-    this.vegetationGroup.traverse((o) => {
-      const inst = o as unknown as { isInstancedMesh?: boolean; count?: number };
-      if (inst.isInstancedMesh) {
-        vegGroups += 1;
-        vegInstances += inst.count ?? 0;
-      }
-    });
+    // Beide Aufbauten zählen: freigeschaltete Stadt UND gesperrte Kulisse.
+    // Sonst meldete das Panel nach v1.24 nur noch einen Bruchteil der Insel.
+    for (const group of [this.vegetationGroup, this.lockedVegetationGroup]) {
+      group.traverse((o) => {
+        const inst = o as unknown as { isInstancedMesh?: boolean; count?: number };
+        if (inst.isInstancedMesh) {
+          vegGroups += 1;
+          vegInstances += inst.count ?? 0;
+        }
+      });
+    }
     setPerfStats({
       fps: Math.round(fps),
       drawCalls: r.info.render.calls,
@@ -5410,11 +5752,18 @@ function makeScenicFallback(kind: keyof typeof SCENIC_PROP_MODELS): Group {
       side: DoubleSide,
       depthWrite: false,
     });
-    const rock = new Mesh(new BoxGeometry(1.65, 3.9, 0.72), rockMat);
-    rock.position.set(0, 1.95, 0.28);
-    rock.rotation.z = -0.08;
-    const fall = new Mesh(new PlaneGeometry(0.72, 3.7, 2, 7), waterMat);
-    fall.position.set(0.08, 2.02, -0.11);
+    // § 12.2: Die Felswand war ein 1,65 × 3,9 × 0,72 großer Kasten — hochkant,
+    // schmal, grau. Genau so las sie sich im Spiel: als Zacke. Eine Wand ist
+    // breiter als hoch und hat eine Schulter; zwei versetzte Blöcke reichen
+    // dafür und bleiben zwei Draw-Calls.
+    const rock = new Mesh(new BoxGeometry(3.4, 2.5, 1.5), rockMat);
+    rock.position.set(0, 1.25, 0.42);
+    rock.rotation.z = -0.03;
+    const shoulder = new Mesh(new BoxGeometry(2.2, 1.1, 1.15), rockMat);
+    shoulder.position.set(-0.5, 2.35, 0.3);
+    shoulder.rotation.z = 0.05;
+    const fall = new Mesh(new PlaneGeometry(0.86, 2.4, 2, 7), waterMat);
+    fall.position.set(0.08, 1.3, -0.36);
     fall.rotation.z = 0.035;
     const pool = new Mesh(
       new CylinderGeometry(0.78, 0.92, 0.07, 18),
@@ -5437,7 +5786,7 @@ function makeScenicFallback(kind: keyof typeof SCENIC_PROP_MODELS): Group {
     const mistB = new Mesh(new SphereGeometry(0.3, 8, 6), mistMat);
     mistA.position.set(-0.18, 0.28, -0.3);
     mistB.position.set(0.4, 0.22, -0.25);
-    group.add(rock, fall, pool, mistA, mistB);
+    group.add(rock, shoulder, fall, pool, mistA, mistB);
   } else if (kind === 'desertSpire') {
     const sandstone = new MeshStandardMaterial({ color: 0xb95027, roughness: 1 });
     const base = new Mesh(new CylinderGeometry(1.1, 1.55, 1.4, 7), sandstone);
@@ -5470,16 +5819,21 @@ function makeScenicFallback(kind: keyof typeof SCENIC_PROP_MODELS): Group {
       }
     }
   } else if (kind === 'rockArch') {
-    const stone = new MeshStandardMaterial({ color: 0x8f8b7d, roughness: 1 });
-    const left = new Mesh(new BoxGeometry(0.9, 3.8, 1.25), stone);
-    const right = new Mesh(new BoxGeometry(0.9, 3.4, 1.2), stone);
-    const crown = new Mesh(new BoxGeometry(3.1, 0.95, 1.2), stone);
-    left.position.set(-1.05, 1.9, 0);
-    left.rotation.z = -0.09;
-    right.position.set(1.05, 1.7, 0);
-    right.rotation.z = 0.12;
-    crown.position.set(0, 3.65, 0);
-    crown.rotation.z = -0.05;
+    // § 12.2: Vorher zwei aufrecht stehende Kästen (0,9 × 3,8) plus Deckel —
+    // aus der Distanz zwei graue Zacken, und genau das hat der Spieltest
+    // gemeldet. Ein Felstor ist BREITER als hoch; die Pfeiler sind gedrungen
+    // und angeschrägt, der Bogen trägt sichtbar auf. Wird ohnehin ersetzt,
+    // sobald ein echtes Modell (oder `rock_large`) geladen ist.
+    const stone = new MeshStandardMaterial({ color: 0x8f8b7d, roughness: 1, flatShading: true });
+    const left = new Mesh(new CylinderGeometry(1.15, 1.55, 1.95, 7), stone);
+    const right = new Mesh(new CylinderGeometry(1.05, 1.45, 1.7, 7), stone);
+    const crown = new Mesh(new BoxGeometry(4.6, 0.85, 1.7), stone);
+    left.position.set(-1.55, 0.98, 0);
+    left.rotation.z = -0.05;
+    right.position.set(1.6, 0.85, 0.1);
+    right.rotation.z = 0.06;
+    crown.position.set(0, 2.15, 0.05);
+    crown.rotation.z = -0.03;
     group.add(left, right, crown);
   } else if (kind === 'ruin') {
     const stone = new MeshStandardMaterial({ color: 0x9b927c, roughness: 1 });
@@ -5783,20 +6137,10 @@ function makeAnimalMesh(kind: 'cow' | 'sheep' | 'chicken'): Group {
   return g;
 }
 
-const CAR_COLORS = [0xd94f4f, 0x4f7fd9, 0xe0b03a, 0xf2f2f2, 0x5fb35f, 0x333a44];
-
-/** A small shaped car (body + cabin + tinted windows) — clearer than a bare box.
- *  A real `vehicles/car.glb` can replace this later via vehicleModel(). */
-function makeCarMesh(): Group {
-  const g = new Group();
-  const color = CAR_COLORS[Math.floor(Math.random() * CAR_COLORS.length)]!;
-  const body = new Mesh(new BoxGeometry(0.32, 0.16, 0.52), new MeshStandardMaterial({ color, roughness: 0.5, metalness: 0.2 }));
-  body.position.y = 0.08;
-  body.castShadow = true;
-  const cabin = new Mesh(new BoxGeometry(0.28, 0.14, 0.28), new MeshStandardMaterial({ color: 0x223042, roughness: 0.3 }));
-  cabin.position.set(0, 0.2, -0.02);
-  g.add(body, cabin);
-  return g;
+/** Gebündelter Cartoon-Kleinwagen mit stabiler Farbwahl, Fenstern, Rädern und
+ * Fahrgestell. Ein reales `vehicles/car.glb` ersetzt ihn weiterhin per Drop-in. */
+function makeCarMesh(seed: string): Group {
+  return createStylizedVehicleFallback('car', seed);
 }
 
 // ---- § A6 Fahrmodus: Konstanten + Fahrzeug/Zielpfeil-Fallbacks --------------
@@ -5809,84 +6153,10 @@ const DRIVE_STEER = 2.6; // rad/s bei voller Fahrt
 const DRIVE_CAM_DIST = 8.5;
 const DRIVE_CAM_PITCH = 0.64; // rad über der Horizontalen (Verfolgerblick von schräg oben)
 
-/** Prozedurales, deutlich unterscheidbares Missionsfahrzeug je Typ (Fallback,
- *  bis ein GLB eingelegt wird). Front zeigt nach +z (wie alle Fahrzeuge hier). */
+/** Gebündeltes, typabhängig lesbares Missionsfahrzeug. Jede Variante bleibt ein
+ * Draw-Call; ein passendes Drop-in-GLB ersetzt sie weiterhin automatisch. */
 function makeMissionVehicle(vehicle: string | undefined): Group {
-  const g = new Group();
-  const paint = (color: number, rough = 0.5): MeshStandardMaterial => new MeshStandardMaterial({ color, roughness: rough, metalness: 0.15 });
-  const addBox = (w: number, hgt: number, l: number, x: number, y: number, z: number, mat: MeshStandardMaterial): Mesh => {
-    const m = new Mesh(new BoxGeometry(w, hgt, l), mat);
-    m.position.set(x, y, z);
-    m.castShadow = true;
-    g.add(m);
-    return m;
-  };
-  const beacon = (color: number, emissive: number): void => {
-    const bar = addBox(0.34, 0.07, 0.14, 0, 0.4, 0.06, new MeshStandardMaterial({ color, emissive, emissiveIntensity: 1.1, roughness: 0.4 }));
-    bar.castShadow = false;
-  };
-  switch (vehicle) {
-    case 'medium_truck': {
-      addBox(0.48, 0.34, 0.72, 0, 0.22, -0.12, paint(0x245c9b));
-      addBox(0.46, 0.3, 0.3, 0, 0.2, 0.39, paint(0x3176bd));
-      addBox(0.5, 0.06, 0.58, 0, 0.2, -0.12, paint(0xd8a331));
-      break;
-    }
-    case 'large_truck': {
-      addBox(0.54, 0.42, 0.92, 0, 0.26, -0.16, paint(0xa92e25));
-      addBox(0.52, 0.36, 0.34, 0, 0.23, 0.48, paint(0xd44535));
-      addBox(0.56, 0.07, 0.72, 0, 0.23, -0.14, paint(0x303840));
-      break;
-    }
-    case 'refrigerated_truck': {
-      addBox(0.48, 0.38, 0.78, 0, 0.24, -0.12, paint(0xf2f5f5, 0.35));
-      addBox(0.46, 0.3, 0.3, 0, 0.2, 0.41, paint(0xe8eeee, 0.35));
-      addBox(0.34, 0.12, 0.13, 0, 0.47, 0.12, paint(0x7fd6e7));
-      addBox(0.5, 0.055, 0.6, 0, 0.22, -0.13, paint(0x42b9ce));
-      break;
-    }
-    case 'heavy_transporter': {
-      addBox(0.54, 0.36, 0.34, 0, 0.22, 0.46, paint(0xd87916));
-      addBox(0.58, 0.1, 0.98, 0, 0.1, -0.2, paint(0x343a40));
-      addBox(0.44, 0.34, 0.46, 0, 0.3, -0.25, paint(0xc9a76c));
-      beacon(0xffb52a, 0xef8e00);
-      break;
-    }
-    case 'fire_truck': {
-      addBox(0.46, 0.32, 0.9, 0, 0.2, -0.05, paint(0xc62828)); // roter Aufbau
-      addBox(0.46, 0.26, 0.28, 0, 0.17, 0.38, paint(0x8e1f1f)); // Kabine
-      addBox(0.5, 0.05, 0.5, 0, 0.24, -0.1, paint(0xf2f2f2)); // weißer Streifen
-      beacon(0xff5252, 0xff2a2a);
-      break;
-    }
-    case 'police_car': {
-      addBox(0.4, 0.2, 0.78, 0, 0.13, 0, paint(0xf4f4f4)); // weiße Karosse
-      addBox(0.36, 0.16, 0.3, 0, 0.26, -0.02, paint(0x1f2c46)); // Dach/Kabine
-      addBox(0.42, 0.06, 0.42, 0, 0.13, 0, paint(0x1c3f7a)); // blauer Seitenstreifen
-      beacon(0x2f6bff, 0x1e4fd0);
-      break;
-    }
-    case 'logging_truck': {
-      addBox(0.42, 0.28, 0.3, 0, 0.18, 0.34, paint(0x2f6d3a)); // grüne Zugmaschine
-      addBox(0.44, 0.14, 0.62, 0, 0.12, -0.18, paint(0x3a2a1c)); // Ladefläche
-      addBox(0.14, 0.16, 0.56, -0.12, 0.26, -0.18, paint(0x6b4a2a)); // Stamm
-      addBox(0.14, 0.16, 0.56, 0.12, 0.26, -0.18, paint(0x7a5632)); // Stamm
-      break;
-    }
-    case 'flatbed': {
-      addBox(0.42, 0.28, 0.3, 0, 0.18, 0.34, paint(0xcf8b2a)); // orange Zugmaschine
-      addBox(0.46, 0.1, 0.66, 0, 0.1, -0.16, paint(0x4a4f57)); // Pritsche
-      addBox(0.34, 0.22, 0.34, 0, 0.24, -0.16, paint(0xb0793a)); // Materialkiste
-      break;
-    }
-    default: {
-      // van: weißer Kastenwagen (wie die ambiente Lieferung, etwas größer).
-      addBox(0.44, 0.34, 0.72, 0, 0.2, -0.03, paint(0xf2f2f2));
-      addBox(0.44, 0.24, 0.22, 0, 0.16, 0.34, paint(0xe0a03a));
-      addBox(0.46, 0.06, 0.44, 0, 0.24, -0.06, paint(0xe0a03a));
-    }
-  }
-  return g;
+  return createStylizedVehicleFallback(vehicle, vehicle ?? 'van');
 }
 
 /** Schwebender Richtungspfeil über dem Fahrzeug (zeigt nach +z, Gruppe wird
@@ -5907,11 +6177,11 @@ function makeDriveArrow(): Group {
  *  today (see docs/ROAD_TEXTURES.md). */
 export type RoadClass = 'residential' | 'main' | 'wide' | 'industrial' | 'boulevard';
 const ROAD_SPECS: Record<RoadClass, { half: number; centerline: boolean }> = {
-  residential: { half: 0.3, centerline: false },
-  main: { half: 0.37, centerline: true },
-  wide: { half: 0.43, centerline: true },
-  industrial: { half: 0.4, centerline: false },
-  boulevard: { half: 0.45, centerline: true },
+  residential: { half: 0.34, centerline: false },
+  main: { half: 0.4, centerline: true },
+  wide: { half: 0.45, centerline: true },
+  industrial: { half: 0.42, centerline: false },
+  boulevard: { half: 0.47, centerline: true },
 };
 function roadClassFor(defId: string): RoadClass {
   if (defId.includes('boulevard') || defId.includes('allee')) return 'boulevard';
@@ -6060,6 +6330,52 @@ function makeMarkerTexture(kind: MarkerKind): CanvasTexture {
 /** Große Navy/Gold-Tafel für eine noch gesperrte Weltregion. Sie bleibt als
  * Canvas-Fallback immer verfügbar; die Wolkendecke selbst darf kein UI-Asset
  * voraussetzen. */
+/**
+ * § World Overhaul 12.0 §10: Kompakter Marker OHNE Text — das ist der
+ * Ruhezustand. Zwölf dauerhaft eingeblendete Regionsnamen haben den Blick auf die
+ * Insel verdeckt; der Auftrag verlangt Namen nur „beim Hover, beim Öffnen der
+ * Regionenkarte, beim Freischalten". Das Schloss bleibt sichtbar, damit die
+ * Klickfläche und die Bedeutung („hier ist noch zu"), erhalten bleiben.
+ */
+function makeLockedRegionIconTexture(): CanvasTexture {
+  const cv = document.createElement('canvas');
+  cv.width = 192;
+  cv.height = 192;
+  const ctx = cv.getContext('2d');
+  if (ctx) {
+    ctx.clearRect(0, 0, cv.width, cv.height);
+    ctx.shadowColor = 'rgba(0,0,0,.55)';
+    ctx.shadowBlur = 18;
+    ctx.shadowOffsetY = 8;
+    ctx.fillStyle = 'rgba(6,22,33,.92)';
+    ctx.strokeStyle = '#d89b27';
+    ctx.lineWidth = 7;
+    ctx.beginPath();
+    ctx.roundRect(22, 14, 148, 164, 26);
+    ctx.fill();
+    ctx.stroke();
+    ctx.shadowColor = 'transparent';
+    // Schlossbügel + Korpus (identische Formensprache wie im vollen Marker).
+    ctx.strokeStyle = '#f5e2ad';
+    ctx.lineWidth = 13;
+    ctx.beginPath();
+    ctx.arc(96, 78, 32, Math.PI, 0);
+    ctx.stroke();
+    ctx.fillStyle = '#f5e2ad';
+    ctx.beginPath();
+    ctx.roundRect(57, 76, 78, 66, 11);
+    ctx.fill();
+    ctx.fillStyle = '#172b37';
+    ctx.beginPath();
+    ctx.arc(96, 101, 9, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillRect(91, 105, 10, 20);
+  }
+  const texture = new CanvasTexture(cv);
+  texture.colorSpace = SRGBColorSpace;
+  return texture;
+}
+
 function makeLockedRegionMarkerTexture(regionName: string, levelLabel: string): CanvasTexture {
   const cv = document.createElement('canvas');
   cv.width = 768;

@@ -31,7 +31,7 @@ import {
   BufferGeometry,
   type Texture,
 } from 'three';
-import { grade, sunDirection, sunElevation, wrap01, type EnvGrade } from './environment.ts';
+import { dawnReadability, grade, sunDirection, sunElevation, wrap01, type EnvGrade } from './environment.ts';
 import { getEnvironmentSettings, subscribeEnvironmentSettings } from './environmentSettings.ts';
 import { environmentImage } from '../../assets/registry.ts';
 
@@ -234,6 +234,11 @@ export class SkyEnvironment {
     return this._water;
   }
 
+  /** Aktuelle, tatsächlich gerenderte Tageszeit inklusive Auto-Zyklus. */
+  get timeOfDay(): number {
+    return this.tod;
+  }
+
   /** Advance the clock (if cycling) and repaint the sky/lights for this frame. */
   update(dt: number): void {
     const s = getEnvironmentSettings();
@@ -338,12 +343,21 @@ export class SkyEnvironment {
     this.sun.position.set(fx + dir.x * 180, Math.max(20, dir.y * 180), fz + dir.z * 180);
     this.sun.target.position.set(fx, 0, fz);
     this.sun.color.copy(this.weatherSun);
-    this.sun.intensity = g.sunIntensity * (weather === 'rain' ? 0.42 : weather === 'fog' ? 0.68 : 1);
+    this.sun.intensity = g.sunIntensity * (weather === 'rain' ? 0.48 : weather === 'fog' ? 0.72 : 1);
 
     this.hemi.color.copy(g.hemiSky);
     this.hemi.groundColor.copy(g.hemiGround);
-    this.hemi.intensity = g.hemiIntensity * (weather === 'rain' ? 0.7 : weather === 'fog' ? 0.82 : 1);
-    this.ambient.intensity = g.ambient * (weather === 'rain' ? 0.78 : weather === 'fog' ? 0.9 : 1);
+    // Ein City-Builder muss auch in der Abendübersicht lesbar bleiben. Die
+    // bisherigen Dämmerungswerte wurden durch ACES und die großen Bergschatten
+    // fast schwarz. Ein moderater Fill-Floor bewahrt Tageszeit und Nachtfarbe,
+    // verhindert aber verlorene Straßen, Gebäude und Vegetation.
+    const dawnFill = dawnReadability(this.tod);
+    const hemiFloor = (weather === 'clear' ? 0.44 : 0.38) + dawnFill * 0.2;
+    const ambientFloor = (weather === 'clear' ? 0.16 : 0.14) + dawnFill * 0.08;
+    this.hemi.intensity = Math.max(g.hemiIntensity, hemiFloor)
+      * (weather === 'rain' ? 0.76 : weather === 'fog' ? 0.86 : 1);
+    this.ambient.intensity = Math.max(g.ambient, ambientFloor)
+      * (weather === 'rain' ? 0.84 : weather === 'fog' ? 0.92 : 1);
 
     // Sun/moon disc + star opacity.
     (this.sunSprite.material as SpriteMaterial).opacity = Math.max(0, Math.min(1, (elev + 0.08) * 4));

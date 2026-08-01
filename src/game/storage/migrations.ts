@@ -471,6 +471,95 @@ const migrateV24ToV25: Migration = (raw) => {
 };
 
 /**
+ * v25 → v26: § World Overhaul 12.0 — VOLLSTÄNDIGER WELTAUSTAUSCH.
+ *
+ * Die Weltgrundlage ist eine andere 3D-Insel: `reference/world/new island 3d
+ * model.glb` ersetzt `island 3d new.glb` als einzige Bake-Quelle. Damit ändert
+ * sich alles gleichzeitig, was ein Spielstand referenziert:
+ *
+ * - Jede Höhen-, Terrain-, Wasser- und Bebaubar-Kachel (neue Geometrie).
+ * - Alle 13 Region-Zuschnitte und -Ids (neu segmentiert, jetzt zusätzlich NACH
+ *   dem Terraforming — D-041).
+ * - Die Startregion (jetzt Id 13 „Gründerland") und der Rathausanker (237,256).
+ * - Land-/Seenachbarschaft und damit die gesamte Freischaltreihenfolge.
+ *
+ * Eine Projektion alter Koordinaten wäre nicht nur verlustbehaftet, sondern
+ * sinnlos: Ein Gebäude auf (127,250) der alten Insel liegt auf der neuen Insel
+ * an einem geografisch völlig anderen Ort (womöglich im Wasser), und
+ * „Region 9 erschlossen" bedeutet eine andere Landschaft. Wie bei jedem echten
+ * Weltumbau (v13→v14, v15→v16, v18→v19, v19→v20) gilt deshalb der transparente
+ * Weltneustart: Der alte Stand wird EINMALIG unter
+ * `cmb.save.backup.world-v25` gesichert — kein stiller Verlust.
+ */
+const migrateV25ToV26: Migration = (raw) => {
+  throw new WorldRebuildSaveError(typeof raw.schemaVersion === 'number' ? raw.schemaVersion : 25);
+};
+
+/**
+ * v26 → v27 (§ Welt-Feinschliff 12.2, Spieltest 30.07.2026) — WELTUMBAU.
+ *
+ * Zwei Änderungen greifen gleichzeitig so tief, dass ein alter Stand nicht
+ * ehrlich weiterlaufen kann:
+ *
+ * 1. NEUE SEGMENTIERUNG. Das relief-gesteuerte Uferprofil verschiebt Höhen,
+ *    Biome und damit die Region-Cluster. Aus acht werden neun Regionen, jede Id
+ *    beschreibt eine andere Landschaft (die Startregion ist jetzt 9, nicht 8).
+ *    „Region 6 erschlossen" hieße im alten Stand Nordwald, im neuen Dünenküste.
+ * 2. FREIE RATHAUSWAHL. Ein neues Spiel startet ohne Rathaus; der Spieler setzt
+ *    es selbst. Alte Stände haben ein Rathaus auf einem Anker, den es so nicht
+ *    mehr gibt.
+ *
+ * Wie bei jedem echten Weltumbau (v13→v14, v15→v16, v18→v19, v19→v20, v25→v26)
+ * gilt der transparente Neustart: Der alte Stand wird EINMALIG unter
+ * `cmb.save.backup.world-v26` gesichert — kein stiller Verlust.
+ */
+const migrateV26ToV27: Migration = (raw) => {
+  throw new WorldRebuildSaveError(typeof raw.schemaVersion === 'number' ? raw.schemaVersion : 26);
+};
+
+/**
+ * v27 → v28: § MODELLTREUE 13.0 — DAS GELÄNDE IST JETZT DAS MODELL.
+ *
+ * Der Bake verändert die Geometrie der Welt-GLB nicht mehr (0 von 233.287
+ * Landknoten abweichend; vorher wurden 67,6 % verändert und die mittlere
+ * Landhöhe von 8,46 auf 6,45 m gedrückt). Damit ist praktisch jede Kachel eine
+ * andere: Küsten sind Klippen statt Strand, Plateaus behalten ihre Kanten, und
+ * die Bebaubar-Maske beschreibt ein anderes Gelände (47.806 → 37.891).
+ *
+ * Zusätzlich hat die Segmentierung elf statt neun Regionen mit neuen Ids und
+ * einer neuen Startregion (11 statt 9); das Rathaus liegt bei (239,251).
+ * Ein migrierter Stand hätte Gebäude auf Kacheln, die es so nicht mehr gibt.
+ *
+ * Wie bei jedem echten Weltumbau (v13→v14, v15→v16, v18→v19, v19→v20, v25→v26,
+ * v26→v27) gilt der transparente Neustart: Der alte Stand wird EINMALIG unter
+ * `cmb.save.backup.world-v27` gesichert — kein stiller Verlust.
+ */
+const migrateV27ToV28: Migration = (raw) => {
+  throw new WorldRebuildSaveError(typeof raw.schemaVersion === 'number' ? raw.schemaVersion : 27);
+};
+
+/**
+ * v28 → v29: § MODELLTREUE 13.1 — DER MEERESSPIEGEL LIEGT AN DER TERRASSENKANTE.
+ *
+ * Das Gelände ist unverändert (die GLB bleibt bitgleich übernommen), aber das
+ * Wasser steht 4 m höher: gemessen lagen zwischen 0 und 3 m nur 331 flache
+ * Kacheln (die Klippenwand), bei 4–5 m dagegen 14.073 — dort beginnt die
+ * unterste Ebene. Der höhere Wasserstand setzt die Klippenfüße unter Wasser und
+ * macht die Terrassenkante zur Uferkante.
+ *
+ * Für einen Spielstand heißt das: 5.728 vormalige Landkacheln sind jetzt Wasser,
+ * jede Höhe über der Wasserlinie ist eine andere, und die Segmentierung liefert
+ * neun statt elf Regionen mit neuen Ids (Startregion 9 statt 11, Rathaus
+ * (241,251)). Gebäude stünden im Wasser oder in einer fremden Region.
+ *
+ * Wie bei jedem echten Weltumbau gilt der transparente Neustart: Der alte Stand
+ * wird EINMALIG unter `cmb.save.backup.world-v28` gesichert.
+ */
+const migrateV28ToV29: Migration = (raw) => {
+  throw new WorldRebuildSaveError(typeof raw.schemaVersion === 'number' ? raw.schemaVersion : 28);
+};
+
+/**
  * Migration chain: migrations[n] upgrades a save from schemaVersion n to n+1.
  * Beginnt bei v10 (Insel-Basis).
  */
@@ -490,6 +579,10 @@ const migrations: Record<number, Migration> = {
   22: migrateV22ToV23,
   23: migrateV23ToV24,
   24: migrateV24ToV25,
+  25: migrateV25ToV26,
+  26: migrateV26ToV27,
+  27: migrateV27ToV28,
+  28: migrateV28ToV29,
 };
 
 export class SaveValidationError extends Error {}

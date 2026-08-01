@@ -5,19 +5,21 @@ import {
   Axe,
   BriefcaseBusiness,
   CheckCircle2,
-  Clock,
+  ChevronDown,
   Coins,
-  Flame,
+  Grid2X2,
   Home,
+  Layers,
   Leaf,
   Lock,
   MapPinned,
   Move,
+  PackageOpen,
   Pause,
+  Pickaxe,
   Play,
   Route,
-  Grid2X2,
-  PackageOpen,
+  Sprout,
   ShieldCheck,
   Sparkles,
   Square,
@@ -25,354 +27,406 @@ import {
   Trash2,
   TrendingDown,
   TrendingUp,
-  TreePine,
   Truck,
   Users,
   UserX,
   Warehouse,
   X,
 } from 'lucide-react';
-import { useEffect, useState } from 'react';
-import { useGame, useUiStore } from '../../state/store.ts';
+import { useEffect, useState, type ReactNode } from 'react';
 import { effectiveEffects } from '../../game/buildings/effects.ts';
-import type { BuildingEffect } from '../../game/config/types.ts';
-import type { BuildingInstance, DriveVehicle, ResourceId } from '../../game/types.ts';
 import type { Diagnosis } from '../../game/buildings/diagnostics.ts';
-import { ActionBubble } from '../common/ActionBubble.tsx';
-import { ConfirmModal } from '../common/ConfirmModal.tsx';
-import { BuildingArt } from '../art/index.ts';
-import { formatDuration, formatGameDuration, formatMoney, t } from '../../i18n/index.ts';
+import type { BuildingDef, BuildingEffect } from '../../game/config/types.ts';
 import { regionIdAt, terrainAt } from '../../game/config/startRegion.config.ts';
-import { CapacityBar, StatusChip } from '../common/GamePanel.tsx';
-import { buildBuildingOperationView, defaultWorkAreaSelection } from '../operations/adapters.ts';
+import type { BuildingInstance, ResourceNodeType } from '../../game/types.ts';
+import { formatGameDuration, formatMoney, t } from '../../i18n/index.ts';
+import { getMapApi, useGame, useUiStore } from '../../state/store.ts';
+import { BuildingArt } from '../art/index.ts';
+import { ConfirmModal } from '../common/ConfirmModal.tsx';
+import { useEscapeClose } from '../common/useEscapeClose.ts';
 import { TransportPlanner } from '../logistics/TransportPlanner.tsx';
+import { buildBuildingOperationView, defaultWorkAreaSelection } from '../operations/adapters.ts';
+import { nodeVocabulary } from '../operations/nodeVocabulary.ts';
 
-/** Money costs use the compact format; materials stay plain integers. */
 function costLabel(cost: Partial<Record<string, number>>): string {
   return Object.entries(cost)
-    .map(([res, amount]) => `${res === 'money' ? formatMoney(amount ?? 0) : amount} ${t(`resource.${res}`)}`)
-    .join(', ');
+    .map(([resource, amount]) =>
+      `${resource === 'money' ? formatMoney(amount ?? 0) : amount} ${t(`resource.${resource}`)}`,
+    )
+    .join(' · ');
 }
 
 /**
- * A building's info sheet that floats over the map rather than covering it
- * (§3): the map stays visible and the camera has already centred the building
- * (renderer focus). Actions are round bubbles (§4); demolish routes through the
- * shared ConfirmModal (§9). All gameplay stays in the controller.
+ * AS-3 building sheet: the default view answers four questions only:
+ * what is it, is it healthy, what are its core values and what should happen
+ * next? Site diagnostics and manual logistics remain available on demand.
  */
 export function FloatingBuildingSheet() {
   const game = useGame();
-  const { selectedBuildingId, selectBuilding, startMoving, setPanel, pushToast } = useUiStore();
+  const {
+    selectedBuildingId,
+    selectBuilding,
+    startMoving,
+    startPlacing,
+    setPanel,
+    pushToast,
+    openWorkAreaPlanner,
+    openResourceNetwork,
+  } = useUiStore();
   const [confirmDemolish, setConfirmDemolish] = useState(false);
+  const [detailsOpen, setDetailsOpen] = useState(false);
   const [previewStage, setPreviewStage] = useState<number>();
-  useEffect(() => setPreviewStage(undefined), [selectedBuildingId]);
-  if (!selectedBuildingId) return null;
-  const b = game.state.buildings[selectedBuildingId];
-  const def = b && game.config.buildings.get(b.defId);
-  if (!b || !def) return null;
 
-  const effects = effectiveEffects(def, b.upgradeLevel);
-  const upgrade = game.getUpgradeInfo(b.id);
+  useEffect(() => {
+    setPreviewStage(undefined);
+    setDetailsOpen(false);
+    setConfirmDemolish(false);
+  }, [selectedBuildingId]);
+  useEscapeClose(
+    () => selectBuilding(undefined),
+    selectedBuildingId !== undefined && !confirmDemolish,
+  );
+
+  if (!selectedBuildingId) return null;
+  const building = game.state.buildings[selectedBuildingId];
+  const def = building && game.config.buildings.get(building.defId);
+  if (!building || !def) return null;
+
+  const effects = effectiveEffects(def, building.upgradeLevel);
+  const upgrade = game.getUpgradeInfo(building.id);
   const maxLevel = upgrade.maxStage;
-  const viewedStage = Math.min(maxLevel, previewStage ?? b.upgradeLevel);
-  const bonusPct = game.derived.productionBonus[b.id] ?? 0;
-  const ambience = game.derived.ambience[b.id];
-  const now = game.state.meta.lastSimTime;
-  const refund = game.getDemolishRefund(b.id);
+  const viewedStage = Math.min(maxLevel, previewStage ?? building.upgradeLevel);
+  const bonusPct = game.derived.productionBonus[building.id] ?? 0;
+  const ambience = game.derived.ambience[building.id];
+  const diagnostics = game.getBuildingDiagnostics(building.id);
+  const visibleDiagnostics = diagnostics.filter((diagnosis) => diagnosis.code !== 'no_movein');
+  const problems = visibleDiagnostics.filter((diagnosis) => diagnosis.kind === 'problem');
+  const benefits = visibleDiagnostics.filter((diagnosis) => diagnosis.kind === 'benefit');
+  const primaryProblem = problems[0];
+  const status = buildingStatus(building, visibleDiagnostics);
+  const operationInfo = def.operation ? game.getBuildingOperationInfo(building.id) : undefined;
+  const activeOperationInfo = building.status === 'active' ? operationInfo : undefined;
+  const logisticsWarning = activeOperationInfo
+    ? game.getLogisticsWarnings().find((warning) => warning.buildingId === building.id)
+    : undefined;
+  const radius = effects.reduce((largest, effect) => {
+    if ('radius' in effect && typeof effect.radius === 'number') return Math.max(largest, effect.radius);
+    return largest;
+  }, 0);
+  const stats = effects.flatMap((effect) => effectStats(effect, bonusPct, def.operation !== undefined));
+  if (bonusPct > 0) {
+    stats.push({
+      icon: <Sparkles size={14} />,
+      label: t('ui.location_bonus_short'),
+      value: `+${Math.round(bonusPct)}%`,
+      tone: 'good',
+    });
+  }
+  if (ambience !== undefined) {
+    stats.push({
+      icon: <Leaf size={14} />,
+      label: t('ui.ambience'),
+      value: `${ambience >= 0 ? '+' : ''}${ambience}`,
+      tone: ambience >= 0 ? 'good' : 'bad',
+    });
+  }
+
+  const refund = game.getDemolishRefund(building.id);
   const refundLabel = costLabel(refund);
   const canRelocate = game.config.features.moveBuildings || def.canRelocate === true;
   const relocateAffordable = !def.relocationCost || game.canAffordCost(def.relocationCost);
-  // A building that has been upgraded reads by its stage name (§ prestige/visual
-  // development): "Wolkenkratzer", not "Wohnturm".
-  const stageNameKey = b.upgradeLevel > 0 ? (def.upgrades?.[b.upgradeLevel - 1]?.nameKey ?? def.nameKey) : def.nameKey;
-  // Problems & benefits (§2/§4): the shared diagnostics, grouped for the sheet.
-  // "no_movein" is shown by the dedicated growth note below, so drop it here to
-  // avoid saying the same thing twice.
-  const diagnostics = game.getBuildingDiagnostics(b.id);
-  const infrastructure = game.getBuildingInfrastructureStatus(b.id);
-  const harborConnections = def.waterfront ? game.getAvailableHarborConnections(b.id) : [];
-  const problems = diagnostics.filter((d) => d.kind === 'problem' && d.code !== 'no_movein');
-  const benefits = diagnostics.filter((d) => d.kind === 'benefit');
-  const status = buildingStatus(b, diagnostics);
-  const regionId = regionIdAt(b.x, b.y);
-  const region = game.config.regions.get(regionId);
-  const terrain = terrainAt(b.x, b.y);
-  const radius = effects.reduce((max, effect) => {
-    if ('radius' in effect && typeof effect.radius === 'number') return Math.max(max, effect.radius);
-    return max;
-  }, 0);
-  const roadStatus = diagnostics.some((diagnosis) => diagnosis.code === 'no_road')
-    ? { label: t('diag.no_road'), tone: 'bad' }
-    : def.requiresRoad
-      ? { label: t('diag.road_ok'), tone: 'good' }
-      : { label: 'Nicht erforderlich', tone: 'muted' };
-  // §I3 — Anleger als Netzknoten: die Landseite unterscheidet Stadtnetz von einem
-  // lokalen Netz hinter dem Wasser. „Anschließbar" heißt: ein erreichbarer Anleger
-  // hängt am Stadtnetz — die Schiffsroute selbst kommt erst mit I4.
-  const harborNode = def.waterfront ? game.getHarborNodeStatus(b.id) : undefined;
-  const harborLandNetwork = !def.waterfront
-    ? { label: '—', tone: 'muted' }
-    : !harborNode?.landSegmentId
-      ? { label: t('ui.building.harbor_land_none'), tone: 'bad' }
-      : harborNode.onCityNetwork
-        ? { label: t('ui.building.harbor_land_city'), tone: 'good' }
-        : harborNode.linksToCityVia.length > 0
-          ? { label: t('ui.building.harbor_land_linkable'), tone: 'warn' }
-          : { label: t('ui.building.harbor_land_isolated'), tone: 'warn' };
+  const canDemolish = def.canDemolish !== false && !def.unique;
+  const stageNameKey =
+    building.upgradeLevel > 0
+      ? (def.upgrades?.[building.upgradeLevel - 1]?.nameKey ?? def.nameKey)
+      : def.nameKey;
   const close = () => selectBuilding(undefined);
+  const openArea = () => {
+    if (!activeOperationInfo) return;
+    openWorkAreaPlanner(
+      building.id,
+      activeOperationInfo.efficientRadius,
+      defaultWorkAreaSelection(game, building.id, activeOperationInfo.efficientRadius),
+    );
+  };
+
+  let nextTitle = 'Kein Handlungsbedarf';
+  let nextDescription = 'Das Gebäude arbeitet wie vorgesehen.';
+  let nextTone: 'good' | 'warn' | 'neutral' = 'good';
+  let nextActionLabel: string | undefined;
+  let nextAction: (() => void) | undefined;
+  let nextActionIcon: ReactNode = <Route size={16} />;
+  let nextActionDisabled = false;
+
+  if (building.status === 'constructing') {
+    nextTitle = building.targetUpgradeLevel !== undefined ? 'Ausbau läuft' : 'Bau läuft';
+    nextDescription =
+      building.constructionEndsAt !== undefined
+        ? t('ui.ready_in', { time: formatGameDuration(building.constructionEndsAt - game.state.meta.lastSimTime) })
+        : 'Die Baustelle wird automatisch fertiggestellt.';
+    nextTone = 'neutral';
+  } else if (building.status === 'paused') {
+    nextTitle = 'Gebäude außer Betrieb';
+    nextDescription = t('message.fire', { building: t(def.nameKey) });
+    nextTone = 'warn';
+  } else if (logisticsWarning) {
+    nextTitle = 'Lieferung braucht Aufmerksamkeit';
+    nextDescription = logisticsWarningText(logisticsWarning.code, t(`resource.${logisticsWarning.resource}`));
+    nextTone = 'warn';
+    nextActionLabel = 'Logistik prüfen';
+    nextActionIcon = <Warehouse size={16} />;
+    nextAction = () => openResourceNetwork(logisticsWarning.resource);
+  } else if (primaryProblem) {
+    nextTitle = t(`diag.${primaryProblem.code}`, primaryProblem.params);
+    nextDescription = 'Öffne die Diagnose für Ursache und Standortdaten.';
+    nextTone = 'warn';
+    const road = primaryProblem.code === 'no_road'
+      ? game.config.buildingList.find(
+          (candidate) =>
+            candidate.category === 'roads' &&
+            candidate.buildable !== false &&
+            candidate.unlockLevel <= game.state.level.current &&
+            game.canAffordCost(game.getBuildCost(candidate.id)),
+        )
+      : undefined;
+    if (road) {
+      nextActionLabel = 'Straße anbinden';
+      nextActionIcon = <Route size={16} />;
+      nextAction = () => startPlacing(road.id);
+    } else {
+      nextActionLabel = 'Problem ansehen';
+      nextActionIcon = <AlertTriangle size={16} />;
+      nextAction = () => setDetailsOpen(true);
+    }
+  } else if (activeOperationInfo && !activeOperationInfo.active) {
+    nextTitle = 'Betrieb startklar';
+    nextDescription = 'Ein Klick richtet das empfohlene Arbeitsgebiet als Dauerbetrieb ein.';
+    nextTone = 'neutral';
+    nextActionLabel = 'Betrieb starten';
+    nextActionIcon = operationIcon(activeOperationInfo.nodeType, 16);
+    nextAction = () => {
+      const result = game.startBuildingOperation(building.id);
+      if (!result.ok) pushToast(nodeVocabulary(activeOperationInfo.nodeType).emptyArea, 'error');
+    };
+  } else if (activeOperationInfo) {
+    nextTitle = 'Betrieb läuft automatisch';
+    nextDescription = 'Arbeitsgebiet und Lieferautomatik übernehmen die laufende Arbeit.';
+  } else if (upgrade.next) {
+    nextTone = 'neutral';
+    if (upgrade.lockedUntilLevel !== undefined) {
+      nextTitle = `Nächste Stufe ab Level ${upgrade.lockedUntilLevel}`;
+      nextDescription = 'Deine Stadt muss zuerst weiter wachsen.';
+      nextActionLabel = `Level ${upgrade.lockedUntilLevel}`;
+      nextActionIcon = <Lock size={16} />;
+      nextActionDisabled = true;
+    } else if (!upgrade.affordable) {
+      nextTitle = 'Ressourcen für die nächste Stufe sammeln';
+      nextDescription = costLabel(upgrade.next.cost);
+      nextActionLabel = 'Noch nicht bezahlbar';
+      nextActionIcon = <Lock size={16} />;
+      nextActionDisabled = true;
+    } else {
+      nextTitle = upgrade.next.nameKey ? t(upgrade.next.nameKey) : 'Nächste Ausbaustufe';
+      nextDescription = `Upgrade · ${costLabel(upgrade.next.cost)}`;
+      nextActionLabel = 'Upgrade starten';
+      nextActionIcon = <ArrowUp size={16} />;
+      nextAction = () => {
+        const result = game.upgradeBuilding(building.id);
+        if (!result.ok) pushToast(t(`error.${result.error}`), 'error');
+      };
+    }
+  } else if (def.tradePost) {
+    nextTitle = 'Handel verwalten';
+    nextDescription = 'Preise, Käufe und Verkäufe liegen gesammelt im Handel.';
+    nextTone = 'neutral';
+    nextActionLabel = 'Handel öffnen';
+    nextActionIcon = <Store size={16} />;
+    nextAction = () => setPanel('trade');
+  }
 
   return (
     <>
-      <div className="floating-sheet" onClick={(e) => e.stopPropagation()}>
-        <div className="floating-sheet-head">
-          <div className="sheet-hero">
-            <span className="sheet-hero-art">
-              <BuildingArt id={def.id} category={def.category} px={158} stage={viewedStage} />
+      <aside
+        className="floating-sheet as3-building-sheet"
+        aria-label={`Gebäudedetails: ${t(stageNameKey)}`}
+        onClick={(event) => event.stopPropagation()}
+      >
+        <header className="as3-building-hero">
+          <span className="as3-building-hero-art">
+            <BuildingArt id={def.id} category={def.category} px={148} stage={viewedStage} />
+          </span>
+          <span className="as3-building-hero-copy">
+            <small>{t(`category.${def.category}`)}</small>
+            <h2>{t(stageNameKey)}</h2>
+            <span>
+              Stufe {building.upgradeLevel + 1}
+              <i>von {maxLevel + 1}</i>
             </span>
-            <div className="sheet-hero-text">
-              <span className="sheet-kicker">Gebäude-Details</span>
-              <h3>
-                {t(stageNameKey)}
-                {maxLevel > 0 && (
-                  <span className="level-pips" title={`${t('ui.building_level')} ${b.upgradeLevel + 1}/${maxLevel + 1}`}>
-                    {Array.from({ length: maxLevel + 1 }, (_, i) => (
-                      <span key={i} className={`pip${i <= b.upgradeLevel ? ' filled' : ''}`} />
-                    ))}
-                  </span>
-                )}
-              </h3>
-              <div className="sheet-substatus">
-                <span className="sheet-category">{t(`category.${def.category}`)}</span>
-                <span className="sheet-stage">Stufe {b.upgradeLevel + 1}/{maxLevel + 1}</span>
-                <span className={`sheet-status-badge ${status.tone}`}>{t(status.key)}</span>
-              </div>
-            </div>
-          </div>
-          <button className="btn-icon" onClick={close} title={t('ui.close')}>
+          </span>
+          <span className={`as3-building-status ${status.tone}`}>{t(status.key)}</span>
+          <button className="as3-icon-button" type="button" onClick={close} title={t('ui.close')}>
             <X size={18} />
           </button>
-        </div>
+        </header>
 
-        {maxLevel > 0 && (
-          <section className="building-stage-gallery">
-            <div className="building-stage-gallery-head">
-              <span>Gebäude-Entwicklung</span>
-              <small>
-                Vorschau · Stufe {viewedStage + 1}/{maxLevel + 1}
-              </small>
-            </div>
-            <div className="building-stage-strip">
-              {Array.from({ length: maxLevel + 1 }, (_, stage) => {
-                const stageDef = stage > 0 ? def.upgrades?.[stage - 1] : undefined;
-                const levelGate = stageDef?.unlockLevel;
-                const locked = levelGate !== undefined && game.state.level.current < levelGate;
-                return (
-                  <button
-                    key={stage}
-                    className={`${viewedStage === stage ? 'active' : ''}${stage === b.upgradeLevel ? ' current' : ''}`}
-                    onClick={() => setPreviewStage(stage)}
-                    title={
-                      stageDef?.nameKey
-                        ? t(stageDef.nameKey)
-                        : `${t(def.nameKey)} · Stufe ${stage + 1}`
-                    }
-                  >
-                    <span className="building-stage-art">
-                      <BuildingArt id={def.id} category={def.category} px={66} stage={stage} />
-                      {locked && (
-                        <i>
-                          <Lock size={12} />
-                          Lv. {levelGate}
-                        </i>
-                      )}
-                    </span>
-                    <b>Stufe {stage + 1}</b>
-                    <small>{stage === b.upgradeLevel ? 'Aktuell' : locked ? `Ab Level ${levelGate}` : 'Vorschau'}</small>
-                  </button>
-                );
-              })}
-            </div>
+        {activeOperationInfo ? (
+          <CompactOperationSummary buildingId={building.id} />
+        ) : (
+          <section className="as3-building-stats" aria-label="Kernwerte">
+            {stats.slice(0, 4).map((stat, index) => (
+              <span className="as3-building-stat" key={`${stat.label}-${index}`}>
+                <i>{stat.icon}</i>
+                <small>{stat.label}</small>
+                <strong className={stat.tone ? `text-${stat.tone}` : undefined}>{stat.value}</strong>
+              </span>
+            ))}
+            {stats.length === 0 && (
+              <span className="as3-building-stat wide">
+                <i><CheckCircle2 size={16} /></i>
+                <small>Status</small>
+                <strong>Bereit</strong>
+              </span>
+            )}
           </section>
         )}
 
-        {b.status === 'constructing' && b.constructionEndsAt !== undefined && (
-          <>
-            <p className="dialog-status">
-              <Clock size={15} /> {t(b.targetUpgradeLevel !== undefined ? 'ui.upgrade_running' : 'ui.construction')} —{' '}
-              {t('ui.ready_in', { time: formatGameDuration(b.constructionEndsAt - now) })}
-            </p>
-            {b.targetUpgradeLevel !== undefined && (
-              // §2/§17: reassure that the current stage stays fully active during
-              // the upgrade, and name the stage the building is heading toward.
-              <p className="dialog-hint sheet-upgrade-note">
-                {t('ui.upgrade_running.keeps')}
-                {def.upgrades?.[b.targetUpgradeLevel - 1]?.nameKey && (
-                  <> {t('ui.upgrade_to', { name: t(def.upgrades[b.targetUpgradeLevel - 1]!.nameKey!) })}</>
-                )}
-              </p>
-            )}
-          </>
-        )}
-        {b.status === 'paused' && (
-          <p className="dialog-status text-bad">
-            <Flame size={15} /> {t('message.fire', { building: t(def.nameKey) })}
-          </p>
-        )}
+        {def.category === 'residential' && building.status === 'active' && <ResidentialGrowthNote />}
 
-        {(() => {
-          // "Werte" block (mockup §6): the building's key figures as a compact
-          // label/value grid rather than a wall of sentences. Derived straight
-          // from the effective effects — no new state.
-          const stats = effects.flatMap((eff) => effectStats(eff, bonusPct, def.operation !== undefined));
-          if (bonusPct > 0) stats.push({ icon: <Sparkles size={14} />, label: t('ui.location_bonus_short'), value: `+${Math.round(bonusPct)}%`, tone: 'good' });
-          if (ambience !== undefined) stats.push({ icon: <Leaf size={14} />, label: t('ui.ambience'), value: `${ambience >= 0 ? '+' : ''}${ambience}`, tone: ambience >= 0 ? 'good' : 'bad' });
-          if (stats.length === 0) return null;
-          return (
-            <div className="sheet-stat-grid">
-              {stats.map((s, i) => (
-                <div key={i} className="sheet-stat">
-                  <span className="sheet-stat-label">{s.icon} {s.label}</span>
-                  <span className={`sheet-stat-value${s.tone ? ` text-${s.tone}` : ''}`}>{s.value}</span>
-                </div>
-              ))}
-            </div>
-          );
-        })()}
-
-        {def.operation && b.status === 'active' && <BuildingOperationSection buildingId={b.id} />}
-
-        <section className="building-site-analysis">
-          <div className="building-site-copy">
-            <h4>
-              <MapPinned size={15} /> {t('ui.building.site_analysis')}
-            </h4>
-            <div className="building-site-row">
-              <span>{t('ui.building.region')}</span>
-              <strong>{region ? t(region.nameKey) : '—'}</strong>
-            </div>
-            <div className="building-site-row">
-              <span>{t('ui.building.terrain')}</span>
-              <strong>{t(`terrain.${terrain}`)}</strong>
-            </div>
-            <div className="building-site-row">
-              <span>{t('ui.building.road')}</span>
-              <strong className={`text-${roadStatus.tone}`}>{roadStatus.label}</strong>
-            </div>
-            {def.waterfront && (
-              <>
-                <div className="building-site-row">
-                  <span><Anchor size={13} /> {t('ui.building.water_network')}</span>
-                  <strong className={infrastructure?.modes.water ? 'text-good' : 'text-bad'}>
-                    {infrastructure?.modes.water ? t('ui.building.water_connected') : t('ui.building.water_missing')}
-                  </strong>
-                </div>
-                <div className="building-site-row">
-                  <span>{t('ui.building.harbor_connections')}</span>
-                  <strong className={harborConnections.some((connection) => connection.status === 'planned') ? 'text-good' : 'text-bad'}>
-                    {harborConnections.filter((connection) => connection.status === 'planned').length}
-                  </strong>
-                </div>
-                {/* §I3 — Landseite: hängt der Anleger am Stadtnetz oder an einem
-                    lokalen Netz hinter dem Wasser? Ohne diese Zeile sah beides gleich aus. */}
-                <div className="building-site-row">
-                  <span>{t('ui.building.harbor_land_network')}</span>
-                  <strong className={`text-${harborLandNetwork.tone}`}>{harborLandNetwork.label}</strong>
-                </div>
-              </>
-            )}
-            <div className="building-site-row">
-              <span>{t('ui.building.footprint')}</span>
-              <strong>
-                <Grid2X2 size={13} /> {def.size.w}×{def.size.h}
-              </strong>
-            </div>
-            <div className="building-site-row">
-              <span>{t('ui.location_bonus_short')}</span>
-              <strong className={bonusPct > 0 ? 'text-good' : 'muted'}>{bonusPct > 0 ? `+${Math.round(bonusPct)}%` : '—'}</strong>
-            </div>
-          </div>
-          <div className="building-radius-preview">
-            <span>{t('ui.building.coverage')}</span>
-            <div className="building-radius-map">
-              {radius > 0 ? (
-                <i
-                  style={{
-                    width: `${46 + 78 * Math.min(1, radius / 24)}px`,
-                    height: `${46 + 78 * Math.min(1, radius / 24)}px`,
-                  }}
-                />
-              ) : <b>—</b>}
-              <Route size={22} />
-            </div>
-            <strong>{radius > 0 ? t('ui.radius.tiles', { n: radius }) : 'Kein Radius'}</strong>
-          </div>
+        <section className={`as3-next-step ${nextTone}`}>
+          <span className="as3-next-step-icon">
+            {nextTone === 'warn' ? <AlertTriangle size={18} /> : nextTone === 'good' ? <CheckCircle2 size={18} /> : <Sparkles size={18} />}
+          </span>
+          <span>
+            <small>Nächster Schritt</small>
+            <strong>{nextTitle}</strong>
+            <p>{nextDescription}</p>
+          </span>
+          {nextActionLabel && (
+            <button
+              type="button"
+              className="as3-primary-button"
+              onClick={nextAction}
+              disabled={nextActionDisabled}
+            >
+              {nextActionIcon}
+              {nextActionLabel}
+            </button>
+          )}
         </section>
 
-        {(problems.length > 0 || benefits.length > 0) && (
-          <div className="sheet-diagnostics">
-            {problems.map((d, i) => (
-              <div key={`p${i}`} className="sheet-diag problem">
-                <AlertTriangle size={14} />
-                <span>{t(`diag.${d.code}`, d.params)}</span>
-              </div>
-            ))}
-            {benefits.map((d, i) => (
-              <div key={`b${i}`} className="sheet-diag benefit">
-                <CheckCircle2 size={14} />
-                <span>{t(`diag.${d.code}`, d.params)}</span>
-              </div>
-            ))}
+        {(radius > 0 || activeOperationInfo) && (
+          <div className="as3-building-map-actions">
+            {radius > 0 && (
+              <button type="button" onClick={() => getMapApi()?.focusSelected()}>
+                <Route size={15} />
+                Wirkungsbereich auf Karte
+                <span>{radius} Felder</span>
+              </button>
+            )}
+            {activeOperationInfo && (
+              <button type="button" onClick={openArea}>
+                <MapPinned size={15} />
+                Arbeitsgebiet
+                <span>{activeOperationInfo.efficientRadius} Felder</span>
+              </button>
+            )}
           </div>
         )}
 
-        {def.category === 'residential' && b.status === 'active' && <ResidentialGrowthNote />}
+        <details
+          className="as3-building-details"
+          open={detailsOpen}
+          onToggle={(event) => setDetailsOpen(event.currentTarget.open)}
+        >
+          <summary>
+            <span>
+              <ChevronDown size={16} />
+              Mehr Details
+            </span>
+            <small>Standort, Stufen und Verwaltung</small>
+          </summary>
+          <div className="as3-building-details-body">
+            {maxLevel > 0 && (
+              <BuildingStageGallery
+                def={def}
+                currentStage={building.upgradeLevel}
+                viewedStage={viewedStage}
+                onView={setPreviewStage}
+              />
+            )}
 
-        <div className="action-bubbles">
-          {upgrade.next && b.status === 'active' && (
-            upgrade.lockedUntilLevel !== undefined ? (
-              // The stage exists but the city is too low a level (§ level-coupled
-              // densification): show why, don't just hide it.
-              <ActionBubble
-                icon={<ArrowUp size={18} />}
-                label={t('ui.upgrade_locked', { level: upgrade.lockedUntilLevel })}
-                disabled
-                onClick={() => {}}
-              />
-            ) : (
-              <ActionBubble
-                icon={<ArrowUp size={18} />}
-                label={`${upgrade.next.nameKey ? t('ui.upgrade_to', { name: t(upgrade.next.nameKey) }) : t('ui.upgrade')} · ${costLabel(upgrade.next.cost)}`}
-                tone="primary"
-                disabled={!upgrade.affordable}
-                onClick={() => {
-                  const result = game.upgradeBuilding(b.id);
-                  if (!result.ok) pushToast(t(`error.${result.error}`), 'error');
-                }}
-              />
-            )
-          )}
-          {def.tradePost && b.status === 'active' && (
-            <ActionBubble
-              icon={<Store size={18} />}
-              label={t('ui.trade.open')}
-              tone="primary"
-              onClick={() => setPanel('trade')}
+            <BuildingSiteDetails
+              building={building}
+              radius={radius}
+              bonusPct={bonusPct}
             />
-          )}
-          {canRelocate && (
-            <ActionBubble
-              icon={<Move size={18} />}
-              label={def.canRelocate ? `${t('ui.relocate')}${def.relocationCost ? ` · ${costLabel(def.relocationCost)}` : ''}` : t('ui.move')}
-              disabled={!relocateAffordable}
-              onClick={() => startMoving(b.id)}
-            />
-          )}
-          {!def.unique && (
-            <ActionBubble icon={<Trash2 size={18} />} label={t('ui.demolish')} tone="danger" onClick={() => setConfirmDemolish(true)} />
-          )}
-        </div>
-        {!canRelocate && !def.unique && <p className="dialog-hint">{t('ui.move.disabled')}</p>}
-      </div>
+
+            {stats.length > 4 && (
+              <section className="as3-detail-card">
+                <h3>Weitere Werte</h3>
+                <div className="as3-detail-value-grid">
+                  {stats.slice(4).map((stat, index) => (
+                    <span key={`${stat.label}-${index}`}>
+                      <small>{stat.icon}{stat.label}</small>
+                      <strong className={stat.tone ? `text-${stat.tone}` : undefined}>{stat.value}</strong>
+                    </span>
+                  ))}
+                </div>
+              </section>
+            )}
+
+            {(problems.length > 0 || benefits.length > 0) && (
+              <section className="as3-detail-card">
+                <h3>Diagnose</h3>
+                <div className="as3-diagnostics">
+                  {problems.map((diagnosis) => (
+                    <p className="problem" key={`problem-${diagnosis.code}`}>
+                      <AlertTriangle size={14} />
+                      {t(`diag.${diagnosis.code}`, diagnosis.params)}
+                    </p>
+                  ))}
+                  {benefits.map((diagnosis) => (
+                    <p className="benefit" key={`benefit-${diagnosis.code}`}>
+                      <CheckCircle2 size={14} />
+                      {t(`diag.${diagnosis.code}`, diagnosis.params)}
+                    </p>
+                  ))}
+                </div>
+              </section>
+            )}
+
+            {activeOperationInfo && <OperationDetails buildingId={building.id} />}
+
+            <section className="as3-detail-card as3-building-management">
+              <h3>Verwaltung</h3>
+              <div>
+                {def.tradePost && building.status === 'active' && (
+                  <button type="button" onClick={() => setPanel('trade')}>
+                    <Store size={15} />
+                    Handel öffnen
+                  </button>
+                )}
+                {canRelocate && (
+                  <button
+                    type="button"
+                    disabled={!relocateAffordable}
+                    onClick={() => startMoving(building.id)}
+                  >
+                    <Move size={15} />
+                    {def.relocationCost ? `Versetzen · ${costLabel(def.relocationCost)}` : 'Versetzen'}
+                  </button>
+                )}
+                {canDemolish && (
+                  <button type="button" className="danger" onClick={() => setConfirmDemolish(true)}>
+                    <Trash2 size={15} />
+                    Abreißen
+                  </button>
+                )}
+              </div>
+            </section>
+          </div>
+        </details>
+      </aside>
 
       {confirmDemolish && (
         <ConfirmModal
@@ -382,7 +436,7 @@ export function FloatingBuildingSheet() {
           confirmLabel={t('ui.demolish')}
           detail={refundLabel ? t('ui.demolish.refund', { resources: refundLabel }) : undefined}
           onConfirm={() => {
-            game.demolishBuilding(b.id);
+            game.demolishBuilding(building.id);
             if (refundLabel) pushToast(t('ui.demolish.refunded', { resources: refundLabel }), 'success');
             setConfirmDemolish(false);
             close();
@@ -395,343 +449,386 @@ export function FloatingBuildingSheet() {
 }
 
 /**
- * The building's headline status for the sheet badge (§2): the same states the
- * game already tracks, plus a "needs attention" / "upgrade ready" read derived
- * from the shared diagnostics — no new state.
+ * Werkzeugsymbol des Betriebs (§A6). Die Axt stand bis zuletzt auch über einem
+ * Steinbruch — dasselbe Versehen wie „Bäume in Reichweite": der Referenzschnitt
+ * war das Sägewerk. Unbelegte Knotentypen bekommen ein neutrales Symbol.
  */
-function buildingStatus(b: BuildingInstance, diagnostics: Diagnosis[]): { key: string; tone: string } {
-  if (b.status === 'constructing') {
-    // An in-progress upgrade is flagged by targetUpgradeLevel (upgradeLevel now
-    // only advances on completion), so this correctly reads "upgrading" even for
-    // a base→stage-1 upgrade where upgradeLevel is still 0 (§2).
-    return b.targetUpgradeLevel !== undefined
-      ? { key: 'ui.status.upgrading', tone: 'busy' }
-      : { key: 'ui.status.constructing', tone: 'busy' };
+function operationIcon(nodeType: ResourceNodeType, size: number): ReactNode {
+  switch (nodeType) {
+    case 'tree':
+      return <Axe size={size} />;
+    case 'rock':
+      return <Pickaxe size={size} />;
+    case 'crop':
+      return <Sprout size={size} />;
+    default:
+      return <Layers size={size} />;
   }
-  if (b.status === 'paused') return { key: 'ui.status.paused', tone: 'bad' };
-  if (diagnostics.some((d) => d.kind === 'problem')) return { key: 'ui.status.attention', tone: 'bad' };
-  if (diagnostics.some((d) => d.code === 'upgrade_ready')) return { key: 'ui.status.upgrade_ready', tone: 'good' };
-  return { key: 'ui.status.active', tone: 'good' };
 }
 
-/**
- * Move-in status shown on a residential building (§11/§15): explains, right at
- * the home the player clicked, whether citizens are arriving and — if not — why
- * ("nobody wants to move in: …"). Population is a city-wide figure, so this
- * mirrors the city's growth model rather than inventing per-house occupancy.
- */
-function ResidentialGrowthNote() {
+function CompactOperationSummary({ buildingId }: { buildingId: string }) {
   const game = useGame();
-  const g = game.getGrowthStatus();
-  if (g.growing) {
-    return (
-      <p className="sheet-growth text-good">
-        <TrendingUp size={14} /> {t('ui.growth.moving_in', { rate: Math.round(g.ratePerMin).toLocaleString('de-DE') })}
-      </p>
-    );
-  }
-  const key =
-    g.reason === 'housing_full'
-      ? 'ui.growth.full'
-      : g.reason === 'unhappy'
-        ? 'ui.growth.nobody_here'
-        : 'ui.growth.no_housing';
-  return (
-    <p className={`sheet-growth ${g.reason === 'unhappy' ? 'text-bad' : 'text-warn'}`}>
-      <UserX size={14} /> {t(key)}
-    </p>
-  );
-}
-
-/**
- * Betriebsbereich des Gebäudefensters (§ Active Operations 2.0, §18): großer
- * Aktionsbutton, Arbeiter, lokales Lager, Auftragswarteschlange und ehrliche
- * Vorschau/Warnungen. Liest ausschließlich Controller-Read-Helper; jede Aktion
- * läuft über einen Command (keine direkte State-Mutation, CLAUDE.md §1).
- */
-function BuildingOperationSection({ buildingId }: { buildingId: string }) {
-  const game = useGame();
-  const { pushToast, openWorkAreaPlanner, openResourceNetwork } = useUiStore();
+  const { pushToast } = useUiStore();
   const info = game.getBuildingOperationInfo(buildingId);
-  const operationView = buildBuildingOperationView(game, buildingId);
-  const [tab, setTab] = useState<'overview' | 'storage' | 'orders' | 'upgrades'>('overview');
-  if (!info || !operationView) return null;
-  const building = game.state.buildings[buildingId]!;
-  const def = game.config.buildings.get(building.defId)!;
-  const running = info.active !== undefined;
-  const preview = running ? undefined : game.getBuildingOperationPreview(buildingId);
-  const throughput = game.getOperationThroughput(buildingId);
-  const resName = t(`resource.${info.resource}`);
-  const inv = info.inventory;
-  const storagePct = inv.capacity > 0 ? Math.min(100, Math.round((inv.used / inv.capacity) * 100)) : 0;
+  const view = buildBuildingOperationView(game, buildingId);
+  if (!info || !view) return null;
 
-  const start = () => {
-    const result = game.startBuildingOperation(buildingId);
-    if (!result.ok) pushToast(t(result.error === 'invalid' ? 'ui.operation.no_trees' : `error.${result.error}`), 'error');
+  const throughput = game.getOperationThroughput(buildingId);
+  const autoTransport = game.getAutoTransport(buildingId);
+  const storagePct =
+    info.inventory.capacity > 0
+      ? Math.min(100, Math.round((info.inventory.used / info.inventory.capacity) * 100))
+      : 0;
+  const resourceName = t(`resource.${info.resource}`);
+  const warning = game.getLogisticsWarnings().find((candidate) => candidate.buildingId === buildingId);
+
+  const toggleAutoTransport = () => {
+    const result = game.setAutoTransport(buildingId, !autoTransport.enabled);
+    if (!result.ok) pushToast(t(`error.${result.error}`), 'error');
   };
-  const openArea = () =>
-    openWorkAreaPlanner(
-      buildingId,
-      info.efficientRadius,
-      defaultWorkAreaSelection(game, buildingId, info.efficientRadius),
-    );
 
   return (
-    <section className="building-operation">
-      <div className="op-head">
-        <span><Axe size={15} /> {t('ui.operation.title')}</span>
-        <StatusChip tone={operationView.status === 'active' ? 'good' : operationView.status === 'storage_full' ? 'danger' : 'warning'}>
-          {operationView.statusLabel}
-        </StatusChip>
-      </div>
-
-      <div className="operation-detail-tabs" role="tablist" aria-label="Betriebsdetails">
-        {([
-          ['overview', 'Übersicht'],
-          ['storage', 'Lager'],
-          ['orders', 'Aufträge'],
-          ['upgrades', 'Upgrades'],
-        ] as const).map(([id, label]) => (
-          <button key={id} type="button" role="tab" aria-selected={tab === id} className={tab === id ? 'active' : ''} onClick={() => setTab(id)}>
-            {label}
-          </button>
-        ))}
-      </div>
-
-      {tab === 'overview' && <div className="op-metrics">
-        <div className="op-metric">
-          <span><Users size={13} /> {t('ui.operation.workers')}</span>
+    <section className="as3-operation-summary">
+      <header>
+        <span>
+          {operationIcon(info.nodeType, 15)}
+          Betrieb
+        </span>
+        <strong className={view.status === 'active' ? 'good' : 'warn'}>{view.statusLabel}</strong>
+      </header>
+      <div className="as3-operation-metrics">
+        <span>
+          <TrendingUp size={15} />
+          <small>Produktion</small>
+          <strong>
+            {throughput && throughput.perMinute > 0
+              ? `${throughput.perMinute.toLocaleString('de-DE')} ${resourceName}/min`
+              : throughput?.idleReason
+                ? t(`ui.operation.idle.${throughput.idleReason}`)
+                : 'Bereit'}
+          </strong>
+        </span>
+        <span>
+          <Users size={15} />
+          <small>Arbeiter</small>
           <strong>{info.workersBusy} / {info.workerSlots}</strong>
-        </div>
-        <div className="op-metric">
-          <span><TreePine size={13} /> {t('ui.operation.active_orders')}</span>
-          <strong>{info.active?.remainingCount ?? 0}</strong>
-        </div>
-        <div className="op-metric">
-          <span><MapPinned size={13} /> {t('ui.operation.available_nodes')}</span>
-          <strong>{info.availableNodes}</strong>
-        </div>
-        {/* § R2/§5: echter Durchsatz statt der früheren passiven „+X/min"-Lüge.
-            Projektion der realen Arbeitsschleife (Hinweg + Fällen + Rückweg) mit den
-            Formeln des Ticks — also der Wert unter den AKTUELLEN Bedingungen. */}
-        <div className="op-metric">
-          <span><TrendingUp size={13} /> {t('ui.operation.throughput')}</span>
-          {throughput && throughput.perMinute > 0 ? (
-            <strong title={t('ui.operation.throughput_hint')}>
-              {throughput.perMinute.toLocaleString('de-DE')} {resName}/min
-              <small> · ø {throughput.avgDistance} Kacheln</small>
-            </strong>
-          ) : (
-            <strong className="muted">
-              {throughput?.idleReason ? t(`ui.operation.idle.${throughput.idleReason}`) : '—'}
-            </strong>
-          )}
-        </div>
-      </div>}
-
-      {tab === 'overview' && (
-        <div className="operation-workers">
-          {operationView.workers.length > 0 ? operationView.workers.map((worker) => (
-            <div className="operation-worker-row" key={worker.id}>
-              <span className="worker-avatar"><Users size={14} /></span>
-              <span><strong>{worker.displayName}</strong><small>{worker.statusLabel}{worker.detail ? ` · ${worker.detail}` : ''}</small></span>
-              <i><b style={{ width: `${worker.progressPct}%` }} /></i>
-              <em>{worker.progressPct}%</em>
-            </div>
-          )) : <p className="op-hint">Arbeiter erscheinen mit dem ersten bestätigten Auftrag.</p>}
-        </div>
-      )}
-
-      {tab !== 'upgrades' && <div className="op-storage">
-        <div className="op-storage-head">
-          <span><PackageOpen size={13} /> {t('ui.operation.local_storage')}</span>
-          <strong>{Math.round(inv.used)} / {inv.capacity} {resName}</strong>
-        </div>
-        <div className="op-storage-bar"><i style={{ width: `${storagePct}%` }} className={info.storageFull ? 'full' : ''} /></div>
-      </div>}
-
-      {tab === 'storage' && (
-        <>
-          <CapacityBar
-            label={`Lagerbelegung · ${resName}`}
-            used={operationView.localStored}
-            reserved={operationView.localReserved}
-            capacity={operationView.localCapacity}
-          />
-          <div className="storage-facts">
-            <span><b>{Math.round(operationView.availableForTransport)}</b><small>Für Transport verfügbar</small></span>
-            <span><b>{Math.round(operationView.localReserved)}</b><small>Reserviert</small></span>
-            <span><b>{Math.max(0, Math.round(operationView.localCapacity - operationView.localStored))}</b><small>Freie Kapazität</small></span>
-          </div>
-          <button className="op-cta ghost" type="button" onClick={() => openResourceNetwork(info.resource)}>
-            <Warehouse size={15} /> Gesamtes Ressourcennetz
-          </button>
-          <TransportPlanner compact sourceBuildingId={buildingId} resource={info.resource} />
-        </>
-      )}
-
-      {tab === 'orders' && preview && preview.validTargetIds.length > 0 && (
-        <div className="op-preview">
-          <div><Sparkles size={13} /> {t('ui.operation.expected_yield')}<b>~{preview.expectedYield} {resName}</b></div>
-          <div><Clock size={13} /> {t('ui.operation.duration')}<b>{formatDuration(preview.expectedDurationSec * 1000)}</b></div>
-          <div><Route size={13} /> {t('ui.operation.travel')}<b>{preview.travelDistanceAvg}</b></div>
-        </div>
-      )}
-      {tab === 'orders' && preview?.warnings.map((w) => (
-        <p key={w} className="op-warning"><AlertTriangle size={13} /> {t(w)}</p>
-      ))}
-
-      {tab === 'overview' && <div className="op-actions">
-        <button className="op-cta" onClick={start}>
-          <Axe size={16} /> {running ? t('ui.operation.adjust') : t('ui.operation.start', { resource: resName })}
-        </button>
-        {running && (
-          <>
-            {info.active?.paused ? (
-              <button className="op-mini" onClick={() => game.resumeBuildingOperation(buildingId)} title={t('ui.operation.resume')}><Play size={15} /></button>
-            ) : (
-              <button className="op-mini" onClick={() => game.pauseBuildingOperation(buildingId)} title={t('ui.operation.pause')}><Pause size={15} /></button>
-            )}
-            <button className="op-mini danger" onClick={() => game.cancelBuildingOperation(buildingId)} title={t('ui.operation.stop')}><Square size={15} /></button>
-          </>
-        )}
-        <button className="op-cta ghost" onClick={openArea}>
-          <MapPinned size={16} /> Arbeitsgebiet anpassen
-        </button>
-      </div>}
-
-      {tab === 'orders' && (
-        <button className="op-cta" onClick={openArea}><MapPinned size={16} /> Arbeitsgebiet öffnen</button>
-      )}
-
-      {tab === 'overview' && <BuildingTransportSection buildingId={buildingId} resource={info.resource} />}
-
-      {tab === 'upgrades' && (
-        <div className="operation-upgrade-preview">
-          {def.operation!.stages.map((stage, index) => (
-            <article key={index} className={index === building.upgradeLevel ? 'current' : index < building.upgradeLevel ? 'complete' : ''}>
-              <BuildingArt id={def.id} category={def.category} px={80} stage={index} />
-              <span><small>Stufe {index + 1}</small><strong>{index === building.upgradeLevel ? 'Aktuell' : index < building.upgradeLevel ? 'Erreicht' : 'Vorschau'}</strong></span>
-              <dl>
-                <div><dt>Arbeiter</dt><dd>{stage.workerSlots}</dd></div>
-                <div><dt>Tempo</dt><dd>{stage.workSpeed}/min</dd></div>
-                <div><dt>Traglast</dt><dd>{stage.carryCapacity}</dd></div>
-                <div><dt>Lager</dt><dd>{stage.storageCapacity}</dd></div>
-              </dl>
-            </article>
-          ))}
-        </div>
+        </span>
+        <span>
+          <PackageOpen size={15} />
+          <small>Lager</small>
+          <strong>{Math.round(info.inventory.used)} / {info.inventory.capacity}</strong>
+        </span>
+      </div>
+      <div className="as3-operation-storage">
+        <i style={{ width: `${storagePct}%` }} className={info.storageFull ? 'full' : ''} />
+      </div>
+      <button
+        type="button"
+        role="switch"
+        aria-checked={autoTransport.enabled}
+        className={`as3-auto-toggle${autoTransport.enabled ? ' enabled' : ''}`}
+        onClick={toggleAutoTransport}
+      >
+        <span><Truck size={15} /></span>
+        <span>
+          <strong>Lieferautomatik</strong>
+          <small>{autoTransport.enabled ? 'Bestes Lager und Fahrzeug werden automatisch gewählt.' : 'Aus · manuelle Planung unter „Mehr Details“.'}</small>
+        </span>
+        <i aria-hidden="true"><b /></i>
+      </button>
+      {warning && autoTransport.enabled && (
+        <p className="as3-operation-warning">
+          <AlertTriangle size={14} />
+          {logisticsWarningText(warning.code, resourceName)}
+        </p>
       )}
     </section>
   );
 }
 
-function BuildingTransportSection({ buildingId, resource }: { buildingId: string; resource: ResourceId }) {
+function OperationDetails({ buildingId }: { buildingId: string }) {
   const game = useGame();
-  const { pushToast } = useUiStore();
-  const resName = t(`resource.${resource}`);
-  const available = Math.floor(game.getAvailableForTransfer(buildingId, resource));
-  const targets = game.getInventoryTransferTargets(buildingId, resource);
-  const vehicles = game.config.activities.vehicles.filter((v) => !v.future && v.unlockLevel <= game.state.level.current);
-  const transfers = game.getBuildingTransfers(buildingId);
+  const { openResourceNetwork } = useUiStore();
+  const info = game.getBuildingOperationInfo(buildingId);
+  const view = buildBuildingOperationView(game, buildingId);
+  if (!info || !view) return null;
 
-  const [planning, setPlanning] = useState(false);
-  const [targetId, setTargetId] = useState(() => targets[0]?.buildingId ?? '');
-  const [vehicleId, setVehicleId] = useState<DriveVehicle | ''>(() => vehicles[0]?.id ?? '');
-
-  const validTarget = targets.some((tg) => tg.buildingId === targetId) ? targetId : (targets[0]?.buildingId ?? '');
-  const validVehicle = vehicles.some((v) => v.id === vehicleId) ? (vehicleId as DriveVehicle) : (vehicles[0]?.id as DriveVehicle | undefined);
-  const preview =
-    planning && validTarget && validVehicle && available > 0
-      ? game.getInventoryTransferPreview({ sourceBuildingId: buildingId, targetBuildingId: validTarget, resource, amount: available, vehicleId: validVehicle })
-      : undefined;
-
-  const confirm = () => {
-    if (!validTarget || !validVehicle) return;
-    const result = game.createInventoryTransfer({ sourceBuildingId: buildingId, targetBuildingId: validTarget, resource, amount: available, vehicleId: validVehicle });
-    if (!result.ok) {
-      pushToast(t(`error.${result.error}`), 'error');
-      return;
-    }
-    setPlanning(false);
-  };
+  const autoTransport = game.getAutoTransport(buildingId);
+  const resourceName = t(`resource.${info.resource}`);
+  const running = info.active !== undefined;
+  const vocabulary = nodeVocabulary(info.nodeType);
+  const continuous = game.getContinuousOperationStatus(buildingId);
 
   return (
-    <div className="op-transport">
-      <div className="op-transport-head">
-        <span><Truck size={14} /> {t('ui.transport.title')}</span>
-        <strong>{available} {resName} {t('ui.transport.available').toLowerCase()}</strong>
+    <section className="as3-detail-card as3-operation-details">
+      <h3>Betriebsdetails</h3>
+      <div className="as3-detail-value-grid">
+        <span>
+          <small><MapPinned size={13} /> {vocabulary.inRange}</small>
+          <strong>{info.availableNodes}</strong>
+        </span>
+        {/*
+          § A6: Bei einem nicht nachwachsenden Vorkommen ist der Restbestand im
+          Arbeitsgebiet die eigentliche strategische Zahl — er sagt, wie lange der
+          Standort überhaupt noch trägt. Bei Holz/Nahrung wäre dieselbe Zahl
+          irreführend (sie füllt sich wieder auf), deshalb steht sie nur hier.
+        */}
+        {!info.renewable && continuous !== undefined ? (
+          <span>
+            <small><Layers size={13} /> {t('ui.operation.remaining_in_area')}</small>
+            <strong>{continuous.remainingInArea.toLocaleString('de-DE')} {resourceName}</strong>
+          </span>
+        ) : (
+          <span>
+            <small><Warehouse size={13} /> Frei im Lager</small>
+            <strong>{Math.max(0, Math.round(info.inventory.free))} {resourceName}</strong>
+          </span>
+        )}
+        <span>
+          <small><PackageOpen size={13} /> Reserviert</small>
+          <strong>{Math.round(Object.values(info.inventory.reserved).reduce((sum, amount) => sum + amount, 0))}</strong>
+        </span>
       </div>
-
-      {transfers.length > 0 && (
-        <ul className="op-transfers">
-          {transfers.map((tr) => {
-            const target = targets.find((tg) => tg.buildingId === tr.targetBuildingId);
-            const label =
-              tr.status === 'loading' ? 'ui.transport.status_loading'
-              : tr.status === 'in_transit' ? 'ui.transport.status_in_transit'
-              : tr.status === 'returning' ? 'ui.transport.status_returning'
-              : 'ui.transport.status_unloading';
-            const delivered = tr.delivered ?? 0;
-            return (
-              <li key={tr.id} className="op-transfer">
-                <div className="op-transfer-row">
-                  <span><Truck size={12} /> {tr.amount} {t(`resource.${tr.resource}`)} → {target ? t(target.nameKey) : '—'}</span>
-                  <button className="op-mini danger" onClick={() => game.cancelInventoryTransfer(tr.id)} title={t('ui.transport.recall')}><X size={13} /></button>
-                </div>
-                <div className="op-transfer-bar"><i style={{ width: `${Math.round(Math.min(1, tr.progress) * 100)}%` }} className={tr.status} /></div>
-                <span className="op-transfer-status">{t(label)}{delivered > 0 ? ` · ${t('ui.transport.progress', { done: delivered, total: tr.amount })}` : ''}</span>
-              </li>
-            );
-          })}
-        </ul>
+      {!info.renewable && (
+        <p className="as3-operation-warning">
+          <AlertTriangle size={14} />
+          {continuous?.remainingInArea === 0 ? t('ui.operation.exhausted_hint') : t('ui.operation.finite_deposit')}
+        </p>
       )}
 
-      {available <= 0 ? (
-        <p className="op-hint">{t('ui.transport.no_cargo', { resource: resName })}</p>
-      ) : targets.length === 0 ? (
-        <p className="op-warning"><AlertTriangle size={13} /> {t('ui.transport.no_targets', { resource: resName })}</p>
-      ) : !planning ? (
-        <button className="op-cta ghost" onClick={() => setPlanning(true)}><Truck size={15} /> {t('ui.transport.plan')}</button>
-      ) : (
-        <div className="op-transport-form">
-          <label>
-            <span>{t('ui.transport.target')}</span>
-            <select value={validTarget} onChange={(e) => setTargetId(e.target.value)}>
-              {targets.map((tg) => <option key={tg.buildingId} value={tg.buildingId}>{t(tg.nameKey)}</option>)}
-            </select>
-          </label>
-          <label>
-            <span>{t('ui.transport.vehicle')}</span>
-            <select value={validVehicle ?? ''} onChange={(e) => setVehicleId(e.target.value as DriveVehicle)}>
-              {vehicles.map((v) => <option key={v.id} value={v.id}>{t(v.nameKey)} ({v.capacity})</option>)}
-            </select>
-          </label>
-          {preview && (
-            <div className="op-transport-preview">
-              <div><PackageOpen size={12} /> {t('ui.transport.amount')}<b>{preview.amount} {resName}</b></div>
-              <div><Truck size={12} /> {t('ui.transport.loads')}<b>{preview.loads}×</b></div>
-              <div><Route size={12} /> {t('ui.transport.distance')}<b>{preview.distanceTiles}</b></div>
-              <div><Clock size={12} /> {t('ui.transport.duration')}<b>{formatDuration(preview.totalSec * 1000)}</b></div>
-              <div><Warehouse size={12} /> {t('ui.transport.road_coverage')}<b>{Math.round(preview.roadCoverage * 100)}%</b></div>
-              <div><Coins size={12} /> {t('ui.transport.cost')}<b>{preview.operatingCost.toLocaleString('de-DE')}</b></div>
-            </div>
-          )}
-          {preview?.warnings.map((w) => (
-            <p key={w} className="op-warning small"><AlertTriangle size={12} /> {t(w)}</p>
+      {view.workers.length > 0 && (
+        <div className="as3-worker-list">
+          {view.workers.map((worker) => (
+            <span key={worker.id}>
+              <i><Users size={13} /></i>
+              <span>
+                <strong>{worker.displayName}</strong>
+                <small>{worker.statusLabel}{worker.detail ? ` · ${worker.detail}` : ''}</small>
+              </span>
+              <em>{worker.progressPct}%</em>
+            </span>
           ))}
-          <div className="op-transport-actions">
-            <button className="op-cta" onClick={confirm} disabled={!preview || preview.amount <= 0}><Truck size={15} /> {t('ui.transport.confirm')}</button>
-            <button className="op-mini" onClick={() => setPlanning(false)} title={t('ui.transport.cancel')}><X size={15} /></button>
-          </div>
         </div>
       )}
-    </div>
+
+      <div className="as3-operation-detail-actions">
+        <button type="button" onClick={() => openResourceNetwork(info.resource)}>
+          <Warehouse size={15} />
+          Ressourcennetz
+        </button>
+        {running && (
+          <>
+            {info.active?.paused ? (
+              <button type="button" onClick={() => game.resumeBuildingOperation(buildingId)}>
+                <Play size={15} />
+                Fortsetzen
+              </button>
+            ) : (
+              <button type="button" onClick={() => game.pauseBuildingOperation(buildingId)}>
+                <Pause size={15} />
+                Pausieren
+              </button>
+            )}
+            <button type="button" className="danger" onClick={() => game.cancelBuildingOperation(buildingId)}>
+              <Square size={14} />
+              Betrieb stoppen
+            </button>
+          </>
+        )}
+      </div>
+
+      {!autoTransport.enabled && (
+        <details className="as3-manual-transport">
+          <summary>
+            <Truck size={14} />
+            Manuellen Transport planen
+            <ChevronDown size={14} />
+          </summary>
+          <TransportPlanner compact sourceBuildingId={buildingId} resource={info.resource} />
+        </details>
+      )}
+    </section>
   );
 }
 
-function effectIcon(eff: BuildingEffect) {
-  switch (eff.type) {
+function BuildingStageGallery({
+  def,
+  currentStage,
+  viewedStage,
+  onView,
+}: {
+  def: BuildingDef;
+  currentStage: number;
+  viewedStage: number;
+  onView(stage: number): void;
+}) {
+  const game = useGame();
+  const maxStage = def.upgrades?.length ?? 0;
+  return (
+    <section className="as3-detail-card">
+      <h3>Gebäudestufen</h3>
+      <div className="as3-stage-strip">
+        {Array.from({ length: maxStage + 1 }, (_, stage) => {
+          const stageDef = stage > 0 ? def.upgrades?.[stage - 1] : undefined;
+          const locked =
+            stageDef?.unlockLevel !== undefined && game.state.level.current < stageDef.unlockLevel;
+          return (
+            <button
+              type="button"
+              key={stage}
+              className={`${viewedStage === stage ? 'active' : ''}${currentStage === stage ? ' current' : ''}`}
+              onClick={() => onView(stage)}
+            >
+              <BuildingArt id={def.id} category={def.category} px={62} stage={stage} />
+              <span>
+                <strong>Stufe {stage + 1}</strong>
+                <small>{currentStage === stage ? 'Aktuell' : locked ? `Ab Level ${stageDef?.unlockLevel}` : 'Vorschau'}</small>
+              </span>
+              {locked && <Lock size={12} />}
+            </button>
+          );
+        })}
+      </div>
+    </section>
+  );
+}
+
+function BuildingSiteDetails({
+  building,
+  radius,
+  bonusPct,
+}: {
+  building: BuildingInstance;
+  radius: number;
+  bonusPct: number;
+}) {
+  const game = useGame();
+  const def = game.config.buildings.get(building.defId);
+  if (!def) return null;
+
+  const region = game.config.regions.get(regionIdAt(building.x, building.y));
+  const terrain = terrainAt(building.x, building.y);
+  const infrastructure = game.getBuildingInfrastructureStatus(building.id);
+  const harborConnections = def.waterfront ? game.getAvailableHarborConnections(building.id) : [];
+
+  return (
+    <section className="as3-detail-card">
+      <h3>Standort</h3>
+      <div className="as3-site-grid">
+        <span>
+          <small>Region</small>
+          <strong>{region ? t(region.nameKey) : '—'}</strong>
+        </span>
+        <span>
+          <small>Gelände</small>
+          <strong>{t(`terrain.${terrain}`)}</strong>
+        </span>
+        <span>
+          <small>Straße</small>
+          <strong className={infrastructure?.modes.road || !def.requiresRoad ? 'text-good' : 'text-bad'}>
+            {def.requiresRoad ? (infrastructure?.modes.road ? 'Verbunden' : 'Fehlt') : 'Nicht nötig'}
+          </strong>
+        </span>
+        <span>
+          <small>Grundfläche</small>
+          <strong><Grid2X2 size={13} /> {def.size.w}×{def.size.h}</strong>
+        </span>
+        <span>
+          <small>Standortbonus</small>
+          <strong className={bonusPct > 0 ? 'text-good' : undefined}>{bonusPct > 0 ? `+${Math.round(bonusPct)}%` : '—'}</strong>
+        </span>
+        <span>
+          <small>Wirkungsradius</small>
+          <strong>{radius > 0 ? `${radius} Felder` : '—'}</strong>
+        </span>
+        {def.waterfront && (
+          <>
+            <span>
+              <small><Anchor size={12} /> Wasserweg</small>
+              <strong className={infrastructure?.modes.water ? 'text-good' : 'text-bad'}>
+                {infrastructure?.modes.water ? 'Erreichbar' : 'Fehlt'}
+              </strong>
+            </span>
+            <span>
+              <small>Hafenverbindungen</small>
+              <strong>{harborConnections.filter((connection) => connection.status === 'planned').length}</strong>
+            </span>
+          </>
+        )}
+      </div>
+    </section>
+  );
+}
+
+function buildingStatus(
+  building: BuildingInstance,
+  diagnostics: Diagnosis[],
+): { key: string; tone: 'good' | 'bad' | 'busy' } {
+  if (building.status === 'constructing') {
+    return building.targetUpgradeLevel !== undefined
+      ? { key: 'ui.status.upgrading', tone: 'busy' }
+      : { key: 'ui.status.constructing', tone: 'busy' };
+  }
+  if (building.status === 'paused') return { key: 'ui.status.paused', tone: 'bad' };
+  if (diagnostics.some((diagnosis) => diagnosis.kind === 'problem')) {
+    return { key: 'ui.status.attention', tone: 'bad' };
+  }
+  if (diagnostics.some((diagnosis) => diagnosis.code === 'upgrade_ready')) {
+    return { key: 'ui.status.upgrade_ready', tone: 'good' };
+  }
+  return { key: 'ui.status.active', tone: 'good' };
+}
+
+function ResidentialGrowthNote() {
+  const game = useGame();
+  const growth = game.getGrowthStatus();
+  if (growth.growing) {
+    return (
+      <p className="as3-growth-note text-good">
+        <TrendingUp size={14} />
+        {t('ui.growth.moving_in', { rate: Math.round(growth.ratePerMin).toLocaleString('de-DE') })}
+      </p>
+    );
+  }
+  const key =
+    growth.reason === 'housing_full'
+      ? 'ui.growth.full'
+      : growth.reason === 'unhappy'
+        ? 'ui.growth.nobody_here'
+        : 'ui.growth.no_housing';
+  return (
+    <p className={`as3-growth-note ${growth.reason === 'unhappy' ? 'text-bad' : 'text-warn'}`}>
+      <UserX size={14} />
+      {t(key)}
+    </p>
+  );
+}
+
+function logisticsWarningText(
+  code: 'no_storage_target' | 'no_route' | 'no_vehicle' | 'storage_full',
+  resourceName: string,
+): string {
+  switch (code) {
+    case 'no_storage_target':
+      return `Kein freies Lager nimmt ${resourceName} an.`;
+    case 'no_route':
+      return 'Zwischen Betrieb und Lager fehlt eine befahrbare Straße.';
+    case 'no_vehicle':
+      return 'Noch kein passendes Lieferfahrzeug verfügbar.';
+    case 'storage_full':
+      return `Das lokale ${resourceName}-Lager ist voll.`;
+  }
+}
+
+interface SheetStat {
+  icon: ReactNode;
+  label: string;
+  value: string;
+  tone?: 'good' | 'bad';
+}
+
+function effectIcon(effect: BuildingEffect): ReactNode {
+  switch (effect.type) {
     case 'produce':
       return <TrendingUp size={15} />;
     case 'housing':
@@ -739,8 +836,9 @@ function effectIcon(eff: BuildingEffect) {
     case 'revenue':
       return <Coins size={15} />;
     case 'capacity':
-      return eff.need === 'housing' ? <Home size={15} /> : <PackageOpen size={15} />;
+      return effect.need === 'housing' ? <Home size={15} /> : <PackageOpen size={15} />;
     case 'coverage':
+    case 'ambience':
       return <Leaf size={15} />;
     case 'storage':
       return <Warehouse size={15} />;
@@ -750,8 +848,6 @@ function effectIcon(eff: BuildingEffect) {
       return <PackageOpen size={15} />;
     case 'protection':
       return <ShieldCheck size={15} />;
-    case 'ambience':
-      return <Leaf size={15} />;
     case 'logistics':
       return <Truck size={15} />;
     case 'upkeep':
@@ -761,55 +857,73 @@ function effectIcon(eff: BuildingEffect) {
   }
 }
 
-interface SheetStat {
-  icon: React.ReactNode;
-  label: string;
-  value: string;
-  tone?: 'good' | 'bad';
-}
-
-/** One effect → its "Werte" grid rows (label + value). Empty for effects that
- *  have no legible figure (ambience/demand are shown elsewhere or implied). */
-function effectStats(eff: BuildingEffect, bonusPct: number, isActiveOperation = false): SheetStat[] {
-  const icon = effectIcon(eff);
-  switch (eff.type) {
+function effectStats(
+  effect: BuildingEffect,
+  bonusPct: number,
+  isActiveOperation = false,
+): SheetStat[] {
+  const icon = effectIcon(effect);
+  switch (effect.type) {
     case 'produce': {
-      // § R2/§5: Bei einem aktiven Betrieb ist der passive `produce`-Pfad seit
-      // Active Operations 2.0 ABGESCHALTET — eine „+X/min"-Zeile wäre schlicht
-      // falsch. Der echte Durchsatz steht im Betriebsbereich (Durchsatz-Diagnose).
       if (isActiveOperation) return [];
-      const rate = eff.perMinute * (1 + bonusPct / 100);
-      return [{ icon, label: t(`resource.${eff.resource}`), value: `+${rate % 1 === 0 ? rate : rate.toFixed(1)}/min`, tone: 'good' }];
+      const rate = effect.perMinute * (1 + bonusPct / 100);
+      return [{
+        icon,
+        label: t(`resource.${effect.resource}`),
+        value: `+${rate % 1 === 0 ? rate : rate.toFixed(1)}/min`,
+        tone: 'good',
+      }];
     }
     case 'housing':
       return [
-        { icon, label: t('ui.housing.units'), value: String(eff.units) },
-        { icon: <Home size={14} />, label: t('need.housing'), value: `${eff.units * eff.minResidentsPerUnit}–${eff.units * eff.maxResidentsPerUnit}` },
+        { icon, label: 'Wohneinheiten', value: String(effect.units) },
+        {
+          icon: <Home size={14} />,
+          label: 'Bewohner',
+          value: `${effect.units * effect.minResidentsPerUnit}–${effect.units * effect.maxResidentsPerUnit}`,
+        },
       ];
     case 'revenue':
-      return [{ icon, label: t(`ui.revenue.${eff.category}`), value: `+${formatMoney(eff.perMinute)}/min`, tone: 'good' }];
+      return [{
+        icon,
+        label: 'Einnahmen',
+        value: `+${formatMoney(effect.perMinute)}/min`,
+        tone: 'good',
+      }];
     case 'capacity':
       return [
-        { icon, label: t(`need.${eff.need}`), value: `+${eff.amount}` },
-        ...(eff.radius !== undefined ? [{ icon: <MapPinned size={14} />, label: t('ui.radius'), value: t('ui.radius.tiles', { n: eff.radius }) }] : []),
+        { icon, label: t(`need.${effect.need}`), value: `+${effect.amount}` },
+        ...(effect.radius !== undefined
+          ? [{ icon: <MapPinned size={14} />, label: 'Radius', value: `${effect.radius} Felder` }]
+          : []),
       ];
     case 'coverage':
       return [
-        { icon, label: t(`need.${eff.need}`), value: t('ui.effect.covers') },
-        { icon: <MapPinned size={14} />, label: t('ui.radius'), value: t('ui.radius.tiles', { n: eff.radius }) },
+        { icon, label: t(`need.${effect.need}`), value: 'Versorgung' },
+        { icon: <MapPinned size={14} />, label: 'Radius', value: `${effect.radius} Felder` },
       ];
     case 'storage':
-      return [{ icon, label: `${t('ui.storage')} ${t(`resource.${eff.resource}`)}`, value: `+${eff.amount}` }];
+      return [{ icon, label: `${t(`resource.${effect.resource}`)}-Lager`, value: `+${effect.amount}` }];
     case 'jobs':
-      return [{ icon, label: t('ui.jobs'), value: `+${eff.amount}` }];
+      return [{ icon, label: 'Arbeitsplätze', value: `+${effect.amount}` }];
     case 'distribution':
-      return [{ icon, label: `${t('ui.distribution')} ${t(`need.${eff.need}`)}`, value: t('ui.radius.tiles', { n: eff.radius }) }];
+      return [{ icon, label: `${t(`need.${effect.need}`)} verteilen`, value: `${effect.radius} Felder` }];
     case 'protection':
-      return [{ icon, label: t('ui.protection'), value: t('ui.radius.tiles', { n: eff.radius }) }];
+      return [{ icon, label: 'Schutzradius', value: `${effect.radius} Felder` }];
     case 'logistics':
-      return [{ icon, label: t('ui.logistics'), value: `+${eff.boostPct}% · ${t('ui.radius.tiles', { n: eff.radius })}`, tone: 'good' }];
+      return [{
+        icon,
+        label: 'Logistik',
+        value: `+${effect.boostPct}% · ${effect.radius} Felder`,
+        tone: 'good',
+      }];
     case 'upkeep':
-      return [{ icon, label: t('ui.finance.upkeep'), value: `−${formatMoney(eff.perMinute)}/min`, tone: 'bad' }];
+      return [{
+        icon,
+        label: 'Unterhalt',
+        value: `−${formatMoney(effect.perMinute)}/min`,
+        tone: 'bad',
+      }];
     case 'ambience':
     case 'demand':
       return [];

@@ -16,9 +16,10 @@ describe('in-place reset (resetTo)', () => {
     const fresh = createNewGame(config, 'Neustadt', T0 + 1000);
     controller.resetTo(fresh);
 
-    // Only the pre-placed buildings remain (town hall + start roads) — the
-    // player's house/road are gone.
-    expect(controller.state.buildings['b_townhall']).toBeDefined();
+    // § 12.2: Ein frisches Spiel ist UNGEGRÜNDET — nach dem Reset steht kein
+    // Rathaus mehr, der Spieler wählt den Platz erneut. Das Haus des alten
+    // Spielstands ist ebenfalls weg.
+    expect(controller.isCityFounded()).toBe(false);
     expect(Object.values(controller.state.buildings).some((b) => b.defId === 'house_small')).toBe(false);
     // Money is back to the fresh starting budget, not the old 12 345.
     expect(controller.state.resources.money).toBe(config.balancing.startResources.money);

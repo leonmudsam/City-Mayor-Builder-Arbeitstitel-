@@ -23,7 +23,7 @@ export function ResourceCard({
   warn?: boolean;
   accent?: string | undefined;
   title?: string;
-  detail?: ReactNode;
+  detail?: ReactNode | ((close: () => void) => ReactNode);
 }) {
   const style = accent ? ({ '--card-accent': accent } as React.CSSProperties) : undefined;
   const body = (
@@ -53,12 +53,14 @@ export function ResourceCard({
           style={style}
           onClick={toggle}
           title={title}
+          aria-haspopup="dialog"
+          aria-expanded={open}
         >
           {body}
         </button>
       )}
     >
-      {detail}
+      {({ close }) => (typeof detail === 'function' ? detail(close) : detail)}
     </Popover>
   );
 }

@@ -17,7 +17,7 @@ import {
   rewardTierFor,
   type TradeContractOffer,
 } from '../simulation/activities.ts';
-import type { ActiveBuildingOperation, ActivityPlanningSelection, BuildingWorkerState, GameState, InventoryTransfer, RegionId, ResourceId, TerrainType } from '../types.ts';
+import type { ActiveBuildingOperation, ActivityPlanningSelection, BuildingWorkerState, GameState, InventoryTransfer, RegionId, ResourceId, ResourceNodeType, TerrainType } from '../types.ts';
 import { recomputeDerived, type Derived } from '../simulation/derived.ts';
 import { advance, moveInPerMin } from '../simulation/tick.ts';
 import { updateQuests, objectiveTarget, questFocus, type QuestFocus } from '../simulation/quests.ts';
@@ -88,6 +88,8 @@ import {
   getContinuousOperationStatus,
   getInventory,
   getOperationThroughput,
+  isRenewableOperation,
+  operationRadii,
   inventoryFree,
   inventoryUsed,
   nodesInWorkArea,
@@ -178,6 +180,16 @@ export type CommandResult = { ok: true } | { ok: false; error: CommandError };
 
 const ok: CommandResult = { ok: true };
 const fail = (error: CommandError): CommandResult => ({ ok: false, error });
+
+/**
+ * § 12.2 — Platzhalter-Id für die Gründungsprüfung. `validatePlacement`
+ * benutzt `ignoreBuildingId` als „dieses Gebäude existiert bereits" und
+ * überspringt damit genau die Identitätsprüfungen (`buildable:false`, `unique`,
+ * Levelfreischaltung), die für das Rathaus nicht gelten dürfen. Die Id gehört
+ * bewusst zu KEINEM Gebäude, damit alle Kachel-, Terrain- und Belegungsprüfungen
+ * vollständig normal laufen.
+ */
+const FOUNDING_PLACEHOLDER_ID = '__founding__';
 
 export type GameEvent =
   | { type: 'levelUp'; level: number }
@@ -339,6 +351,13 @@ export interface BuildingInventoryView {
 export interface BuildingOperationInfo {
   isOperationBuilding: boolean;
   resource: ResourceId;
+  /**
+   * Bearbeiteter Knotentyp (§A6/A7). Die UI beschriftet damit Knoten und Meldungen
+   * — „Bäume", „Felsvorkommen", „Felder" — statt überall von Bäumen zu reden.
+   */
+  nodeType: ResourceNodeType;
+  /** Wächst der Knotentyp nach? Bei `false` ist ein leeres Gebiet endgültig. */
+  renewable: boolean;
   workerSlots: number;
   /** Arbeiter, die gerade unterwegs/am Arbeiten sind (nicht im Betrieb warten). */
   workersBusy: number;
@@ -533,6 +552,87 @@ export class GameController {
     if (instant) {
       addXp(this.state, this.config, this.derived, def.xpReward);
       if (defId === 'mayor_house') this.state.mayor.houseLevel = Math.max(this.state.mayor.houseLevel, 1);
+    }
+    this.afterStructuralChange();
+    return ok;
+  }
+
+  // ---- Gründung (§ Welt-Feinschliff 12.2) ---------------------------------
+  //
+  // Nutzerwunsch: „Das Rathaus soll man am Anfang selbst entscheiden können wo
+  // man es platziert." Die Gründung ist bewusst KEIN normaler Bau:
+  // `town_hall` ist `buildable: false` und `unique` — beides ist richtig, denn
+  // im Baumenü darf das Rathaus nie auftauchen. Deshalb ein eigener,
+  // einmaliger Command statt einer Ausnahme in `placeBuilding` (§2: bestehendes
+  // System erweitern, keine Sonderpfade im Baupfad).
+
+  /** Existiert bereits ein Rathaus? Abgeleitet, nie gespeichert. */
+  isCityFounded(): boolean {
+    return Object.values(this.state.buildings).some((building) => building.defId === 'town_hall');
+  }
+
+  /**
+   * Warum die Gründung an dieser Stelle nicht geht — oder `undefined`.
+   * Reine Leseprüfung für die Ghost-Vorschau; benutzt exakt dieselbe
+   * `validatePlacement`-Instanz wie jeder andere Bau (§2).
+   */
+  getFoundingBlocker(x: number, y: number): PlacementError | undefined {
+    if (this.isCityFounded()) return 'unique_exists';
+    const def = this.config.buildings.get('town_hall');
+    if (!def) return 'locked_building';
+    // `ignoreBuildingId` überspringt genau den Block, der hier nicht gilt
+    // (`buildable:false`, `unique`, Levelfreischaltung). Terrain, Bebaubarkeit,
+    // Höhenbudget, Belegung UND die Regionsprüfung laufen vollständig normal —
+    // nur die Startregion ist beim Gründen erschlossen, also greift
+    // `region_locked` automatisch für alles andere. Kein zweiter Regionsbegriff.
+    return validatePlacement(this.state, this.config, this.derived, def, x, y, {
+      ignoreBuildingId: FOUNDING_PLACEHOLDER_ID,
+    });
+  }
+
+  /**
+   * Setzt das Rathaus und gründet damit die Stadt. Einmalig, kostenlos, sofort.
+   * Die Tutorial-Achsen entstehen relativ zum GEWÄHLTEN Anker und nur dort, wo
+   * sie wirklich baubar sind — eine Straße im Wasser wäre schlimmer als keine.
+   */
+  foundCity(x: number, y: number): CommandResult {
+    const def = this.config.buildings.get('town_hall');
+    if (!def) return fail('not_found');
+    const blocker = this.getFoundingBlocker(x, y);
+    if (blocker) return fail(blocker);
+    const townHallId = newId(this.state, 'b');
+    this.state.buildings[townHallId] = {
+      id: townHallId,
+      defId: 'town_hall',
+      x,
+      y,
+      upgradeLevel: 0,
+      status: 'active',
+    };
+    occupyTiles(this.state, x, y, def.size.w, def.size.h, townHallId);
+    this.state.world.districts['main'] = {
+      id: 'main',
+      nameKey: 'district.main',
+      centerBuildingId: townHallId,
+    };
+    this.state.stats.built['town_hall'] = (this.state.stats.built['town_hall'] ?? 0) + 1;
+
+    // Tutorial-Achsen: dieselbe L-Form wie bisher, jetzt relativ zum gewählten
+    // Anker. Jede Kachel wird einzeln geprüft; unpassende werden ausgelassen.
+    const roadDef = this.config.buildings.get('road');
+    if (roadDef) {
+      const offsets: { dx: number; dy: number }[] = [];
+      for (let dx = -5; dx <= 4; dx++) offsets.push({ dx, dy: 5 });
+      for (let dy = 6; dy <= 11; dy++) offsets.push({ dx: -5, dy });
+      for (const { dx, dy } of offsets) {
+        const rx = x + dx;
+        const ry = y + dy;
+        if (regionIdAt(rx, ry) !== startRegionConfig.startRegionId) continue;
+        if (validatePlacement(this.state, this.config, this.derived, roadDef, rx, ry)) continue;
+        const roadId = newId(this.state, 'b');
+        this.state.buildings[roadId] = { id: roadId, defId: 'road', x: rx, y: ry, upgradeLevel: 0, status: 'active' };
+        occupyTiles(this.state, rx, ry, 1, 1, roadId);
+      }
     }
     this.afterStructuralChange();
     return ok;
@@ -2383,7 +2483,9 @@ export class GameController {
     const def = b && this.config.buildings.get(b.defId);
     if (!b || !def?.operation || b.status !== 'active') return fail('invalid');
     const now = this.state.meta.lastSimTime;
-    const r = Math.min(def.operation.maxRadius, Math.max(1, radius ?? def.operation.efficientRadius));
+    // Radien kommen aus der Ausbaustufe (§A7: Großfarm/Tiefbruch greifen weiter).
+    const radii = operationRadii(def.operation, b.upgradeLevel);
+    const r = Math.min(radii.maxRadius, Math.max(1, radius ?? radii.efficientRadius));
     const nodeIds = selectAreaNodeIds(this.state, def, b, r, maxCount ?? 60, now);
     if (nodeIds.length === 0) return fail('invalid');
     ensureInventory(this.state, b.id, operationStage(def.operation, b.upgradeLevel).storageCapacity);
@@ -2402,7 +2504,13 @@ export class GameController {
    * schlicht falsche passive „+X/min"-Anzeige.
    */
   getOperationThroughput(buildingId: string): OperationThroughput | undefined {
-    return getOperationThroughput(this.state, this.config, buildingId, this.state.meta.lastSimTime);
+    return getOperationThroughput(
+      this.state,
+      this.config,
+      buildingId,
+      this.state.meta.lastSimTime,
+      this.derived.logisticsBoost,
+    );
   }
 
   // ---- Automatischer Warenfluss (§ Active Simplicity / AS-1, D-039) ---------
@@ -2501,19 +2609,22 @@ export class GameController {
     const op = this.getBuildingOperation(buildingId);
     const remaining = op
       ? op.targetNodeIds.filter((id) => {
-          const node = resolveNode(this.state, profile.nodeTerrain, id, now);
+          const node = resolveNode(this.state, profile.nodeType, id, now);
           return node && node.remainingAmount > 0 && node.state !== 'regrowing' && node.state !== 'depleted';
         }).length
       : 0;
+    const radii = operationRadii(profile, b.upgradeLevel);
     return {
       isOperationBuilding: true,
       resource: profile.resource,
+      nodeType: profile.nodeType,
+      renewable: isRenewableOperation(profile),
       workerSlots: stage.workerSlots,
       workersBusy,
-      efficientRadius: profile.efficientRadius,
-      maxRadius: profile.maxRadius,
+      efficientRadius: radii.efficientRadius,
+      maxRadius: radii.maxRadius,
       inventory: inv,
-      availableNodes: availableWorkNodes(this.state, def, b, profile.efficientRadius, now).length,
+      availableNodes: availableWorkNodes(this.state, def, b, radii.efficientRadius, now).length,
       storageFull: inv.free <= 0,
       ...(op ? { active: { targetCount: op.targetNodeIds.length, remainingCount: remaining, paused: op.status === 'paused' } } : {}),
     };
@@ -2525,7 +2636,7 @@ export class GameController {
     const def = b && this.config.buildings.get(b.defId);
     if (!b || !def?.operation) return undefined;
     const now = this.state.meta.lastSimTime;
-    const ids = nodeIds ?? selectAreaNodeIds(this.state, def, b, def.operation.efficientRadius, 60, now);
+    const ids = nodeIds ?? selectAreaNodeIds(this.state, def, b, operationRadii(def.operation, b.upgradeLevel).efficientRadius, 60, now);
     return previewOperation(this.state, this.config, b, ids, now);
   }
 
@@ -2536,10 +2647,10 @@ export class GameController {
     if (!b || !def?.operation) return undefined;
     const { cx, cy } = centerOf(def, b);
     return {
-      efficientRadius: def.operation.efficientRadius,
-      maxRadius: def.operation.maxRadius,
+      efficientRadius: operationRadii(def.operation, b.upgradeLevel).efficientRadius,
+      maxRadius: operationRadii(def.operation, b.upgradeLevel).maxRadius,
       center: { x: cx, y: cy },
-      bounds: workAreaBounds(def, b, def.operation.maxRadius),
+      bounds: workAreaBounds(def, b, operationRadii(def.operation, b.upgradeLevel).maxRadius),
     };
   }
 
@@ -2549,7 +2660,8 @@ export class GameController {
     const def = b && this.config.buildings.get(b.defId);
     if (!b || !def?.operation) return [];
     const now = this.state.meta.lastSimTime;
-    return nodesInWorkArea(this.state, def, b, Math.min(def.operation.maxRadius, radius ?? def.operation.efficientRadius), now);
+    const radii = operationRadii(def.operation, b.upgradeLevel);
+    return nodesInWorkArea(this.state, def, b, Math.min(radii.maxRadius, radius ?? radii.efficientRadius), now);
   }
 
   /** Sichtbare Arbeiter aller Betriebe (additive Renderer-Darstellung). */

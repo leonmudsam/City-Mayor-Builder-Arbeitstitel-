@@ -1,15 +1,25 @@
-# WORLD_REBUILD — Terrain & World Scale Overhaul 6.1
+# WORLD_REBUILD — Weltgrundlage und Bake-Pipeline
+
+> **Aktuell: § World Overhaul 12.0 (v1.17, D-041).** Die Weltgrundlage ist
+> `reference/world/new island 3d model.glb` (117 Meshes, 1.914.065 Dreiecke,
+> SHA-256 `b52c0cfb…4374b0`). Die frühere `island 3d new.glb` wird von nichts
+> mehr gelesen. **Wichtig:** Seit D-041 läuft das Terraforming im Bake **VOR** der
+> Regionssegmentierung (`§6b-flat`) — Regionen, Startregion, Rathaus und
+> Regionsstatistik beschreiben das fertige, bespielbare Gelände. Details und
+> Kennzahlen: [`agents/WORLD_OVERHAUL_12_PLAN.md`](agents/WORLD_OVERHAUL_12_PLAN.md).
+
+## Historie: Terrain & World Scale Overhaul 6.1
 
 ## Ergebnis
 
-`reference/world/island 3d new.glb` ist die einzige geometrische Quelle der
+`reference/world/new island 3d model.glb` ist die einzige geometrische Quelle der
 aktiven Welt. Das vollständige Modell dient ausschließlich als Offline-
 Authoringquelle. Simulation, Renderer, Minimap und Stadtarbeit verwenden die
 gleichen deterministisch gebackenen Daten; es gibt kein zweites Weltsystem und
 keinen Runtime-Import der Source-GLB.
 
 ```text
-island 3d new.glb
+new island 3d model.glb
   → tools/analyzeNewIsland.mjs
   → tools/bakeWorld.mjs
   ├─ Simulation: Terrain, Regionen, Bebaubarkeit, Infrastruktur
@@ -22,7 +32,7 @@ island 3d new.glb
 | Datei | Verantwortung |
 |---|---|
 | `islandTerrain.gen.ts` | 512² Terrainraster, Skalierung, Source-Hash, Zentralstart und Ankunftshooks |
-| `islandRegions.gen.ts` | 40 organische Regionen und Nachbarschaften |
+| `islandRegions.gen.ts` | 13 organische Regionen und Nachbarschaften (Land + See) |
 | `islandBuildability.gen.ts` | Höhe, Neigung, Wasser-/Kliff-/Ufer-/Waterfront-/Bauflags |
 | `islandInfrastructure.gen.ts` | Brücken-, Viadukt-, Tunnel-, Hafen- und Wasserwegkandidaten |
 | `worldHeight.gen.ts` | 1025²-Höhenraster für den Renderer |

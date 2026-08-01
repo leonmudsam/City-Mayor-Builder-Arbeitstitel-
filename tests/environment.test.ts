@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { grade, sunDirection, sunElevation, moonDirection, wrap01 } from '../src/renderer/three/environment.ts';
+import { dawnReadability, grade, sunDirection, sunElevation, moonDirection, wrap01 } from '../src/renderer/three/environment.ts';
 import {
   getEnvironmentSettings,
   resetEnvironmentSettings,
@@ -48,6 +48,15 @@ describe('wrap01', () => {
 });
 
 describe('atmosphere grade', () => {
+  it('macht die Welt um 05:42 lesbar, ohne Mitternacht aufzuhellen', () => {
+    const dawn = 5.7 / 24;
+    expect(dawnReadability(dawn)).toBeGreaterThan(0.9);
+    expect(dawnReadability(0)).toBe(0);
+    expect(dawnReadability(0.5)).toBe(0);
+    expect(grade(dawn).hemiIntensity).toBeGreaterThan(0.7);
+    expect(grade(dawn).ambient).toBeGreaterThan(0.2);
+  });
+
   it('produces finite colours and intensities everywhere', () => {
     for (let i = 0; i < 50; i++) {
       const g = grade(i / 50);

@@ -1,7 +1,7 @@
 #!/usr/bin/env node
-// bakeWorld.mjs — Offline-Bake der verbindlichen Welt-GLB (World Rebuild 6.1).
+// bakeWorld.mjs — Offline-Bake der verbindlichen Welt-GLB (§ World Overhaul 12.0).
 //
-// Liest `reference/world/island 3d new.glb` (78 Meshes, reine Geometrie)
+// Liest `reference/world/new island 3d model.glb` (117 Meshes, reine Geometrie)
 // und erzeugt daraus deterministisch die committeten Laufzeit-Daten:
 //
 //   src/game/config/world/islandTerrain.gen.ts   — 512×512 Terrain-Typ-Grid (Sim)
@@ -30,7 +30,40 @@ import { createHash } from 'node:crypto';
 import zlib from 'node:zlib';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
-const GLB_PATH = join(ROOT, 'reference', 'world', 'island 3d new.glb');
+// § World Overhaul 12.0 (Auftrag 29.07.2026): verbindliche Quelle ist die NEUE
+// Insel. Die alte `island 3d new.glb` bleibt nur noch als historische Referenz
+// im Ordner liegen und wird von nichts mehr gelesen. `WORLD_GLB` erlaubt
+// Vergleichsbakes ohne Codeänderung (Diagnose, nie Laufzeit).
+const WORLD_GLB_RELATIVE = process.env.WORLD_GLB ?? 'reference/world/new island 3d model.glb';
+const GLB_PATH = join(ROOT, WORLD_GLB_RELATIVE);
+
+// ---------------------------------------------------------------------------
+// § MODELLTREUE 13.0 (Auftrag 31.07.2026) — DIE GLB IST DIE WELT
+// ---------------------------------------------------------------------------
+// Nutzerbefund mit Beleg (Viewer-Screenshot der rohen GLB): das Modell ist NICHT
+// das Problem. Es hat bereits klare Klippen, ebene Plateaus, saubere Fluss- und
+// Küstenkanten. Was im Spiel ankam, war eine andere Landschaft — der Bake hat
+// sie erzeugt, nicht die GLB:
+//
+//   * `applyFlatShoreProfile()` zog JEDE Uferkante auf 0,24 m Plattform herunter
+//     (drei Durchläufe) — genau die Klippen, die im Modell die Insel definieren.
+//   * `terraformNonMassifLand()` glättete alles unterhalb des Massivs in vier
+//     Runden à acht Durchgängen ein.
+//   * `flattenBuildableLand()` relaxierte anschließend 6.000 Sweeps lang.
+//   * `buildCliffPlateaus()`/`repairTerrainNeedles()`/`repairCoastPeaks()`
+//     bauten Ersatz-Landschaft dort wieder auf, wo die Glättung sie entfernt
+//     hatte.
+//
+// Gemessen bleibt davon 1 von 3 Höhenmetern übrig (siehe Bericht `fidelity`).
+// Ab jetzt gilt die umgekehrte Reihenfolge des Auftrags: erst die Geometrie
+// exakt übernehmen, DANN Wasser, Ufer, Biome und Texturen darauf ableiten.
+// Ableitungen lesen das Gelände; sie verändern es nicht mehr.
+//
+// Der alte Pfad bleibt zu Vergleichszwecken über `TERRAIN_MODE=flatten`
+// erreichbar, ist aber nicht mehr die ausgelieferte Welt.
+const RAW_TERRAIN_FIDELITY = (process.env.TERRAIN_MODE ?? 'raw') !== 'flatten';
+/** Quellenangabe für generierte Dateien und den Report (immer POSIX-Pfad). */
+const SOURCE_LABEL = WORLD_GLB_RELATIVE.split('\\').join('/');
 const round = (value, digits = 3) => Number(value.toFixed(digits));
 const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
 
@@ -59,7 +92,35 @@ const PREVIOUS_WATERLINE_N = 0.0065;
 // § 10.0 (Nutzerwunsch flacher Uferübergang): Wasserlinie leicht angehoben, damit
 // die niedrigste Küstenfranse überflutet und der Strand als flache Rampe statt
 // Klippenstufe ausläuft — besser für Hafen-/Wassergebäude-Platzierung.
-const WATERLINE_N = 0.0075;
+const SCALE_REFERENCE_N = 0.0075;
+/**
+ * § Modelltreue 13.1 (Auftrag 31.07.2026) — DER MEERESSPIEGEL STEIGT AUF DIE
+ * UNTERKANTE DER TERRASSEN.
+ *
+ * Nutzerwunsch: „Das Wasser so anpassen, dass es exakt mit der unteren Kante der
+ * flacheren Ebenen abschließt, sodass man dort perfekt Hafen etc. platzieren
+ * kann." Gemessen am modelltreuen Gelände (Histogramm flacher Landkacheln über
+ * der alten Wasserlinie):
+ *
+ *   0–3 m:   331 Kacheln   ⇒ praktisch nichts — das ist die Klippenwand
+ *   4–5 m: 14.073 Kacheln  ⇒ die unterste Terrasse, die gesuchte Ebene
+ *   8–10 m: 15.275 Kacheln ⇒ die zweite Terrasse
+ *
+ * Die Unterkante der untersten Ebene liegt also bei rund 4 m. Genau um diesen
+ * Betrag steigt das Wasser, damit die Terrassenkante zur Uferkante wird.
+ *
+ * WICHTIG — WARUM DIE HÖHENSKALA DAVON ENTKOPPELT IST: Bis 13.0 leitete sich
+ * `HEIGHT_SCALE` aus der Wasserlinie ab (Gipfel bleibt exakt
+ * `PEAK_WORLD_HEIGHT`). Ein höherer Wasserstand hätte damit das ganze Gelände um
+ * 8 % vertikal GESTRECKT — eine Geländeänderung durch die Hintertür, genau das,
+ * was D-043 ausschließt. Die Skala hängt jetzt an `SCALE_REFERENCE_N` und ist
+ * fix; der Meeresspiegel ist ein reiner Wasserparameter. Das Gelände steht still,
+ * das Wasser steigt. Der Gipfel liegt dadurch ehrlich niedriger über dem Wasser
+ * (52 → ~48 m), weil ein höherer Meeresspiegel genau das bedeutet.
+ */
+const WATERLINE_RISE_WORLD = Number(process.env.WATERLINE_RISE ?? 4);
+const WATERLINE_N = SCALE_REFERENCE_N
+  + WATERLINE_RISE_WORLD / (PEAK_WORLD_HEIGHT / (0.258 - SCALE_REFERENCE_N));
 const BASELINE_BUILDABLE_TILES = 44_755; // verbindlicher 6.1-Report vor diesem Rebake
 
 // Uferprofil § 10.0: deutlich sanfterer, breiterer Strandsaum. Nach der dritten
@@ -103,15 +164,23 @@ const MOUNTAIN_SLOPE_MIN_HEIGHT = -Infinity;
 // Erst DANACH (§8a-flat) wird das Gelände eingeebnet und Ufer, Biome und
 // Bebaubarkeit werden neu abgeleitet. Infrastruktur-Hooks (§8b) und alle
 // Ausgaben (§9) sehen ausschließlich dieses neue Gelände.
-const FLAT_SHORE_BLEND_TILES = 11;
-const FLAT_SHORE_PLATFORM_HEIGHT = 0.26;
-const FLAT_SHORE_RISE_PER_TILE = 0.20;
+// § Welt-Feinschliff 12.1 (Spieltest): breiteres, flacheres Uferband und weniger
+// bewusste Steilküste. §5 verlangt „die meisten Küsten müssen nutzbar sein" —
+// gemessen waren nur 67 % der Uferkacheln bebaubar, und Binnengewässer lagen in
+// einer Schlucht. Der Blend reicht jetzt weiter ins Land (14 statt 11 Kacheln)
+// und steigt flacher an (0,16 statt 0,20 je Kachel).
+const FLAT_SHORE_BLEND_TILES = 14;
+const FLAT_SHORE_PLATFORM_HEIGHT = 0.24;
+const FLAT_SHORE_RISE_PER_TILE = 0.16;
 const FLAT_SHORE_CLIFF_HEIGHT = 12.0;
 /** Der Ist-Stand war mehrheitlich Steilküste: 1.937 Steilküsten-Kacheln (davon
  *  1 % bebaubar) gegen 897 flache Küsten + 542 Flussufer. Größter Einzelgrund
  *  war `shoreHash >= 0.24` — jede vierte 18×18-Küstenzone war absichtlich VOM
  *  flachen Profil ausgeschlossen. Jetzt bleiben ~8 % bewusste Steilküste. */
-const FLAT_SHORE_CLIFF_ZONE_RATIO = 0.08;
+// § 12.1: §5 will „nur wenige Bereiche" mit extremen Höhenunterschieden. 8 % der
+// 18×18-Küstenzonen waren nach dem Spieltest immer noch zu viel Steilküste an
+// Stellen, wo der Spieler bauen will. 5 % bleiben als bewusstes Landschaftsbild.
+const FLAT_SHORE_CLIFF_ZONE_RATIO = 0.05;
 const FLAT_SHORE_ACCESSIBLE_MAX_HEIGHT = 4.6;
 const FLAT_SHORE_ACCESSIBLE_MAX_SLOPE = 1.35;
 const FLAT_SHORE_APRON_TARGET = 44;
@@ -185,6 +254,72 @@ const TERRAFORM_SLOPE_GATE = 1.5;
  *  aber Zehntausende Relaxationsdurchläufe und konvergieren im Bake nicht. */
 const FLAT_MAX_BUILDABLE_STEP = 0.25;
 
+// ---------------------------------------------------------------------------
+// § Welt-Feinschliff 12.2 (Spieltest 30.07.2026) — KÜSTEN-ZACKEN + ECHTE KLIPPEN
+// ---------------------------------------------------------------------------
+// Befund aus dem Spieltest: an mehreren Ufern stehen dünne, hohe Grat-Splitter
+// („Zacken") im Wasser und an der Wasserkante. Sie stammen aus der Quell-GLB
+// (Tripo erzeugt schmale Felsnadeln), die der Max-Y-Rasterizer zu 1–2 Knoten
+// breiten Nadeln im Höhenfeld verdichtet.
+//
+// WARUM DER ALTE RIEGEL NICHT GEGRIFFEN HAT: `repairCoastPeaks()` verlangte
+// „mehr als 6 m über dem Nachbar-Median UND höchstens EIN stützender Nachbar".
+// Gemessen im ausgelieferten Bake erfüllte genau 1 Knoten diese Bedingung —
+// tatsächlich sind es 487 Knoten mit ≥ 1,5 m Überhöhung, davon 321 direkt auf
+// der Land/Wasser-Grenze. Die Kennzahl `isolatedPeakCount` stand also auf „fast
+// 0", während der Spieler ein Ufer voller Splitter sah: die Metrik hat das
+// falsche gemessen.
+//
+// Die neue Erkennung nutzt eine ZWEITE, trennscharfe Bedingung: ein Knoten ist
+// nur dann eine Nadel, wenn er in mindestens drei der vier Achsen (W-O, N-S und
+// beide Diagonalen) BEIDSEITIG deutlich höher liegt. Eine echte Klippenkante
+// oder ein Bergkamm ist in der Achse ENTLANG der Kante kein Hochpunkt und bleibt
+// damit unangetastet — der Weltgipfel hat 8 stützende Nachbarn und 0,26 m
+// Überhöhung, ist also nie betroffen.
+const NEEDLE_MIN_RISE = 1.5;          // Überhöhung über dem Median der 8 Nachbarn
+const NEEDLE_SUPPORT_TOLERANCE = 2.5; // ein Nachbar „stützt", wenn er so nah liegt
+const NEEDLE_MAX_SUPPORT = 3;         // mehr Stützen ⇒ zusammenhängender Grat, kein Splitter
+const NEEDLE_AXIS_MARGIN = 0.6;       // Mindestabstand zu BEIDEN Achsennachbarn
+const NEEDLE_MIN_AXES = 3;            // Hochpunkt in ≥ 3 von 4 Achsen ⇒ Nadel
+const NEEDLE_SHORE_BAND = 3;          // Uferband in Kacheln (alle Gewässer)
+const NEEDLE_LOWLAND_HEIGHT = 8;      // darunter kann keine Nadel zum Massiv gehören
+const NEEDLE_PASSES = 6;              // eine entfernte Nadel legt die nächste frei
+
+// § 12.2 — ECHTE KLIPPEN MIT PLATEAU (Nutzerskizze: „gerade Fläche oben").
+// Die bewusste Steilküste (shoreType 4) war bisher eine reine Rampe mit
+// Splittern obendrauf: gemessen 13 Steilküsten-Kacheln über 4 m, davon 0 mit
+// flachem Kopf. Gewünscht ist das Gegenteil — eine klare Wand zum Wasser und
+// darüber eine ebene, ans Hinterland angeschlossene Fläche.
+//
+// ABGRENZUNG zu B4 (unten): B4 hat eine GLOBALE Höhenquantisierung verworfen,
+// weil sie überall neue Kanten erzeugte. Hier wird nichts quantisiert — es wird
+// ausschließlich der Kopf zusammenhängender Steilküsten-Abschnitte auf das
+// vorhandene Hinterlandniveau gelegt. Lokal, gemessen, und nur dort, wo §5 des
+// Auftrags ohnehin „klare Klippe mit großer flacher Fläche oben" verlangt.
+const CLIFF_ZONE_RELIEF_RADIUS = 7;    // Umkreis, in dem das Hinterland hoch sein muss
+/** Mindesthöhe des Hinterlands, damit eine ausgewürfelte Zone Klippe bleibt. */
+const CLIFF_ZONE_MIN_RELIEF = 5;
+/**
+ * § 12.2 (zweiter Spieltest) — KLIPPEN-GARANTIE.
+ *
+ * Nutzerwunsch zu einer konkreten Uferstelle: „Ich will genau da aber eine
+ * Klippe, kein flaches Ufer. Überall anders passt." Ab dieser Hinterlandhöhe
+ * bleibt die Uferkante deshalb IMMER stehen — unabhängig von der Zonen-Lotterie.
+ * Wo sich echtes Gebirge bis ans Wasser schiebt, gibt es keinen Strand.
+ *
+ * WARUM NICHT GANZ OHNE LOTTERIE: Gemessen (Schwelle 5 bzw. 11, Hash entfernt)
+ * wurde praktisch die gesamte Küste steil — der Bake fand danach KEINE
+ * Startregion mehr, die Budget, Wasserzugang, Hafenfläche und drei
+ * Nachbarregionen gleichzeitig erfüllt (67 bzw. 51 Kandidaten scheiterten am
+ * Wasserzugang). Die Kombination hält beides: garantierte Felsküste am echten
+ * Gebirge, flaches bebaubares Ufer überall sonst.
+ */
+const CLIFF_ZONE_ALWAYS_RELIEF = 18;
+const CLIFF_PLATEAU_MIN_COMPONENT = 5; // kürzere Abschnitte sind Einzelfelsen, keine Klippe
+const CLIFF_PLATEAU_DEPTH = 5;         // Tiefe des ebenen Kopfes in Kacheln
+const CLIFF_PLATEAU_MIN_HEIGHT = 3;    // darunter ist es Strand, keine Klippe
+const CLIFF_PLATEAU_BLEND_TILES = 3;   // Übergang Plateau → Hinterland
+
 // § Map Flattening B4 — TERRASSEN: BEWUSST NICHT UMGESETZT.
 // Eine zusätzliche Höhenquantisierung („Stufen statt Rampen") wurde gebaut und
 // gemessen — pro Knoten UND pro Kachel, mit fbm-gestreuter Stufenlage. Ergebnis
@@ -199,10 +334,29 @@ const FLAT_MAX_BUILDABLE_STEP = 0.25;
 // zentrale Startregion + ungefähr zwölf bedeutende Freischaltungen. Jede Region
 // muss eigene Identität und spürbaren Nutzen haben; Kleinstregionen, deren
 // Freischaltung nur ein paar Kacheln liefert, werden konsequent gemerged.
-const REGION_TARGET_TILES = 6200; // ~79k Landkacheln / 13 Regionen
+// § World Overhaul 12.0: Die NEUE Insel hat ~60k Landkacheln (statt ~79k) und
+// eine deutlich stärker gegliederte Küste. Bei unverändertem Ziel von 6.200
+// Kacheln je Region fiel eine Region unter `REGION_MIN_TILES` und wurde
+// wegge-merged (12 statt 13 Regionen). Ziel/Untergrenze folgen jetzt der neuen
+// Landfläche: 60k / 13 ≈ 4.600.
+// § Welt-Feinschliff 12.1 (Spieltest, §1): „Zu viele kleine freischaltbare
+// Regionen." 13 Regionen mit Median 3.649 Kacheln lasen sich wie ein Raster zum
+// Abhaken statt wie große Gebiete mit eigener Identität. Ziel jetzt: EINE
+// zentrale Startregion + SECHS große Landschaften mit klarer strategischer Rolle
+// (Wald, Farm, Stein, Mischland). 61.322 Landkacheln / 7 ≈ 8.760.
+const REGION_TARGET_TILES = 7000; // ~61k Landkacheln / 8 Regionen
 const REGION_MIN_COMPONENT = 400; // Biom-Cluster kleiner als das bekommen keinen eigenen Seed
-const REGION_MIN_TILES = 2400;    // alles darunter wandert in den Nachbarn mit längster Grenze
-const REGION_MAX_SEEDS = 12;      // + 1 ausgeschnittene Startregion = 13 (zulässig 12–14)
+// § 12.2: Das relief-gesteuerte Uferprofil verschiebt die Biom-Cluster leicht;
+// die vorher größte Region (11.856 bebaubar) zerfällt dadurch in eine Gras- und
+// eine Sandregion von 7.658 und 4.461 bebaubaren Kacheln. Ergebnis: 9 statt 8
+// Regionen bei UNVERÄNDERTEM Median (7.983 Kacheln) — §1 („wenige, große
+// Regionen mit klarer Rolle") bleibt erfüllt. Die Schwelle bleibt bei 3.000;
+// niedrigere Werte lassen zusätzlich einen 2.922-Kachel-Rest stehen.
+const REGION_MIN_TILES = 3300;    // alles darunter wandert in den Nachbarn mit längster Grenze
+// 12 Seeds ergaben auf der neuen Insel nach dem Merge nur 10 Regionen (+ Start
+// = 11). Der Auftrag verlangt 1 Startregion + ca. 12 Freischaltungen, deshalb
+// werden mehr Seeds gesetzt; der Merge in §7d dünnt sie wieder aus.
+const REGION_MAX_SEEDS = 10;      // + 1 ausgeschnittene Startregion (Merge dünnt aus)
 /** Bauflächen-Budget der ausgeschnittenen zentralen Startregion.
  * § Change 9.0 §3.3: 1.200–1.600 direkt gut bebaubare Kacheln. Das REVERSIERT
  * bewusst die 8.1-Entscheidung „kleine 820er-Pocket" — der neue Auftrag verlangt
@@ -223,6 +377,52 @@ const COST_HEIGHT_FACTOR = 4;     // Zusatzkosten je Höhendelta (Gebirgskämme 
 // nach oben, damit das kostenbasierte Carve-Wachstum es zuverlässig trifft.
 const MIN_START_BUILDABLE = 1200;
 const MAX_START_BUILDABLE = 1750;
+// § World Overhaul 12.0 §4 („Startressourcen: Wasser"): Die Startregion MUSS
+// echten Wasserzugang haben — Küste, See oder Fluss. Der erste Bake der neuen
+// Insel lieferte eine vollständig binnenländische Startregion (0 Küstenkanten,
+// 0 fruchtbare Kacheln), weil das Carve-Wachstum abbricht, sobald das
+// Bauflächenbudget erreicht ist. Deshalb: Kernkacheln nur in Wassernähe
+// zulassen und den Ausschnitt danach gezielt bis an die Wasserkante ziehen.
+/** Höchstabstand einer Kandidaten-Kernkachel zu irgendeinem Wasser (Kacheln). */
+const START_CORE_MAX_WATER_DISTANCE = 26;
+/** Zusatzkacheln, die der Ausschnitt über das Budget hinaus bis ans Wasser darf. */
+const START_CARVE_WATER_EXTENSION = 900;
+/** Radius des Ufer-Vorplatzes am Ende des Zugangskorridors. Ein einzelner
+ *  Uferpunkt wäre kein „guter Zugang" (§4) und trägt keinen Hafen — dieser
+ *  Vorplatz macht daraus eine echte kleine Bucht.
+ *  § 12.1: von 6 auf 9 erhöht, siehe START_MIN_HARBOUR_PADS. */
+const START_SHORE_APRON_RADIUS = 9;
+/** Mindestzahl direkter Uferkacheln in der Startregion. */
+/**
+ * § Modelltreue 13.0/13.1 — auf der ungeglätteten Insel ist die Küste eine
+ * Klippe. „Uferkacheln" sind dort selten bebaubar, und die Forderung nach 20
+ * Stück zwang den Ausschnitt an den Inselrand: der erste gültige Kandidat lag 94
+ * Kacheln vom Inselschwerpunkt (Ziel < 65, § 3.1 „zentraler Start"). Acht
+ * Uferkacheln bleiben ein ehrlicher Wasserzugang und lassen die Wahl zentral
+ * ausfallen.
+ */
+const START_MIN_WATERFRONT = RAW_TERRAIN_FIDELITY ? 8 : 20;
+/**
+ * § 12.1 §6 — HAFENTAUGLICHKEIT FUNKTIONAL PRÜFEN, nicht zählen.
+ *
+ * Die erste Fassung verlangte nur „≥ 8 Uferkacheln". Das Ergebnis bestand die
+ * Prüfung und war trotzdem unbrauchbar: die Bucht war ein schmaler Streifen, in
+ * den KEIN einziger 2×2-Anleger passte (0 gültige `dock_small`-Plätze in der
+ * Startregion bei 346 weltweit). Geprüft wird deshalb jetzt genau das, was der
+ * Spieler tun will — passt ein 2×2-Wassergebäude ans Ufer?
+ */
+const START_MIN_HARBOUR_PADS = RAW_TERRAIN_FIDELITY ? 0 : 3;
+/** So viele Kernkandidaten werden der Reihe nach probiert, bis einer trägt. */
+const START_CORE_CANDIDATES = 400;
+/** § 12.0 §4 „einfache Topografie": Höhenspanne über dem 7×7-Rathausblock. MUSS
+ *  zur Schwelle der Flachheitsbewertung in §8 passen (`flatnessScore`), sonst
+ *  schneidet der Bake eine Startregion aus, in der §8 gar keinen flachen
+ *  Rathausplatz mehr findet (Flachheit 0,000). */
+const START_CORE_MAX_FLAT_DELTA = 0.85;
+/** § 12.0 §4 „mehrere Expansionsrichtungen": So viele Nachbarregionen muss der
+ *  Ausschnitt berühren. Mit nur einer Nachbarregion ist die erste
+ *  Freischaltungsentscheidung des Spielers keine Entscheidung (§8). */
+const START_MIN_NEIGHBOUR_REGIONS = 3;
 // Startregion + die ersten beiden Erweiterungen zusammen. Mit dem größeren Start
 // (~1.400) und ~2.400–4.000 je Nachbarregion liegt die Frühfläche höher; der
 // Korridor bleibt weit, priorisiert wird weiterhin die REGIONSSTRUKTUR (§4).
@@ -424,7 +624,9 @@ for (let o = 0; o < isWaterCand.length; o++) {
 // ---------------------------------------------------------------------------
 // 4. Höhen in Welt-Einheiten + Ozean-Tiefenrampe
 // ---------------------------------------------------------------------------
-const HEIGHT_SCALE = PEAK_WORLD_HEIGHT / (maxYn - WATERLINE_N);
+// § Modelltreue 13.1: Skala aus der REFERENZ-Wasserlinie, nicht aus der
+// aktuellen — sonst streckt jeder Meeresspiegel-Wechsel das Gelände.
+const HEIGHT_SCALE = PEAK_WORLD_HEIGHT / (maxYn - SCALE_REFERENCE_N);
 // Distanz jeder Wasser-Kachel zum Land (BFS) für die Tiefenrampe.
 const distToLand = new Int32Array(WORLD_TILES * WORLD_TILES).fill(-1);
 {
@@ -478,6 +680,46 @@ function shoreHash(tx, ty) {
 }
 const accessibleShoreZone = new Uint8Array(WORLD_TILES * WORLD_TILES);
 
+/**
+ * § 12.2 — Höchste Landhöhe im Umkreis (Relief des Hinterlands).
+ *
+ * WARUM: `shoreHash` allein wählte die bewusste Steilküste rein zufällig. Im
+ * ausgelieferten Bake lagen dadurch 223 „Steilküsten"-Kacheln überwiegend bei
+ * 0,2–1,3 m Höhe — also flaches Ufer, das nur vom flachen Profil AUSGESCHLOSSEN
+ * war, statt einer sichtbaren Klippe. Genau daraus wurde im Spiel das gemeldete
+ * Bild: kein Strand, keine Klippe, dafür Splitter. Eine Klippe darf nur dort
+ * entstehen, wo das Land dahinter wirklich hoch ist.
+ */
+const cliffReliefCache = new Float32Array(WORLD_TILES * WORLD_TILES);
+function computeCliffRelief() {
+  const radius = CLIFF_ZONE_RELIEF_RADIUS;
+  // Separierbares Maximum-Filter: erst je Zeile, dann je Spalte (O(N·2r)).
+  const rowMax = new Float32Array(WORLD_TILES * WORLD_TILES);
+  for (let ty = 0; ty < WORLD_TILES; ty++) {
+    for (let tx = 0; tx < WORLD_TILES; tx++) {
+      let m = -Infinity;
+      for (let dx = -radius; dx <= radius; dx++) {
+        const nx = tx + dx;
+        if (nx < 0 || nx >= WORLD_TILES) continue;
+        if (isWaterCand[ty * WORLD_TILES + nx]) continue;
+        m = Math.max(m, tileH(nx, ty));
+      }
+      rowMax[ty * WORLD_TILES + tx] = m;
+    }
+  }
+  for (let tx = 0; tx < WORLD_TILES; tx++) {
+    for (let ty = 0; ty < WORLD_TILES; ty++) {
+      let m = -Infinity;
+      for (let dy = -radius; dy <= radius; dy++) {
+        const ny = ty + dy;
+        if (ny < 0 || ny >= WORLD_TILES) continue;
+        m = Math.max(m, rowMax[ny * WORLD_TILES + tx]);
+      }
+      cliffReliefCache[ty * WORLD_TILES + tx] = Number.isFinite(m) ? m : 0;
+    }
+  }
+}
+
 /** Uferrampe: blendet eine Höhe zur flachen Plattform hin aus, je näher am
  *  Wasser desto stärker. Eine Quelle für den Ur-Bake und den Flachlauf. */
 function shoreBlendHeight(height, waterDistance, blendTiles, platformHeight, risePerTile) {
@@ -498,7 +740,11 @@ for (let gz = 0; gz < GRID; gz++) {
       const rawHeight = (H[o] - WATERLINE_N) * HEIGHT_SCALE;
       const waterDistance = distToWaterRaw[to];
       const enclosedWaterNear = enclosedLabel[to] >= 0;
-      const accessible = waterDistance > 0 && waterDistance <= SHORE_BLEND_TILES
+      // § Modelltreue 13.0: Im Treue-Modus bleibt die Landhöhe exakt die des
+      // Modells. Der Ufer-Blend war die erste von drei Stellen, an denen die
+      // Klippen der GLB verschwanden.
+      const accessible = !RAW_TERRAIN_FIDELITY
+        && waterDistance > 0 && waterDistance <= SHORE_BLEND_TILES
         && rawHeight < SHORE_CLIFF_HEIGHT
         && (enclosedWaterNear || shoreHash(tx, ty) >= SHORE_CLIFF_ZONE_RATIO);
       if (accessible) {
@@ -510,12 +756,28 @@ for (let gz = 0; gz < GRID; gz++) {
     } else {
       const d = Math.max(1, distToLand[to]);
       const enclosed = enclosedLabel[to] >= 0;
-      // Höherer Wasserspiegel + flachere Becken: Wasser liest sich als Teil der
-      // Landschaft statt als tiefer Graben. Tiefe bleibt für die Ozeanfarbe.
-      HW[o] = enclosed ? -0.42 : -Math.min(2.4, 0.24 + d * 0.22);
+      // § Modelltreue 13.0 — WASSER KOMMT NACH DEM MODELL, ALSO IST SEINE TIEFE
+      // UNSERE WAHL. Die GLB modelliert keinen Gewässergrund; die Tiefenrampe
+      // ist reine Bake-Entscheidung und damit der richtige Hebel, wenn eine
+      // Anforderung an ihr scheitert.
+      //
+      // Gemessen auf der modelltreuen Insel: `river_port` (braucht 0,7 Tiefe auf
+      // 4×3 Wasser) war an NULL Stellen baubar, `dock_small` (0,55) an 43. Grund
+      // war nicht das Gelände, sondern die frühere Rampe: Binnengewässer lagen
+      // pauschal bei 0,42 und der Ozean am Ufer bei 0,46 — beides unter den
+      // Mindesttiefen der Wassergebäude. Die Rampe steigt jetzt am Ufer schneller
+      // an und bleibt zur Mitte hin gedeckelt.
+      HW[o] = enclosed
+        ? -Math.min(1.6, 0.5 + d * 0.3)
+        : -Math.min(2.6, 0.58 + d * 0.24);
     }
   }
 }
+
+// § Modelltreue 13.0 — Referenzkopie der reinen Modellhöhe. Sie wird nie
+// verändert und dient am Ende ausschließlich als Beweis, wie weit die
+// ausgelieferte Welt vom Modell abweicht (Bericht `fidelity`).
+const HW_MODEL = Float32Array.from(HW);
 
 // ---------------------------------------------------------------------------
 // 5. Biome klassifizieren (Kachel-Ebene)
@@ -676,8 +938,9 @@ function nodeMaskFromTiles(tileMask, out) {
 
 /**
  * § Map Flattening Phase B1 — Terraforming. Ebnet Land AUSSERHALB des Massivs
- * iterativ ein. Läuft bewusst ERST NACH Regionen/Startwahl (§8a-flat), damit
- * die Weltstruktur unverändert bleibt.
+ * iterativ ein. Läuft seit § World Overhaul 12.0 (D-041) VOR der
+ * Regionssegmentierung, damit Regionen, Startregion und Statistik das fertige,
+ * bespielbare Gelände beschreiben (§6b-flat).
  */
 function terraformNonMassifLand() {
   const terraformTiles = new Uint8Array(WORLD_TILES * WORLD_TILES);
@@ -925,7 +1188,8 @@ function flattenBuildableLand(sweeps = 800, options = {}) {
   for (let o = 0; o < HW.length; o++) if (nodeBuildable[o] && HW[o] < 0.05) HW[o] = 0.05;
   return violations;
 }
-flattenBuildableLand();
+// § Modelltreue 13.0: auch dieser Ur-Glättungslauf ist eine Geländeänderung.
+if (!RAW_TERRAIN_FIDELITY) flattenBuildableLand();
 
 // Konservativer Sicherheitsgurt für sehr schmale, nicht exakt senkrechte
 // Quellpolygone: ausschließlich im direkten Küstenband und ausschließlich,
@@ -961,6 +1225,191 @@ function repairCoastPeaks() {
   return repaired;
 }
 
+/**
+ * § 12.2 — Zahl der Achsen, in denen der Knoten BEIDSEITIG deutlich höher liegt.
+ *
+ * Das ist der Unterschied zwischen Splitter und Klippenkante: eine Nadel ist in
+ * allen vier Achsen ein Hochpunkt, eine Kante oder ein Grat höchstens in zwei
+ * (entlang der Kante liegen gleich hohe Nachbarn).
+ */
+function needleAxisCount(source, o, margin) {
+  let axes = 0;
+  for (const [a, b] of [
+    [o - 1, o + 1],
+    [o - GRID, o + GRID],
+    [o - GRID - 1, o + GRID + 1],
+    [o - GRID + 1, o + GRID - 1],
+  ]) {
+    if (source[o] > source[a] + margin && source[o] > source[b] + margin) axes++;
+  }
+  return axes;
+}
+
+/** Trifft die Nadelbedingung? Wird von Reparatur UND Messung geteilt, damit die
+ *  Kennzahl nie wieder etwas anderes prüft als der Riegel (§12.2). */
+function isTerrainNeedle(source, o, gx, gz) {
+  const tx = Math.min(WORLD_TILES - 1, (gx / SAMPLES_PER_TILE) | 0);
+  const ty = Math.min(WORLD_TILES - 1, (gz / SAMPLES_PER_TILE) | 0);
+  const inShoreBand = distToWaterRaw[ty * WORLD_TILES + tx] <= NEEDLE_SHORE_BAND;
+  // Das Massiv bleibt Highlight (§3.2): außerhalb des Uferbands nur Tiefland.
+  if (!inShoreBand && source[o] >= NEEDLE_LOWLAND_HEIGHT) return null;
+  const { neighbors, median } = coastNeighborhood(source, o);
+  if (source[o] - median < NEEDLE_MIN_RISE) return null;
+  const supporting = neighbors.filter((height) => height >= source[o] - NEEDLE_SUPPORT_TOLERANCE).length;
+  if (supporting > NEEDLE_MAX_SUPPORT) return null;
+  if (needleAxisCount(source, o, NEEDLE_AXIS_MARGIN) < NEEDLE_MIN_AXES) return null;
+  return median;
+}
+
+/**
+ * § 12.2 — entfernt Geländenadeln (die im Spieltest gemeldeten „Klippen-Zacken").
+ *
+ * Mehrere Durchgänge, weil eine abgesenkte Nadel ihren direkten Nachbarn zur
+ * neuen Nadel machen kann (Splitter treten in Gruppen auf). Jeder Durchgang
+ * arbeitet auf einer Kopie, damit das Ergebnis reihenfolgeunabhängig bleibt.
+ */
+function repairTerrainNeedles() {
+  let repaired = 0;
+  for (let pass = 0; pass < NEEDLE_PASSES; pass++) {
+    const source = HW.slice();
+    let hits = 0;
+    for (let gz = 1; gz < GRID - 1; gz++) {
+      for (let gx = 1; gx < GRID - 1; gx++) {
+        const o = gz * GRID + gx;
+        const median = isTerrainNeedle(source, o, gx, gz);
+        if (median === null) continue;
+        HW[o] = median;
+        hits++;
+      }
+    }
+    repaired += hits;
+    if (hits === 0) break;
+  }
+  return repaired;
+}
+
+/** Verbleibende Nadeln — Regressionskennzahl, hart in den Tests geprüft. */
+function countTerrainNeedles() {
+  let count = 0;
+  for (let gz = 1; gz < GRID - 1; gz++) {
+    for (let gx = 1; gx < GRID - 1; gx++) {
+      if (isTerrainNeedle(HW, gz * GRID + gx, gx, gz) !== null) count++;
+    }
+  }
+  return count;
+}
+
+/**
+ * § 12.2 — ECHTE KLIPPEN: ebener Kopf auf zusammenhängender Steilküste.
+ *
+ * Läuft NACH `classifyShoreTypes`, damit `shoreTypeGrid === 4` (bewusste
+ * Steilküste) die Auswahl trifft, und VOR der letzten Bebaubar-Ableitung, damit
+ * die neue ebene Fläche auch als Baufläche ankommt.
+ *
+ * Nur Knoten, deren VIER angrenzende Kacheln Land sind, werden angehoben. Die
+ * Wasserkante behält damit ihren Knoten — die Wand entsteht innerhalb der
+ * äußersten Landkachel und nicht als angehobene Wasserfläche.
+ */
+function buildCliffPlateaus() {
+  const visited = new Uint8Array(WORLD_TILES * WORLD_TILES);
+  const nodeIsInland = new Uint8Array(GRID * GRID);
+  for (let gz = 0; gz < GRID; gz++) {
+    for (let gx = 0; gx < GRID; gx++) {
+      let dry = 0, seen = 0;
+      for (const [dx, dz] of [[0, 0], [-1, 0], [0, -1], [-1, -1]]) {
+        const tx = ((gx / SAMPLES_PER_TILE) | 0) + dx;
+        const ty = ((gz / SAMPLES_PER_TILE) | 0) + dz;
+        if (tx < 0 || ty < 0 || tx >= WORLD_TILES || ty >= WORLD_TILES) continue;
+        seen++;
+        if (!isWaterCand[ty * WORLD_TILES + tx]) dry++;
+      }
+      nodeIsInland[gz * GRID + gx] = seen > 0 && dry === seen ? 1 : 0;
+    }
+  }
+
+  let plateaus = 0, plateauTiles = 0;
+  for (let sy = 1; sy < WORLD_TILES - 1; sy++) {
+    for (let sx = 1; sx < WORLD_TILES - 1; sx++) {
+      const start = sy * WORLD_TILES + sx;
+      if (visited[start] || shoreTypeGrid[start] !== 4) continue;
+      // (1) Zusammenhängender Steilküsten-Abschnitt (8-Nachbarschaft).
+      const component = [];
+      const queue = [start];
+      visited[start] = 1;
+      while (queue.length) {
+        const o = queue.pop();
+        component.push(o);
+        const tx = o % WORLD_TILES, ty = (o / WORLD_TILES) | 0;
+        for (let dy = -1; dy <= 1; dy++) {
+          for (let dx = -1; dx <= 1; dx++) {
+            const nx = tx + dx, ny = ty + dy;
+            if (nx < 1 || ny < 1 || nx >= WORLD_TILES - 1 || ny >= WORLD_TILES - 1) continue;
+            const no = ny * WORLD_TILES + nx;
+            if (visited[no] || shoreTypeGrid[no] !== 4) continue;
+            visited[no] = 1;
+            queue.push(no);
+          }
+        }
+      }
+      if (component.length < CLIFF_PLATEAU_MIN_COMPONENT) continue;
+      const faceHeights = component.map((o) => tileH(o % WORLD_TILES, (o / WORLD_TILES) | 0)).sort((a, b) => a - b);
+      if (faceHeights[faceHeights.length >> 1] < CLIFF_PLATEAU_MIN_HEIGHT) continue;
+
+      // (2) Kopf des Abschnitts: BFS landeinwärts bis CLIFF_PLATEAU_DEPTH.
+      const depth = new Map();
+      const bfs = [];
+      for (const o of component) { depth.set(o, 0); bfs.push(o); }
+      for (let head = 0; head < bfs.length; head++) {
+        const o = bfs[head];
+        const d = depth.get(o);
+        if (d >= CLIFF_PLATEAU_DEPTH) continue;
+        const tx = o % WORLD_TILES, ty = (o / WORLD_TILES) | 0;
+        for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+          const nx = tx + dx, ny = ty + dy;
+          if (nx < 1 || ny < 1 || nx >= WORLD_TILES - 1 || ny >= WORLD_TILES - 1) continue;
+          const no = ny * WORLD_TILES + nx;
+          if (depth.has(no) || isWaterCand[no]) continue;
+          // Das Massiv bleibt unangetastet (§3.2).
+          if (tileH(nx, ny) > MOUNTAIN_HEIGHT) continue;
+          depth.set(no, d + 1);
+          bfs.push(no);
+        }
+      }
+      // (3) Plateauhöhe = Hinterlandniveau am inneren Rand. Genau dadurch
+      //     entsteht der vom Auftrag verlangte „Verbund zum Land": das Plateau
+      //     schließt bündig an, statt eine zweite Kante zu erzeugen.
+      const ring = [...depth.entries()]
+        .filter(([, d]) => d >= CLIFF_PLATEAU_DEPTH - 1)
+        .map(([o]) => tileH(o % WORLD_TILES, (o / WORLD_TILES) | 0))
+        .sort((a, b) => a - b);
+      const inner = ring.length ? ring : faceHeights;
+      const plateauHeight = Math.max(CLIFF_PLATEAU_MIN_HEIGHT, inner[inner.length >> 1]);
+
+      // (4) Kopf einebnen, in den letzten Kacheln weich ans Hinterland führen.
+      const flatUntil = Math.max(0, CLIFF_PLATEAU_DEPTH - CLIFF_PLATEAU_BLEND_TILES);
+      for (const [o, d] of depth) {
+        const tx = o % WORLD_TILES, ty = (o / WORLD_TILES) | 0;
+        const t = d <= flatUntil
+          ? 1
+          : 1 - (d - flatUntil) / Math.max(1, CLIFF_PLATEAU_DEPTH - flatUntil);
+        if (t <= 0) continue;
+        for (let sz = 0; sz <= SAMPLES_PER_TILE; sz++) {
+          for (let sxx = 0; sxx <= SAMPLES_PER_TILE; sxx++) {
+            const gx = tx * SAMPLES_PER_TILE + sxx;
+            const gz = ty * SAMPLES_PER_TILE + sz;
+            const no = gz * GRID + gx;
+            if (!nodeIsInland[no]) continue;
+            HW[no] += (plateauHeight - HW[no]) * t;
+          }
+        }
+        plateauTiles++;
+      }
+      plateaus++;
+    }
+  }
+  return { plateaus, plateauTiles };
+}
+
 // Regression-Diagnose für den ursprünglichen Küstenkegel-Fehler. Ein echter
 // Grat/Kliff wird von mehreren hohen Nachbarn getragen; ein einzelner Peak mehr
 // als 6 Weltmeter über dem Median seiner acht Nachbarn ist im regelmäßigen
@@ -984,9 +1433,227 @@ function measureCoastGeometry() {
   return { isolatedPeaks, maxNeighborStep };
 }
 
-let coastIsolatedPeaksRepaired = repairCoastPeaks();
+let coastIsolatedPeaksRepaired = RAW_TERRAIN_FIDELITY ? 0 : repairCoastPeaks();
 let { isolatedPeaks: coastIsolatedPeakCount, maxNeighborStep: coastMaxNeighborStep } = measureCoastGeometry();
 console.log(`  Küstengeometrie: ${coastIsolatedPeakCount} isolierte Peaks, max. Nachbarschritt ${coastMaxNeighborStep.toFixed(2)} m`);
+// ---------------------------------------------------------------------------
+// 6b-flat. § MAP FLATTENING + BUILDABILITY — Gelände bespielbar machen
+// ---------------------------------------------------------------------------
+// § World Overhaul 12.0 / D-041 — REIHENFOLGE UMGEDREHT (bewusst, siehe unten).
+//
+// Bis v1.11 lief dieser Block als „§8a-flat" ERST NACH Regionen, Startregion und
+// Rathauswahl. Grund war ausschließlich Rückwärtskompatibilität: D-040 wollte
+// Regions-Ids, Startregion und Rathaus bitgleich halten, damit alte Spielstände
+// und `regions.config.ts` gültig blieben. Dieser Auftrag ersetzt die Welt
+// vollständig (neue GLB, neue Regionen, Save-Neustart) — damit fällt der Grund
+// weg, und die alte Reihenfolge wird zum echten Fehler:
+//
+//   * Die Segmentierung sah Biome des ROHEN, ungeglätteten Geländes.
+//   * Der Startregion-Ausschnitt zählte die Bauflächen der ROHEN Maske und
+//     wuchs deshalb weit über sein Ziel hinaus (3.983 Kacheln für 1.348
+//     „bebaubare" — nach dem Einebnen waren es faktisch viel mehr).
+//   * `BAKED_REGIONS[].buildable` (und damit die Regionskosten) beschrieben eine
+//     Welt, die es nach dem Einebnen nicht mehr gab.
+//
+// Deshalb gilt jetzt: einebnen, DANN segmentieren. Regionen, Startregion,
+// Rathaus, Statistik und alle Ausgaben sehen ausschließlich das FERTIGE,
+// bespielbare Gelände. Wer diese Reihenfolge wieder umdreht, macht die
+// Regionsstatistik erneut unehrlich.
+console.log(RAW_TERRAIN_FIDELITY
+  ? '— Modelltreue: Gelände unverändert übernehmen, nur ableiten …'
+  : '— Map Flattening: Gelände einebnen …');
+const flattenBefore = buildableMask.reduce((sum, v) => sum + v, 0);
+
+// (1) Ufer: breiteres, flacheres Strandprofil und deutlich weniger bewusste
+//     Steilküste (§3.3/B5). Quelle ist die AKTUELLE Höhe, nicht die Rohhöhe —
+//     der Ur-Blend bleibt dadurch erhalten und wird nur weiter abgeflacht.
+function applyFlatShoreProfile() {
+  let widened = 0;
+  accessibleShoreZone.fill(0);
+  computeCliffRelief();
+  for (let gz = 0; gz < GRID; gz++) {
+    for (let gx = 0; gx < GRID; gx++) {
+      const o = gz * GRID + gx;
+      if (Number.isNaN(H[o])) continue; // Wasserflächen behalten ihre Tiefenrampe
+      const tx = Math.min(WORLD_TILES - 1, (gx / SAMPLES_PER_TILE) | 0);
+      const ty = Math.min(WORLD_TILES - 1, (gz / SAMPLES_PER_TILE) | 0);
+      const to = ty * WORLD_TILES + tx;
+      const waterDistance = distToWaterRaw[to];
+      // § 12.2: Steilküste entsteht auf zwei Wegen. (1) Die bewusste Zonenwahl
+      // („nur wenige Bereiche") — dort muss zusätzlich echtes Relief dahinter
+      // liegen, sonst entstünde die früher gemessene Pseudo-Steilküste mit
+      // Höhenmedian 0,2–1,3 m. (2) GARANTIERT überall dort, wo sich echtes
+      // Gebirge bis ans Wasser schiebt: dort gibt es nie Strand, egal was die
+      // Zonen-Lotterie sagt. Weg (2) ist die Antwort auf „ich will genau da
+      // eine Klippe".
+      const relief = cliffReliefCache[to];
+      const deliberateCliffZone = enclosedLabel[to] < 0
+        && (relief >= CLIFF_ZONE_ALWAYS_RELIEF
+          || (shoreHash(tx, ty) < FLAT_SHORE_CLIFF_ZONE_RATIO && relief >= CLIFF_ZONE_MIN_RELIEF));
+      const accessible = waterDistance > 0 && waterDistance <= FLAT_SHORE_BLEND_TILES
+        && HW[o] < FLAT_SHORE_CLIFF_HEIGHT
+        && !deliberateCliffZone;
+      if (!accessible) continue;
+      if (!accessibleShoreZone[to]) widened++;
+      accessibleShoreZone[to] = 1;
+      HW[o] = shoreBlendHeight(
+        HW[o], waterDistance,
+        FLAT_SHORE_BLEND_TILES, FLAT_SHORE_PLATFORM_HEIGHT, FLAT_SHORE_RISE_PER_TILE,
+      );
+    }
+  }
+  return widened;
+}
+if (!RAW_TERRAIN_FIDELITY) {
+  console.log(`  Uferprofil verbreitert: ${applyFlatShoreProfile()} Uferkacheln im flachen Band`);
+
+  // (2) Terraforming außerhalb des Massivs (B1).
+  terraformNonMassifLand();
+  // Das Terraforming zieht das Hinterland herunter und macht dadurch genau die
+  // Uferkante wieder relativ steiler. Ein zweiter Durchlauf legt das flache
+  // Strandprofil auf das FERTIGE Gelände — sonst gewinnt das Einebnen gegen §3.3.
+  applyFlatShoreProfile();
+} else {
+  // § Modelltreue 13.0: `accessibleShoreZone` steuert weiter unten nur noch
+  // Ufer-/Hafen-METADATEN. Sie wird deshalb aus der vorhandenen Geometrie
+  // abgeleitet, statt Geometrie zu erzeugen: flach genug am Wasser = begehbar.
+  computeCliffRelief();
+  accessibleShoreZone.fill(0);
+  for (let ty = 0; ty < WORLD_TILES; ty++) {
+    for (let tx = 0; tx < WORLD_TILES; tx++) {
+      const to = ty * WORLD_TILES + tx;
+      if (isWaterCand[to]) continue;
+      const waterDistance = distToWaterRaw[to];
+      if (waterDistance <= 0 || waterDistance > FLAT_SHORE_BLEND_TILES) continue;
+      if (tileH(tx, ty) >= FLAT_SHORE_CLIFF_HEIGHT) continue;
+      if (tileSlope(tx, ty) > FLAT_SHORE_ACCESSIBLE_MAX_SLOPE) continue;
+      accessibleShoreZone[to] = 1;
+    }
+  }
+}
+
+// (3) Ufer, Biome und Bebaubarkeit aus dem neuen Gelände neu ableiten (B2/B3/B5).
+classifyShoreTypes(FLAT_SHORE_ACCESSIBLE_MAX_HEIGHT, FLAT_SHORE_ACCESSIBLE_MAX_SLOPE);
+classifyBiomes(FLAT_MOUNTAIN_SLOPE_MIN_HEIGHT);
+classifyBuildable(
+  FLAT_MAX_BUILDABLE_TILE_SLOPE, FLAT_MIN_ORTHOGONAL_BUILDABLE,
+  FLAT_SHORE_APRON_TARGET, FLAT_SHORE_APRON_MIN_DISTANCE, FLAT_SHORE_BLEND_TILES,
+  FLAT_MOUNTAIN_SLOPE_MIN_HEIGHT,
+);
+
+// (4) Die neue, deutlich größere Baufläche final glätten und kappen. Die Maske
+//     ist jetzt großflächig zusammenhängend, deshalb braucht die Gauss-Seidel-
+//     Relaxation spürbar mehr Sweeps bis zur Konvergenz als früher.
+let needlesRepaired = 0;
+let cliffPlateaus = { plateaus: 0, plateauTiles: 0 };
+if (!RAW_TERRAIN_FIDELITY) {
+flattenBuildableLand(6000, { onlyRough: true, maxStep: FLAT_MAX_BUILDABLE_STEP });
+
+// (4b) § Welt-Feinschliff 12.1 — DAS UFER ZULETZT.
+//
+// Befund aus dem Spieltest: Ozeanufer lagen im Median 0,26 über der Wasserlinie
+// (gut), Seeufer aber bei 0,81 und Flussufer bei 1,14 — mit p90 um 2,6. Sichtbar
+// wurde daraus genau das, was §5 verbietet: Binnengewässer in einer Schlucht mit
+// steiler Kante statt begehbarem Ufer.
+//
+// Ursache war die REIHENFOLGE, nicht das Profil: `applyFlatShoreProfile()` lief
+// zuletzt VOR `flattenBuildableLand()`. Die Schlussglättung zieht jeden Knoten
+// zum Mittel seiner Nachbarn — am Ufer heißt das: zum höheren Hinterland. Das
+// frisch gelegte Strandprofil wurde also direkt wieder hochgezogen.
+//
+// Deshalb läuft das Uferprofil jetzt ein drittes Mal, NACH der Glättung, und
+// danach wird nur noch die Stufigkeit gekappt (kein Mitteln mehr), damit das
+// Ufer flach bleibt und trotzdem keine neuen Kanten entstehen.
+applyFlatShoreProfile();
+nodeMaskFromTiles(buildableMask, nodeBuildable);
+for (let sweep = 0; sweep < 400; sweep++) {
+  if (clampSweep(nodeBuildable, FLAT_MAX_BUILDABLE_STEP) === 0) break;
+}
+
+// (4c) § 12.2 — GELÄNDENADELN ENTFERNEN. Muss NACH dem Uferprofil laufen: das
+//      Profil senkt das Ufer ab und macht dadurch jeden stehengebliebenen
+//      Splitter erst zur Nadel. Vor der Bebaubar-Ableitung, damit die Maske das
+//      gesäuberte Gelände sieht.
+needlesRepaired = repairTerrainNeedles();
+console.log(`  Geländenadeln entfernt: ${needlesRepaired} Knoten`);
+
+// (5) Zwischen-Klassifikation: `buildCliffPlateaus` braucht eine frische
+//     Steilküsten-Typisierung, und das anschließende Kappen braucht eine
+//     Bebaubar-Maske. Beides ist VORLÄUFIG — verbindlich ist (5d).
+classifyShoreTypes(FLAT_SHORE_ACCESSIBLE_MAX_HEIGHT, FLAT_SHORE_ACCESSIBLE_MAX_SLOPE);
+
+// (5b) § 12.2 — echte Klippen mit ebenem Kopf auf zusammenhängender Steilküste.
+cliffPlateaus = buildCliffPlateaus();
+console.log(`  Klippen-Plateaus: ${cliffPlateaus.plateaus} Abschnitte, ${cliffPlateaus.plateauTiles} Kacheln eingeebnet`);
+classifyShoreTypes(FLAT_SHORE_ACCESSIBLE_MAX_HEIGHT, FLAT_SHORE_ACCESSIBLE_MAX_SLOPE);
+classifyBiomes(FLAT_MOUNTAIN_SLOPE_MIN_HEIGHT);
+classifyBuildable(
+  FLAT_MAX_BUILDABLE_TILE_SLOPE, FLAT_MIN_ORTHOGONAL_BUILDABLE,
+  FLAT_SHORE_APRON_TARGET, FLAT_SHORE_APRON_MIN_DISTANCE, FLAT_SHORE_BLEND_TILES,
+  FLAT_MOUNTAIN_SLOPE_MIN_HEIGHT,
+);
+
+// (5c) LETZTE HÖHENÄNDERUNGEN. Danach darf HW nicht mehr angefasst werden.
+//
+// § 12.2 — hier lag ein echter Fehler: Kappung und Nadelreparatur liefen
+// ursprünglich NACH der letzten `classifyBuildable`. Beide verändern Höhen,
+// also beschrieb die ausgelieferte Bebaubar-Maske ein Gelände, das es nicht
+// mehr gab. `tests/mapBuildability.test.ts` hat genau das gefunden: eine als
+// bebaubar markierte Kachel mit Hang 1,35 — über `GROUND_ROAD_MAX_SLOPE`
+// (1,25) und damit ein Bauplatz ohne mögliche Straßenanbindung.
+nodeMaskFromTiles(buildableMask, nodeBuildable);
+for (let sweep = 0; sweep < 400; sweep++) {
+  if (clampSweep(nodeBuildable, FLAT_MAX_BUILDABLE_STEP) === 0) break;
+}
+coastIsolatedPeaksRepaired += repairCoastPeaks();
+coastIsolatedPeaksRepaired += repairTerrainNeedles();
+} // Ende des Nicht-Treue-Pfads: ab hier wird HW nie mehr geschrieben.
+
+// (5d) VERBINDLICHE Ableitung auf dem endgültigen Gelände.
+classifyShoreTypes(FLAT_SHORE_ACCESSIBLE_MAX_HEIGHT, FLAT_SHORE_ACCESSIBLE_MAX_SLOPE);
+classifyBiomes(FLAT_MOUNTAIN_SLOPE_MIN_HEIGHT);
+classifyBuildable(
+  FLAT_MAX_BUILDABLE_TILE_SLOPE, FLAT_MIN_ORTHOGONAL_BUILDABLE,
+  FLAT_SHORE_APRON_TARGET, FLAT_SHORE_APRON_MIN_DISTANCE, FLAT_SHORE_BLEND_TILES,
+  FLAT_MOUNTAIN_SLOPE_MIN_HEIGHT,
+);
+nodeMaskFromTiles(buildableMask, nodeBuildable);
+
+// (6) Reine Diagnose auf dem FINALEN Gelände — mutiert nichts mehr.
+({ isolatedPeaks: coastIsolatedPeakCount, maxNeighborStep: coastMaxNeighborStep } = measureCoastGeometry());
+const terrainNeedleCount = countTerrainNeedles();
+console.log(`  Küstengeometrie (final): ${coastIsolatedPeakCount} isolierte Peaks, ${terrainNeedleCount} Nadeln, max. Nachbarschritt ${coastMaxNeighborStep.toFixed(2)} m`);
+
+const flattenAfter = buildableMask.reduce((sum, v) => sum + v, 0);
+console.log(`  Bebaubare Kacheln: ${flattenBefore} → ${flattenAfter} (${(100 * (flattenAfter / flattenBefore - 1)).toFixed(1)} %)`);
+
+// § Modelltreue 13.0 — DER BEWEIS. Wie weit weicht das ausgelieferte Höhenfeld
+// vom Modell ab? Nur Landknoten; Wasser hat im Modell keine Geometrie.
+const modelFidelity = (() => {
+  let nodes = 0, changed = 0, sumAbs = 0, maxAbs = 0, sumModel = 0, sumWorld = 0;
+  for (let o = 0; o < HW.length; o++) {
+    if (Number.isNaN(H[o])) continue;
+    const d = HW[o] - HW_MODEL[o];
+    const a = Math.abs(d);
+    nodes++;
+    sumModel += HW_MODEL[o];
+    sumWorld += HW[o];
+    sumAbs += a;
+    if (a > maxAbs) maxAbs = a;
+    if (a > 0.05) changed++;
+  }
+  return {
+    landNodes: nodes,
+    changedNodes: changed,
+    changedShare: round(nodes ? changed / nodes : 0, 4),
+    meanAbsDelta: round(nodes ? sumAbs / nodes : 0),
+    maxAbsDelta: round(maxAbs),
+    meanModelHeight: round(nodes ? sumModel / nodes : 0),
+    meanWorldHeight: round(nodes ? sumWorld / nodes : 0),
+  };
+})();
+console.log(`  Modelltreue: ${modelFidelity.changedNodes.toLocaleString('de-DE')} von ${modelFidelity.landNodes.toLocaleString('de-DE')} Landknoten verändert (${(100 * modelFidelity.changedShare).toFixed(1)} %), Ø |Δ| ${modelFidelity.meanAbsDelta} m, max ${modelFidelity.maxAbsDelta} m, Ø Höhe Modell ${modelFidelity.meanModelHeight} → Welt ${modelFidelity.meanWorldHeight}`);
+
 
 // ---------------------------------------------------------------------------
 // 7. Organische Regionen segmentieren (§ Welt 2.0)
@@ -1065,6 +1732,47 @@ for (const comp of compsBySize) {
 }
 console.log(`  ${comps.length} Biom-Cluster → ${seeds.length} Region-Seeds`);
 
+// § 12.1 §6 — OFFENES WASSER FÜR WASSERGEBÄUDE.
+//
+// `dock_small` & Co. verlangen laut `BuildingDef.waterfront` ein 2×2-WASSER-
+// rechteck vor dem Kai (`waterWidth`/`waterDepth` 2, `shorelineTolerance` 0).
+// Der erste Anlauf zählte nur bebaubare Landkacheln am Wasser — dabei kam eine
+// Startbucht heraus, die ein EIN Kachel breiter Kanal war: 23 „Hafenflächen"
+// laut Bake, 0 baubare Anleger im Spiel. Diese Maske spiegelt deshalb genau die
+// Laufzeitregel: Wo liegt wirklich offenes Wasser?
+const waterPad2 = new Uint8Array(SIZE); // Anker eines vollständig nassen 2×2-Blocks
+for (let ty = 0; ty < WORLD_TILES - 1; ty++) {
+  for (let tx = 0; tx < WORLD_TILES - 1; tx++) {
+    const o = ty * WORLD_TILES + tx;
+    if (isWaterCand[o] && isWaterCand[o + 1] && isWaterCand[o + WORLD_TILES] && isWaterCand[o + WORLD_TILES + 1]) {
+      waterPad2[o] = 1;
+    }
+  }
+}
+/**
+ * Trägt ein 2×2-Wassergebäude mit Anker (tx,ty) einen Kai?
+ *
+ * Spiegelt `waterfrontWaterCells()` aus `src/game/buildings/placement.ts` EXAKT
+ * für das Profil `waterWidth: 2, waterDepth: 2` (dock_small): Das 2×2-Wasser-
+ * rechteck muss bündig an einer der vier Seiten liegen — Norden (Rotation 0),
+ * Süden (180), Westen (90) oder Osten (270). Eine bloße Nachbarschaftsprüfung
+ * genügt nicht: sie akzeptiert schräg liegendes Wasser, an dem die Laufzeit
+ * `needs_water` meldet.
+ */
+const carriesQuay = (tx, ty) => {
+  const anchors = [
+    [tx, ty - 2],           // Rotation 0   — Wasser nördlich
+    [tx, ty + 2],           // Rotation 180 — Wasser südlich
+    [tx - 2, ty],           // Rotation 90  — Wasser westlich
+    [tx + 2, ty],           // Rotation 270 — Wasser östlich
+  ];
+  for (const [ax, ay] of anchors) {
+    if (ax < 0 || ay < 0 || ax >= WORLD_TILES - 1 || ay >= WORLD_TILES - 1) continue;
+    if (waterPad2[ay * WORLD_TILES + ax]) return true;
+  }
+  return false;
+};
+
 // 7c. Kostenbasiertes Multi-Source-Wachstum (deterministischer Binär-Heap).
 const regionOf = new Int32Array(SIZE).fill(-1); // Seed-Index je Kachel
 {
@@ -1120,6 +1828,67 @@ const regionOf = new Int32Array(SIZE).fill(-1); // Seed-Index je Kachel
   }
 }
 
+// 7c-bis. § World Overhaul 12.0 — VERWAISTES LAND EINSAMMELN.
+//
+// Das kostenbasierte Wachstum läuft nur über Land. Kleine Inseln, die keinen
+// eigenen Seed bekommen (Biom-Cluster < REGION_MIN_COMPONENT) und über Land mit
+// keinem Seed verbunden sind, blieben deshalb bei Region 0 — also „Ozean".
+// Auf der neuen Insel waren das 3.217 Kacheln in zwei Nordinseln: sichtbares
+// Land, das der Spieler nie hätte betreten können, weil `regionIdAt` dort 0
+// liefert und keine Region es freischaltet.
+//
+// Jede verwaiste Landkomponente wandert deshalb komplett zur Region mit dem
+// KÜRZESTEN Wasserabstand — dieselbe Logik, die §7f-bis für die Seenachbarschaft
+// ausmisst. Keine neue Region, keine erfundene Landbrücke; die Insel gehört
+// einfach zur nächstgelegenen Landschaft.
+{
+  const seen = new Uint8Array(SIZE);
+  let orphanTiles = 0;
+  let orphanComponents = 0;
+  for (let start = 0; start < SIZE; start++) {
+    if (seen[start] || !isLand(start) || regionOf[start] >= 0) continue;
+    const component = [start];
+    seen[start] = 1;
+    for (let head = 0; head < component.length; head++) {
+      const c = component[head];
+      const tx = c % WORLD_TILES, ty = (c / WORLD_TILES) | 0;
+      for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+        const nx = tx + dx, ny = ty + dy;
+        if (nx < 0 || ny < 0 || nx >= WORLD_TILES || ny >= WORLD_TILES) continue;
+        const no = ny * WORLD_TILES + nx;
+        if (seen[no] || !isLand(no) || regionOf[no] >= 0) continue;
+        seen[no] = 1;
+        component.push(no);
+      }
+    }
+    // BFS über ALLES (auch Wasser) bis zur ersten zugeordneten Landkachel.
+    const depth = new Int32Array(SIZE).fill(-1);
+    const queue = component.slice();
+    for (const o of queue) depth[o] = 0;
+    let nearest = -1;
+    for (let head = 0; head < queue.length && nearest < 0; head++) {
+      const c = queue[head];
+      const tx = c % WORLD_TILES, ty = (c / WORLD_TILES) | 0;
+      for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+        const nx = tx + dx, ny = ty + dy;
+        if (nx < 0 || ny < 0 || nx >= WORLD_TILES || ny >= WORLD_TILES) continue;
+        const no = ny * WORLD_TILES + nx;
+        if (depth[no] >= 0) continue;
+        depth[no] = depth[c] + 1;
+        if (regionOf[no] >= 0) { nearest = regionOf[no]; break; }
+        queue.push(no);
+      }
+    }
+    if (nearest < 0) continue; // theoretisch unmöglich (es gibt immer Seeds)
+    for (const o of component) regionOf[o] = nearest;
+    orphanTiles += component.length;
+    orphanComponents++;
+  }
+  if (orphanTiles > 0) {
+    console.log(`  ${orphanTiles.toLocaleString('de-DE')} verwaiste Landkacheln in ${orphanComponents} Komponenten der nächstgelegenen Region zugeordnet`);
+  }
+}
+
 // 7d. Kleine Regionen in den Nachbarn mit der längsten gemeinsamen Grenze mergen.
 for (;;) {
   const count = new Map();
@@ -1155,6 +1924,31 @@ for (;;) {
 // Kacheln herausgelöst und zur eigenen Region gemacht. Der Rest bleibt bei der
 // Wirtsregion — sie wird dadurch die erste natürliche Erweiterungsrichtung; der
 // größere Kern reicht bis an mehrere Nachbarregionen (Expansionsrichtungen).
+// § Modelltreue 13.0 — INSELWEITE HAFENTAUGLICHKEIT, bevor die Startregion
+// gesucht wird. Ohne diese Zahl ist ein Fehlschlag der Startsuche nicht
+// deutbar: „0 Hafenflächen im Ausschnitt" kann heißen, dass der Ausschnitt
+// schlecht liegt — oder dass die ganze Insel keinen einzigen Anlegerplatz hat.
+const islandHarbourPads = (() => {
+  let pads = 0, buildableShore = 0;
+  for (let ty = 0; ty < WORLD_TILES - 1; ty++) {
+    for (let tx = 0; tx < WORLD_TILES - 1; tx++) {
+      const o = ty * WORLD_TILES + tx;
+      if (buildableMask[o] && distWater[o] === 1) buildableShore++;
+      let pad = true, touchesWater = false;
+      for (let dy = 0; dy < 2 && pad; dy++) {
+        for (let dx = 0; dx < 2; dx++) {
+          const no = (ty + dy) * WORLD_TILES + tx + dx;
+          if (!buildableMask[no]) { pad = false; break; }
+          if (distWater[no] === 1 && carriesQuay(tx, ty)) touchesWater = true;
+        }
+      }
+      if (pad && touchesWater) pads++;
+    }
+  }
+  console.log(`  Hafentauglichkeit inselweit: ${pads.toLocaleString('de-DE')} 2×2-Anlegerplätze, ${buildableShore.toLocaleString('de-DE')} bebaubare Uferkacheln`);
+  return pads;
+})();
+
 const startCarve = (() => {
   // Größte zusammenhängende Landmasse und ihr Flächenschwerpunkt.
   const seen = new Uint8Array(SIZE);
@@ -1205,12 +1999,15 @@ const startCarve = (() => {
   const buildPrefix = prefixOf((o) => buildableMask[o]);
   const grassPrefix = prefixOf((o) => buildableMask[o] && terrain[o] === T.grass);
 
-  let core = -1, coreScore = -Infinity;
+  const candidates = [];
   for (let ty = 11; ty < WORLD_TILES - 16; ty++) {
     for (let tx = 11; tx < WORLD_TILES - 27; tx++) {
       const centerX = tx + 2, centerY = ty + 2;
       const centerOffset = centerY * WORLD_TILES + centerX;
       if (!onMainland[centerOffset] || !buildableMask[centerOffset]) continue;
+      // § 12.0 §4 „Wasser": ohne erreichbares Wasser ist die Kachel als Zentrum
+      // einer Startregion ungeeignet, egal wie flach und zentral sie liegt.
+      if (distWater[centerOffset] > START_CORE_MAX_WATER_DISTANCE) continue;
       const reserveX = tx + RESERVE_X0, reserveY = ty + RESERVE_Y0;
       if (sumOf(buildPrefix, reserveX, reserveY, reserveX + RESERVE_W, reserveY + RESERVE_H) !== RESERVE_W * RESERVE_H) continue;
       if (sumOf(grassPrefix, tx - 1, ty - 1, tx + 6, ty + 6) !== 49) continue;
@@ -1224,58 +2021,207 @@ const startCarve = (() => {
         }
       }
       if (!uniform) continue;
+      // § 12.0 §4: Der Rathausblock muss WIRKLICH eben sein. Genau dieselbe
+      // 7×7-Spanne bewertet §8 später als `flatnessScore`.
+      let hMin = Infinity, hMax = -Infinity;
+      for (let y = ty - 1; y <= ty + 5; y++) {
+        for (let x = tx - 1; x <= tx + 5; x++) {
+          const h = tileH(x, y);
+          if (h < hMin) hMin = h;
+          if (h > hMax) hMax = h;
+        }
+      }
+      const flatDelta = hMax - hMin;
+      if (flatDelta > START_CORE_MAX_FLAT_DELTA) continue;
       const centrality = 1 - Math.min(1, Math.hypot(centerX - cx, centerY - cy) / 150);
       // Umliegendes Bauland als Reserve für die spätere Verdichtung.
       const around = sumOf(buildPrefix, centerX - 14, centerY - 14, centerX + 15, centerY + 15) / (29 * 29);
-      const score = centrality * 3 + around - tileSlope(centerX, centerY) * 0.5;
-      if (score > coreScore + 1e-9 || (Math.abs(score - coreScore) < 1e-9 && centerOffset < core)) {
-        coreScore = score;
-        core = centerOffset;
+      // Wassernähe zählt positiv, aber schwächer als Zentralität — die Stadt soll
+      // im Landesinneren mit Uferzugang liegen, nicht auf einer Landzunge.
+      const waterAccess = 1 - Math.min(1, distWater[centerOffset] / START_CORE_MAX_WATER_DISTANCE);
+      const flatness = 1 - flatDelta / START_CORE_MAX_FLAT_DELTA;
+      const score = centrality * 3 + around + waterAccess * 0.8 + flatness * 0.9
+        - tileSlope(centerX, centerY) * 0.5;
+      candidates.push([score, centerOffset]);
+    }
+  }
+  if (candidates.length === 0) { console.warn('  ! keine zentrale Startkachel mit Gründungsreserve und Wasserzugang gefunden — Startregion wird nicht ausgeschnitten'); return null; }
+  candidates.sort((a, b) => b[0] - a[0] || a[1] - b[1]);
+  {
+    const d = (o) => Math.hypot((o % WORLD_TILES) - cx, ((o / WORLD_TILES) | 0) - cy);
+    const top = candidates.slice(0, 5).map(([, o]) => `(${o % WORLD_TILES},${(o / WORLD_TILES) | 0})@${d(o).toFixed(0)}`);
+    let nearest = Infinity;
+    for (const [, o] of candidates) nearest = Math.min(nearest, d(o));
+    console.log(`  Startkandidaten: ${candidates.length}, bestbewertete ${top.join(' ')}, zentralster Abstand ${nearest.toFixed(0)}`);
+  }
+
+  /**
+   * Kompaktes Wachstum NUR innerhalb der Wirtsregion und auf der Hauptinsel:
+   * billigste Kachel zuerst (Distanz + Strafaufschlag für nicht bebaubares
+   * Gelände), bis das Bauflächen-Budget erreicht ist. Ergebnis ist rund und
+   * zusammenhängend, folgt aber weiterhin dem echten Gelände.
+   *
+   * § 12.0: Danach wächst derselbe Ausschnitt mit derselben Kostenfunktion
+   * weiter, bis er eine Kachel direkt am Wasser enthält (§4 „Wasser"). Das ist
+   * keine zweite Wachstumslogik, nur ein zweites Abbruchkriterium.
+   */
+  const growCarve = (core, { seekWater }) => {
+    const host = regionOf[core];
+    const carved = [];
+    const inCarve = new Uint8Array(SIZE);
+    const dist = new Float64Array(SIZE).fill(Infinity);
+    const queue = [[0, core]];
+    dist[core] = 0;
+    let buildableCount = 0;
+    let waterfrontTiles = 0;
+    const canGrow = (o) => regionOf[o] === host && onMainland[o];
+    while (queue.length > 0 && buildableCount < START_REGION_TARGET_BUILDABLE) {
+      queue.sort((a, b) => a[0] - b[0] || a[1] - b[1]);
+      const [cost, tile] = queue.shift();
+      if (inCarve[tile]) continue;
+      inCarve[tile] = 1;
+      carved.push(tile);
+      if (buildableMask[tile]) buildableCount++;
+      if (distWater[tile] === 1) waterfrontTiles++;
+      const tx = tile % WORLD_TILES, ty = (tile / WORLD_TILES) | 0;
+      for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+        const nx = tx + dx, ny = ty + dy;
+        if (nx < 0 || ny < 0 || nx >= WORLD_TILES || ny >= WORLD_TILES) continue;
+        const no = ny * WORLD_TILES + nx;
+        if (inCarve[no] || !canGrow(no)) continue;
+        // Bauland wächst billig, Gebirge/Wasserkanten teuer ⇒ die Startregion
+        // greift zuerst die zusammenhängende Bauebene ab.
+        const nc = cost + (buildableMask[no] ? 1 : 5);
+        if (nc < dist[no]) { dist[no] = nc; queue.push([nc, no]); }
       }
     }
-  }
-  if (core < 0) { console.warn('  ! keine zentrale Startkachel mit Gründungsreserve gefunden — Startregion wird nicht ausgeschnitten'); return null; }
-
-  const host = regionOf[core];
-  // Kompaktes Wachstum NUR innerhalb der Wirtsregion und auf der Hauptinsel:
-  // billigste Kachel zuerst (Distanz + Strafaufschlag für nicht bebaubares
-  // Gelände), bis das Bauflächen-Budget erreicht ist. Ergebnis ist rund und
-  // zusammenhängend, folgt aber weiterhin dem echten Gelände.
-  const carved = [];
-  const inCarve = new Uint8Array(SIZE);
-  const dist = new Float64Array(SIZE).fill(Infinity);
-  const queue = [[0, core]];
-  dist[core] = 0;
-  let buildableCount = 0;
-  while (queue.length > 0 && buildableCount < START_REGION_TARGET_BUILDABLE) {
-    queue.sort((a, b) => a[0] - b[0] || a[1] - b[1]);
-    const [cost, tile] = queue.shift();
-    if (inCarve[tile]) continue;
-    inCarve[tile] = 1;
-    carved.push(tile);
-    if (buildableMask[tile]) buildableCount++;
-    const tx = tile % WORLD_TILES, ty = (tile / WORLD_TILES) | 0;
-    for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
-      const nx = tx + dx, ny = ty + dy;
-      if (nx < 0 || ny < 0 || nx >= WORLD_TILES || ny >= WORLD_TILES) continue;
-      const no = ny * WORLD_TILES + nx;
-      if (inCarve[no] || regionOf[no] !== host || !onMainland[no]) continue;
-      // Bauland wächst billig, Gebirge/Wasserkanten teuer ⇒ die Startregion
-      // greift zuerst die zusammenhängende Bauebene ab.
-      const step = buildableMask[no] ? 1 : 5;
-      const nc = cost + step;
-      if (nc < dist[no]) { dist[no] = nc; queue.push([nc, no]); }
+    // Nachlauf NUR wenn nötig: ein SCHMALER Korridor (kürzester Weg innerhalb der
+    // Wirtsregion) von der bestehenden Fläche zur nächsten Uferkachel. Kein
+    // flächiges Weiterwachsen — die Startregion soll kompakt bleiben und nur
+    // einen ehrlichen Zugang zum Wasser bekommen (§4).
+    // § Modelltreue 13.0: Bedingung von „gar kein Ufer" auf „zu wenig Ufer"
+    // erweitert. Auf dem ungeglätteten Modell endet das Budget-Wachstum oft
+    // MIT ein paar Uferkacheln, aber unter der Mindestzahl — der Korridor lief
+    // dann nie an, und ALLE 96 Kandidaten fielen am Wasserzugang durch.
+    if (seekWater && waterfrontTiles < START_MIN_WATERFRONT) {
+      const from = new Int32Array(SIZE).fill(-2); // -2 unbesucht, -1 Startfläche
+      const q = [];
+      for (const o of carved) { from[o] = -1; q.push(o); }
+      let target = -1;
+      for (let head = 0; head < q.length && target < 0; head++) {
+        const c = q[head];
+        const tx = c % WORLD_TILES, ty = (c / WORLD_TILES) | 0;
+        for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+          const nx = tx + dx, ny = ty + dy;
+          if (nx < 0 || ny < 0 || nx >= WORLD_TILES || ny >= WORLD_TILES) continue;
+          const no = ny * WORLD_TILES + nx;
+          if (from[no] !== -2 || !canGrow(no)) continue;
+          from[no] = c;
+          // § 12.1: Ziel ist eine Kachel an OFFENEM Wasser (2×2), nicht an einem
+          // beliebigen Rinnsal — sonst entsteht eine Bucht ohne Hafenplatz.
+          if (distWater[no] === 1 && carriesQuay(nx, ny)) { target = no; break; }
+          q.push(no);
+        }
+      }
+      if (target >= 0) {
+        const corridor = [];
+        for (let o = target; o >= 0 && from[o] !== -1; o = from[o]) corridor.push(o);
+        // Am Ende des Korridors ein echter Ufer-Vorplatz statt eines einzelnen
+        // Punktes: alle Kacheln der Wirtsregion im Umkreis. Damit trägt die
+        // Startregion einen Hafen und liest sich als kleine Bucht (§4).
+        const apronX = target % WORLD_TILES, apronY = (target / WORLD_TILES) | 0;
+        for (let dy = -START_SHORE_APRON_RADIUS; dy <= START_SHORE_APRON_RADIUS; dy++) {
+          for (let dx = -START_SHORE_APRON_RADIUS; dx <= START_SHORE_APRON_RADIUS; dx++) {
+            const nx = apronX + dx, ny = apronY + dy;
+            if (nx < 0 || ny < 0 || nx >= WORLD_TILES || ny >= WORLD_TILES) continue;
+            const no = ny * WORLD_TILES + nx;
+            if (canGrow(no)) corridor.push(no);
+          }
+        }
+        if (corridor.length <= START_CARVE_WATER_EXTENSION) {
+          for (const o of corridor) {
+            if (inCarve[o]) continue;
+            inCarve[o] = 1;
+            carved.push(o);
+            if (buildableMask[o]) buildableCount++;
+            if (distWater[o] === 1) waterfrontTiles++;
+          }
+        }
+      }
     }
+    // § 12.0 §4: Wie viele ANDERE Segmentierungsregionen berührt der Ausschnitt?
+    // Die Wirtsregion zählt mit — sie bleibt nach dem Ausschneiden Nachbar und ist
+    // die natürliche erste Erweiterungsrichtung.
+    const neighbourSeeds = new Set();
+    for (const tile of carved) {
+      const tx = tile % WORLD_TILES, ty = (tile / WORLD_TILES) | 0;
+      for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+        const nx = tx + dx, ny = ty + dy;
+        if (nx < 0 || ny < 0 || nx >= WORLD_TILES || ny >= WORLD_TILES) continue;
+        const no = ny * WORLD_TILES + nx;
+        if (inCarve[no]) continue;
+        if (regionOf[no] >= 0) neighbourSeeds.add(regionOf[no]);
+      }
+    }
+    // § 12.1 §6: Wie viele 2×2-Blöcke im Ausschnitt sind vollständig bebaubar UND
+    // grenzen direkt ans Wasser? Genau das braucht ein Anleger/Hafen.
+    let harbourPads = 0;
+    for (const tile of carved) {
+      const tx = tile % WORLD_TILES, ty = (tile / WORLD_TILES) | 0;
+      if (tx + 1 >= WORLD_TILES || ty + 1 >= WORLD_TILES) continue;
+      let pad = true;
+      let touchesWater = false;
+      for (let dy = 0; dy < 2 && pad; dy++) {
+        for (let dx = 0; dx < 2; dx++) {
+          const no = (ty + dy) * WORLD_TILES + tx + dx;
+          if (!inCarve[no] || !buildableMask[no]) { pad = false; break; }
+          if (distWater[no] === 1 && carriesQuay(tx, ty)) touchesWater = true;
+        }
+      }
+      if (pad && touchesWater) harbourPads++;
+    }
+    return { host, carved, buildableCount, waterfrontTiles, harbourPads, neighbourRegions: neighbourSeeds.size };
+  };
+
+  // Zwei Durchgänge: Zuerst wird ein Kern gesucht, dessen natürlicher, kompakter
+  // Ausschnitt das Wasser VON SELBST erreicht (bestes Ergebnis — Stadt am Ufer).
+  // Erst wenn kein einziger Kandidat das schafft, wird der schmale Uferkorridor
+  // zugelassen. Ohne beides gibt es keine Startregion (harter Fehler unten).
+  let chosen;
+  const rejected = { budget: 0, water: 0, harbour: 0, neighbours: 0 };
+  // § Modelltreue 13.0: Der Korridor-Durchlauf zaehlte seine Ablehnungen nicht.
+  // Bei einem Fehlschlag war deshalb nicht erkennbar, WORAN der zweite Versuch
+  // scheiterte — die Meldung beschrieb nur den ersten. Jetzt beide.
+  const rejectedSeek = { budget: 0, water: 0, harbour: 0, neighbours: 0 };
+  const best = { buildableCount: 0, waterfrontTiles: 0, harbourPads: 0, neighbourRegions: 0 };
+  for (const seekWater of [false, true]) {
+    const bucket = seekWater ? rejectedSeek : rejected;
+    for (const [, candidate] of candidates.slice(0, START_CORE_CANDIDATES)) {
+      const grown = growCarve(candidate, { seekWater });
+      if (seekWater) {
+        for (const key of Object.keys(best)) best[key] = Math.max(best[key], grown[key]);
+      }
+      if (grown.buildableCount < MIN_START_BUILDABLE) { bucket.budget++; continue; }
+      if (grown.waterfrontTiles < START_MIN_WATERFRONT) { bucket.water++; continue; }
+      if (grown.harbourPads < START_MIN_HARBOUR_PADS) { bucket.harbour++; continue; }
+      if (grown.neighbourRegions < START_MIN_NEIGHBOUR_REGIONS) { bucket.neighbours++; continue; }
+      chosen = { core: candidate, seekWater, ...grown };
+      break;
+    }
+    if (chosen) break;
   }
-  if (buildableCount < MIN_START_BUILDABLE) {
-    console.warn(`  ! zentraler Kern liefert nur ${buildableCount} Bauflächen — Startregion wird nicht ausgeschnitten`);
+  if (!chosen) {
+    console.warn(`  ! kein zentraler Kern erfüllt Budget + Wasserzugang + ${START_MIN_NEIGHBOUR_REGIONS} Nachbarregionen — Startregion wird nicht ausgeschnitten`);
+    console.warn(`    ohne Korridor: ${rejected.budget} Budget, ${rejected.water} Wasser, ${rejected.harbour} Hafenfläche, ${rejected.neighbours} Nachbarn`);
+    console.warn(`    mit Korridor:  ${rejectedSeek.budget} Budget, ${rejectedSeek.water} Wasser, ${rejectedSeek.harbour} Hafenfläche, ${rejectedSeek.neighbours} Nachbarn`);
+    console.warn(`    bester Kandidat: ${best.buildableCount} bebaubar (min ${MIN_START_BUILDABLE}), ${best.waterfrontTiles} Ufer (min ${START_MIN_WATERFRONT}), ${best.harbourPads} Hafenflächen (min ${START_MIN_HARBOUR_PADS}), ${best.neighbourRegions} Nachbarn (min ${START_MIN_NEIGHBOUR_REGIONS})`);
     return null;
   }
   const startSeedIdx = seeds.length;
-  seeds.push({ tile: core, cls: terrain[core] });
-  for (const o of carved) regionOf[o] = startSeedIdx;
-  console.log(`  Startregion ausgeschnitten: ${carved.length} Kacheln, ${buildableCount} bebaubar (Wirt: Seed ${host})`);
-  return { seedIdx: startSeedIdx, core, tiles: carved.length, buildable: buildableCount };
+  seeds.push({ tile: chosen.core, cls: terrain[chosen.core] });
+  for (const o of chosen.carved) regionOf[o] = startSeedIdx;
+  console.log(`  Startregion ausgeschnitten: ${chosen.carved.length} Kacheln, ${chosen.buildableCount} bebaubar, ${chosen.waterfrontTiles} Kacheln direkt am Wasser, ${chosen.harbourPads} Hafenflächen, ${chosen.neighbourRegions} Nachbarregionen${chosen.seekWater ? ' (über Uferkorridor)' : ''} (Wirt: Seed ${chosen.host})`);
+  return { seedIdx: startSeedIdx, core: chosen.core, tiles: chosen.carved.length, buildable: chosen.buildableCount };
 })();
 
 // 7e. Finale Ids 1..N (0 = Ozean), Reihenfolge deterministisch nach Größe.
@@ -1526,6 +2472,12 @@ for (let ty = 11; ty < WORLD_TILES - 16; ty++) {
       }
     }
     const flatDelta = hMax - hMin;
+    // § 12.1: HARTE Flachheitsgrenze, nicht nur eine Bewertung. Vorher war
+    // `flatnessScore` bloß ein Summand — sobald flachere Kandidaten an einer
+    // anderen Bedingung scheiterten, wählte §8 einen Platz mit ΔH 3,48 und einer
+    // Flachheit von 0,000. Das Rathaus MUSS laut §4 auf einfacher Topografie
+    // stehen; dieselbe Schwelle gilt schon für den Startregion-Kern.
+    if (flatDelta > START_CORE_MAX_FLAT_DELTA) continue;
     const flatnessScore = clamp(1 - flatDelta / 0.85, 0, 1);
     const centralityScore = clamp(1 - Math.hypot(centerX - islandCenter.x, centerY - islandCenter.y) / 190, 0, 1);
     const expansionScore = expansionDirectionScore(centerX, centerY);
@@ -1583,6 +2535,15 @@ const startRegion = regions[townHall.regionId - 1];
 
 // Zwei von Beginn an verlängerbare Hauptachsen: eine Ost-West-Tangente südlich
 // des Rathauses und ein Nord-Süd-Ast. Keine Sackgasse direkt am Stadtzentrum.
+// Zwei vorplatzierte, verlängerbare Hauptachsen an der Rathaus-Südwestkante.
+//
+// § 12.1 — WARUM DIE OFFSETS FEST BLEIBEN: Ein Versuch, die Achsen dem Gelände
+// folgen zu lassen (nur Graskacheln), war technisch erfolgreich, hat aber die
+// Startbelegung verschoben und damit ein Dutzend Tests in acht Dateien gebrochen,
+// die Bauplätze relativ zum Rathaus beschreiben — für einen rein optischen
+// Gewinn. Die Achsen bleiben deshalb fest; garantiert (und geprüft) ist, dass sie
+// auf BEBAUBAREM Land der Startregion liegen. Dass sie gelegentlich zwei
+// Waldkacheln queren, ist folgenlos: Wald ist bebaubar und befahrbar.
 const startRoads = [];
 for (let x = townHall.x - 5; x <= townHall.x + 4; x++) startRoads.push({ x, y: townHall.y + 5 });
 for (let y = townHall.y + 6; y <= townHall.y + 11; y++) startRoads.push({ x: townHall.x - 5, y });
@@ -1593,92 +2554,6 @@ for (const road of startRoads) {
     process.exit(1);
   }
 }
-
-// ---------------------------------------------------------------------------
-// 8a-flat. § MAP FLATTENING + BUILDABILITY OVERHAUL — Gelände bespielbar machen
-// ---------------------------------------------------------------------------
-// Alles oberhalb (Regionen, Startregion-Carve, Rathauswahl) lief auf dem
-// unveränderten Ur-Gelände und ist deshalb bitgleich zum vorherigen Bake —
-// Regions-Ids, Regionsgrenzen, Startregion und Rathaus bleiben stabil, sodass
-// `regions.config.ts`, das Balancing und bestehende Spielstände gültig bleiben.
-//
-// Ab hier wird das Gelände eingeebnet und Ufer/Biome/Bebaubarkeit werden neu
-// abgeleitet. Alles Folgende (Infrastruktur-Hooks §8b, sämtliche Ausgaben §9)
-// sieht ausschließlich diese neue, bespielbare Welt.
-console.log('— Map Flattening: Gelände einebnen …');
-const flattenBefore = buildableMask.reduce((sum, v) => sum + v, 0);
-
-// (1) Ufer: breiteres, flacheres Strandprofil und deutlich weniger bewusste
-//     Steilküste (§3.3/B5). Quelle ist die AKTUELLE Höhe, nicht die Rohhöhe —
-//     der Ur-Blend bleibt dadurch erhalten und wird nur weiter abgeflacht.
-function applyFlatShoreProfile() {
-  let widened = 0;
-  accessibleShoreZone.fill(0);
-  for (let gz = 0; gz < GRID; gz++) {
-    for (let gx = 0; gx < GRID; gx++) {
-      const o = gz * GRID + gx;
-      if (Number.isNaN(H[o])) continue; // Wasserflächen behalten ihre Tiefenrampe
-      const tx = Math.min(WORLD_TILES - 1, (gx / SAMPLES_PER_TILE) | 0);
-      const ty = Math.min(WORLD_TILES - 1, (gz / SAMPLES_PER_TILE) | 0);
-      const to = ty * WORLD_TILES + tx;
-      const waterDistance = distToWaterRaw[to];
-      const accessible = waterDistance > 0 && waterDistance <= FLAT_SHORE_BLEND_TILES
-        && HW[o] < FLAT_SHORE_CLIFF_HEIGHT
-        && (enclosedLabel[to] >= 0 || shoreHash(tx, ty) >= FLAT_SHORE_CLIFF_ZONE_RATIO);
-      if (!accessible) continue;
-      if (!accessibleShoreZone[to]) widened++;
-      accessibleShoreZone[to] = 1;
-      HW[o] = shoreBlendHeight(
-        HW[o], waterDistance,
-        FLAT_SHORE_BLEND_TILES, FLAT_SHORE_PLATFORM_HEIGHT, FLAT_SHORE_RISE_PER_TILE,
-      );
-    }
-  }
-  return widened;
-}
-console.log(`  Uferprofil verbreitert: ${applyFlatShoreProfile()} Uferkacheln im flachen Band`);
-
-// (2) Terraforming außerhalb des Massivs (B1).
-terraformNonMassifLand();
-// Das Terraforming zieht das Hinterland herunter und macht dadurch genau die
-// Uferkante wieder relativ steiler. Ein zweiter Durchlauf legt das flache
-// Strandprofil auf das FERTIGE Gelände — sonst gewinnt das Einebnen gegen §3.3.
-applyFlatShoreProfile();
-
-// (3) Ufer, Biome und Bebaubarkeit aus dem neuen Gelände neu ableiten (B2/B3/B5).
-classifyShoreTypes(FLAT_SHORE_ACCESSIBLE_MAX_HEIGHT, FLAT_SHORE_ACCESSIBLE_MAX_SLOPE);
-classifyBiomes(FLAT_MOUNTAIN_SLOPE_MIN_HEIGHT);
-classifyBuildable(
-  FLAT_MAX_BUILDABLE_TILE_SLOPE, FLAT_MIN_ORTHOGONAL_BUILDABLE,
-  FLAT_SHORE_APRON_TARGET, FLAT_SHORE_APRON_MIN_DISTANCE, FLAT_SHORE_BLEND_TILES,
-  FLAT_MOUNTAIN_SLOPE_MIN_HEIGHT,
-);
-
-// (4) Die neue, deutlich größere Baufläche final glätten und kappen. Die Maske
-//     ist jetzt großflächig zusammenhängend, deshalb braucht die Gauss-Seidel-
-//     Relaxation spürbar mehr Sweeps bis zur Konvergenz als früher.
-flattenBuildableLand(6000, { onlyRough: true, maxStep: FLAT_MAX_BUILDABLE_STEP });
-
-// (5) Nach dem Kappen kann eine Kachel knapp über die Bebaubar-Schwelle
-//     gerutscht sein (die Glättung senkt Hänge weiter ab). Ein letzter,
-//     billiger Durchlauf erntet diese Kacheln — ohne erneut zu glätten, damit
-//     die Geometrie stabil bleibt.
-classifyShoreTypes(FLAT_SHORE_ACCESSIBLE_MAX_HEIGHT, FLAT_SHORE_ACCESSIBLE_MAX_SLOPE);
-classifyBiomes(FLAT_MOUNTAIN_SLOPE_MIN_HEIGHT);
-classifyBuildable(
-  FLAT_MAX_BUILDABLE_TILE_SLOPE, FLAT_MIN_ORTHOGONAL_BUILDABLE,
-  FLAT_SHORE_APRON_TARGET, FLAT_SHORE_APRON_MIN_DISTANCE, FLAT_SHORE_BLEND_TILES,
-  FLAT_MOUNTAIN_SLOPE_MIN_HEIGHT,
-);
-nodeMaskFromTiles(buildableMask, nodeBuildable);
-
-// (6) Küsten-Sicherheitsgurt und Regressions-Diagnose auf dem FINALEN Gelände.
-coastIsolatedPeaksRepaired += repairCoastPeaks();
-({ isolatedPeaks: coastIsolatedPeakCount, maxNeighborStep: coastMaxNeighborStep } = measureCoastGeometry());
-console.log(`  Küstengeometrie (final): ${coastIsolatedPeakCount} isolierte Peaks, max. Nachbarschritt ${coastMaxNeighborStep.toFixed(2)} m`);
-
-const flattenAfter = buildableMask.reduce((sum, v) => sum + v, 0);
-console.log(`  Bebaubare Kacheln: ${flattenBefore} → ${flattenAfter} (${(100 * (flattenAfter / flattenBefore - 1)).toFixed(1)} %)`);
 
 // ---------------------------------------------------------------------------
 // 8b. Reine Infrastruktur-Kandidaten (noch kein zweites Gameplay-System)
@@ -1743,6 +2618,12 @@ bridgePool.sort((a, b) => a.score - b.score || a.midY - b.midY || a.midX - b.mid
 const bridgeCandidates = [];
 for (const candidate of bridgePool) spacedPush(bridgeCandidates, candidate, 10, 48);
 
+// § World Overhaul 12.0: Das Massiv der neuen Insel ist deutlich breiter als das
+// der alten. Mit der bisherigen Reichweite von 28 Kacheln fand die Suche KEINEN
+// einzigen Tunnel mehr — nicht weil es keine gäbe, sondern weil kein gerader
+// Durchstich innerhalb von 28 Kacheln wieder auf befahrbares Gelände trifft.
+const TUNNEL_MAX_LENGTH_TILES = 52;
+
 const tunnelPool = [];
 for (let y = 4; y < WORLD_TILES - 4; y += 2) {
   for (let x = 4; x < WORLD_TILES - 4; x += 2) {
@@ -1750,7 +2631,7 @@ for (let y = 4; y < WORLD_TILES - 4; y += 2) {
     for (const [dx, dy] of [[1, 0], [0, 1]]) {
       let maxMountain = -Infinity;
       let mountainTiles = 0;
-      for (let step = 1; step <= 28; step++) {
+      for (let step = 1; step <= TUNNEL_MAX_LENGTH_TILES; step++) {
         const nx = x + dx * step, ny = y + dy * step;
         if (!inWorld(nx, ny)) break;
         const no = tileOffset(nx, ny);
@@ -2022,7 +2903,7 @@ function toBase64Lines(bytes) {
 
 // 8a. Terrain-Grid (Sim).
 const terrainTs = `// AUTO-GENERIERT von tools/bakeWorld.mjs — NICHT von Hand editieren.
-// Quelle: reference/world/island 3d new.glb (§ 10.0 R7/R8 World Compaction 3.0 (weiches Uferprofil)).
+// Quelle: ${SOURCE_LABEL} (§ World Overhaul 12.0 — neue Insel, Terraforming vor Segmentierung).
 // Regeln/Schwellen: tools/bakeWorld.mjs + docs/WORLD_REBUILD.md; Statistik:
 // tools/bake-report.md. Neu erzeugen: \`node tools/bakeWorld.mjs\`.
 /* eslint-disable */
@@ -2041,7 +2922,32 @@ export const BAKED_WORLD = {
     isolatedPeaksRepaired: ${coastIsolatedPeaksRepaired},
     isolatedPeakCount: ${coastIsolatedPeakCount},
     maxNeighborStep: ${round(coastMaxNeighborStep)},
+    /** § 12.2: die verbindliche Zackenkennzahl. \`isolatedPeakCount\` benutzt die
+     *  alte, viel zu lockere Bedingung (> 6 m Überhöhung UND ≤ 1 Stütze) und
+     *  stand deshalb auf ~0, während der Spieler ein Ufer voller Splitter sah. */
+    needlesRepaired: ${needlesRepaired},
+    needleCount: ${terrainNeedleCount},
+    cliffPlateaus: ${cliffPlateaus.plateaus},
+    cliffPlateauTiles: ${cliffPlateaus.plateauTiles},
   },
+  /**
+   * § Modelltreue 13.0 — die verbindliche Kennzahl dieses Auftrags: Wie stark
+   * weicht das ausgelieferte Höhenfeld von der Quell-GLB ab? Gemessen wird
+   * jeder Landknoten des Rasters gegen seine reine Modellhöhe; \`changedNodes\`
+   * zählt Abweichungen über 5 cm. Im Treue-Modus MUSS das 0 sein.
+   */
+  modelFidelity: {
+    terrainMode: '${RAW_TERRAIN_FIDELITY ? 'raw' : 'flatten'}',
+    landNodes: ${modelFidelity.landNodes},
+    changedNodes: ${modelFidelity.changedNodes},
+    changedShare: ${modelFidelity.changedShare},
+    meanAbsDelta: ${modelFidelity.meanAbsDelta},
+    maxAbsDelta: ${modelFidelity.maxAbsDelta},
+    meanModelHeight: ${modelFidelity.meanModelHeight},
+    meanWorldHeight: ${modelFidelity.meanWorldHeight},
+  },
+  /** Inselweit mögliche 2×2-Anlegerplätze (Klippenküste ⇒ bewusst selten). */
+  harbourPads: ${islandHarbourPads},
 } as const;
 
 /** Terrain-Typ je ID im Grid (Index = gespeicherter Byte-Wert). */
@@ -2321,7 +3227,7 @@ const hRange = hMax - hMin;
 const HQ = new Uint16Array(GRID * GRID);
 for (let i = 0; i < HW.length; i++) HQ[i] = Math.round(((HW[i] - hMin) / hRange) * 65535);
 const heightTs = `// AUTO-GENERIERT von tools/bakeWorld.mjs — NICHT von Hand editieren.
-// Quelle: reference/world/island 3d new.glb (§ 10.0 R7/R8 World Compaction 3.0 (weiches Uferprofil)).
+// Quelle: ${SOURCE_LABEL} (§ World Overhaul 12.0 — neue Insel, Terraforming vor Segmentierung).
 // ${GRID}×${GRID} Höhen-Samples (${SAMPLES_PER_TILE}/Kachel + 1), Uint16-quantisiert.
 // Neu erzeugen: \`node tools/bakeWorld.mjs\`.
 /* eslint-disable */
@@ -2446,6 +3352,79 @@ console.log('— geschrieben: src/renderer/three/worldMasks.gen.ts');
     writeFileSync(output, mapPng);
   }
   console.log('— geschrieben: tools/bake-preview.png');
+
+  // 8c-bis. § World Overhaul 12.0 — REGIONSKARTE als zweite Kontrollausgabe.
+  // Die Hypsometrie zeigt die Landschaft, nicht die Regionsstruktur. Für
+  // `regions.config.ts` (Namen, Progression, Nachbarschaft) und die Region-Doku
+  // braucht es eine Karte, auf der die Regionen unterscheidbar und beschriftet
+  // sind. Reine Diagnose-/Doku-Ausgabe; nichts davon wird zur Laufzeit geladen.
+  const REGION_COLORS = [
+    [206, 92, 92], [92, 154, 206], [214, 176, 84], [126, 186, 108], [176, 118, 196],
+    [96, 190, 178], [222, 138, 92], [140, 150, 214], [186, 200, 96], [206, 118, 164],
+    [110, 168, 132], [178, 132, 96], [128, 196, 214], [162, 162, 162],
+  ];
+  // 3×5-Pixelfont, nur Ziffern — genug für die Region-Ids im Bild.
+  const DIGITS = [
+    '111101101101111', '010010010010010', '111001111100111', '111001111001111', '101101111001001',
+    '111100111001111', '111100111101111', '111001001001001', '111101111101111', '111101111001111',
+  ];
+  const rpx = Buffer.alloc(S * S * 3);
+  for (let ty = 0; ty < S; ty++) {
+    for (let tx = 0; tx < S; tx++) {
+      const o = ty * S + tx;
+      const rid = regionGrid[o];
+      let color;
+      if (rid === 0) color = isWaterCand[o] ? [22, 52, 96] : [60, 66, 72];
+      else {
+        const base = REGION_COLORS[(rid - 1) % REGION_COLORS.length];
+        // Bebaubares Land satt, unbebaubares Land derselben Region blass —
+        // dadurch ist auf einen Blick sichtbar, was eine Region wirklich hergibt.
+        const mul = buildableMask[o] ? 1 : 0.52;
+        color = [base[0] * mul, base[1] * mul, base[2] * mul];
+        if (isWaterCand[o]) color = [base[0] * 0.32 + 22, base[1] * 0.32 + 52, base[2] * 0.32 + 96];
+      }
+      rpx[o * 3] = color[0]; rpx[o * 3 + 1] = color[1]; rpx[o * 3 + 2] = color[2];
+    }
+  }
+  const stamp = (text, atX, atY, color) => {
+    let cursor = atX;
+    for (const char of text) {
+      const glyph = DIGITS[Number(char)];
+      if (glyph) {
+        for (let gy = 0; gy < 5; gy++) {
+          for (let gx = 0; gx < 3; gx++) {
+            if (glyph[gy * 3 + gx] !== '1') continue;
+            for (let sy = 0; sy < 2; sy++) {
+              for (let sx = 0; sx < 2; sx++) {
+                const px2 = cursor + gx * 2 + sx, py2 = atY + gy * 2 + sy;
+                if (px2 < 0 || py2 < 0 || px2 >= S || py2 >= S) continue;
+                const o = py2 * S + px2;
+                rpx[o * 3] = color[0]; rpx[o * 3 + 1] = color[1]; rpx[o * 3 + 2] = color[2];
+              }
+            }
+          }
+        }
+      }
+      cursor += 8;
+    }
+  };
+  for (const region of regions) stamp(String(region.id), region.centroid.x - 4, region.centroid.y - 5, [16, 16, 16]);
+  // Rathaus als weißes 5×5-Quadrat mit schwarzem Rand.
+  for (let dy = -1; dy <= 5; dy++) {
+    for (let dx = -1; dx <= 5; dx++) {
+      const px2 = townHall.x + dx, py2 = townHall.y + dy;
+      if (px2 < 0 || py2 < 0 || px2 >= S || py2 >= S) continue;
+      const edge = dx < 0 || dy < 0 || dx > 4 || dy > 4;
+      const o = py2 * S + px2;
+      rpx[o * 3] = edge ? 0 : 255; rpx[o * 3 + 1] = edge ? 0 : 255; rpx[o * 3 + 2] = edge ? 0 : 255;
+    }
+  }
+  const rraw = Buffer.alloc((S * 3 + 1) * S);
+  for (let y = 0; y < S; y++) { rraw[y * (S * 3 + 1)] = 0; rpx.copy(rraw, y * (S * 3 + 1) + 1, y * S * 3, (y + 1) * S * 3); }
+  writeFileSync(join(ROOT, 'tools', 'bake-regions.png'), Buffer.concat([
+    Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]), chunk('IHDR', ihdr), chunk('IDAT', zlib.deflateSync(rraw)), chunk('IEND', Buffer.alloc(0)),
+  ]));
+  console.log('— geschrieben: tools/bake-regions.png');
 }
 
 // 8d. Report.
@@ -2464,21 +3443,24 @@ console.log('— geschrieben: src/renderer/three/worldMasks.gen.ts');
   const candidateRows = startAreaCandidates.slice(0, 10)
     .map((candidate, index) => `| ${index + 1} | ${candidate.regionId} | (${candidate.center.x},${candidate.center.y}) | ${candidate.buildableTiles} | ${candidate.earlyBuildable} | ${candidate.centralityScore.toFixed(3)} | ${candidate.flatnessScore.toFixed(3)} | ${candidate.expansionDirectionScore.toFixed(3)} | ${candidate.resourceAccessScore.toFixed(3)} | ${candidate.infrastructureScore.toFixed(3)} | ${candidate.waterRisk.toFixed(3)} | ${candidate.cliffRisk.toFixed(3)} | ${candidate.totalScore.toFixed(2)} |`)
     .join('\n');
-  const report = `# Bake-Report — § 10.0 R7/R8 World Compaction 3.0 (weiches Uferprofil)
+  const report = `# Bake-Report — § World Overhaul 12.0 (neue Insel)
 
 > **Auto-generiert** von \`tools/bakeWorld.mjs\`. Nicht von Hand editieren.
 
 ## Eckdaten
 
-- Quelle: \`reference/world/island 3d new.glb\` (${triCount.toLocaleString('de-DE')} Dreiecke gerastert)
+- Quelle: \`${SOURCE_LABEL}\` (${triCount.toLocaleString('de-DE')} Dreiecke gerastert)
 - Source-SHA-256: \`${SOURCE_SHA256}\`
 - Welt: ${WORLD_TILES}×${WORLD_TILES} Kacheln, ${regions.length} organische Regionen (+ Ozean)
 - Horizontale Quellspannweite: ${WORLD_TILES - OCEAN_MARGIN_TILES * 2} statt ${WORLD_TILES - PREVIOUS_OCEAN_MARGIN_TILES * 2} Kacheln; Faktor ${((WORLD_TILES - OCEAN_MARGIN_TILES * 2) / (WORLD_TILES - PREVIOUS_OCEAN_MARGIN_TILES * 2)).toFixed(4)} (Fläche ≈ ${Math.pow((WORLD_TILES - OCEAN_MARGIN_TILES * 2) / (WORLD_TILES - PREVIOUS_OCEAN_MARGIN_TILES * 2), 2).toFixed(4)})
 - Ozeanrand: ${OCEAN_MARGIN_TILES} Kacheln; separate Y-Skalierung: Gipfel ≈ ${PEAK_WORLD_HEIGHT} Welt-Einheiten
 - Wasserlinie (normalisiert): ${PREVIOUS_WATERLINE_N} → ${WATERLINE_N}; Höhenbereich Welt: [${hMin.toFixed(2)}, ${hMax.toFixed(2)}]
 - Bebaubare Kacheln: ${BASELINE_BUILDABLE_TILES.toLocaleString('de-DE')} → ${totalBuildable.toLocaleString('de-DE')} (${(buildableRatio * 100).toFixed(1)} %, Änderung ${((buildableRatio - 1) * 100).toFixed(1)} %)
-- Terraforming (§ Map Flattening B1): ${TERRAFORM_ROUNDS} Runden × ${TERRAFORM_ITERATIONS} Iterationen, Hang-Tor ${TERRAFORM_SLOPE_GATE}, Massiv > ${MOUNTAIN_HEIGHT} ausgenommen
-- Glättung bebaubaren Landes: ${SMOOTH_ITERATIONS} Iterationen, max. Schritt ${MAX_BUILDABLE_STEP}/Sample, Bebaubar-Hang ≤ ${MAX_BUILDABLE_TILE_SLOPE}
+- Geländebearbeitung: ${RAW_TERRAIN_FIDELITY
+  ? `**keine** (§ Modelltreue 13.0 — die GLB IST das Gelände)`
+  : `Terraforming ${TERRAFORM_ROUNDS} Runden × ${TERRAFORM_ITERATIONS} Iterationen, Hang-Tor ${TERRAFORM_SLOPE_GATE}, Massiv > ${MOUNTAIN_HEIGHT} ausgenommen; Glättung ${SMOOTH_ITERATIONS} Iterationen, max. Schritt ${MAX_BUILDABLE_STEP}/Sample`}
+- **Modelltreue: ${modelFidelity.changedNodes.toLocaleString('de-DE')} von ${modelFidelity.landNodes.toLocaleString('de-DE')} Landknoten verändert** (${(100 * modelFidelity.changedShare).toFixed(1)} %), Ø |Δ| ${modelFidelity.meanAbsDelta} m, max ${modelFidelity.maxAbsDelta} m; Ø Landhöhe Modell ${modelFidelity.meanModelHeight} m → Welt ${modelFidelity.meanWorldHeight} m
+- Bebaubar-Hang ≤ ${FLAT_MAX_BUILDABLE_TILE_SLOPE}, mindestens ${FLAT_MIN_ORTHOGONAL_BUILDABLE} orthogonale Nachbarn
 - Gebirge: ab Höhe ${MOUNTAIN_HEIGHT}, ODER Hang ≥ ${MOUNTAIN_SLOPE} oberhalb Höhe ${MOUNTAIN_SLOPE_MIN_HEIGHT}
 - Regions-Parameter: Ziel ~${REGION_TARGET_TILES} Kacheln, min. ${REGION_MIN_TILES} (sonst Merge), Kosten fremdes Biom +${COST_FOREIGN_BIOME} / Fluss +${COST_CROSS_RIVER} / Höhe ×${COST_HEIGHT_FACTOR}
 - Infrastruktur-Hooks: ${bridgeCandidates.length} Brücken, ${elevatedRoadCandidates.length} Viadukte, ${tunnelCandidates.length} Tunnel, ${harborCandidates.length} Häfen, ${waterRouteNodes.length} Wasserwegknoten
@@ -2493,8 +3475,12 @@ ${T_NAMES.map((n, i) => `- ${n}: ${counts[i].toLocaleString('de-DE')} (${(100 * 
 - Sanftes Flussufer: ${shoreCounts[2].toLocaleString('de-DE')} Kacheln
 - Sanftes Seeufer: ${shoreCounts[3].toLocaleString('de-DE')} Kacheln
 - Bewusste Steilküste: ${shoreCounts[4].toLocaleString('de-DE')} Kacheln
+- Inselweit mögliche 2×2-Anlegerplätze: ${islandHarbourPads.toLocaleString('de-DE')}
 - Direkt wassernahe und bebaubare Uferkacheln: ${waterfrontBuildable.toLocaleString('de-DE')}
 - Garantierte 5×5-Uferplattformen: ${waterfrontAprons.length}
+- § 12.2 Geländenadeln („Klippen-Zacken") entfernt: ${needlesRepaired}; verbleibend: **${terrainNeedleCount}**
+- § 12.2 Klippen-Plateaus: ${cliffPlateaus.plateaus} Abschnitte, ${cliffPlateaus.plateauTiles} Kacheln eingeebnet
+- § 12.2 Steilküste nur mit echtem Relief: Hinterland ≥ ${CLIFF_ZONE_MIN_RELIEF} m im Umkreis ${CLIFF_ZONE_RELIEF_RADIUS}
 
 ## Zentraler Start (vom Bake gewählt und validiert)
 

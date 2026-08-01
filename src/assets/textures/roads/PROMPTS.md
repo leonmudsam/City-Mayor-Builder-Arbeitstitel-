@@ -5,9 +5,23 @@
 > `WRITE_ROAD_DOCS=1 npx vitest run tests/roadTextures.test.ts` (schreibt diese Datei neu).
 > Der Test schlägt fehl, sobald die Doku veraltet ist.
 
-Genaue Anweisungen zum Erstellen und Ablegen jeder der 6 Straßen-/Brücken-Texturen (§ Straßen als Textur). Für das Gesamtkonzept (Splatmap-artige Verwendung, Kreisverkehr/Bergstraße/Steg-Logik) siehe `docs/ROAD_TEXTURES.md`.
+Genaue Anweisungen zum Erstellen und Ablegen jeder der 7 Straßen-/Brücken-Texturen (§ Straßen als Textur). Für das Gesamtkonzept (Splatmap-artige Verwendung, Kreisverkehr/Bergstraße/Steg-Logik) siehe `docs/ROAD_TEXTURES.md`.
 
 ## Fahrbahn-Oberflächen — `src/assets/textures/roads/surface/`
+
+### `road_path_cartoon.png`
+
+1. **Prompt eingeben** (unverändert kopieren):
+
+   ```text
+   Seamless tileable stylized road-surface texture for a premium low-poly city-builder game. Soft painterly look, natural subtle wear, no baked lighting, no shadows, top-down orthographic view, perfect seamless edges along the tiling axis, PBR-ready — warm honey-beige packed earth, exceptionally calm broad painterly fields, virtually no gravel or micro detail, no borders and no lane markings
+   ```
+
+2. **Format/Auflösung:** PNG (kein Alphakanal nötig), 1024×1024, quadratisch, seamless/nahtlos kachelbar an allen vier Rändern (kein sichtbarer Bruch bei Wiederholung).
+3. **Genau hier speichern:** `src/assets/textures/roads/surface/road_path_cartoon.png`
+4. **Was passiert dann:** Wird automatisch erkannt (Datei-Watcher/Reload reicht) — kein Code, kein Neustart nötig. Solange die Datei fehlt, bleibt die aktuelle Flächenfarbe aktiv.
+
+*Kontext:* Frühe Bodenstraßen und Wege im zusammenhängenden geglätteten Straßennetz. Gespiegelte World-Space-UVs auf dem gebündelten Fahrbahnband; ersetzt die dunkle Prototyp-Fläche ohne Richtungsnaht oder Kachelraster. Priorität: **Pflicht**.
 
 ### `road_asphalt.png`
 

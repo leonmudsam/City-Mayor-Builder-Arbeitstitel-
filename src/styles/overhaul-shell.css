@@ -1,0 +1,1042 @@
+/*
+ * Full-Overhaul: ruhige Detailflächen und kompakte Welt-Navigation.
+ * Diese letzte Präsentationsschicht besitzt keine Gameplay-Verantwortung.
+ */
+
+:root {
+  --overhaul-sheet-width: min(470px, calc(100vw - 112px));
+  --overhaul-right-stack-width: 286px;
+}
+
+/* Wirtschaft: eine Entscheidungsebene, Tiefendaten erst auf Wunsch. */
+.economy-panel-simple,
+.mayor-panel-simple {
+  width: var(--overhaul-sheet-width);
+  max-width: 470px;
+  gap: 12px;
+  padding: 15px;
+  overflow-y: auto;
+}
+
+.economy-hero {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  overflow: hidden;
+  border: 1px solid rgba(154, 190, 207, 0.18);
+  border-radius: 13px;
+  background:
+    radial-gradient(circle at 84% -20%, rgba(96, 207, 219, 0.12), transparent 48%),
+    rgba(3, 19, 28, 0.72);
+}
+
+.economy-hero > div {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 13px;
+  border-right: 1px solid rgba(154, 190, 207, 0.13);
+}
+
+.economy-hero > div:last-child {
+  border-right: 0;
+  background: rgba(96, 211, 139, 0.055);
+}
+
+.economy-hero > div.negative {
+  background: rgba(191, 55, 48, 0.1);
+}
+
+.economy-hero > div.negative strong {
+  color: #ff8c7d;
+}
+
+.economy-hero > div.positive strong {
+  color: #83df9d;
+}
+
+.economy-hero span,
+.economy-hero small,
+.economy-focus-card small {
+  color: #8fa8b3;
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0.055em;
+  text-transform: uppercase;
+}
+
+.economy-hero strong {
+  overflow: hidden;
+  color: #f8f3e8;
+  font-size: 19px;
+  font-variant-numeric: tabular-nums;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.economy-boost-line {
+  padding: 8px 10px;
+  color: #9be5ad;
+  border: 1px solid rgba(101, 213, 139, 0.22);
+  border-radius: 9px;
+  background: rgba(48, 139, 77, 0.1);
+  font-size: 11px;
+}
+
+.economy-focus-card {
+  display: grid;
+  grid-template-columns: 38px minmax(0, 1fr) minmax(0, 1fr);
+  align-items: center;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid rgba(241, 195, 93, 0.26);
+  border-radius: 12px;
+  background:
+    linear-gradient(90deg, rgba(241, 195, 93, 0.08), transparent 42%),
+    rgba(9, 34, 46, 0.72);
+}
+
+.economy-focus-icon {
+  width: 36px;
+  height: 36px;
+  display: grid;
+  place-items: center;
+  color: #f2cb73;
+  border: 1px solid rgba(241, 195, 93, 0.28);
+  border-radius: 10px;
+  background: rgba(241, 195, 93, 0.08);
+}
+
+.economy-focus-card > div {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.economy-focus-card > div:last-child {
+  padding-left: 10px;
+  border-left: 1px solid rgba(154, 190, 207, 0.15);
+}
+
+.economy-focus-card > div:last-child > svg {
+  color: #f0756d;
+}
+
+.economy-focus-card strong,
+.economy-focus-card span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.economy-focus-card strong {
+  color: #f5efe3;
+  font-size: 12px;
+}
+
+.economy-focus-card span {
+  color: #8ce1a3;
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.economy-focus-card > div:last-child span {
+  color: #f38a7e;
+}
+
+.economy-details,
+.mayor-details {
+  border: 1px solid rgba(154, 190, 207, 0.16);
+  border-radius: 10px;
+  background: rgba(4, 20, 29, 0.54);
+}
+
+.economy-details > summary,
+.mayor-details > summary {
+  min-height: 40px;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 0 11px;
+  color: #c0d0d5;
+  font-size: 11px;
+  font-weight: 800;
+  cursor: pointer;
+  list-style: none;
+}
+
+.economy-details > summary::after,
+.mayor-details > summary::after {
+  content: "⌄";
+  margin-left: auto;
+  color: #f1c35d;
+}
+
+.economy-details[open] > summary,
+.mayor-details[open] > summary {
+  border-bottom: 1px solid rgba(154, 190, 207, 0.13);
+}
+
+.economy-rows,
+.economy-tax,
+.mayor-details .buff-list,
+.mayor-details .message-feed {
+  display: grid;
+  gap: 7px;
+  padding: 10px;
+}
+
+.economy-row,
+.economy-employment {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  color: #a9bbc2;
+  font-size: 11px;
+}
+
+.economy-row-name,
+.economy-employment {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.economy-row strong {
+  color: #8ce1a3;
+}
+
+.economy-employment,
+.economy-note {
+  margin: 0 10px 10px;
+}
+
+/* Stadtverwaltung: keine doppelte Finanzseite, sondern klare Stadtaktionen. */
+.mayor-hero {
+  display: grid;
+  grid-template-columns: 50px minmax(0, 1fr);
+  align-items: center;
+  gap: 11px;
+  padding: 12px;
+  border: 1px solid rgba(154, 190, 207, 0.18);
+  border-radius: 13px;
+  background:
+    radial-gradient(circle at 92% 0, rgba(92, 187, 211, 0.13), transparent 48%),
+    rgba(5, 26, 36, 0.76);
+}
+
+.mayor-hero.is-ready {
+  border-color: rgba(101, 213, 139, 0.27);
+}
+
+.mayor-hero-icon {
+  width: 48px;
+  height: 48px;
+  display: grid;
+  place-items: center;
+  color: #f2ce7e;
+  border: 1px solid rgba(241, 195, 93, 0.3);
+  border-radius: 13px;
+  background: rgba(241, 195, 93, 0.08);
+}
+
+.mayor-hero > div {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.mayor-hero small,
+.mayor-shortcuts small,
+.mayor-section-title small {
+  color: #86a4b0;
+  font-size: 9px;
+  font-weight: 850;
+  letter-spacing: 0.055em;
+  text-transform: uppercase;
+}
+
+.mayor-hero strong {
+  color: #f8f1e1;
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: 17px;
+}
+
+.mayor-hero > div > span {
+  color: #a5bbc3;
+  font-size: 10px;
+  line-height: 1.4;
+}
+
+.mayor-shortcuts {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.mayor-shortcuts button {
+  min-width: 0;
+  min-height: 52px;
+  display: grid;
+  grid-template-columns: 30px minmax(0, 1fr);
+  align-items: center;
+  gap: 7px;
+  padding: 8px;
+  color: #a8c3cc;
+  border: 1px solid rgba(154, 190, 207, 0.16);
+  border-radius: 10px;
+  background: rgba(11, 38, 49, 0.67);
+  text-align: left;
+}
+
+.mayor-shortcuts button:hover {
+  color: #f1d17e;
+  border-color: rgba(241, 195, 93, 0.42);
+}
+
+.mayor-shortcuts button > span {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.mayor-shortcuts strong {
+  overflow: hidden;
+  color: #edf3f3;
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mayor-decision {
+  display: grid;
+  gap: 8px;
+  padding: 11px;
+  border: 1px solid rgba(241, 195, 93, 0.23);
+  border-radius: 12px;
+  background:
+    radial-gradient(circle at 100% 0, rgba(241, 195, 93, 0.09), transparent 46%),
+    rgba(5, 23, 33, 0.72);
+}
+
+.mayor-section-title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.mayor-section-title > div {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.mayor-section-title strong {
+  overflow: hidden;
+  color: #fff0c9;
+  font-size: 13px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mayor-section-title > svg {
+  color: #f1c35d;
+}
+
+.mayor-panel-simple .mayor-actions {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 6px;
+}
+
+.mayor-panel-simple .mayor-action {
+  min-height: 48px;
+  padding: 8px 10px;
+  border-color: rgba(154, 190, 207, 0.14);
+  background: rgba(12, 39, 50, 0.66);
+}
+
+.mayor-panel-simple .mayor-action.is-primary {
+  border-color: rgba(101, 213, 139, 0.34);
+  background: rgba(49, 133, 73, 0.14);
+}
+
+.mayor-panel-simple .mayor-action-name {
+  color: #f1f1e9;
+  font-size: 12px;
+}
+
+.mayor-panel-simple .mayor-action-desc {
+  font-size: 10px;
+  line-height: 1.35;
+}
+
+.mayor-build-cta {
+  min-height: 58px;
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1fr);
+  align-items: center;
+  gap: 9px;
+  padding: 9px 11px;
+  color: #fff3d0;
+  border: 1px solid rgba(241, 195, 93, 0.48);
+  border-radius: 10px;
+  background: linear-gradient(135deg, rgba(183, 126, 35, 0.35), rgba(83, 55, 13, 0.42));
+  box-shadow: inset 0 1px rgba(255, 244, 205, 0.1);
+  text-align: left;
+}
+
+.mayor-build-cta:hover {
+  border-color: rgba(255, 219, 137, 0.78);
+  background: linear-gradient(135deg, rgba(205, 146, 43, 0.42), rgba(95, 63, 14, 0.5));
+}
+
+.mayor-build-cta > span {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.mayor-build-cta strong {
+  font-size: 13px;
+}
+
+.mayor-build-cta small {
+  overflow: hidden;
+  color: #d0bd91;
+  font-size: 10px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Die Minimap hilft bei Orientierung, dominiert aber nicht mehr die Stadt. */
+.world-minimap {
+  width: 236px;
+  padding: 8px;
+  border-radius: 13px;
+}
+
+.world-minimap-head {
+  height: 28px;
+  font-size: 11px;
+}
+
+.world-minimap-map {
+  width: 218px;
+  height: 164px;
+  border-radius: 12px;
+}
+
+.world-minimap-map canvas {
+  width: 218px;
+  height: 218px;
+  transform: translateY(-27px);
+}
+
+.world-minimap-region {
+  padding: 7px 3px 2px;
+}
+
+.world-minimap-region > span,
+.world-minimap-region small {
+  font-size: 8px;
+}
+
+.world-minimap-region strong,
+.world-minimap-region b {
+  font-size: 10px;
+}
+
+.right-hud-stack {
+  right: 12px;
+  bottom: 244px;
+  width: var(--overhaul-right-stack-width);
+}
+
+.right-hud-stack .citizen-requests {
+  width: 100%;
+  max-width: 100%;
+}
+
+.camera-controls {
+  right: 258px;
+}
+
+@media (max-width: 1180px) {
+  :root {
+    --overhaul-sheet-width: min(430px, calc(100vw - 94px));
+    --overhaul-right-stack-width: 240px;
+  }
+
+  .hud-environment {
+    display: flex;
+    flex-basis: 150px;
+    width: 150px;
+    min-width: 150px;
+    gap: 3px;
+    padding-inline: 5px;
+  }
+
+  .hud-environment-copy {
+    display: none;
+  }
+
+  .hud-env-speeds button {
+    min-width: 22px;
+    padding-inline: 2px;
+  }
+
+  .city-status.city-status-compact {
+    display: flex;
+    width: 246px;
+  }
+
+  .world-minimap {
+    width: 210px;
+  }
+
+  .world-minimap-map {
+    width: 192px;
+    height: 148px;
+  }
+
+  .world-minimap-map canvas {
+    width: 192px;
+    height: 192px;
+    transform: translateY(-22px);
+  }
+
+  .right-hud-stack {
+    display: flex;
+    bottom: 226px;
+    width: var(--overhaul-right-stack-width);
+  }
+
+  .right-hud-stack .citizen-requests {
+    width: 100%;
+  }
+
+  .camera-controls {
+    right: 230px;
+  }
+}
+
+/* -------------------------------------------------------------------------- */
+/* HUD-Proportions 1.16: mehr Welt, weniger dauerhafte Rahmenfläche.           */
+/* -------------------------------------------------------------------------- */
+
+/* Die Kernwerte bleiben eine gemeinsame Kapsel, füllen aber nicht länger den
+   gesamten freien Monitor. Zeit und Systemaktionen bleiben rechts verankert. */
+.game-hud {
+  justify-content: flex-start;
+}
+
+.hud-level {
+  flex: 0 0 260px;
+  width: 260px;
+  min-width: 260px;
+}
+
+.hud-level-text {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.hud-brand-name {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.hud-resources {
+  flex: 0 1 650px;
+  width: clamp(510px, 34vw, 650px);
+  min-width: 510px;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  margin-right: auto;
+  border-color: rgba(202, 217, 218, 0.2);
+  border-radius: 28px;
+  background:
+    radial-gradient(circle at 48% -70%, rgba(67, 148, 177, 0.13), transparent 55%),
+    rgba(3, 18, 28, 0.78);
+}
+
+.hud-resources .res-card {
+  padding-inline: 7px;
+}
+
+.hud-resources .res-card-icon {
+  width: 28px;
+  height: 28px;
+  flex-basis: 28px;
+  border-radius: 50%;
+}
+
+.hud-resources .res-card-icon .res-art {
+  width: 25px;
+  height: 25px;
+}
+
+.hud-resources .res-card-value {
+  font-size: clamp(13px, 0.78vw, 15px);
+}
+
+/* Navigation: gleiche kleine Grundfläche, aber deutlichere Zustände und
+   lesbarere Beschriftung. */
+.primary-nav,
+.quick-actions.nav-overflow {
+  border-color: rgba(214, 188, 126, 0.26);
+  border-radius: 12px;
+  background:
+    linear-gradient(90deg, rgba(241, 195, 93, 0.045), transparent 48%),
+    linear-gradient(165deg, rgba(7, 29, 41, 0.975), rgba(3, 17, 27, 0.975));
+  box-shadow: 0 13px 30px rgba(0, 6, 11, 0.38), inset 0 1px rgba(255, 245, 216, 0.035);
+}
+
+.primary-nav {
+  gap: 1px;
+  padding: 5px;
+}
+
+.primary-nav-btn {
+  width: 60px;
+  min-height: 52px;
+  gap: 2px;
+  color: #bdcbd1;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+}
+
+.primary-nav-icon {
+  width: 29px;
+  height: 27px;
+  color: #dce5e7;
+  border-radius: 8px;
+  background: rgba(151, 187, 200, 0.045);
+}
+
+.primary-nav-btn.active .primary-nav-icon,
+.primary-nav-btn.featured.active .primary-nav-icon {
+  color: #ffe6a2;
+  background: rgba(241, 195, 93, 0.13);
+  box-shadow: 0 0 14px rgba(241, 195, 93, 0.08);
+}
+
+/* Stadtstatus und Anliegen beantworten nur noch die nächste Entscheidung. */
+.city-status.city-status-compact {
+  width: 286px;
+  gap: 8px;
+  padding: 10px;
+}
+
+.status-compact-title strong,
+.citizen-requests .hud-panel-head h3 {
+  font-size: 15px;
+  letter-spacing: 0.005em;
+}
+
+.status-overview {
+  min-height: 36px;
+  padding: 4px 8px;
+}
+
+.status-overview strong {
+  font-size: 22px;
+}
+
+.status-overview span,
+.status-compact-metric > span {
+  color: #c1d0d5;
+  font-size: 10px;
+}
+
+.status-next-action {
+  min-height: 49px;
+  padding-block: 6px;
+}
+
+.right-hud-stack {
+  bottom: 226px;
+  width: 274px;
+}
+
+.right-hud-stack .citizen-requests {
+  gap: 7px;
+  padding: 10px;
+}
+
+.citizen-requests .hud-panel-head {
+  padding-bottom: 6px;
+}
+
+.request-card.request-card-compact {
+  gap: 5px;
+  padding: 7px;
+}
+
+.request-card-compact .request-avatar,
+.request-card-compact .request-avatar .portrait,
+.request-card-compact .request-avatar .citizen-portrait {
+  width: 38px;
+  height: 38px;
+}
+
+.request-card-compact .request-task {
+  font-size: 10.5px;
+}
+
+.request-next-step {
+  color: #b3c3c8;
+  font-size: 9px;
+}
+
+/* Laufende Stadtarbeit ist ein Status-Chip mit Zugriff auf alle drei Aktionen,
+   kein zweites Missionsfenster. */
+.citywork-execution {
+  left: clamp(92px, 14.5vw, 278px);
+  bottom: 76px;
+  width: min(410px, calc(100vw - 390px));
+  min-width: 350px;
+  grid-template-columns: 58px minmax(0, 1fr);
+  gap: 7px 9px;
+  padding: 8px;
+  border-radius: 11px;
+}
+
+.citywork-execution-art {
+  min-height: 58px;
+  border-radius: 8px;
+}
+
+.citywork-execution-art img {
+  width: 108%;
+  height: 108%;
+  filter: drop-shadow(0 4px 5px rgba(0, 0, 0, 0.34));
+}
+
+.citywork-execution-art span {
+  left: 4px;
+  right: 4px;
+  bottom: 4px;
+  justify-content: center;
+  padding: 2px 3px;
+  font-size: 7px;
+  letter-spacing: 0.02em;
+}
+
+.citywork-execution-copy > small {
+  font-size: 9px;
+  letter-spacing: 0.05em;
+}
+
+.citywork-execution-copy > strong {
+  font-size: 13px;
+}
+
+.citywork-execution-copy > p {
+  margin: 2px 0 4px;
+  font-size: 10px;
+}
+
+.citywork-execution-progress {
+  height: 4px;
+}
+
+.citywork-execution-stats {
+  gap: 8px;
+  margin-top: 3px;
+  font-size: 9px;
+}
+
+.citywork-execution-actions {
+  gap: 5px;
+}
+
+.citywork-execution-actions button {
+  min-height: 27px;
+  padding-inline: 7px;
+  font-size: 9px;
+}
+
+/* Der Info-Layer startet als eine kleine Statuskapsel. Alle bisherigen Filter
+   bleiben über denselben Schalter erreichbar. */
+.info-layer-control {
+  min-width: 0;
+  width: auto;
+  max-width: calc(100vw - 210px);
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0;
+  padding: 0;
+  overflow: hidden;
+  border-radius: 11px;
+}
+
+.info-layer-control.is-collapsed {
+  width: 244px;
+}
+
+.info-layer-control.is-expanded {
+  width: min(700px, calc(100vw - 210px));
+}
+
+.info-layer-summary {
+  width: 100%;
+  min-height: 38px;
+  display: grid;
+  grid-template-columns: 19px minmax(78px, auto) minmax(0, 1fr) auto 18px;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 9px;
+  color: #d8e4e7;
+  text-align: left;
+  background:
+    linear-gradient(90deg, rgba(241, 195, 93, 0.07), transparent 50%),
+    rgba(5, 24, 34, 0.92);
+}
+
+.info-layer-summary > svg:first-child {
+  color: #f1c35d;
+}
+
+.info-layer-summary-title {
+  color: #f1cf7c;
+  font-size: 9px;
+  font-weight: 900;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.info-layer-summary-mode {
+  min-width: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 4px;
+  overflow: hidden;
+  color: #bed0d6;
+  font-size: 9px;
+  font-weight: 750;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.info-layer-summary > i {
+  padding: 2px 5px;
+  color: #83d9e9;
+  border-radius: 8px;
+  background: rgba(74, 169, 192, 0.1);
+  font-size: 7px;
+  font-style: normal;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.info-layer-chevron {
+  grid-column: -2 / -1;
+  transition: transform 140ms ease;
+}
+
+.info-layer-control.is-collapsed .info-layer-chevron {
+  transform: rotate(180deg);
+}
+
+.info-layer-options {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 5px;
+  padding: 5px;
+  border-top: 1px solid rgba(154, 190, 207, 0.14);
+}
+
+.info-layer-options .info-layer-modes {
+  min-width: 0;
+}
+
+.info-layer-options .info-layer-modes button {
+  min-width: 0;
+  height: 34px;
+  padding-inline: 6px;
+}
+
+.info-layer-options .infrastructure-layer-select {
+  height: 34px;
+}
+
+/* Kompakter Ausschnitt statt großer zweiter Karte. */
+.world-minimap {
+  right: 10px;
+  bottom: 10px;
+  width: 214px;
+  padding: 7px;
+}
+
+.world-minimap-head {
+  height: 25px;
+  font-size: 10px;
+}
+
+.world-minimap-actions button {
+  width: 23px;
+  height: 23px;
+}
+
+.world-minimap-map {
+  width: 198px;
+  height: 146px;
+  border-radius: 10px;
+}
+
+.world-minimap-map canvas {
+  width: 198px;
+  height: 198px;
+  transform: translateY(-26px);
+}
+
+.world-minimap-region {
+  padding: 5px 2px 1px;
+}
+
+.world-minimap-region > span,
+.world-minimap-region small {
+  font-size: 7.5px;
+}
+
+.world-minimap-region strong,
+.world-minimap-region b {
+  font-size: 9px;
+}
+
+.camera-controls {
+  right: 226px;
+}
+
+@media (max-width: 1360px) {
+  .hud-level {
+    flex-basis: 218px;
+    width: 218px;
+    min-width: 218px;
+  }
+
+  .hud-resources {
+    flex-basis: 480px;
+    width: min(480px, 37vw);
+    min-width: 430px;
+  }
+
+  .hud-environment {
+    flex-basis: 190px;
+    width: 190px;
+    min-width: 190px;
+  }
+}
+
+@media (max-width: 1180px) {
+  .hud-level {
+    flex-basis: 188px;
+    width: 188px;
+    min-width: 188px;
+  }
+
+  .hud-brand-name {
+    font-size: 16px;
+  }
+
+  .hud-level-label {
+    display: none;
+  }
+
+  .hud-resources {
+    flex-basis: 405px;
+    width: 405px;
+    min-width: 390px;
+  }
+
+  .hud-resources .res-card {
+    padding-inline: 4px;
+  }
+
+  .hud-environment {
+    flex-basis: 146px;
+    width: 146px;
+    min-width: 146px;
+  }
+
+  .city-status.city-status-compact {
+    width: 236px;
+  }
+
+  .right-hud-stack {
+    bottom: 210px;
+    width: 232px;
+  }
+
+  .world-minimap {
+    width: 190px;
+  }
+
+  .world-minimap-map {
+    width: 174px;
+    height: 130px;
+  }
+
+  .world-minimap-map canvas {
+    width: 174px;
+    height: 174px;
+    transform: translateY(-22px);
+  }
+
+  .camera-controls {
+    right: 202px;
+  }
+
+  .citywork-execution {
+    left: 88px;
+    width: 350px;
+    min-width: 350px;
+  }
+
+  .info-layer-control.is-collapsed {
+    width: 220px;
+  }
+
+  .info-layer-control.is-expanded {
+    width: min(650px, calc(100vw - 188px));
+  }
+
+  .info-layer-summary-title {
+    display: none;
+  }
+
+  .info-layer-summary {
+    grid-template-columns: 19px minmax(0, 1fr) auto 18px;
+  }
+}
+
+@media (max-height: 760px) {
+  .primary-nav-btn {
+    min-height: 46px;
+  }
+
+  .city-status.city-status-compact {
+    gap: 6px;
+    padding: 8px;
+  }
+
+  .right-hud-stack .citizen-requests {
+    max-height: 318px;
+  }
+
+  .citywork-execution {
+    bottom: 62px;
+  }
+}

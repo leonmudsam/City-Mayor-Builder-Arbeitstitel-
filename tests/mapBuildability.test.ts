@@ -26,10 +26,11 @@ import {
   plinthDepthFor,
 } from '../src/game/buildings/terrainFit.ts';
 import { samplePlacementSurface } from '../src/game/map/world.ts';
-import { bakedSurfaceAt, regionIdAt, terrainAt, WORLD_TILES } from '../src/game/config/startRegion.config.ts';
+import { bakedSurfaceAt, regionIdAt, startRegionConfig, terrainAt, WORLD_TILES } from '../src/game/config/startRegion.config.ts';
 import { BUILDABLE_BIT, buildabilityGrid } from '../src/game/config/world/islandBuildability.gen.ts';
 import type { BuildingDef } from '../src/game/config/types.ts';
 import type { GameState } from '../src/game/types.ts';
+import { regionsConfig } from '../src/game/config/regions.config.ts';
 
 /** Controller auf ECHTEM Inselgelände mit allen Regionen freigeschaltet. */
 function realWorldController() {
@@ -286,6 +287,69 @@ describe('Map Flattening — Gebäude auf echtem Inselgelände (Phase E §7)', (
     }
     expect(missing).toEqual([]);
   });
+
+  it('trägt in der Startregion eine ganze Anfangsstadt — auch große Footprints', () => {
+    // § World Overhaul 12.0 §4: „Der Spieler soll hier lange spielen können."
+    // Gemessen wird auf ECHTEM Gelände (keine Overrides): wie viele gültige
+    // Bauplätze bietet die Startregion je Gebäudegröße? Ein einzelner Platz
+    // würde die Kriterien formal erfüllen, aber keine Stadt tragen.
+    const start = startRegionConfig.startRegionId;
+    const count = (defId: string) => {
+      let valid = 0;
+      for (let y = 0; y < WORLD_TILES; y++) {
+        for (let x = 0; x < WORLD_TILES; x++) {
+          if (regionIdAt(x, y) !== start) continue;
+          if (place(controller, defId, x, y) === undefined) valid++;
+        }
+      }
+      return valid;
+    };
+    // 3×3 Wohnhaus, 4×4 Sägewerk, 5×5 Steinbruch, 6×6 Farm.
+    expect(count('house_small')).toBeGreaterThan(600);
+    expect(count('sawmill')).toBeGreaterThan(500);
+    expect(count('quarry')).toBeGreaterThan(400);
+    expect(count('farm')).toBeGreaterThan(300);
+  });
+
+  it('erlaubt einen Anleger, sobald der Anleger freigeschaltet ist (§6 Hafen)', () => {
+    // § MODELLTREUE 13.0 — NEU AUSGERICHTET, UND ZWAR EHRLICH.
+    //
+    // Früher wurde geprüft, ob in der STARTREGION ein Anleger passt. Auf der
+    // modelltreuen Klippeninsel passt dort keiner: die Startregion liegt zentral
+    // und hat 15 Uferkacheln, alle an einer Kante. Das ist kein Fehler, sondern
+    // die Geografie des Modells.
+    //
+    // Was wirklich gesichert sein muss, ist die SPIELBARKEIT: Wenn `dock_small`
+    // auf Level 6 freigeschaltet wird, muss der Spieler in dem Gebiet, das er
+    // bis dahin haben KANN, einen Anleger bauen können. Bis L6 sind das der
+    // Nordwald (8, ab L2 gratis) und das Herzland (1, ab L4). Gemessen: 1 bzw. 6
+    // Anlegerplätze, dazu 28 Flusshafenplätze im Herzland.
+    //
+    // WICHTIG: Ein Kai hat eine AUSRICHTUNG. `waterfrontWaterCells` erwartet das
+    // 2×2-Wasserrechteck bündig im Norden (0°), Osten (270°), Süden (180°) oder
+    // Westen (90°) — die zulässigen Rotationswerte sind Grad, nicht 0..3. Ein
+    // Test, der nur die Vorgabe 0° prüft, meldet fälschlich „kein Hafen möglich".
+    const dockDefinition = def(controller, 'dock_small');
+    const reachableByDockLevel = new Set<number>([
+      startRegionConfig.startRegionId,
+      ...regionsConfig
+        .filter((region) => region.unlockLevel > 1 && region.unlockLevel <= dockDefinition.unlockLevel)
+        .map((region) => region.id),
+    ]);
+    let dockSpots = 0;
+    for (let y = 0; y < WORLD_TILES; y++) {
+      for (let x = 0; x < WORLD_TILES; x++) {
+        if (!reachableByDockLevel.has(regionIdAt(x, y))) continue;
+        for (const rotation of [0, 90, 180, 270] as const) {
+          if (validatePlacement(controller.state, controller.config, controller.derived, dockDefinition, x, y, { rotation }) === undefined) {
+            dockSpots++;
+            break;
+          }
+        }
+      }
+    }
+    expect(dockSpots).toBeGreaterThanOrEqual(5);
+  });
 });
 
 describe('Map Flattening — Straßen auf echtem Gelände (Phase E §7)', () => {
@@ -381,22 +445,35 @@ describe('Map Flattening — Kennzahl-Regression (Phase E)', () => {
     expect(highPeaks).toBeGreaterThan(1_000);
   });
 
-  it('macht Küsten und Ufer flacher statt steiler', () => {
+  it('behält die Klippenküste des Modells und lässt trotzdem flaches Ufer zu', () => {
+    // § MODELLTREUE 13.0 — DIESE FORDERUNG WURDE AUSDRÜCKLICH UMGEKEHRT.
+    //
+    // Der Test verlangte bisher, dass flaches Ufer die Steilküste um Faktor 1,5
+    // schlägt. Erreicht wurde das ausschließlich durch das Terraforming, das
+    // jede Uferkante auf eine 0,24-m-Plattform zog. Genau dieses Ergebnis hat
+    // der Spieler als „weicht vom Modell ab" gemeldet: die Quell-GLB IST eine
+    // Klippeninsel, mit Plateaus und harten Kanten zum Wasser.
+    //
+    // Geprüft wird deshalb jetzt beides — dass die Klippen da sind UND dass es
+    // trotzdem nutzbares flaches Ufer gibt (sonst wäre kein Anleger baubar).
     const gentle = countTiles((x, y) => {
       const shore = surfaceAt(x, y).shoreType;
       return shore === 'coast' || shore === 'riverbank' || shore === 'lakeshore';
     });
     const cliff = countTiles((x, y) => surfaceAt(x, y).shoreType === 'cliff');
-    // Vorher: 1.453 flach gegen 1.937 Steilküste — die Küste war mehrheitlich
-    // Klippe. Jetzt muss das flache Ufer die klare Mehrheit sein.
-    expect(gentle).toBeGreaterThan(cliff * 1.5);
+    expect(cliff).toBeGreaterThan(gentle);
+    expect(gentle).toBeGreaterThan(300);
   });
 
   it('lässt sichtbares Relief bestehen (nicht steril eingeebnet)', () => {
-    // Gegenprobe zu §8: die Insel darf nicht flachgebügelt sein.
+    // Gegenprobe zu §8: die Insel darf nicht flachgebügelt sein. § Modelltreue
+    // 13.0 macht das strukturell unmöglich (es wird gar nicht mehr terraformt);
+    // die Kennzahl bleibt als Regressionsschutz, falls je wieder eine Stufe
+    // Höhen schreibt. Der Anteil sinkt in 13.1 leicht, weil der höhere
+    // Meeresspiegel die steilsten Klippenfüße unter Wasser setzt.
     const land = countTiles(isLand);
     const rolling = countTiles((x, y) => isLand(x, y) && surfaceAt(x, y).slope > 0.3);
-    expect(rolling / land).toBeGreaterThan(0.25);
+    expect(rolling / land).toBeGreaterThan(0.2);
   });
 });
 

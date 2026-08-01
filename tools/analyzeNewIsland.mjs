@@ -13,7 +13,7 @@ import { fileURLToPath } from 'node:url';
 import { createHash } from 'node:crypto';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
-const SOURCE = join(ROOT, 'reference', 'world', 'island 3d new.glb');
+const SOURCE = join(ROOT, 'reference', 'world', 'new island 3d model.glb');
 const JSON_OUT = join(ROOT, 'tools', 'new-island-report.json');
 const MD_OUT = join(ROOT, 'tools', 'new-island-report.md');
 

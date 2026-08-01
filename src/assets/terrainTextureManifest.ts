@@ -67,6 +67,10 @@ export interface TerrainTextureEntry {
   /** Mischverhalten im Splatmap-System: womit/wie diese Textur überblendet. */
   blend: string;
   priority: TexturePriority;
+  /** Tatsächliche Runtime-Auflösung, falls sie vom Kategorie-Ziel abweicht. */
+  resolution?: string;
+  /** Tatsächlicher Asset-Ordner, falls die Materialkategorie breiter gefasst ist. */
+  folder?: string;
   /** Englisches Motiv, wird an TEXTURE_STYLE_PREFIX gehängt. */
   motif: string;
   biomes: readonly string[];
@@ -119,13 +123,13 @@ export interface BiomeMaterialSet {
 /** Welche Texturen pro Biom im Materialset zur Auswahl stehen (§ "Biome
  *  steuern Texturen"). Der Splatmap-Mix wählt/gewichtet innerhalb dieses Sets. */
 export const BIOME_MATERIAL_SETS: BiomeMaterialSet[] = [
-  { biome: 'Grasland', textures: ['grass_meadow_fresh', 'grass_meadow_dark', 'grass_wildflowers', 'grass_trampled', 'grass_wet'] },
-  { biome: 'Mischwald', textures: ['forest_floor_moss', 'forest_floor_needles', 'forest_floor_leaves', 'forest_floor_roots', 'forest_edge_grass'] },
+  { biome: 'Grasland', textures: ['grass_meadow_cartoon', 'grass_meadow_fresh', 'grass_meadow_dark', 'grass_wildflowers', 'grass_trampled', 'grass_wet'] },
+  { biome: 'Mischwald', textures: ['forest_floor_cartoon', 'forest_floor_moss', 'forest_floor_needles', 'forest_floor_leaves', 'forest_floor_roots', 'forest_edge_grass'] },
   { biome: 'Fruchtbares Land', textures: ['fertile_valley_ground', 'coast_mud_fertile', 'terrain_field_plowed', 'terrain_field_wheat', 'terrain_field_harvest'] },
-  { biome: 'Gebirge', textures: ['mountain_granite_base', 'mountain_cliff_faceted', 'mountain_strata', 'mountain_scree', 'mountain_moss', 'mountain_snow', 'mountain_wet_rock'] },
+  { biome: 'Gebirge', textures: ['mountain_cliff_cartoon', 'mountain_granite_base', 'mountain_cliff_faceted', 'mountain_strata', 'mountain_scree', 'mountain_moss', 'mountain_snow', 'mountain_wet_rock'] },
   { biome: 'Wüste', textures: ['desert_sand_red', 'terrain_sand_dune', 'terrain_earth_light', 'terrain_rock_granite'] },
   { biome: 'Sumpf', textures: ['moor_heather_ground', 'swamp_mud', 'forest_floor_dark_soil', 'grass_mossy'] },
-  { biome: 'Küste', textures: ['coast_shore_accessible', 'coast_sand_wet', 'coast_gravel_stylized', 'coast_mud_fertile'] },
+  { biome: 'Küste', textures: ['coast_sand_cartoon', 'coast_shore_accessible', 'coast_sand_wet', 'coast_gravel_stylized', 'coast_mud_fertile'] },
   { biome: 'Fluss/See/Meer', textures: ['terrain_deep_water', 'terrain_shallow_water', 'terrain_riverbed', 'terrain_river_delta', 'terrain_swamp', 'terrain_ice'] },
   { biome: 'Straßen/Wege', textures: ['terrain_path', 'terrain_road_edge', 'terrain_gravel', 'terrain_stone'] },
 ];
@@ -144,6 +148,7 @@ type Terrain61Row = readonly [
  * `_normal`, `_roughness` und `_ao` Dateien werden über denselben Registry-
  * Pfad gefunden, sind aber keine eigenständigen Farb-Layer. */
 const TERRAIN_61_ROWS: readonly Terrain61Row[] = [
+  ['mountain_cliff_cartoon', 'mountain', 'Helle malerische Cartoon-Felsbasis für Berge und Klippen', 'warmes Hellgrau, Beige und Moosgrün', ['Gebirge', 'Küste']],
   ['mountain_granite_base', 'mountain', 'Triplanare alpine Felsbasis', 'warmes Granitgrau und Beige', ['Gebirge']],
   ['mountain_granite_light', 'mountain', 'Sonnenflächen und helle Grate', 'helles Steingrau', ['Gebirge']],
   ['mountain_granite_dark', 'mountain', 'Nordflanken und tiefe Fugen', 'Anthrazit und kühles Grau', ['Gebirge']],
@@ -152,6 +157,7 @@ const TERRAIN_61_ROWS: readonly Terrain61Row[] = [
   ['mountain_scree', 'mountain', 'Geröllfächer am Gebirgsfuß', 'gemischtes Steingrau', ['Gebirge']],
   ['mountain_moss', 'mountain', 'Moosige untere Felshänge', 'Moosgrün und Graubraun', ['Gebirge', 'Mischwald']],
   ['mountain_wet_rock', 'mountain', 'Nasse Felsen an Wasserfällen und Küsten', 'dunkles Graphitgrau', ['Gebirge', 'Küste']],
+  ['grass_meadow_cartoon', 'grass', 'Helle malerische Cartoon-Wiesenbasis für Bauland und Täler', 'Smaragd, Moosgrün, Gelbgrün und kleine Ockertupfer', ['Grasland']],
   ['grass_meadow_fresh', 'grass', 'Frische Wiesenbasis und Bauland', 'sattes Mittelgrün', ['Grasland']],
   ['grass_meadow_dark', 'grass', 'Beschattete Wiesen und Waldsäume', 'dunkles Waldgrün', ['Grasland', 'Mischwald']],
   ['grass_meadow_dry', 'grass', 'Trockene sonnige Wiesen', 'Gelbgrün und Stroh', ['Trockene Ebene']],
@@ -160,12 +166,14 @@ const TERRAIN_61_ROWS: readonly Terrain61Row[] = [
   ['grass_wildflowers', 'grass', 'Seltene Blütencluster in Nahsicht', 'Grün mit kleinen Farbtupfern', ['Grasland']],
   ['grass_trampled', 'grass', 'Genutzte Flächen und Wegränder', 'Oliv und Erdbraun', ['Grasland']],
   ['grass_wet', 'grass', 'Regennasse Uferwiesen', 'tiefes nasses Grün', ['Küste', 'Flusstal']],
+  ['forest_floor_cartoon', 'earth', 'Ruhige helle Cartoon-Waldbodenbasis mit breiten Moos- und Laubformen', 'Moosgrün, warmes Oliv, Erdbraun und kleine Goldakzente', ['Mischwald']],
   ['forest_floor_needles', 'earth', 'Nadelwaldboden', 'Braun und dunkles Grün', ['Mischwald']],
   ['forest_floor_moss', 'earth', 'Moosiger Waldboden-Basislayer', 'Moosgrün und Torfbraun', ['Mischwald']],
   ['forest_floor_leaves', 'earth', 'Laubwaldboden', 'Rotbraun und Oliv', ['Mischwald']],
   ['forest_floor_dark_soil', 'earth', 'Dunkle feuchte Walderde', 'Schokoladenbraun', ['Mischwald', 'Sumpf']],
   ['forest_floor_roots', 'earth', 'Wurzelreiche Waldränder', 'Erdbraun und Grau', ['Mischwald']],
   ['forest_edge_grass', 'grass', 'Weicher Wald-Wiesen-Übergang', 'Waldgrün zu Wiesengrün', ['Mischwald', 'Grasland']],
+  ['coast_sand_cartoon', 'coast', 'Helle malerische Cartoon-Basis für Strände und flache Bauufer', 'Elfenbein, Honigbeige, Hellgold und Türkisgrau', ['Küste', 'Flusstal']],
   ['coast_shore_accessible', 'coast', 'Baubare flache Uferzone', 'Nassgrün, Sand und Kies', ['Küste', 'Flusstal']],
   ['coast_sand_wet', 'coast', 'Nasser Sand direkt am Wassersaum', 'Beige und dunkles Ocker', ['Küste']],
   ['coast_gravel_stylized', 'coast', 'Stilisierter Uferkies', 'Blaugrau und Beige', ['Küste', 'Flusstal']],
@@ -185,6 +193,8 @@ const TERRAIN_TEXTURES_61: TerrainTextureEntry[] = TERRAIN_61_ROWS.map(
     materialProps: 'matt bis natürlich feucht, breite Formen statt Foto-Mikrorauschen',
     blend: 'weltkoordinatenbasiert nach Biom, Höhe, Neigung und Wassernähe; Nahdetail per LOD',
     priority: 'Pflicht',
+    ...(name.endsWith('_cartoon') ? { resolution: '1024×1024' } : {}),
+    ...(name === 'forest_floor_cartoon' ? { folder: 'textures/terrain/forest/' } : {}),
     motif: `${useCase.toLowerCase()}, broad painterly low-poly shapes, restrained micro detail`,
     biomes,
   }),
@@ -726,7 +736,7 @@ function textureBlock(e: TerrainTextureEntry): string {
   const head = `### \`${e.name}.png\``;
   const prompt = `\`\`\`text\n${TEXTURE_STYLE_PREFIX} ${e.motif}\n\`\`\``;
   const spec =
-    `**Spec:** Ordner \`${d.folder}\` · ${d.resolution} · nahtlos kachelbar · Stil: ${e.style} · ` +
+    `**Spec:** Ordner \`${e.folder ?? d.folder}\` · ${e.resolution ?? d.resolution} · nahtlos kachelbar · Stil: ${e.style} · ` +
     `Palette: ${e.palette} · Einsatz: ${e.useCase} · Material: ${e.materialProps} · ` +
     `Mischverhalten: ${e.blend} · Maps: ${mapsLine(d.maps)} · Detailstufe: ${d.detailLevel} · ` +
     `Priorität: **${e.priority}** · Biome: ${e.biomes.join(', ')}`;

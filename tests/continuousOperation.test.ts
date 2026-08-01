@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { flattenTerrain, nearTownHall, newController, paintTerrain, setLevel, T0 } from './helpers.ts';
+import { flattenTerrain, nearTownHall, newController, paintResourceNodes, setLevel, T0 } from './helpers.ts';
 
 // § 10.0 R2 — Dauerbetrieb. Bisher wurde ein Gebiets-Auftrag GELÖSCHT, sobald im
 // Arbeitsgebiet nichts mehr zu holen war (`delete ops.active[...]`). Der Spieler
@@ -10,22 +10,18 @@ import { flattenTerrain, nearTownHall, newController, paintTerrain, setLevel, T0
 const MIN = 60_000;
 const at = (dx: number, dy: number) => nearTownHall(dx, dy);
 
-function paintForest(controller: ReturnType<typeof newController>['controller'], x0: number, y0: number, w: number, h: number): void {
-  const coords: [number, number][] = [];
-  for (let dy = 0; dy < h; dy++) for (let dx = 0; dx < w; dx++) coords.push([x0 + dx, y0 + dy]);
-  paintTerrain(controller, coords, 'forest');
-}
-
 /** Sägewerk mit einem winzigen Waldstück — schnell leer geerntet. */
 function sawmillWithTinyForest() {
   const bundle = newController();
   const { controller } = bundle;
   setLevel(controller, 3);
   flattenTerrain(controller);
-  // Nur zwei Bäume, damit das Gebiet in überschaubarer Zeit erschöpft ist. Sie
-  // müssen außerhalb der 4×4-Grundfläche des Sägewerks liegen (belegte Kacheln
-  // sind keine Ressourcenknoten).
-  paintForest(controller, at(6, 6).x, at(6, 6).y, 2, 1);
+  // Genau zwei ECHTE Baumknoten, damit das Gebiet in überschaubarer Zeit
+  // erschöpft ist. Sie müssen außerhalb der 4×4-Grundfläche des Sägewerks liegen
+  // (belegte Kacheln sind keine Ressourcenknoten). `paintResourceNodes` prüft die
+  // Knotendichte je Kachel — reines Waldmalen liefert je nach Weltkoordinate
+  // gar keinen Baum (§ World Overhaul 12.0).
+  paintResourceNodes(controller, 'tree', at(6, 6), 2, 2);
   expect(controller.placeBuilding('sawmill', at(1, 6).x, at(1, 6).y)).toEqual({ ok: true });
   controller.update(T0 + 31_000, true);
   const sawmill = Object.values(controller.state.buildings).find((b) => b.defId === 'sawmill')!;

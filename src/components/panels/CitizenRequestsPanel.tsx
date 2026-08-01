@@ -46,10 +46,24 @@ export function CitizenRequestsPanel() {
     }
   }, [sheetConflict]);
 
+  useEffect(() => {
+    if (!inboxOpen && selectedQuestId === undefined) return;
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape') return;
+      setSelectedQuestId(undefined);
+      setInboxOpen(false);
+    };
+    window.addEventListener('keydown', closeOnEscape);
+    return () => window.removeEventListener('keydown', closeOnEscape);
+  }, [inboxOpen, selectedQuestId]);
+
   const active = game.state.quests.active;
   if (active.length === 0 && game.state.quests.completed.length === 0) return null;
 
   const claimable = active.filter((quest) => quest.claimable).length;
+  const prioritised = [...active].sort(
+    (left, right) => Number(right.claimable) - Number(left.claimable),
+  );
   const selectedQuest = active.find((quest) => quest.questId === selectedQuestId);
   const selectedDef = selectedQuest ? game.config.quests.get(selectedQuest.questId) : undefined;
 
@@ -67,11 +81,16 @@ export function CitizenRequestsPanel() {
           <h3>
             <User size={16} /> {t('ui.requests')}
           </h3>
-          <span className={`hud-badge${claimable > 0 ? ' alert' : ''}`}>{claimable || active.length}</span>
+          <span
+            className={`hud-badge${claimable > 0 ? ' alert' : ''}`}
+            title={claimable > 0 ? `${claimable} Belohnungen bereit` : undefined}
+          >
+            {active.length}
+          </span>
         </div>
 
         <div className="request-list">
-          {active.slice(0, 3).map((quest) => {
+          {prioritised.slice(0, 2).map((quest) => {
             const def = game.config.quests.get(quest.questId);
             if (!def) return null;
             return (
@@ -79,6 +98,8 @@ export function CitizenRequestsPanel() {
                 key={quest.questId}
                 quest={quest}
                 def={def}
+                game={game}
+                compact
                 onSelect={() => setSelectedQuestId(quest.questId)}
                 onClaim={() => claim(quest, def)}
               />
@@ -97,28 +118,43 @@ export function CitizenRequestsPanel() {
         </button>
       </aside>
 
-      {inboxOpen && !selectedQuest && (
-        <CitizenRequestsInbox
-          game={game}
-          filter={filter}
-          onFilter={setFilter}
-          onClose={() => setInboxOpen(false)}
-          onSelect={(questId) => setSelectedQuestId(questId)}
-          onClaim={claim}
-        />
-      )}
-
-      {selectedQuest && selectedDef && (
-        <CitizenRequestDetail
-          quest={selectedQuest}
-          def={selectedDef}
-          game={game}
-          onBack={() => {
+      {(inboxOpen || (selectedQuest && selectedDef)) && (
+        <div
+          className="request-sheet-layer"
+          onMouseDown={(event) => {
+            if (event.target !== event.currentTarget) return;
             setSelectedQuestId(undefined);
-            if (!inboxOpen) setInboxOpen(false);
+            setInboxOpen(false);
           }}
-          onClaim={() => claim(selectedQuest, selectedDef)}
-        />
+        >
+          {inboxOpen && !selectedQuest && (
+            <CitizenRequestsInbox
+              game={game}
+              filter={filter}
+              onFilter={setFilter}
+              onClose={() => setInboxOpen(false)}
+              onSelect={(questId) => setSelectedQuestId(questId)}
+              onClaim={claim}
+            />
+          )}
+
+          {selectedQuest && selectedDef && (
+            <CitizenRequestDetail
+              quest={selectedQuest}
+              def={selectedDef}
+              game={game}
+              onBack={() => {
+                setSelectedQuestId(undefined);
+                if (!inboxOpen) setInboxOpen(false);
+              }}
+              onCloseAll={() => {
+                setSelectedQuestId(undefined);
+                setInboxOpen(false);
+              }}
+              onClaim={() => claim(selectedQuest, selectedDef)}
+            />
+          )}
+        </div>
       )}
     </>
   );
@@ -127,81 +163,67 @@ export function CitizenRequestsPanel() {
 function RequestCard({
   quest,
   def,
+  game,
+  compact = false,
   onSelect,
   onClaim,
 }: {
   quest: ActiveQuest;
   def: QuestDef;
+  game: GameController;
+  compact?: boolean;
   onSelect(): void;
   onClaim(): void;
 }) {
   const sender = def.sender ?? 'citizen';
+  const summary = questProgressSummary(quest, def);
+  const focusObjective = def.objectives[summary.focusIndex];
+  const focusText = focusObjective ? objectiveText(focusObjective, game) : t(def.descriptionKey);
   return (
     <article
-      className={`request-card request-role-${sender}${quest.claimable ? ' is-claimable' : ''}`}
-      role="button"
-      tabIndex={0}
-      onClick={onSelect}
-      onKeyDown={(event) => {
-        if (event.key === 'Enter' || event.key === ' ') onSelect();
-      }}
+      className={`request-card request-role-${sender}${compact ? ' request-card-compact' : ''}${quest.claimable ? ' is-claimable' : ''}`}
     >
-      <div className="request-top">
-        <span className="request-avatar">
-          <CitizenPortrait role={sender} seed={quest.questId} size={62} />
-        </span>
-        <div className="request-card-copy">
-          <div className="request-card-meta">
-            <span className="request-role">{t(`quest.sender.${sender}`)}</span>
-            {quest.claimable && <span className="request-priority">{t('ui.requests.ready')}</span>}
-          </div>
-          <strong className="request-task">{t(def.titleKey)}</strong>
-          <p className="request-bubble">{t(def.descriptionKey)}</p>
-        </div>
-      </div>
-
-      <div className="request-objectives">
-        {def.objectives.map((objective, index) => {
-          const progress = quest.progress[index] ?? 0;
-          const target = objectiveTarget(objective);
-          const pct = target > 0 ? Math.min(100, (progress / target) * 100) : 0;
-          const done = progress >= target;
-          return (
-            <div key={index} className="request-obj">
-              <div className="request-obj-bar">
-                <div className={`request-obj-fill${done ? ' done' : ''}`} style={{ width: `${pct}%` }} />
-              </div>
-              <span className={`request-obj-count${done ? ' done' : ''}`}>
-                {done && <Check size={12} />}
-                {Math.floor(progress)}/{target}
-              </span>
+      <button className="request-card-open" type="button" onClick={onSelect}>
+        <div className="request-top">
+          <span className="request-avatar">
+            <CitizenPortrait role={sender} seed={quest.questId} size={compact ? 46 : 54} />
+          </span>
+          <div className="request-card-copy">
+            <div className="request-card-meta">
+              <span className="request-role">{t(`quest.sender.${sender}`)}</span>
+              {quest.claimable && <span className="request-priority">{t('ui.requests.ready')}</span>}
             </div>
-          );
-        })}
-      </div>
+            <strong className="request-task">{t(def.titleKey)}</strong>
+            <p className="request-next-step">{focusText}</p>
+          </div>
+        </div>
+
+        <div className="request-card-progress">
+          <div className="request-obj-bar">
+            <div
+              className={`request-obj-fill${quest.claimable ? ' done' : ''}`}
+              style={{ width: `${summary.pct}%` }}
+            />
+          </div>
+          <span className={quest.claimable ? 'done' : ''}>
+            {quest.claimable && <Check size={12} />}
+            {quest.claimable ? t('ui.requests.ready') : `${summary.current}/${summary.target}`}
+          </span>
+        </div>
+      </button>
 
       <div className="request-foot">
-        <span className="request-reward">
-          <RewardRow rewards={def.rewards} />
-        </span>
+        {!compact && (
+          <span className="request-reward">
+            <RewardRow rewards={def.rewards} />
+          </span>
+        )}
         {quest.claimable ? (
-          <button
-            className="btn-primary btn-tiny"
-            onClick={(event) => {
-              event.stopPropagation();
-              onClaim();
-            }}
-          >
+          <button className="btn-primary btn-tiny" onClick={onClaim}>
             {t('ui.claim')}
           </button>
         ) : (
-          <button
-            className="request-detail-link"
-            onClick={(event) => {
-              event.stopPropagation();
-              onSelect();
-            }}
-          >
+          <button className="request-detail-link" onClick={onSelect}>
             {t('ui.details')} <ChevronRight size={13} />
           </button>
         )}
@@ -231,7 +253,12 @@ function CitizenRequestsInbox({
     .filter((def): def is QuestDef => def !== undefined);
 
   return (
-    <section className="citizen-inbox-sheet" aria-label={t('ui.requests.all')}>
+    <section
+      className="citizen-inbox-sheet"
+      role="dialog"
+      aria-modal="true"
+      aria-label={t('ui.requests.all')}
+    >
       <header className="citizen-inbox-head">
         <div>
           <span>{t('ui.requests')}</span>
@@ -262,6 +289,7 @@ function CitizenRequestsInbox({
                 key={quest.questId}
                 quest={quest}
                 def={def}
+                game={game}
                 onSelect={() => onSelect(quest.questId)}
                 onClaim={() => onClaim(quest, def)}
               />
@@ -291,19 +319,26 @@ function CitizenRequestDetail({
   def,
   game,
   onBack,
+  onCloseAll,
   onClaim,
 }: {
   quest: ActiveQuest;
   def: QuestDef;
   game: GameController;
   onBack(): void;
+  onCloseAll(): void;
   onClaim(): void;
 }) {
   const sender = def.sender ?? 'citizen';
   // § C3: kanonische Kartenprojektion des Anliegens (Controller-Read-Helper).
   const focus = game.questFocus(quest.questId);
   return (
-    <section className={`citizen-request-sheet request-role-${sender}`} aria-label={t('ui.requests.detail')}>
+    <section
+      className={`citizen-request-sheet request-role-${sender}`}
+      role="dialog"
+      aria-modal="true"
+      aria-label={t('ui.requests.detail')}
+    >
       <div className="citizen-request-sheet-head">
         <span>{t('ui.requests.detail')}</span>
         <button className="btn-icon" onClick={onBack} title={t('ui.close')}>
@@ -356,7 +391,7 @@ function CitizenRequestDetail({
           onClick={() => {
             if (!focus) return;
             getMapApi()?.focusGround(focus.x, focus.y);
-            onBack();
+            onCloseAll();
           }}
         >
           <MapPinned size={15} /> {t('ui.request.show_on_map')}
@@ -407,6 +442,32 @@ function objectiveText(objective: QuestObjective, game: GameController): string 
     case 'tradeEarnings':
       return t('ui.objective.trade_earnings', { amount: formatMoney(objective.amount) });
   }
+}
+
+function questProgressSummary(
+  quest: ActiveQuest,
+  def: QuestDef,
+): { pct: number; focusIndex: number; current: number; target: number } {
+  const objectiveProgress = def.objectives.map((objective, index) => {
+    const target = Math.max(1, objectiveTarget(objective));
+    const current = Math.max(0, quest.progress[index] ?? 0);
+    return {
+      index,
+      current,
+      target,
+      ratio: Math.min(1, current / target),
+    };
+  });
+  const focus = objectiveProgress.find((objective) => objective.current < objective.target)
+    ?? objectiveProgress.at(-1)
+    ?? { index: 0, current: 0, target: 1, ratio: 0 };
+  const pct = quest.claimable ? 100 : Math.round(focus.ratio * 100);
+  return {
+    pct,
+    focusIndex: focus.index,
+    current: Math.floor(focus.current),
+    target: focus.target,
+  };
 }
 
 function RewardRow({ rewards }: { rewards: QuestDef['rewards'] }) {

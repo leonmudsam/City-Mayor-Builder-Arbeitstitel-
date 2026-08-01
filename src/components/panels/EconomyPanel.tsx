@@ -1,38 +1,54 @@
-import { AlertTriangle, Briefcase, Building2, Factory, PackageOpen, SlidersHorizontal, TrendingDown, TrendingUp, Wallet, X } from 'lucide-react';
+import {
+  AlertTriangle,
+  Briefcase,
+  Building2,
+  Factory,
+  SlidersHorizontal,
+  TrendingDown,
+  TrendingUp,
+  Wallet,
+  X,
+} from 'lucide-react';
 import { useGame, useUiStore } from '../../state/store.ts';
 import { formatMoney, t } from '../../i18n/index.ts';
+import { useEscapeClose } from '../common/useEscapeClose.ts';
 
-// Dedicated economy view (§11): where the money comes from, split by sector,
-// with the employment factor that scales commercial/industrial revenue. Reads
-// the single computeIncome source of truth via the controller — no numbers are
-// re-derived in the UI.
+/**
+ * Eine Wirtschaftsseite, eine Wahrheit: oben nur Einnahmen, Kosten und Netto,
+ * darunter genau die stärkste Einnahmequelle. Steuerdetails bleiben vollständig
+ * bedienbar, liegen aber hinter einer bewussten Vertiefung statt neben dem
+ * Kernentscheid zu konkurrieren.
+ */
 export function EconomyPanel() {
   const game = useGame();
   const setPanel = useUiStore((s) => s.setPanel);
   const income = game.getIncome();
-  const stable = game.getStableIncome();
-  const hasBoost = game.hasIncomeBuffs();
-  const max = Math.max(income.residential, income.commercial, income.industrial, 1);
-
-  const rows = [
+  useEscapeClose(() => setPanel(undefined));
+  const sources = [
     { key: 'residential', icon: <Building2 size={15} />, value: income.residential },
     { key: 'commercial', icon: <TrendingUp size={15} />, value: income.commercial },
     { key: 'industrial', icon: <Factory size={15} />, value: income.industrial },
   ] as const;
+  const strongest = sources.reduce((best, current) => current.value > best.value ? current : best);
 
-  // Tax sliders unlock once the commercial economy exists (§ tax sliders, MVP 2).
   const bal = game.config.balancing;
-  const { taxRateMin, taxRateMax } = bal;
   const showTax = game.state.level.current >= 6;
   const taxSliders = [
-    { kind: 'residential' as const, rate: game.state.policy.residentialTaxRate, happPer: bal.residentialTaxHappinessPer },
-    { kind: 'commercial' as const, rate: game.state.policy.commercialTaxRate, happPer: bal.commercialTaxHappinessPer },
+    {
+      kind: 'residential' as const,
+      rate: game.state.policy.residentialTaxRate,
+      happinessPer: bal.residentialTaxHappinessPer,
+    },
+    {
+      kind: 'commercial' as const,
+      rate: game.state.policy.commercialTaxRate,
+      happinessPer: bal.commercialTaxHappinessPer,
+    },
   ];
-  // Warn as the rate climbs into punishing territory (§9): amber ≥ 150 %, red ≥ 250 %.
   const taxTone = (rate: number) => (rate >= 2.5 ? 'danger' : rate >= 1.5 ? 'warn' : '');
 
   return (
-    <aside className="panel side-panel economy-panel">
+    <aside className="panel side-panel economy-panel economy-panel-simple">
       <div className="panel-head">
         <h3>
           <Wallet size={17} /> {t('ui.economy.title')}
@@ -42,102 +58,101 @@ export function EconomyPanel() {
         </button>
       </div>
 
-      <div className={`economy-total${income.net < 0 ? ' negative' : ''}`}>
-        <span className="economy-total-label">{t('ui.finance.stable_net')}</span>
-        <span className="economy-total-value">{t('ui.finance.per_min', { amount: formatMoney(stable.net) })}</span>
-      </div>
-      {hasBoost && (
-        // §20: a temporary boost (festival tax buff) is shown separately so the
-        // stable figure above stays the honest baseline for planning.
-        <div className="economy-boost-line">
-          {t('ui.finance.with_boost', { amount: formatMoney(income.net) })}
-        </div>
-      )}
-
-      <div className="economy-rows">
-        {rows.map((row) => (
-          <div key={row.key} className="economy-row">
-            <div className="economy-row-head">
-              <span className="economy-row-name">
-                {row.icon}
-                {t(`ui.finance.${row.key}`)}
-              </span>
-              <span className="economy-row-value">+{formatMoney(row.value)}</span>
-            </div>
-            <div className="economy-bar">
-              <div className={`economy-bar-fill economy-${row.key}`} style={{ width: `${(row.value / max) * 100}%` }} />
-            </div>
-          </div>
-        ))}
-      </div>
-
-      <div className="economy-ledger">
-        <div className="economy-ledger-row">
+      <section className="economy-hero" aria-label={t('ui.finance.title')}>
+        <div>
           <span>{t('ui.finance.total')}</span>
-          <span className="text-good">+{formatMoney(income.total)}</span>
+          <strong className="text-good">+{formatMoney(income.total)}</strong>
+          <small>{t('ui.economy.per_minute')}</small>
         </div>
-        <div className="economy-ledger-row">
-          <span>
-            <TrendingDown size={13} /> {t('ui.finance.upkeep')}
-          </span>
-          <span className="text-bad">−{formatMoney(income.upkeep)}</span>
+        <div>
+          <span>{t('ui.finance.upkeep')}</span>
+          <strong className="text-bad">−{formatMoney(income.upkeep)}</strong>
+          <small>{t('ui.economy.running_costs')}</small>
         </div>
-      </div>
+        <div className={income.net < 0 ? 'negative' : 'positive'}>
+          <span>{t('ui.finance.net')}</span>
+          <strong>{income.net >= 0 ? '+' : '−'}{formatMoney(Math.abs(income.net))}</strong>
+          <small>{t('ui.economy.available_each_minute')}</small>
+        </div>
+      </section>
 
-      <div className="economy-employment">
-        <Briefcase size={15} />
-        <span>{t('ui.finance.employment', { pct: Math.round(income.employment * 100) })}</span>
-      </div>
+      <section className="economy-focus-card">
+        <span className="economy-focus-icon">{strongest.icon}</span>
+        <div>
+          <small>{t('ui.economy.strongest_source')}</small>
+          <strong>{t(`ui.finance.${strongest.key}`)}</strong>
+          <span>+{formatMoney(strongest.value)}/min</span>
+        </div>
+        <div>
+          <TrendingDown size={15} />
+          <small>{t('ui.economy.cost_block')}</small>
+          <strong>{t('ui.finance.upkeep')}</strong>
+          <span>−{formatMoney(income.upkeep)}/min</span>
+        </div>
+      </section>
 
-      {/* § no AFK: the whole economy only runs while the game is open. */}
-      <div className="economy-live-note">
-        <PackageOpen size={15} />
-        <span>{t('ui.finance.live_only')}</span>
-      </div>
+      <details className="economy-details">
+        <summary>{t('ui.economy.show_breakdown')}</summary>
+        <div className="economy-rows">
+          {sources.map((source) => (
+            <div key={source.key} className="economy-row">
+              <span className="economy-row-name">
+                {source.icon}
+                {t(`ui.finance.${source.key}`)}
+              </span>
+              <strong>+{formatMoney(source.value)}/min</strong>
+            </div>
+          ))}
+        </div>
+        <div className="economy-employment">
+          <Briefcase size={15} />
+          <span>{t('ui.finance.employment', { pct: Math.round(income.employment * 100) })}</span>
+        </div>
+        <p className="muted economy-note">{t('ui.economy.note')}</p>
+      </details>
 
       {showTax && (
-        <div className="economy-tax">
-          <div className="economy-tax-head">
+        <details className="economy-details economy-tax-details">
+          <summary>
             <SlidersHorizontal size={15} /> {t('ui.tax.title')}
+          </summary>
+          <div className="economy-tax">
+            {taxSliders.map(({ kind, rate, happinessPer }) => {
+              const tone = taxTone(rate);
+              const penalty = Math.round((rate - 1) * happinessPer);
+              return (
+                <div key={kind} className={`economy-tax-row${tone ? ` tax-${tone}` : ''}`}>
+                  <div className="economy-tax-label">
+                    <span>{t(`ui.tax.${kind}`)}</span>
+                    <span className="economy-tax-value">{Math.round(rate * 100)}%</span>
+                  </div>
+                  <input
+                    type="range"
+                    min={Math.round(bal.taxRateMin * 100)}
+                    max={Math.round(bal.taxRateMax * 100)}
+                    step={5}
+                    value={Math.round(rate * 100)}
+                    onChange={(event) => game.setTaxRate(kind, Number(event.target.value) / 100)}
+                    aria-label={t(`ui.tax.${kind}`)}
+                  />
+                  <div className="economy-tax-effect">
+                    {penalty > 0 ? (
+                      <span className={`text-${tone === 'danger' ? 'bad' : 'warn'}`}>
+                        {tone === 'danger' && <AlertTriangle size={12} />}
+                        {t('ui.tax.happiness_cost', { pts: penalty })}
+                      </span>
+                    ) : penalty < 0 ? (
+                      <span className="text-good">{t('ui.tax.happiness_gain', { pts: -penalty })}</span>
+                    ) : (
+                      <span className="muted">{t('ui.tax.neutral')}</span>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
           </div>
-          {taxSliders.map(({ kind, rate, happPer }) => {
-            const tone = taxTone(rate);
-            const penalty = Math.round((rate - 1) * happPer);
-            return (
-              <div key={kind} className={`economy-tax-row${tone ? ` tax-${tone}` : ''}`}>
-                <div className="economy-tax-label">
-                  <span>{t(`ui.tax.${kind}`)}</span>
-                  <span className="economy-tax-value">{Math.round(rate * 100)}%</span>
-                </div>
-                <input
-                  type="range"
-                  min={Math.round(taxRateMin * 100)}
-                  max={Math.round(taxRateMax * 100)}
-                  step={5}
-                  value={Math.round(rate * 100)}
-                  onChange={(e) => game.setTaxRate(kind, Number(e.target.value) / 100)}
-                  aria-label={t(`ui.tax.${kind}`)}
-                />
-                {/* Effect preview (§9): the happiness cost/benefit of this rate. */}
-                <div className="economy-tax-effect">
-                  {penalty > 0 ? (
-                    <span className={`text-${tone === 'danger' ? 'bad' : 'warn'}`}>
-                      {tone === 'danger' && <AlertTriangle size={12} />} {t('ui.tax.happiness_cost', { pts: penalty })}
-                    </span>
-                  ) : penalty < 0 ? (
-                    <span className="text-good">{t('ui.tax.happiness_gain', { pts: -penalty })}</span>
-                  ) : (
-                    <span className="muted">{t('ui.tax.neutral')}</span>
-                  )}
-                </div>
-              </div>
-            );
-          })}
-          <p className="muted economy-tax-note">{t('ui.tax.note')}</p>
-        </div>
+        </details>
       )}
-
-      <p className="muted economy-note">{t('ui.economy.note')}</p>
     </aside>
   );
 }

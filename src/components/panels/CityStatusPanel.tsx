@@ -1,145 +1,192 @@
-import { BarChart3, Briefcase, ChevronRight, Droplets, Leaf, Lock, Smile, Wheat, type LucideIcon } from 'lucide-react';
+import {
+  BarChart3,
+  Briefcase,
+  ChevronRight,
+  Droplets,
+  Home,
+  Leaf,
+  Smile,
+  Wheat,
+  type LucideIcon,
+} from 'lucide-react';
 import { useGame, useUiStore } from '../../state/store.ts';
 import { t } from '../../i18n/index.ts';
 import { brandImage } from '../../assets/registry.ts';
 
-// Persistent city-status widget (mockup §3, top-left): one legible row per key
-// metric — icon · label · percent · bar · a concrete status line ("12 Gebäude
-// ohne Wasser"). "Details ansehen" opens the full control room (CityStatusDetail).
-// Every figure is read live off the derived simulation; nothing is stored here.
-
-interface StatusRow {
-  id: string;
+interface StatusMetric {
+  id: 'housing' | 'water' | 'food' | 'work' | 'environment';
   icon: LucideIcon;
   label: string;
   pct: number;
   status: string;
-  lockedLevel?: number | undefined;
 }
 
-const clampPct = (n: number) => Math.max(0, Math.min(100, Math.round(n)));
+type StatusTone = 'bad' | 'warn' | 'good';
 
+const clampPct = (n: number) => Math.max(0, Math.min(100, Math.round(n)));
+const formatInt = (n: number) => Math.max(0, Math.round(n)).toLocaleString('de-DE');
+const toneFor = (pct: number): StatusTone => (pct < 60 ? 'bad' : pct < 85 ? 'warn' : 'good');
+
+/**
+ * Permanente Stadtlage nach dem Active-Simplicity-Prinzip:
+ * Gesamtzustand, die drei schwächsten freigeschalteten Werte und genau eine
+ * nächste Aktion. Die vollständige Diagnose bleibt im bestehenden Status-Sheet.
+ */
 export function CityStatusPanel() {
   const game = useGame();
-  const setPanel = useUiStore((s) => s.setPanel);
+  const setPanel = useUiStore((state) => state.setPanel);
   const { state, derived, config } = game;
   const level = state.level.current;
-  const pop = state.citizens.population;
+  const population = state.citizens.population;
   const needs = state.citizens.needs;
+  const growth = game.getGrowthStatus();
   const crest = brandImage('mayor_crest');
   const unlockLevel = (id: string) => config.needs.find((need) => need.id === id)?.unlockLevel ?? 0;
   const unlocked = (id: string) => unlockLevel(id) <= level;
 
   const residential = Object.values(state.buildings).filter(
-    (b) => b.status === 'active' && config.buildings.get(b.defId)?.category === 'residential',
+    (building) =>
+      building.status === 'active' && config.buildings.get(building.defId)?.category === 'residential',
   ).length;
-  const labor = pop * config.balancing.laborParticipation;
+  const labor = population * config.balancing.laborParticipation;
+  const unserved = (fulfilment: number) =>
+    population <= 0 ? 0 : Math.max(0, Math.round((1 - fulfilment) * residential));
 
-  const unserved = (fulfil: number) => (pop <= 0 ? 0 : Math.round((1 - fulfil) * residential));
+  const metrics: StatusMetric[] = [
+    {
+      id: 'housing',
+      icon: Home,
+      label: t('need.housing'),
+      pct: clampPct(needs.housing.fulfillment * 100),
+      status:
+        growth.capacity <= 0
+          ? t('ui.growth.no_housing')
+          : growth.freeHousing <= 0
+            ? t('ui.growth.full')
+            : `${formatInt(growth.freeHousing)} freie Wohnplätze`,
+    },
+  ];
 
-  const rows: StatusRow[] = [];
-  rows.push({
-    id: 'happy',
-    icon: Smile,
-    label: t('ui.happiness'),
-    pct: clampPct(state.citizens.happiness),
-    status: t(happinessKey(state.citizens.happiness)),
-  });
-  {
-    const n = unserved(needs.water.fulfillment);
-    rows.push({
+  if (unlocked('water')) {
+    const missing = unserved(needs.water.fulfillment);
+    metrics.push({
       id: 'water',
       icon: Droplets,
       label: t('ui.status.water'),
       pct: clampPct(needs.water.fulfillment * 100),
-      status: unlocked('water')
-        ? n > 0
-          ? t('ui.status.without_water', { count: n })
-          : t('ui.status.fully_supplied')
-        : t('ui.status.unlock_level', { level: unlockLevel('water') }),
-      lockedLevel: unlocked('water') ? undefined : unlockLevel('water'),
+      status:
+        missing > 0 ? t('ui.status.without_water', { count: missing }) : t('ui.status.fully_supplied'),
     });
   }
-  {
-    const n = unserved(needs.food.fulfillment);
-    rows.push({
+
+  if (unlocked('food')) {
+    const missing = unserved(needs.food.fulfillment);
+    metrics.push({
       id: 'food',
       icon: Wheat,
       label: t('ui.status.food'),
       pct: clampPct(needs.food.fulfillment * 100),
-      status: unlocked('food')
-        ? n > 0
-          ? t('ui.status.without_food', { count: n })
-          : t('ui.status.fully_supplied')
-        : t('ui.status.unlock_level', { level: unlockLevel('food') }),
-      lockedLevel: unlocked('food') ? undefined : unlockLevel('food'),
+      status:
+        missing > 0 ? t('ui.status.without_food', { count: missing }) : t('ui.status.fully_supplied'),
     });
   }
-  {
+
+  if (unlocked('work')) {
     const unemployed = Math.max(0, Math.round(labor * (1 - needs.work.fulfillment)));
-    rows.push({
+    metrics.push({
       id: 'work',
       icon: Briefcase,
       label: t('ui.status.jobs'),
       pct: clampPct(needs.work.fulfillment * 100),
-      status: unlocked('work')
-        ? unemployed > 0
+      status:
+        unemployed > 0
           ? t('ui.status.unemployed', { count: unemployed })
-          : t('ui.status.full_employment')
-        : t('ui.status.unlock_level', { level: unlockLevel('work') }),
-      lockedLevel: unlocked('work') ? undefined : unlockLevel('work'),
+          : t('ui.status.full_employment'),
     });
   }
-  // Environment maps the housing-weighted ambience score onto a 0..100 readout.
-  const envPct = clampPct(60 + derived.avgAmbience * 6);
-  rows.push({
-    id: 'env',
+
+  metrics.push({
+    id: 'environment',
     icon: Leaf,
     label: t('ui.status.environment'),
-    pct: envPct,
+    pct: clampPct(60 + derived.avgAmbience * 6),
     status: t(derived.avgAmbience >= 0 ? 'ui.status.air_clean' : 'ui.status.air_polluted'),
   });
+
+  const rankedMetrics = [...metrics].sort((a, b) => a.pct - b.pct);
+  const visibleMetrics = rankedMetrics.slice(0, 3);
+  const priority = rankedMetrics.find((metric) => metric.pct < 85);
+  const happiness = clampPct(state.citizens.happiness);
+  const happinessTone = toneFor(happiness);
+  const PriorityIcon = priority?.icon ?? Smile;
+  const actionPanel = priority ? 'build' : 'status';
+
   return (
-    <aside className="hud-panel city-status">
-      <div className="hud-panel-head">
-        <h3>
+    <aside className="hud-panel city-status city-status-compact">
+      <header className="status-compact-head">
+        <div className="status-compact-title">
           <span className="status-head-art">
             {crest ? <img src={crest} alt="" aria-hidden="true" /> : <BarChart3 size={16} />}
           </span>
-          {t('ui.status.title')}
-        </h3>
+          <span>
+            <small>{t('ui.nav.city')}</small>
+            <strong>{t('ui.status.title')}</strong>
+          </span>
+        </div>
+        <button
+          className="status-details-button"
+          onClick={() => setPanel('status')}
+          title={t('ui.status.details')}
+          aria-label={t('ui.status.details')}
+        >
+          <ChevronRight size={17} />
+        </button>
+      </header>
+
+      <div className={`status-overview text-${happinessTone}`}>
+        <Smile size={25} />
+        <strong>{happiness}%</strong>
+        <span>{t(happinessKey(happiness))}</span>
       </div>
-      <div className="status-rows">
-        {rows.map((row) => {
-          const Icon = row.icon;
-          const locked = row.lockedLevel !== undefined;
-          const tone = locked ? 'muted' : row.pct < 60 ? 'bad' : row.pct < 85 ? 'warn' : 'good';
+
+      <div className="status-compact-metrics">
+        {visibleMetrics.map((metric) => {
+          const Icon = metric.icon;
+          const tone = toneFor(metric.pct);
           return (
-            <div key={row.id} className={`status-line status-line-${row.id}${locked ? ' locked' : ''}`}>
-              <span className={`status-line-icon ${tone}`}>
-                {locked ? <Lock size={14} /> : <Icon size={15} />}
-              </span>
-              <div className="status-line-body">
-                <div className="status-line-top">
-                  <span className="status-line-label">{row.label}</span>
-                  <span className={`status-line-pct text-${tone}`}>{locked ? `Lv. ${row.lockedLevel}` : `${row.pct}%`}</span>
-                </div>
-                <div className={`status-line-bar${locked ? ' locked' : ''}`}>
-                  <div className={`status-line-fill ${tone}`} style={{ width: locked ? '0%' : `${row.pct}%` }} />
-                </div>
-                <span className="status-line-note">{row.status}</span>
+            <div className="status-compact-metric" key={metric.id} title={metric.status}>
+              <Icon size={14} />
+              <span>{metric.label}</span>
+              <div className="status-line-bar">
+                <div className={`status-line-fill ${tone}`} style={{ width: `${metric.pct}%` }} />
               </div>
+              <strong className={`text-${tone}`}>{metric.pct}%</strong>
             </div>
           );
         })}
       </div>
-      <button className="hud-panel-more" onClick={() => setPanel('status')}>
-        {t('ui.status.details')} <ChevronRight size={14} />
+
+      <button className={`status-next-action ${priority ? toneFor(priority.pct) : 'good'}`} onClick={() => setPanel(actionPanel)}>
+        <span className="status-next-icon">
+          <PriorityIcon size={17} />
+        </span>
+        <span className="status-next-copy">
+          <small>{priority ? t('ui.build.recommended') : t('ui.status.all_good')}</small>
+          <strong>{priority ? `${priority.label} verbessern` : t('ui.status.details')}</strong>
+          {priority && <span>{priority.status}</span>}
+        </span>
+        <ChevronRight size={17} />
       </button>
     </aside>
   );
 }
 
-function happinessKey(h: number): string {
-  return h >= 80 ? 'ui.happy.great' : h >= 55 ? 'ui.happy.ok' : h >= 35 ? 'ui.happy.meh' : 'ui.happy.bad';
+function happinessKey(happiness: number): string {
+  return happiness >= 80
+    ? 'ui.happy.great'
+    : happiness >= 55
+      ? 'ui.happy.ok'
+      : happiness >= 35
+        ? 'ui.happy.meh'
+        : 'ui.happy.bad';
 }

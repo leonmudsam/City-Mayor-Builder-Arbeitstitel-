@@ -3,8 +3,9 @@ import { startRegionConfig, WORLD_TILES } from '../src/game/config/startRegion.c
 import { createNewGame } from '../src/game/newGame.ts';
 import { GameController } from '../src/game/commands/controller.ts';
 import { recomputeDerived } from '../src/game/simulation/derived.ts';
-import { overrideTerrain } from '../src/game/map/world.ts';
-import type { TerrainType } from '../src/game/types.ts';
+import { overrideTerrain, tileAt } from '../src/game/map/world.ts';
+import { isNodeTile, RESOURCE_NODE_PROFILES } from '../src/game/operations/nodes.ts';
+import type { GameState, ResourceNodeType, TerrainType } from '../src/game/types.ts';
 
 export const T0 = 1_700_000_000_000;
 
@@ -27,13 +28,33 @@ export function nearTownHall(dx: number, dy: number): { x: number; y: number } {
  */
 export function newController(
   now = T0,
-  opts: { flatten?: boolean } = {},
+  opts: { flatten?: boolean; found?: boolean } = {},
 ): { controller: GameController; config: GameConfig } {
   const config = loadConfig();
   const state = createNewGame(config, 'Teststadt', now);
   const controller = new GameController(config, state);
   if (opts.flatten !== false) flattenTerrain(controller);
+  // § Welt-Feinschliff 12.2: Ein neues Spiel startet OHNE Rathaus — der Spieler
+  // gründet selbst (`foundCity`). Fast alle Suiten beschreiben aber eine bereits
+  // bestehende Stadt, deshalb gründet die Standard-Fixture auf dem vom Bake
+  // geprüften Anker. Das ist exakt der frühere Startzustand. Tests, die die
+  // Gründung selbst prüfen, setzen `found: false`.
+  if (opts.found !== false) {
+    const founded = controller.foundCity(TOWN_HALL.x, TOWN_HALL.y);
+    if (!founded.ok) throw new Error(`Test-Fixture: Gründung fehlgeschlagen (${founded.error})`);
+  }
   return { controller, config };
+}
+
+/**
+ * Das Rathaus der Test-Fixture. Seit § 12.2 gründet der Spieler selbst, deshalb
+ * vergibt `foundCity` eine laufende Id (`newId`) statt der früher fest
+ * verdrahteten `b_townhall` — Tests fragen das Gebäude über seine Rolle ab.
+ */
+export function townHallOf(controller: GameController): GameState['buildings'][string] {
+  const building = Object.values(controller.state.buildings).find((b) => b.defId === 'town_hall');
+  if (!building) throw new Error('Test: kein Rathaus vorhanden (Fixture mit found:false?)');
+  return building;
 }
 
 /** Cheat helper for tests: jump to a level without playing through it. */
@@ -65,6 +86,53 @@ export function flattenTerrain(controller: GameController): void {
 export function paintTerrain(controller: GameController, tiles: [number, number][], terrain: TerrainType): void {
   for (const [x, y] of tiles) overrideTerrain(controller.state, x, y, terrain);
   refreshDerived(controller);
+}
+
+/**
+ * Malt genau `count` Kacheln, die auch WIRKLICH einen Ressourcenknoten tragen.
+ *
+ * Ein Knoten existiert nur, wenn zusätzlich zum Terrain der Positions-Hash unter
+ * der Knotendichte liegt (`isNodeTile`). Wer einfach zwei Waldkacheln malt,
+ * bekommt deshalb je Kachel nur mit Wahrscheinlichkeit `density` einen Baum —
+ * und das Ergebnis hängt an den ABSOLUTEN Weltkoordinaten. Genau daran sind die
+ * Betriebstests beim Weltaustausch (§ World Overhaul 12.0) gescheitert: dieselbe
+ * Position relativ zum Rathaus lag auf der neuen Insel auf Kacheln ohne Knoten.
+ *
+ * Dieser Helfer sucht stattdessen in Ringen um `anchor` nach passenden Kacheln
+ * und ist damit unabhängig davon, wo das Rathaus in der Welt liegt.
+ */
+export function paintResourceNodes(
+  controller: GameController,
+  type: ResourceNodeType,
+  anchor: { x: number; y: number },
+  count: number,
+  maxRadius = 6,
+): { x: number; y: number }[] {
+  const profile = RESOURCE_NODE_PROFILES[type];
+  if (!profile) throw new Error(`Unbekannter Knotentyp ${type}`);
+  const painted: { x: number; y: number }[] = [];
+  for (let radius = 0; radius <= maxRadius && painted.length < count; radius++) {
+    for (let dy = -radius; dy <= radius && painted.length < count; dy++) {
+      for (let dx = -radius; dx <= radius && painted.length < count; dx++) {
+        if (Math.max(Math.abs(dx), Math.abs(dy)) !== radius) continue; // nur der Ring
+        const x = anchor.x + dx;
+        const y = anchor.y + dy;
+        if (x < 0 || y < 0 || x >= WORLD_TILES || y >= WORLD_TILES) continue;
+        if (tileAt(controller.state, x, y)?.buildingId) continue;
+        overrideTerrain(controller.state, x, y, profile.terrain as TerrainType);
+        if (!isNodeTile(controller.state, type, x, y)) {
+          overrideTerrain(controller.state, x, y, 'grass'); // kein Knoten → zurück
+          continue;
+        }
+        painted.push({ x, y });
+      }
+    }
+  }
+  refreshDerived(controller);
+  if (painted.length < count) {
+    throw new Error(`Nur ${painted.length} von ${count} ${type}-Knoten im Radius ${maxRadius} um (${anchor.x},${anchor.y}) gefunden`);
+  }
+  return painted;
 }
 
 /** Recompute derived values after direct state edits in tests. */

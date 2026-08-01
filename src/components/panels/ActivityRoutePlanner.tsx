@@ -1,14 +1,15 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   AlertTriangle,
   Check,
+  ChevronDown,
   CircleDollarSign,
   Filter,
   HelpCircle,
   PackageCheck,
   Play,
-  RotateCcw,
   Route,
+  SlidersHorizontal,
   Sparkles,
   Truck,
   X,
@@ -19,13 +20,17 @@ import type { ActivityBoardEntry, GameController } from '../../game/commands/con
 import type { ActivityCategory, ActivityDef, DriveVehicle } from '../../game/config/types.ts';
 import { regionIdAt } from '../../game/config/startRegion.config.ts';
 import type { BuildingInstance } from '../../game/types.ts';
-import { formatDuration, formatMoney, t } from '../../i18n/index.ts';
+import { formatMoney, t } from '../../i18n/index.ts';
 import { playFeedback } from '../../services/feedback.ts';
 import { useGame, useUiStore } from '../../state/store.ts';
+import '../../styles/citywork-smart.css';
 import { CitizenPortrait } from '../art/index.ts';
-import { InfrastructureAdvisor } from '../citywork/InfrastructureAdvisor.tsx';
 import { ManualRouteMap, type CityworkMapPoint } from '../citywork/ManualRouteMap.tsx';
 import { RouteSummary } from '../citywork/RouteSummary.tsx';
+import {
+  createSmartRouteSuggestion,
+  type SmartRouteSuggestion,
+} from '../citywork/smartRoutePlan.ts';
 import { TourOverview, type TourDisplayPoint } from '../citywork/TourOverview.tsx';
 import { VehicleSelector } from '../citywork/VehicleSelector.tsx';
 
@@ -45,6 +50,17 @@ const FILTER_LABELS: Partial<Record<BoardFilter, string>> = {
   inspection: 'Verwaltung',
 };
 
+const WARNING_LABELS: Record<InfrastructureWarning['code'], string> = {
+  oversized_target: 'Eine Lieferung braucht mehrere Fahrten.',
+  many_reloads: 'Mehrere automatische Nachladefahrten sind nötig.',
+  high_empty_travel: 'Die Route enthält viel Leerfahrt.',
+  low_vehicle_suitability: 'Das Fahrzeug passt nur bedingt zu diesem Auftrag.',
+  oversized_vehicle: 'Ein kleineres Fahrzeug wäre wirtschaftlicher.',
+  perishable_no_cooling: 'Für diese Ladung ist Kühlung empfehlenswert.',
+  incomplete_road: 'Ein Straßenabschnitt ist noch nicht verbunden.',
+  narrow_streets: 'Das Fahrzeug verliert Zeit im engen Straßennetz.',
+};
+
 export function ActivityRoutePlanner({ defId }: { defId: string }) {
   const game = useGame();
   const closePlanner = useUiStore((state) => state.closeActivityPlanner);
@@ -52,12 +68,13 @@ export function ActivityRoutePlanner({ defId }: { defId: string }) {
   const pushToast = useUiStore((state) => state.pushToast);
   const setMissionFollow = useUiStore((state) => state.setMissionFollow);
   const active = game.state.activities.active?.defId === defId ? game.state.activities.active : undefined;
-  // §2.3: Beim Öffnen eines Auftrags EINMALIG einen Planungssnapshot einfrieren.
-  // Idempotent im Controller — kein Reroll/kein version-Bump bei erneutem Aufruf.
+
+  // Der Controller friert den Auftrag einmalig ein. Die UI erzeugt keinen
+  // eigenen Missionszustand und würfelt beim erneuten Öffnen nichts neu aus.
   useEffect(() => {
     game.selectActivity(defId);
   }, [game, defId]);
-  // §2.4: Ist ein eingefrorenes Ziel real verschwunden? Dann NICHT still tauschen.
+
   const selectionStatus = game.getActivitySelectionStatus(defId);
   const context = useMemo(
     () => game.getActivityPlanningContext(defId),
@@ -65,9 +82,11 @@ export function ActivityRoutePlanner({ defId }: { defId: string }) {
   );
   const def = context?.def;
   const targetIds = context?.targetBuildingIds ?? [];
+  const targetKey = targetIds.join('|');
+  const vehicleKey = context?.vehicles.map((vehicle) => vehicle.id).join('|') ?? '';
   const anchors = useMemo(
     () => game.getActivityRouteAnchors(defId, targetIds),
-    [game, game.version, defId, targetIds],
+    [game, game.version, defId, targetKey],
   );
   const defaultVehicle = context?.vehicles[0]?.id ?? def?.vehicle ?? 'van';
   const [selectedVehicle, setSelectedVehicle] = useState<DriveVehicle>(
@@ -78,6 +97,10 @@ export function ActivityRoutePlanner({ defId }: { defId: string }) {
   );
   const [fitNonce, setFitNonce] = useState(0);
   const [boardFilter, setBoardFilter] = useState<BoardFilter>('all');
+  const [showJobs, setShowJobs] = useState(false);
+  const [showAdjustments, setShowAdjustments] = useState(false);
+  const [manualMode, setManualMode] = useState(false);
+  const initializedPlanKey = useRef('');
 
   const source = useMemo(
     () => sourcePoint(game, def, context?.sourceBuildingIds[0]),
@@ -85,41 +108,46 @@ export function ActivityRoutePlanner({ defId }: { defId: string }) {
   );
   const targets = useMemo(
     () => targetIds.map((id) => buildingPoint(game, id)).filter((point): point is RoutePoint => point !== undefined),
-    [game, game.version, targetIds],
+    [game, game.version, targetKey],
   );
-  const selectedVehicleDef = context?.vehicles.find((vehicle) => vehicle.id === selectedVehicle);
-  const preview = useMemo(
-    () => game.getActivityRoutePreview(defId, targetIds, roadPath, selectedVehicle),
-    [game, game.version, defId, targetIds, roadPath, selectedVehicle],
+  const smartSuggestion = useMemo(
+    () => context
+      ? createSmartRouteSuggestion(game, defId, targetIds, context.vehicles)
+      : undefined,
+    [game, game.version, defId, targetKey, vehicleKey],
   );
-  const referenceAnalysis = useMemo(
-    () => game.analyseActivityRoute(defId, targetIds),
-    [game, game.version, defId, targetIds],
-  );
-  const warnings = useMemo<InfrastructureWarning[]>(
-    () => preview?.analysis
-      ? game.getActivityInfrastructureWarnings(defId, preview.orderedTargetIds, selectedVehicle, {
-          vehicle: selectedVehicle,
-          roadPath,
-        })
-      : [],
-    [game, game.version, defId, preview?.analysis, preview?.orderedTargetIds, selectedVehicle, roadPath],
-  );
-  const routeComplete = preview?.complete === true && !warnings.some((warning) => warning.severity === 'critical');
-  const board = game.getActivityBoard().filter((entry) => entry.def.drive);
-  const filteredBoard = board.filter((entry) => boardFilter === 'all' || entry.def.category === boardFilter);
-  const filters = useMemo(
-    () => ['all', ...new Set(board.map((entry) => entry.def.category).filter(Boolean))] as BoardFilter[],
-    [board],
-  );
-  const futureVehicles = game.config.activities.vehicles.filter((vehicle) => vehicle.future);
 
+  // Standardfall: Fahrzeug, Zielreihenfolge und echte Straßenkette werden einmal
+  // automatisch vorgeschlagen. Laufende Missionen behalten ihren gespeicherten
+  // Plan; Simulations-Ticks überschreiben keine UI-Eingabe.
   useEffect(() => {
-    const vehicle = active?.vehicle ?? defaultVehicle;
-    setSelectedVehicle(vehicle);
-    setRoadPath(active?.plannedRoadPath?.map((point) => ({ ...point })) ?? (anchors ? [{ ...anchors.source }] : []));
+    if (!anchors || !context) return;
+    const planKey = `${defId}:${targetKey}:${active ? 'active' : 'draft'}`;
+    if (initializedPlanKey.current === planKey) return;
+    initializedPlanKey.current = planKey;
+    if (active?.plannedRoadPath?.length) {
+      setSelectedVehicle(active.vehicle ?? defaultVehicle);
+      setRoadPath(active.plannedRoadPath.map((point) => ({ ...point })));
+    } else if (smartSuggestion) {
+      setSelectedVehicle(smartSuggestion.vehicle);
+      setRoadPath(smartSuggestion.roadPath.map((point) => ({ ...point })));
+    } else {
+      setSelectedVehicle(defaultVehicle);
+      setRoadPath([{ ...anchors.source }]);
+    }
+    setManualMode(false);
+    setShowAdjustments(false);
+    setShowJobs(false);
     setFitNonce((value) => value + 1);
-  }, [defId]); // Missionwechsel startet immer mit einem frischen, auftragsbezogenen Plan.
+  }, [
+    active,
+    anchors,
+    context,
+    defaultVehicle,
+    defId,
+    smartSuggestion,
+    targetKey,
+  ]);
 
   useEffect(() => {
     if (roadPath.length === 0 && anchors) setRoadPath([{ ...anchors.source }]);
@@ -131,34 +159,97 @@ export function ActivityRoutePlanner({ defId }: { defId: string }) {
       if (target?.tagName === 'INPUT' || target?.tagName === 'TEXTAREA' || target?.isContentEditable) return;
       if (event.key === 'Escape') {
         event.preventDefault();
-        if (roadPath.length > 1) setRoadPath((path) => path.slice(0, -1));
+        if (showJobs) setShowJobs(false);
+        else if (showAdjustments) setShowAdjustments(false);
         else closePlanner();
       }
       if (event.key === 'r' || event.key === 'R') {
-        setRoadPath(anchors ? [{ ...anchors.source }] : []);
-        pushToast('Route zurückgesetzt.', 'info');
+        if (smartSuggestion) {
+          setSelectedVehicle(smartSuggestion.vehicle);
+          setRoadPath(smartSuggestion.roadPath.map((point) => ({ ...point })));
+          setManualMode(false);
+          pushToast('Bester Routenvorschlag wiederhergestellt.', 'info');
+        }
       }
       if (event.key === 'f' || event.key === 'F') setFitNonce((value) => value + 1);
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [anchors, closePlanner, pushToast, roadPath.length]);
+  }, [closePlanner, pushToast, showAdjustments, showJobs, smartSuggestion]);
 
-  // §2.4: Ein eingefrorenes Ziel wurde abgerissen — klarer Hinweis statt stillem
-  // Zieltausch. Der Spieler entscheidet: aktualisieren (neue Ziele) oder abbrechen.
+  const selectedVehicleDef = context?.vehicles.find((vehicle) => vehicle.id === selectedVehicle);
+  const preview = useMemo(
+    () => game.getActivityRoutePreview(defId, targetIds, roadPath, selectedVehicle),
+    [game, game.version, defId, targetKey, roadPath, selectedVehicle],
+  );
+  const referenceAnalysis = useMemo(
+    () => game.analyseActivityRoute(defId, smartSuggestion?.orderedTargetIds ?? targetIds),
+    [game, game.version, defId, targetKey, smartSuggestion?.orderedTargetIds],
+  );
+  const warnings = useMemo<InfrastructureWarning[]>(
+    () => preview?.analysis
+      ? game.getActivityInfrastructureWarnings(defId, preview.orderedTargetIds, selectedVehicle, {
+          vehicle: selectedVehicle,
+          roadPath,
+        })
+      : [],
+    [game, game.version, defId, preview?.analysis, preview?.orderedTargetIds, selectedVehicle, roadPath],
+  );
+  const blockingWarning = warnings.find((warning) => warning.severity === 'critical');
+  const visibleWarning = blockingWarning ?? warnings.find((warning) => warning.severity === 'warn') ?? warnings[0];
+  const routeComplete = preview?.complete === true && !blockingWarning;
+  const board = game.getActivityBoard().filter((entry) => entry.def.drive);
+  const filteredBoard = board.filter((entry) => boardFilter === 'all' || entry.def.category === boardFilter);
+  const filters = useMemo(
+    () => ['all', ...new Set(board.map((entry) => entry.def.category).filter(Boolean))] as BoardFilter[],
+    [board],
+  );
+  const futureVehicles = game.config.activities.vehicles.filter((vehicle) => vehicle.future);
+
+  const applySmartSuggestion = (suggestion: SmartRouteSuggestion | undefined) => {
+    if (!suggestion) {
+      setManualMode(true);
+      setShowAdjustments(true);
+      pushToast('Das Straßennetz ist nicht vollständig verbunden. Korrigiere den fehlenden Abschnitt.', 'error');
+      return;
+    }
+    setSelectedVehicle(suggestion.vehicle);
+    setRoadPath(suggestion.roadPath.map((point) => ({ ...point })));
+    setManualMode(false);
+    setFitNonce((value) => value + 1);
+    pushToast(
+      suggestion.ready ? 'Fahrzeug und Route wurden automatisch optimiert.' : 'Vorschlag erstellt – ein Abschnitt braucht deine Hilfe.',
+      suggestion.ready ? 'success' : 'info',
+    );
+  };
+
+  const selectVehicle = (vehicle: DriveVehicle) => {
+    if (!context) return;
+    const suggestion = createSmartRouteSuggestion(game, defId, targetIds, [{ id: vehicle }]);
+    if (suggestion) {
+      setSelectedVehicle(vehicle);
+      setRoadPath(suggestion.roadPath.map((point) => ({ ...point })));
+      setManualMode(false);
+      setFitNonce((value) => value + 1);
+    } else {
+      setSelectedVehicle(vehicle);
+      setManualMode(true);
+    }
+  };
+
   if (selectionStatus === 'stale' && !active) {
     return (
-      <section className="citywork-planner citywork-empty">
+      <section className="citywork-planner citywork-smart citywork-empty">
         <AlertTriangle size={42} />
         <h2>Ein Lieferziel wurde abgerissen</h2>
-        <p>Aktualisiere den Auftrag, um ein neues Ziel zu erhalten – oder brich ihn ab. Es wird bewusst kein Ziel im Hintergrund ausgetauscht.</p>
+        <p>Aktualisiere den Auftrag. Es wird bewusst kein Ziel im Hintergrund ausgetauscht.</p>
         <div className="citywork-empty-actions">
           <button
             className="btn-primary"
             onClick={() => {
               game.refreshActivitySelection(defId);
+              initializedPlanKey.current = '';
               setRoadPath([]);
-              setFitNonce((value) => value + 1);
             }}
           >
             Auftrag aktualisieren
@@ -173,19 +264,18 @@ export function ActivityRoutePlanner({ defId }: { defId: string }) {
 
   if (!def || !context || !source || !anchors || targets.length < 2 || context.vehicles.length === 0) {
     return (
-      <section className="citywork-planner citywork-empty">
+      <section className="citywork-planner citywork-smart citywork-empty">
         <Route size={42} />
         <h2>{t('ui.route.unavailable')}</h2>
-        <p>Baue zuerst eine passende Quelle, mindestens zwei Ziele und ein verbundenes Straßennetz.</p>
+        <p>Baue eine passende Quelle, mindestens zwei Ziele und ein verbundenes Straßennetz.</p>
         <button className="btn-primary" onClick={closePlanner}>{t('ui.close')}</button>
       </section>
     );
   }
 
-  const resetPath = () => setRoadPath([{ ...anchors.source }]);
   const startRoute = () => {
     if (!routeComplete || !preview) {
-      pushToast('Verbinde Quelle, alle Pflichtziele und notwendige Nachfüllstopps.', 'error');
+      pushToast('Die automatische Route braucht noch einen verbundenen Straßenabschnitt.', 'error');
       return;
     }
     const plan = { vehicle: selectedVehicle, roadPath };
@@ -198,80 +288,74 @@ export function ActivityRoutePlanner({ defId }: { defId: string }) {
     }
     closePlanner();
     playFeedback('activity_start');
-    pushToast('Mission gestartet – das Fahrzeug folgt deiner Route.', 'success');
+    pushToast('Mission gestartet – dein Fahrzeug übernimmt ab hier.', 'success');
     requestAnimationFrame(() => setMissionFollow(true));
   };
 
+  const selectedImage = selectedVehicleDef ? vehicleImage(selectedVehicleDef.imageKey) : undefined;
+  const planExplanation =
+    !smartSuggestion
+      ? 'Zwischen Quelle und Ziel fehlt ein durchgehender Straßenweg.'
+      : selectedVehicle === smartSuggestion.vehicle
+      ? smartSuggestion.explanation
+      : 'Die Route wurde automatisch an deine Fahrzeugwahl angepasst.';
+
   return (
-    <section className="citywork-planner citywork-v4">
-      <header className="citywork-v4-header">
-        <div className="citywork-v4-brand">
-          <span><Route size={27} /></span>
-          <div><strong>Stadtarbeit</strong><small>Plane deine Route. Liefere clever.</small></div>
+    <section className="citywork-planner citywork-smart">
+      <header className="citywork-smart-header">
+        <div className="citywork-smart-brand">
+          <span><Route size={24} /></span>
+          <div>
+            <small>Stadtarbeit</small>
+            <strong>{t(def.nameKey)}</strong>
+          </div>
         </div>
-        <div className="citywork-v4-steps" aria-label="Planungsfortschritt">
-          {[
-            ['1', 'Auftrag', true],
-            ['2', 'Fahrzeug', true],
-            ['3', 'Route planen', false],
-            ['4', 'Bestätigen', false],
-          ].map(([number, label, done], index) => (
-            <div key={String(number)} className={index === 2 ? 'active' : done ? 'done' : routeComplete ? 'ready' : ''}>
-              <span>{done ? <Check size={13} /> : number}</span>
-              <strong>{label}</strong>
-            </div>
-          ))}
+
+        <div className="citywork-smart-progress" aria-label="Planungsfortschritt">
+          <span className="done"><Check size={13} /> Auftrag gewählt</span>
+          <span className={roadPath.length > 1 ? 'done' : 'active'}>
+            {roadPath.length > 1 ? <Check size={13} /> : <Sparkles size={13} />} Vorschlag
+          </span>
+          <span className={routeComplete ? 'active' : ''}>3&nbsp; Bestätigen</span>
         </div>
-        <div className="citywork-v4-header-actions">
-          <button onClick={() => pushToast('Mausrad zoomt · freie Fläche zieht die Karte · F passt alles ein · R setzt zurück.', 'info')} title="Hilfe"><HelpCircle size={19} /></button>
-          <button onClick={closePlanner} title={t('ui.close')}><X size={22} /></button>
+
+        <div className="citywork-smart-header-actions">
+          <button
+            onClick={() => pushToast('Der Vorschlag ist startklar. Nur unter „Plan anpassen“ kannst du Fahrzeug oder Weg ändern.', 'info')}
+            title="Hilfe"
+          >
+            <HelpCircle size={18} />
+          </button>
+          <button onClick={closePlanner} title={t('ui.close')}><X size={21} /></button>
         </div>
       </header>
 
-      <div className="citywork-v4-layout">
-        <aside className="citywork-v4-jobs">
-          <div className="citywork-v4-section-head">
-            <div><small>Schritt 1</small><strong>Aufträge</strong></div>
-            <span>{board.filter((entry) => entry.available).length} bereit</span>
-          </div>
-          <div className="citywork-v4-filters">
-            <Filter size={14} />
-            {filters.map((filter) => (
-              <button key={filter} className={boardFilter === filter ? 'active' : ''} onClick={() => setBoardFilter(filter)}>
-                {FILTER_LABELS[filter] ?? filter}
-              </button>
-            ))}
-          </div>
-          <div className="citywork-v4-job-list">
-            {filteredBoard.map((entry) => (
-              <MissionCard
-                key={entry.def.id}
-                entry={entry}
-                selected={entry.def.id === defId}
-                current={entry.def.id === defId}
-                onSelect={() => openPlanner(entry.def.id)}
-              />
-            ))}
-          </div>
-          <div className="citywork-v4-brief">
-            <Sparkles size={16} />
-            <div><strong>Warum ist diese Tour anspruchsvoll?</strong><span>{complexityTags(def, preview?.cargoRoute?.requiredResupplies ?? 0).join(' · ')}</span></div>
-          </div>
-        </aside>
-
-        <main className="citywork-v4-center">
-          <div className="citywork-v4-map-head">
+      <div className="citywork-smart-workspace">
+        <main className="citywork-smart-map-panel">
+          <div className="citywork-smart-map-head">
             <div>
-              <small>Schritt 3 · Routenplanung</small>
-              <h2>{t(def.nameKey)}</h2>
-              <p>Zeichne direkt auf den Straßen. Die Reihenfolge entsteht aus deinem Weg.</p>
+              <span className={`citywork-smart-state${routeComplete ? ' ready' : ''}`}>
+                <Sparkles size={13} />
+                {routeComplete ? 'Automatisch geplant' : 'Feinplanung nötig'}
+              </span>
+              <h2>{source.label} → {targetIds.length} Ziele</h2>
+              <p>
+                {routeComplete
+                  ? 'Fahrzeug, Reihenfolge und Nachladen sind vorbereitet. Du kannst direkt starten.'
+                  : 'Der beste vorhandene Weg ist sichtbar. Öffne „Plan anpassen“, um den offenen Punkt zu korrigieren.'}
+              </p>
             </div>
-            <div className="citywork-v4-map-actions">
-              <span>2D</span>
-              <button onClick={resetPath}><RotateCcw size={15} /> Route löschen</button>
+            <div className="citywork-smart-map-actions">
+              <button onClick={() => setShowJobs((value) => !value)}>
+                <PackageCheck size={15} /> Auftrag wechseln
+              </button>
+              <button className="primary" onClick={() => applySmartSuggestion(smartSuggestion)}>
+                <Sparkles size={15} /> Neu optimieren
+              </button>
             </div>
           </div>
-          <div className="citywork-v4-map-stage">
+
+          <div className="citywork-smart-map-stage">
             <ManualRouteMap
               game={game}
               source={source}
@@ -283,73 +367,140 @@ export function ActivityRoutePlanner({ defId }: { defId: string }) {
               visitOrder={preview?.orderedTargetIds ?? []}
               {...(preview?.cargoRoute ? { cargoStops: preview.cargoRoute.stops } : {})}
               fitNonce={fitNonce}
+              editEnabled={manualMode}
               onPathChange={setRoadPath}
-              onInvalid={() => pushToast('Wähle einen angrenzenden Straßenabschnitt.', 'info')}
+              onInvalid={() => pushToast('Nutze einen direkt angrenzenden Straßenabschnitt.', 'info')}
             />
-            <InfrastructureAdvisor
-              warnings={warnings}
-              routeComplete={routeComplete}
-              // TODO(CLAUDE_LOGIC): InfrastructureWarning braucht roadPoint/segmentId,
-              // damit ein einzelner Hinweis statt der gesamten Tour fokussiert werden kann.
-              onShowRoute={() => setFitNonce((value) => value + 1)}
-            />
-            <RouteSummary preview={preview} roadPath={roadPath} />
+            <RouteSummary preview={preview} roadPath={roadPath} targetsTotal={targetIds.length} />
+            {manualMode && (
+              <div className="citywork-smart-editing">
+                <SlidersHorizontal size={15} />
+                Manuelle Feinplanung aktiv
+              </div>
+            )}
           </div>
         </main>
 
-        <aside className="citywork-v4-right">
-          <VehicleSelector
-            vehicles={context.vehicles}
-            futureVehicles={futureVehicles}
-            level={game.state.level.current}
-            selected={selectedVehicle}
-            {...(preview?.cargoPlan ? { cargoPlan: preview.cargoPlan } : {})}
-            {...(preview?.cargoRoute ? { cargoRoute: preview.cargoRoute } : {})}
-            cargoAssetKey={cargoAsset(def)}
-            onSelect={setSelectedVehicle}
-          />
-          <TourOverview
-            source={source}
-            targets={targets}
-            orderedTargetIds={preview?.orderedTargetIds ?? []}
-            {...(preview?.cargoRoute ? { cargoStops: preview.cargoRoute.stops } : {})}
-            {...(preview?.progress ? { progress: preview.progress } : {})}
-            {...(selectedVehicleDef ? { vehicle: selectedVehicleDef } : {})}
-          />
-          <section className={`citywork-v4-confirm${routeComplete ? ' ready' : ''}`}>
-            <div className="citywork-v4-section-head">
-              <div><small>Schritt 4</small><strong>Mission bestätigen</strong></div>
-              <span>{routeComplete ? 'Bereit' : 'Route offen'}</span>
+        <aside className="citywork-smart-decision">
+          <section className={`citywork-smart-ready-card${routeComplete ? ' ready' : ''}`}>
+            <span className="citywork-smart-kicker">{routeComplete ? 'Bereit zur Abfahrt' : 'Deine Hilfe nötig'}</span>
+            <div className="citywork-smart-vehicle-hero">
+              <span>{selectedImage ? <img src={selectedImage} alt="" /> : <Truck size={48} />}</span>
+              <div>
+                <small>{selectedVehicle === smartSuggestion?.vehicle ? 'Automatisch gewählt' : 'Deine Auswahl'}</small>
+                <strong>{selectedVehicleDef ? t(selectedVehicleDef.nameKey) : 'Lieferfahrzeug'}</strong>
+                <p>{planExplanation}</p>
+              </div>
             </div>
-            <div className="citywork-v4-confirm-main">
-              <span className="citywork-v4-confirm-vehicle">
-                {selectedVehicleDef && vehicleImage(selectedVehicleDef.imageKey)
-                  ? <img src={vehicleImage(selectedVehicleDef.imageKey)} alt="" />
-                  : <Truck size={38} />}
-              </span>
-              <dl>
-                <div><dt>Ladung</dt><dd>{preview?.cargoPlan?.totalRequired.toLocaleString('de-DE') ?? '–'}</dd></div>
-                <div><dt>Stopps</dt><dd>{preview?.orderedTargetIds.length ?? 0}/{targetIds.length}</dd></div>
-                <div><dt>Nachfüllen</dt><dd>{preview?.cargoRoute?.plannedResupplies ?? 0}</dd></div>
-                <div><dt>Leerfahrt</dt><dd>{Math.round((preview?.cargoRoute?.emptyTravelRatio ?? 0) * 100)} %</dd></div>
-                <div><dt>Zeit</dt><dd>{preview?.infrastructure ? formatDuration(preview.infrastructure.estimatedDurationMs) : '–'}</dd></div>
-                <div><dt>Risiko</dt><dd>{preview?.analysis ? t(`ui.route.risk.${preview.analysis.congestionRisk}`) : '–'}</dd></div>
-              </dl>
-            </div>
-            <div className="citywork-v4-confirm-reward">
-              <span><CircleDollarSign size={16} /> {formatMoney(context.reward.money)}</span>
-              <span>{context.reward.xp} XP</span>
-              <strong>{preview?.analysis ? t(`ui.route.medal.${preview.analysis.expectedMedal}`) : 'Prognose offen'}</strong>
-            </div>
-            {!routeComplete && (
-              <p><AlertTriangle size={14} /> Quelle, alle Ziele und nötige Nachfüllstopps müssen lückenlos verbunden sein.</p>
+
+            {visibleWarning && (
+              <div className={`citywork-smart-warning ${visibleWarning.severity}`}>
+                <AlertTriangle size={16} />
+                <span>{WARNING_LABELS[visibleWarning.code]}</span>
+              </div>
             )}
-            <button className="citywork-v4-start" disabled={!routeComplete} onClick={startRoute}>
-              <Truck size={20} /> Mission starten <Play size={16} />
+
+            {!visibleWarning && routeComplete && (
+              <div className="citywork-smart-ok">
+                <Check size={16} />
+                Alle Ziele und nötigen Nachladehalte sind verbunden.
+              </div>
+            )}
+
+            <div className="citywork-smart-reward">
+              <span><CircleDollarSign size={15} /> {formatMoney(context.reward.money)}</span>
+              <span>{context.reward.xp} XP</span>
+            </div>
+
+            <button className="citywork-smart-start" disabled={!routeComplete} onClick={startRoute}>
+              <Play size={17} /> Route starten
             </button>
           </section>
+
+          <button
+            className="citywork-smart-adjust-toggle"
+            aria-expanded={showAdjustments}
+            onClick={() => setShowAdjustments((value) => !value)}
+          >
+            <SlidersHorizontal size={16} />
+            Plan anpassen
+            <ChevronDown size={16} />
+          </button>
+
+          {showAdjustments && (
+            <div className="citywork-smart-adjustments">
+              <VehicleSelector
+                compact
+                {...(smartSuggestion ? { recommended: smartSuggestion.vehicle } : {})}
+                vehicles={context.vehicles}
+                futureVehicles={futureVehicles}
+                level={game.state.level.current}
+                selected={selectedVehicle}
+                {...(preview?.cargoPlan ? { cargoPlan: preview.cargoPlan } : {})}
+                {...(preview?.cargoRoute ? { cargoRoute: preview.cargoRoute } : {})}
+                cargoAssetKey={cargoAsset(def)}
+                onSelect={selectVehicle}
+              />
+
+              <div className="citywork-smart-route-tools">
+                <button onClick={() => applySmartSuggestion(smartSuggestion)}>
+                  <Sparkles size={15} /> Automatik wiederherstellen
+                </button>
+                <button
+                  className={manualMode ? 'active' : ''}
+                  onClick={() => {
+                    setManualMode((value) => !value);
+                    setFitNonce((value) => value + 1);
+                  }}
+                >
+                  <Route size={15} /> {manualMode ? 'Zeichnen beenden' : 'Weg selbst korrigieren'}
+                </button>
+              </div>
+
+              <TourOverview
+                compact
+                source={source}
+                targets={targets}
+                orderedTargetIds={preview?.orderedTargetIds ?? []}
+                {...(preview?.cargoRoute ? { cargoStops: preview.cargoRoute.stops } : {})}
+                {...(preview?.progress ? { progress: preview.progress } : {})}
+                {...(selectedVehicleDef ? { vehicle: selectedVehicleDef } : {})}
+              />
+            </div>
+          )}
         </aside>
       </div>
+
+      {showJobs && (
+        <aside className="citywork-smart-jobs">
+          <div className="citywork-smart-jobs-head">
+            <div><small>Auftrag wählen</small><strong>{board.filter((entry) => entry.available).length} verfügbar</strong></div>
+            <button onClick={() => setShowJobs(false)}><X size={18} /></button>
+          </div>
+          <div className="citywork-smart-filters">
+            <Filter size={14} />
+            {filters.map((filter) => (
+              <button key={filter} className={boardFilter === filter ? 'active' : ''} onClick={() => setBoardFilter(filter)}>
+                {FILTER_LABELS[filter] ?? filter}
+              </button>
+            ))}
+          </div>
+          <div className="citywork-smart-job-list">
+            {filteredBoard.map((entry) => (
+              <MissionCard
+                key={entry.def.id}
+                entry={entry}
+                selected={entry.def.id === defId}
+                current={entry.def.id === defId}
+                onSelect={() => {
+                  setShowJobs(false);
+                  openPlanner(entry.def.id);
+                }}
+              />
+            ))}
+          </div>
+        </aside>
+      )}
     </section>
   );
 }
@@ -366,22 +517,24 @@ function MissionCard({
   onSelect(): void;
 }) {
   const image = uiImage(missionImage(entry.def));
-  const tags = complexityTags(entry.def, entry.def.cargoModel ? 1 : 0).slice(0, 2);
+  const locked = !entry.available && !current;
   return (
     <button
-      className={`citywork-v4-job${selected ? ' selected' : ''}${entry.available || current ? '' : ' locked'}`}
-      disabled={!entry.available && !current}
+      className={`citywork-smart-job${selected ? ' selected' : ''}${locked ? ' locked' : ''}`}
+      disabled={locked}
       onClick={onSelect}
     >
-      <span className="citywork-v4-job-art">{image ? <img src={image} alt="" /> : <PackageCheck size={38} />}</span>
-      <span className="citywork-v4-job-copy">
-        <i>{categoryLabel(entry.def.category)} · {entry.def.difficulty ? t(`activity.difficulty.${entry.def.difficulty}`) : 'Planbar'}</i>
+      <span className="citywork-smart-job-art">{image ? <img src={image} alt="" /> : <PackageCheck size={30} />}</span>
+      <span className="citywork-smart-job-copy">
+        <small>{categoryLabel(entry.def.category)}</small>
         <strong>{t(entry.def.nameKey)}</strong>
-        <small>{t(entry.def.descriptionKey)}</small>
-        <em>{tags.map((tag) => <b key={tag}>{tag}</b>)}</em>
-        <span><CircleDollarSign size={12} /> {formatMoney(entry.reward.money)} <b>{entry.reward.xp} XP</b></span>
+        <span>{t(entry.def.descriptionKey)}</span>
       </span>
-      <span className="citywork-v4-job-person"><CitizenPortrait role={entry.def.sender} seed={entry.def.id} size={42} /></span>
+      <span className="citywork-smart-job-reward">
+        <b>{formatMoney(entry.reward.money)}</b>
+        <small>{entry.reward.xp} XP</small>
+      </span>
+      <CitizenPortrait role={entry.def.sender} seed={entry.def.id} size={34} />
     </button>
   );
 }
@@ -434,14 +587,4 @@ function cargoAsset(def: ActivityDef) {
 
 function categoryLabel(category: ActivityCategory | undefined) {
   return category ? FILTER_LABELS[category] ?? 'Spezialtransport' : 'Stadtarbeit';
-}
-
-function complexityTags(def: ActivityDef, resupplies: number) {
-  const tags = [`${def.targetCount?.max ?? 0} Lieferziele`];
-  if (resupplies > 0) tags.push(`${resupplies} Nachfüllung${resupplies === 1 ? '' : 'en'}`);
-  if (def.cargoModel?.perishable) tags.push('Verderbliche Ware');
-  if (def.difficulty === 'hard') tags.push('Hohes Verkehrsrisiko');
-  if (def.vehicle === 'heavy_transporter' || def.vehicle === 'large_truck') tags.push('Schweres Fahrzeug');
-  if (def.timeLimitSec && def.timeLimitSec <= 75) tags.push('Enges Zeitfenster');
-  return tags;
 }

@@ -1,4 +1,4 @@
-import { Bug, CheckCheck, CloudOff, Coins, Hammer, MapPinned, PackageOpen, Compass, X } from 'lucide-react';
+import { Bug, CheckCheck, CloudOff, Coins, Hammer, MapPinned, PackageOpen, X } from 'lucide-react';
 import { useGame, useUiStore } from '../../state/store.ts';
 import { GraphicsQualityControl, PerfReadout } from './PerformancePanel.tsx';
 import { t } from '../../i18n/index.ts';
@@ -10,7 +10,7 @@ import { WorldCompactionPreview } from '../world/WorldCompactionPreview.tsx';
 // here bypasses the normal state flow — it just skips the wait/cost.
 export function DebugPanel() {
   const game = useGame();
-  const { fogDisabled, cameraBoundsDisabled, setPanel, pushToast, toggleRegionFog, toggleCameraBounds } = useUiStore();
+  const { fogDisabled, setPanel, pushToast, toggleRegionFog } = useUiStore();
 
   if (!import.meta.env.DEV || !game.config.features.debugTools) return null;
 
@@ -38,17 +38,6 @@ export function DebugPanel() {
         }}
       >
         <CloudOff size={16} /> {t(fogDisabled ? 'ui.debug.reveal_regions_off' : 'ui.debug.reveal_regions_on')}
-      </button>
-
-      <button
-        className="btn-secondary"
-        aria-pressed={cameraBoundsDisabled}
-        onClick={() => {
-          toggleCameraBounds();
-          done(t(cameraBoundsDisabled ? 'ui.debug.camera_bounds_on_done' : 'ui.debug.camera_bounds_off_done'));
-        }}
-      >
-        <Compass size={16} /> {t(cameraBoundsDisabled ? 'ui.debug.camera_bounds_on' : 'ui.debug.camera_bounds_off')}
       </button>
 
       <button

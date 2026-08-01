@@ -3,6 +3,7 @@ import { effectiveEffects } from '../../game/buildings/effects.ts';
 import { BAKED_REGIONS, regionIdAt } from '../../game/config/startRegion.config.ts';
 import type { BuildingWorkerStatus, DriveVehicle, ResourceId } from '../../game/types.ts';
 import { t } from '../../i18n/index.ts';
+import { nodeVocabulary } from './nodeVocabulary.ts';
 import type {
   BuildingOperationView,
   ResourceLocationView,
@@ -125,7 +126,7 @@ export function buildWorkAreaPlannerView(
       id: node.id,
       x: node.x,
       y: node.y,
-      label: `${operationProfile.nodeType === 'tree' ? 'Baum' : 'Ressource'} ${node.id}`,
+      label: `${nodeVocabulary(operationProfile.nodeType).singular} ${node.id}`,
       resourceLabel: t(`resource.${node.resource}`),
       amountMin: number(node.remainingAmount),
       amountMax: number(node.remainingAmount),
