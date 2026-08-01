@@ -265,7 +265,36 @@ Renderer liest dieselben Werte. Verbindlich vor Gelände-/Platzierungsarbeit:
 `docs/agents/MAP_FLATTENING_AND_BUILDABILITY_PLAN.md`. Offen (nicht vortäuschen):
 echtes Mesh-Einebnen unter dem Footprint, Pfahl-/Steglogik für Wassergebäude.
 
-## Status: G2 ③ — DER GHOST ZEIGT DEN ANSCHLUSSPUNKT (v1.26, Save v29, D-047) — AKTUELL
+## Status: G2 ④ — VERSCHIEBEN IST EIN ENTWURF (v1.27, Save v29, D-048) — AKTUELL
+`ThreeMapRenderer.setMoving()` war ein **No-op** mit einem Kommentar auf den seit
+Ausbaustufe 2.0 entfernten 2D-/Iso-Modus. Dahinter stand kein Schönheitsfehler:
+**14 von 34 Gebäuden tragen `canRelocate`** und zeigen einen „Versetzen"-Knopf
+(Rathaus ab Minute eins, dazu Sägewerk, Steinbruch, Farm, Wasserwerk,
+Krankenhaus …) — der Knopf setzte `movingBuildingId`, das Banner erschien, und
+danach passierte **nichts**: kein Ghost, keine Ursprungsmarkierung,
+`RendererCallbacks.onMove` wurde vom 3D-Renderer **nie** gerufen, Ausweg nur ESC.
+Seit A6/D-046 wiegt das doppelt — **Stein wächst nie nach**, der Steinbruch läuft
+planmäßig leer und **muss** umziehen; genau diese Bewegung war unausführbar.
+Jetzt bleibt das Gebäude logisch und sichtbar stehen, nur der Ghost wandert; der
+Ursprung ist markiert (`moveOriginGroup`), Abbruch wirkt auf nichts, und der
+Bestätigungsklick ist **genau ein** Command (Id/Stufe/Betrieb bleiben — kein
+Abriss + Neubau). **Eine** Ghost-Strecke für beides: `placementDraft()`
+beantwortet „was hängt am Cursor", `isPlacing()` heißt jetzt „es hängt ein
+Entwurf am Cursor".
+**Zwingend (D-048): Wo ein Command zusätzliche Bedingungen kennt, wird sein
+Prüfteil als reine Funktion herausgezogen und die Vorschau ruft GENAU DIESE auf.**
+`evaluateMove` trägt `moveBuilding` **und** `moveDiagnostics` — sonst ist der
+Ghost grün, wo der Command mit `feature_disabled`/`insufficient` ablehnt
+(`validatePlacement` kennt weder `canRelocate` noch Gebühr noch Budget). Der Umzug
+braucht zwingend `ignoreBuildingId`, sonst meldet die eigene Grundfläche
+`occupied`. `MoveBlocker` = deklarierte Obermenge von `PlacementError`; Testpflicht
+ist die Deckungsgleichheit über einen **Kachelstreifen**, nicht der Einzelfall.
+Die Warnstufe aus D-047 gilt weiter (Umzug vom Netz weg → bernstein). Keine Save-/
+Sim-Änderung, **v29**. Offen (nicht vortäuschen): Ghost zeigt das **Stufe-0-Modell**,
+kein Drag-and-Drop, „Versetzen" liegt zwei Klicks tief (Sheet-Pass, nicht G2).
+Danach ⑤ Radien-Overlays, ⑥ Straßenbau als Plan→Vorschau→Bestätigen.
+
+## Status: G2 ③ — DER GHOST ZEIGT DEN ANSCHLUSSPUNKT (v1.26, Save v29, D-047)
 Die Platzierungsvorschau beantwortet zwei Fragen statt einer: „darf hier gebaut
 werden?" **und** „wird das hier arbeiten?". Von den fünf Punkten, die OPEN_TASKS für
 ③ nannte, waren vier längst umgesetzt (GLB-Ghost, Rotation, Sockel, Radius) — wieder
@@ -287,10 +316,8 @@ Ghost + Banner „Baubar — aber ohne Straßenanschluss bleibt der Betrieb ohne
 (bei der Stadtgründung unterdrückt, dort gibt es planmäßig noch keine Straße). Wer
 eine weitere „erlaubt, aber wirkungslos"-Bedingung findet (Energie, Arbeitskräfte,
 Wasserzugang), ergänzt sie als **Warnstufe, nie als Platzierungsregel**. Keine Save-/
-Sim-Änderung, **v29**. Offen (nicht vortäuschen): **G2 ④ Verschieben** — dort ist
-`ThreeMapRenderer.setMoving()` ein No-op, dessen Kommentar auf den seit Ausbaustufe
-2.0 entfernten 2D-/Iso-Modus verweist; Verschieben hat im 3D-Renderer aktuell gar
-keine Vorschau. Danach ⑤ Radien-Overlays, ⑥ Straßenbau als Plan→Vorschau→Bestätigen.
+Sim-Änderung, **v29**. Der hier als Nächstes vermerkte Punkt **G2 ④ Verschieben**
+ist mit v1.27 erledigt (siehe oben).
 
 ## Status: A6 Steinbruch + A7 Farm — DREI AKTIVE BETRIEBE (v1.25, Save v29, D-046)
 Das Sägewerk ist nicht mehr der einzige aktive Betrieb. Steinbruch und Farm nutzen

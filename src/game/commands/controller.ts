@@ -4,6 +4,7 @@ import type {
   ActivityQuality,
   ActivityRewardTier,
   ActivityVehicleDef,
+  BuildingDef,
   BuildingUpgradeDef,
   DriveVehicle,
 } from '../config/types.ts';
@@ -291,6 +292,39 @@ export interface PlacementDiagnostics {
   /** Standort-/Regionsbonus in Prozentpunkten auf die Produktion (kann negativ sein). */
   locationBonusPct: number;
   buildCost: Partial<Record<ResourceId, number>>;
+}
+
+/**
+ * Warum ein Versetzen scheitert. Echte Obermenge von `PlacementError`: beim
+ * Versetzen gelten **zusätzliche** Bedingungen, die `validatePlacement` gar nicht
+ * kennt (darf dieses Gebäude überhaupt umziehen, reicht das Budget für die
+ * Gebühr). Die Vorschau muss sie mit derselben Deutlichkeit zeigen wie einen
+ * belegten Untergrund — sonst ist der Ghost grün und der Klick lehnt ab.
+ */
+export type MoveBlocker = PlacementError | 'feature_disabled' | 'insufficient';
+
+/**
+ * Vorschau für das Versetzen (§ Core Gameplay G2 ④). Dieselbe Projektion wie
+ * `PlacementDiagnostics`, ergänzt um das, was nur beim Umzug gilt.
+ */
+export interface MoveDiagnostics extends Omit<PlacementDiagnostics, 'reason'> {
+  reason?: MoveBlocker;
+  /** Gebühr, die der Bestätigungsklick abbuchen würde (fehlt = kostenlos). */
+  relocationCost?: Partial<Record<ResourceId, number>>;
+  /** Ziel = aktueller Standort: erlaubt, aber folgenlos und gebührenfrei. */
+  unchanged: boolean;
+  /** Ausrichtung, die der Command wirklich setzen würde (Wasserfront-Snap). */
+  rotation: BuildingRotation;
+}
+
+/** Ergebnis der EINEN Verschiebe-Prüfung (siehe `evaluateMove`). */
+interface MoveCheck {
+  def: BuildingDef;
+  building: GameState['buildings'][string];
+  rotation: BuildingRotation;
+  unchanged: boolean;
+  fee?: Partial<Record<ResourceId, number>>;
+  blocker?: MoveBlocker;
 }
 
 /** Read-only route-planning snapshot for the UI. No RNG or save mutation. */
@@ -731,22 +765,22 @@ export class GameController {
   }
 
   /**
-   * Relocate an existing building. Two paths lead here (§2/§5):
-   *  - the global `moveBuildings` dev flag (off in MVP 1), which lets *anything*
-   *    move for free, and
-   *  - a per-building `canRelocate` flag (town hall, mayor house), which lets a
-   *    non-demolishable special be repositioned via its sheet, charging the
-   *    optional `relocationCost`.
-   * Placement rules are always re-validated against the target.
+   * Die EINE Verschiebe-Prüfung — Grundlage von `moveBuilding` **und**
+   * `moveDiagnostics` (§ G2 ④). Getrennte Prüfungen für Vorschau und Ausführung
+   * wären genau der Fehler, den D-042/D-047 beschreiben: der Ghost könnte grün
+   * zeigen, was der Klick danach ablehnt. Rein lesend — bucht nichts ab.
+   *
+   * Zwei Wege führen zum Umzug (§2/§5): das globale `moveBuildings`-Dev-Flag
+   * (aus im MVP, bewegt dann *alles* kostenlos) und das gebäudeeigene
+   * `canRelocate` (Rathaus, Sägewerk, Steinbruch …), das über das Gebäudefenster
+   * gegen `relocationCost` versetzt. Die Platzierungsregeln gelten immer neu.
    */
-  moveBuilding(buildingId: string, x: number, y: number): CommandResult {
-    const b = this.state.buildings[buildingId];
-    if (!b) return fail('not_found');
-    const def = this.config.buildings.get(b.defId);
-    if (!def) return fail('not_found');
+  private evaluateMove(buildingId: string, x: number, y: number): MoveCheck | undefined {
+    const building = this.state.buildings[buildingId];
+    const def = building ? this.config.buildings.get(building.defId) : undefined;
+    if (!building || !def) return undefined;
     const viaFeature = this.config.features.moveBuildings;
-    if (!viaFeature && def.canRelocate !== true) return fail('feature_disabled');
-    if (b.x === x && b.y === y) return ok;
+    const current = building.rotation ?? 0;
     const waterfront = waterfrontPlacementPreview(
       this.state,
       this.config,
@@ -754,24 +788,44 @@ export class GameController {
       def,
       x,
       y,
-      b.rotation ?? 0,
+      current,
       buildingId,
     );
-    const effectiveRotation = waterfront?.valid ? waterfront.suggestedRotation : (b.rotation ?? 0);
+    const rotation = waterfront?.valid ? waterfront.suggestedRotation : current;
+    const base: MoveCheck = {
+      def,
+      building,
+      rotation,
+      unchanged: building.x === x && building.y === y,
+    };
+    if (!viaFeature && def.canRelocate !== true) return { ...base, blocker: 'feature_disabled' };
+    if (base.unchanged) return base;
     const placementError = waterfront?.reason ?? validatePlacement(this.state, this.config, this.derived, def, x, y, {
       ignoreBuildingId: buildingId,
-      ...(def.waterfront ? { rotation: effectiveRotation } : {}),
+      ...(def.waterfront ? { rotation } : {}),
     });
-    if (placementError) return fail(placementError);
-    // Relocation fee (only on the canRelocate path — the dev flag stays free).
-    if (!viaFeature && def.relocationCost) {
-      const spend = spendCost(this.state, def.relocationCost, `relocate_${def.id}`);
+    if (placementError) return { ...base, blocker: placementError };
+    // Umzugsgebühr — nur auf dem `canRelocate`-Weg; das Dev-Flag bleibt gratis.
+    const fee = !viaFeature ? def.relocationCost : undefined;
+    if (fee && !canAfford(this.state, fee)) return { ...base, fee, blocker: 'insufficient' };
+    return { ...base, ...(fee ? { fee } : {}) };
+  }
+
+  /** Relocate an existing building — Prüfung siehe `evaluateMove`. */
+  moveBuilding(buildingId: string, x: number, y: number): CommandResult {
+    const check = this.evaluateMove(buildingId, x, y);
+    if (!check) return fail('not_found');
+    if (check.blocker) return fail(check.blocker);
+    if (check.unchanged) return ok;
+    const { building: b, def, rotation } = check;
+    if (check.fee) {
+      const spend = spendCost(this.state, check.fee, `relocate_${def.id}`);
       if (!spend.ok) return fail('insufficient');
     }
     clearTiles(this.state, b.x, b.y, def.size.w, def.size.h, buildingId);
     b.x = x;
     b.y = y;
-    if (effectiveRotation) b.rotation = effectiveRotation;
+    if (rotation) b.rotation = rotation;
     else delete b.rotation;
     occupyTiles(this.state, x, y, def.size.w, def.size.h, buildingId);
     this.afterStructuralChange();
@@ -2141,6 +2195,36 @@ export class GameController {
       ...(waterfront ? { waterfront } : {}),
       locationBonusPct: Math.round(locationBonusPct(this.state, def, x, y)),
       buildCost: this.getBuildCost(defId, x, y),
+    };
+  }
+
+  /**
+   * Verschiebe-Vorschau (§ G2 ④). Baut auf `placementDiagnostics` auf — die
+   * Vorschau für Untergrund, Straßenanschluss und Standortbonus ist beim
+   * Versetzen dieselbe wie beim Bauen — und **überschreibt das Urteil** mit dem
+   * Ergebnis von `evaluateMove`, das auch der Command benutzt. Der Ghost kann
+   * damit nicht grün sein, wo `moveBuilding` ablehnt.
+   *
+   * Wichtig ist das `ignoreBuildingId`: ohne es meldet die eigene Grundfläche
+   * `occupied`, und ein Umzug um eine Kachel sähe verboten aus, obwohl er erlaubt ist.
+   */
+  moveDiagnostics(buildingId: string, x: number, y: number): MoveDiagnostics | undefined {
+    const check = this.evaluateMove(buildingId, x, y);
+    if (!check) return undefined;
+    const base = this.placementDiagnostics(check.def.id, x, y, buildingId, check.rotation);
+    if (!base) return undefined;
+    // `reason` der Bauprüfung wird bewusst verworfen: beim Versetzen urteilt
+    // allein `evaluateMove` (es kennt zusätzlich Versetzbarkeit und Gebühr, und
+    // blendet die eigene Grundfläche aus, die hier sonst als `occupied` stünde).
+    const rest = { ...base };
+    delete rest.reason;
+    return {
+      ...rest,
+      valid: check.blocker === undefined,
+      ...(check.blocker ? { reason: check.blocker } : {}),
+      ...(check.fee ? { relocationCost: check.fee } : {}),
+      unchanged: check.unchanged,
+      rotation: check.rotation,
     };
   }
 

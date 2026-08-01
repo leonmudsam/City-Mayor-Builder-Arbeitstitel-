@@ -4,15 +4,17 @@
 // Renderwege). Der Renderer liest Controller-Snapshots und meldet Interaktionen
 // über `RendererCallbacks` zurück.
 
-import type { PlacementError } from '../game/buildings/placement.ts';
 import type { BuildingRotation, WaterfrontPlacementPreview } from '../game/buildings/placement.ts';
-import type { RegionId } from '../game/types.ts';
+import type { MoveBlocker } from '../game/commands/controller.ts';
+import type { RegionId, ResourceId } from '../game/types.ts';
 import type { CameraPreset } from './three/CameraConfig.ts';
 
 /** What the cursor currently hovers in placement/move mode (drives the banner). */
 export interface HoverInfo {
   defId: string;
-  error: PlacementError | undefined;
+  /** `MoveBlocker` ist die Obermenge von `PlacementError` — beim Versetzen können
+   *  zusätzlich Versetzbarkeit und Budget scheitern (§ G2 ④). */
+  error: MoveBlocker | undefined;
   bonusPct: number;
   x: number;
   y: number;
@@ -26,6 +28,17 @@ export interface HoverInfo {
   roadWarning: boolean;
   rotation?: BuildingRotation;
   waterfront?: WaterfrontPlacementPreview;
+  /**
+   * Nur im Verschiebemodus gesetzt (§ G2 ④). Das Gebäude bleibt bis zum
+   * Bestätigungsklick an seinem Platz — die Vorschau nennt deshalb die Gebühr,
+   * die dieser eine Klick abbucht, und ob das Ziel überhaupt ein Umzug ist.
+   */
+  move?: {
+    buildingId: string;
+    origin: { x: number; y: number };
+    relocationCost?: Partial<Record<ResourceId, number>>;
+    unchanged: boolean;
+  };
 }
 
 /** Rein visuelle Arbeitsgebiets-Projektion. Keine dieser Angaben wird vom

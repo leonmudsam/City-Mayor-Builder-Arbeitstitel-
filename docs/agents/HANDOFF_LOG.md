@@ -1,5 +1,43 @@
 # Handoff-Log
 
+## 2026-08-01 — G2 ④ Verschieben als Entwurf (v1.27, Save v29, D-048)
+
+**Ausgangslage:** „weiter mit deiner nächsten empfehlung" nach v1.26. ④ war der
+nächste Punkt der zwingenden G2-Reihenfolge und der einzige mit einer in v1.26
+ausdrücklich vermerkten Altlast.
+
+**Der Befund war größer als die Altlast.** `setMoving()` war ein No-op mit einem
+Kommentar auf den 2D-/Iso-Modus (seit Ausbaustufe 2.0 entfernt). Gemessen:
+**14 der 34 Gebäude tragen `canRelocate`** und zeigen einen „Versetzen"-Knopf —
+Rathaus (ab L1, kostenlos), Bürgermeisterhaus, Sägewerk, Steinbruch, Farm,
+Brunnen, Wasserpumpe, Wasserwerk, Markt, Supermarkt, Feuerwache, Polizei,
+Krankenhaus, Handelsposten. Der Knopf setzte `movingBuildingId`, das Banner
+erschien, danach passierte nichts: `RendererCallbacks.onMove` wurde vom
+3D-Renderer an **keiner** Stelle aufgerufen. Ausweg nur ESC. Seit A6/D-046 wiegt
+das doppelt — Stein wächst nie nach, der Steinbruch **muss** umziehen.
+
+**Umbau.** `placementDraft()` als EINE Ghost-Strecke für Bauen und Versetzen;
+`isPlacing()` heißt jetzt „es hängt ein Entwurf am Cursor"; `moveOriginGroup`
+markiert den Ursprung; der Bestätigungsklick ist genau ein `moveBuilding`.
+**D-048:** Der Prüfteil des Commands ist als reine `evaluateMove` herausgezogen,
+`moveDiagnostics` ruft genau diese — sonst zeigt der Ghost Grün, wo der Command
+mit `feature_disabled`/`insufficient` ablehnt (`validatePlacement` kennt weder
+`canRelocate` noch Gebühr noch Budget). `MoveBlocker` ist die deklarierte
+Obermenge von `PlacementError`. `costLabel` liegt jetzt geteilt unter
+`components/common/` (bisher Kopie im Straßenplaner).
+
+**Verifikation.** `tsc`, `eslint`, **70 Dateien / 582 Tests** (10 neu), `npm run
+build` grün. 3D-Smoke gegen `vite preview` (SwiftShader): Gründung → Rathaus →
+„Versetzen" → Ghost folgt, Ursprung markiert, `banner-ok` „Rathaus: Hier
+absetzen." → Klick → Toast „Gebäude versetzt.", Entwurf beendet, Rathaus im
+Spielstand von **(241,251) auf (252,247)**, **0 Konsolenfehler**.
+
+**Für die nächste Runde:** ⑤ Radien-Overlays terrainfolgend
+(`getCoverageOverlay`), danach ⑥ Straßenbau als Plan→Vorschau→Bestätigen.
+Kleinigkeiten aus dieser Runde bewusst offen gelassen: Ghost zeigt das
+Stufe-0-Modell, kein Drag-and-Drop, „Versetzen" liegt zwei Klicks tief
+(gehört in einen Sheet-Pass, nicht in G2).
+
 ## 2026-08-01 — G2 ③ Platzierungs-Ghost mit Anschlusspunkt (v1.26, Save v29, D-047)
 
 **Ausgangslage:** v1.12–v1.25 waren inzwischen als `64fca3c` gesichert (vorher lagen

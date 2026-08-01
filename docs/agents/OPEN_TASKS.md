@@ -353,11 +353,21 @@ Dateistellen: `CORE_GAMEPLAY_OVERHAUL_AUDIT.md`.
    gültig UND ohne Anschluss, das Gebäude danach ohne Wirkung. Dafür gibt es
    jetzt eine eigene bernsteinfarbene Warnstufe in Ghost und Banner.
    7 Tests (`placementRoadLink.test.ts`). Keine Save-/Sim-Änderung.
-4. Verschieben als Entwurf: Ghost an der Zielposition, Ursprung markiert,
-   Abbruch ohne Wirkung, Bestätigung = genau ein Command.
-   ⚠️ **Vorher abräumen:** `ThreeMapRenderer.setMoving()` ist ein No-op, dessen
-   Kommentar auf den **2D-/Iso-Modus** verweist — den es seit Ausbaustufe 2.0
-   nicht mehr gibt. Verschieben hat im 3D-Renderer aktuell keinerlei Vorschau.
+4. ✅ **ERLEDIGT (v1.27, D-048) — Verschieben als Entwurf.** `setMoving()` war ein
+   No-op mit Kommentar auf den entfernten 2D-/Iso-Modus; der „Versetzen"-Knopf von
+   **14 der 34 Gebäude** (u. a. Sägewerk, Steinbruch, Farm — die laut A6/D-046
+   umziehen MÜSSEN, weil Stein nie nachwächst) führte ins Leere: kein Ghost, keine
+   Ursprungsmarkierung, `onMove` wurde nie aufgerufen, Ausweg nur ESC.
+   Jetzt: `placementDraft()` beantwortet „was hängt am Cursor" für Bauen **und**
+   Versetzen (eine Ghost-Strecke), `moveOriginGroup` markiert den Ursprung,
+   der Bestätigungsklick löst genau einen Command aus.
+   **D-048:** Der Prüfteil von `moveBuilding` ist als reine `evaluateMove`
+   herausgezogen; `moveDiagnostics` ruft genau diese auf — sonst wäre der Ghost
+   grün, wo der Command wegen `feature_disabled`/`insufficient` ablehnt. Der
+   Umzug braucht zwingend `ignoreBuildingId` (sonst blockiert die eigene
+   Grundfläche). 10 Tests (`movePreview.test.ts`). Keine Save-/Sim-Änderung.
+   Offen: Ghost zeigt das Stufe-0-Modell, kein Drag-and-Drop, Knopf liegt zwei
+   Klicks tief (gehört in einen Sheet-Pass).
 5. Wirkungsradien terrainfolgend projizieren (`getCoverageOverlay`).
 6. Straßenbau als Planen → Vorschau → Bestätigen → Command.
 
@@ -488,7 +498,9 @@ v15→v16. Lieferketten (§7) und aktive Minispiele (§8) folgen danach.
 
 ## P1/P2 — Welt und Systeme
 
-- Echter GLB-Ghost für Platzieren/Verschieben; `placementDiagnostics` nutzen.
+- ✅ Echter GLB-Ghost für Platzieren (v1.26) **und Verschieben** (v1.27); beide
+  lesen `placementDiagnostics`/`moveDiagnostics`. Rest: Ghost zeigt das
+  Stufe-0-Modell statt der tatsächlichen Ausbaustufe.
 - Wirkungsradien auf Gelände projizieren; `getCoverageOverlay` nutzen.
 - Straßenbau vollständig als Planen → Vorschau → Bestätigen → Command.
 - Lane-/Kreuzungsbelegung und Kollisionsvermeidung.

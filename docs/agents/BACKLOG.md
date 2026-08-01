@@ -124,9 +124,14 @@ Transport (A5), zentraler Start (S1/S2), Fog/Kamera (S3).
   Anschlusskacheln und eine eigene Warnstufe „baubar, aber ohne Wirkung"
   (`requiresRoad` blockiert nicht — im Startzustand 3.652 von 3.721 Kacheln gültig
   UND unverbunden). 7 Tests. Keine Save-/Sim-Änderung.
-- ❌ `[P1]` ④ Verschieben als Entwurf (Ghost, Ursprung, Bestätigung = 1 Command).
-  ⚠️ `setMoving()` ist ein No-op mit Kommentar auf den entfernten 2D-/Iso-Modus —
-  Verschieben hat im 3D-Renderer derzeit gar keine Vorschau.
+- ✅ `[P1]` ④ **Verschieben als Entwurf** (v1.27, D-048): `setMoving()` war ein
+  No-op (Kommentar auf den entfernten 2D-/Iso-Modus) — der „Versetzen"-Knopf von
+  **14 der 34 Gebäude** führte ins Leere, `onMove` wurde nie gerufen. Neu:
+  `placementDraft()` als EINE Ghost-Strecke für Bauen und Versetzen,
+  `moveOriginGroup` markiert den Ursprung, Bestätigung = genau ein Command.
+  `evaluateMove` trägt Command **und** `moveDiagnostics` (D-048), damit der Ghost
+  nicht grün ist, wo `feature_disabled`/`insufficient` ablehnt. 10 Tests.
+  Keine Save-/Sim-Änderung. Offen: Stufe-0-Modell im Ghost, kein Drag-and-Drop.
 - ❌ `[P1]` ⑤ Wirkungsradien terrainfolgend (`getCoverageOverlay`).
 - ❌ `[P1]` ⑥ Straßenbau als Plan→Vorschau→Bestätigen (= Thema 1).
 - ❌ `[P2]` G3–G8: Weltmaßstab-Klärung, Bevölkerungsmodell (Save-Migration),

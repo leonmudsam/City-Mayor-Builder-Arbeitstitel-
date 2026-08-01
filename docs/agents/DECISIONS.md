@@ -1,5 +1,36 @@
 # Entscheidungen
 
+## D-048 — Vorschau und Command teilen sich die Prüfung, nicht nur die Regel
+
+**Datum:** 01.08.2026 · **Status:** aktiv · **Version:** v1.27 (Save v29)
+
+**Entscheidung.** Wo ein Command **zusätzliche** Bedingungen kennt, die über die
+gemeinsame Regel hinausgehen, wird der Prüfteil des Commands als eigene reine
+Funktion herausgezogen, und die Vorschau ruft **genau diese** auf. Erster Fall:
+`GameController.evaluateMove` trägt `moveBuilding` **und** `moveDiagnostics`.
+
+**Warum.** D-042/D-047 verlangen, dass Anzeige und Prüfung dieselbe Quelle
+benutzen. Beim Versetzen reicht das nicht: `validatePlacement` ist zwar dieselbe
+Instanz für Bauen und Umziehen, kennt aber weder `canRelocate` noch die
+`relocationCost` noch das Budget. Eine Vorschau, die nur `validatePlacement`
+befragt, zeigt genau dort Grün, wo `moveBuilding` mit `feature_disabled` oder
+`insufficient` ablehnt — der Spieler klickt in einen Fehler-Toast. Der Umzug
+braucht außerdem zwingend `ignoreBuildingId`: ohne ihn meldet die eigene
+Grundfläche `occupied`, und ein Umzug um eine Kachel sähe verboten aus.
+
+**Folgen.**
+- `MoveBlocker` ist die deklarierte Obermenge von `PlacementError`
+  (`+ feature_disabled | insufficient`); `HoverInfo.error` führt sie, damit das
+  Banner beide Welten mit demselben Text-Mechanismus beschriften kann.
+- `moveDiagnostics` baut auf `placementDiagnostics` auf (Untergrund,
+  Anschlusskacheln, Standortbonus sind beim Versetzen dieselben) und
+  **überschreibt allein das Urteil**. Kein zweiter Diagnosepfad.
+- Testpflicht: Die Suite prüft die Deckungsgleichheit über einen Kachelstreifen —
+  `result.ok === preview.valid` und `result.error === preview.reason` —, nicht
+  einzelne Fälle. Ein Streifen, der nur einen Ausgang enthält, gilt als Fehler.
+- Gilt für jeden künftigen Command mit Vorbedingungen (Abriss, Ausbau,
+  Freischaltung): erst den Prüfteil trennen, dann eine Vorschau anbieten.
+
 ## D-047 — Die Vorschau zeigt auch, was erlaubt ist, aber nicht funktioniert
 
 **Datum:** 01.08.2026 · **Status:** aktiv · **Version:** v1.26 (Save v29)

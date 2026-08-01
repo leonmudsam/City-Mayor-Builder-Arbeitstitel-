@@ -117,7 +117,8 @@ import { sunElevation } from './environment.ts';
 import { getGraphicsProfile, subscribeGraphicsSettings } from './graphicsSettings.ts';
 import { scaledBudget, type GraphicsProfile } from './graphicsQuality.ts';
 import { setPerfStats } from './perfStats.ts';
-import type { GameController } from '../../game/commands/controller.ts';
+import type { GameController, MoveDiagnostics, PlacementDiagnostics } from '../../game/commands/controller.ts';
+import type { BuildingRotation } from '../../game/buildings/placement.ts';
 import type { BuildingDef } from '../../game/config/types.ts';
 import type { BuildingInstance, TerrainType } from '../../game/types.ts';
 import { regionOfTile, samplePlacementSurface, worldTerrainAt } from '../../game/map/world.ts';
@@ -568,6 +569,10 @@ export class ThreeMapRenderer implements IMapRenderer {
    * ausschließlich aus GameController.getCoverageOverlay(). */
   private coverageOverlayGroup = new Group();
   private coverageOverlayKey = '';
+  /** § G2 ④: Markierung des Ursprungs, solange ein Gebäude versetzt wird. Eigene
+   * Gruppe, weil sie den Ghost überlebt — der Ghost wird bei jeder Cursorbewegung
+   * neu gebaut, der Ursprung steht still. */
+  private moveOriginGroup = new Group();
   private markerGroup = new Group();
   private ground: Mesh | undefined; // invisible pick plane
   private ghost: Group | undefined;
@@ -598,6 +603,9 @@ export class ThreeMapRenderer implements IMapRenderer {
   private regionStatus = new Map<number, string>();
 
   private placingDefId: string | undefined;
+  /** § G2 ④: Gebäude, das gerade versetzt wird. Bis zum Bestätigungsklick bleibt
+   * es logisch (und sichtbar) an seinem alten Platz — nur der Ghost wandert. */
+  private movingId: string | undefined;
   private selectedId: string | undefined;
   private infoLayerMode: InfoLayerMode = 'problems';
   private infrastructureLayerMode: InfrastructureLayerMode = 'off';
@@ -732,6 +740,7 @@ export class ThreeMapRenderer implements IMapRenderer {
       this.coverageOverlayGroup,
       this.workAreaOverlayGroup,
       this.roadPlanOverlayGroup,
+      this.moveOriginGroup,
       this.overlayGroup,
       this.markerGroup,
     );
@@ -829,9 +838,19 @@ export class ThreeMapRenderer implements IMapRenderer {
     this.lastHoverKey = ''; // force updateGhostAt to rebuild on the next move
   }
 
-  setMoving(): void {
-    // Moving buildings is a 2D-mode interaction (drag/hold); in 3D the player
-    // switches to 2D/iso to relocate. No-op here (documented, docs/3D_MODEL_MANIFEST.md).
+  /**
+   * § G2 ④ Verschieben als Entwurf. Bis v1.26 war das hier ein No-op mit einem
+   * Kommentar auf den 2D-/Iso-Modus — den es seit Ausbaustufe 2.0 nicht mehr
+   * gibt. Der „Versetzen"-Knopf von 14 der 34 Gebäude führte damit ins Leere.
+   *
+   * Jetzt hängt das Gebäude als Ghost am Cursor, während es logisch an seinem
+   * Platz bleibt; erst der Bestätigungsklick löst genau EINEN Command aus.
+   */
+  setMoving(id: string | undefined): void {
+    if (this.movingId === id) return;
+    this.movingId = id;
+    this.clearGhost();
+    this.rebuildMoveOrigin();
   }
 
   setSelected(id: string | undefined): void {
@@ -1334,14 +1353,25 @@ export class ThreeMapRenderer implements IMapRenderer {
   /** The input controller talks to the renderer through this small surface. */
   private inputHost(): CameraInputHost {
     return {
-      isPlacing: () => this.placingDefId !== undefined,
+      // § G2 ④: „Es hängt ein Entwurf am Cursor" — das gilt für Bauen UND
+      // Versetzen. Davon hängen Fadenkreuz-Cursor, Ghost-Verfolgung und vor
+      // allem ab, dass der Linksklick absetzt statt eine Auswahl zu ändern.
+      isPlacing: () => this.placementDraft() !== undefined,
       placingPaints: () => {
+        if (this.movingId) return false; // ein Umzug wird nicht gemalt.
         const def = this.placingDefId ? this.controller.config.buildings.get(this.placingDefId) : undefined;
         return def?.category === 'roads' || def?.category === 'decoration';
       },
       place: (cx, cy) => {
         const t = this.pickTileAt(cx, cy);
-        if (t && this.placingDefId) this.callbacks.onPlace(this.placingDefId, t.x, t.y, this.placingRotation);
+        if (!t) return;
+        // Der Bestätigungsklick eines Umzugs ist genau EIN Command — kein
+        // Abreißen + Neubauen (das Gebäude behält Id, Stufe und Betrieb).
+        if (this.movingId) {
+          this.callbacks.onMove(this.movingId, t.x, t.y);
+          return;
+        }
+        if (this.placingDefId) this.callbacks.onPlace(this.placingDefId, t.x, t.y, this.placingRotation);
       },
       paint: (cx, cy) => {
         const t = this.pickTileAt(cx, cy);
@@ -1509,27 +1539,57 @@ export class ThreeMapRenderer implements IMapRenderer {
 
   // ---- placement ghost ------------------------------------------------------
 
+  /**
+   * Was gerade als Entwurf am Cursor hängt: ein neues Gebäude (Platzieren) oder
+   * ein bestehendes (Versetzen). Beide laufen anschließend durch DIESELBE
+   * Ghost-Strecke — sonst könnte das Versetzen eine Kachel anders beurteilen als
+   * der Bau, obwohl beide Commands auf `validatePlacement` fußen (§2).
+   */
+  private placementDraft():
+    | { def: BuildingDef; rotation: BuildingRotation; movingId?: string; origin?: { x: number; y: number } }
+    | undefined {
+    if (this.movingId) {
+      const building = this.controller.state.buildings[this.movingId];
+      const def = building ? this.controller.config.buildings.get(building.defId) : undefined;
+      if (!building || !def) return undefined;
+      return {
+        def,
+        rotation: building.rotation ?? 0,
+        movingId: this.movingId,
+        origin: { x: building.x, y: building.y },
+      };
+    }
+    const def = this.placingDefId ? this.controller.config.buildings.get(this.placingDefId) : undefined;
+    return def ? { def, rotation: this.placingRotation } : undefined;
+  }
+
   private updateGhostAt(clientX: number, clientY: number): void {
-    const defId = this.placingDefId;
-    const def = defId ? this.controller.config.buildings.get(defId) : undefined;
+    const draft = this.placementDraft();
     const t = this.pickTileAt(clientX, clientY);
-    if (!def || !t) {
+    if (!draft || !t) {
       this.clearGhost();
       return;
     }
+    const def = draft.def;
     const { x, y } = t;
     // § G2 ③: EINE gebündelte Read-Projektion statt drei Einzelabfragen. Gültigkeit,
     // Wasserfront, Grundfläche, Standortbonus und Straßenanschluss stammen damit
     // garantiert aus demselben Zustand — vorher konnten Ghost, Banner und
     // Wasserfront-HUD dieselbe Kachel unterschiedlich beschreiben.
-    const diagnostics = this.controller.placementDiagnostics(def.id, x, y, undefined, this.placingRotation);
+    // § G2 ④: Beim Versetzen liefert `moveDiagnostics` dasselbe Bild, ergänzt um
+    // Versetzbarkeit und Gebühr — und blendet über `ignoreBuildingId` die eigene
+    // Grundfläche aus, die sonst als `occupied` gegen den Umzug spräche.
+    const moveInfo = draft.movingId ? this.controller.moveDiagnostics(draft.movingId, x, y) : undefined;
+    const diagnostics: PlacementDiagnostics | MoveDiagnostics | undefined = draft.movingId
+      ? moveInfo
+      : this.controller.placementDiagnostics(def.id, x, y, undefined, draft.rotation);
     if (!diagnostics) {
       this.clearGhost();
       return;
     }
     const waterfront = diagnostics.waterfront;
-    const displayRotation = waterfront?.valid ? waterfront.suggestedRotation : this.placingRotation;
-    const key = `${defId}|${x}|${y}|${displayRotation}`;
+    const displayRotation = waterfront?.valid ? waterfront.suggestedRotation : draft.rotation;
+    const key = `${draft.movingId ?? def.id}|${x}|${y}|${displayRotation}`;
     if (key === this.lastHoverKey) return;
     this.lastHoverKey = key;
 
@@ -1538,7 +1598,7 @@ export class ThreeMapRenderer implements IMapRenderer {
     // nicht gegründet ist, entscheidet deshalb dieselbe Instanz, die auch der
     // Command benutzt (`getFoundingBlocker`), damit Vorschau und Ergebnis nie
     // auseinanderlaufen.
-    const founding = def.id === 'town_hall' && !this.controller.isCityFounded();
+    const founding = !draft.movingId && def.id === 'town_hall' && !this.controller.isCityFounded();
     const error = founding ? this.controller.getFoundingBlocker(x, y) : diagnostics.reason;
     const bonusPct = error ? 0 : diagnostics.locationBonusPct;
     // Baubar, aber ohne Wirkung: `requiresRoad` blockiert die Platzierung nicht,
@@ -1555,6 +1615,16 @@ export class ThreeMapRenderer implements IMapRenderer {
       roadAccess: diagnostics.roadAccess,
       roadWarning,
       ...(waterfront ? { rotation: displayRotation, waterfront } : {}),
+      ...(draft.movingId && draft.origin
+        ? {
+            move: {
+              buildingId: draft.movingId,
+              origin: draft.origin,
+              ...(moveInfo?.relocationCost ? { relocationCost: moveInfo.relocationCost } : {}),
+              unchanged: moveInfo?.unchanged === true,
+            },
+          }
+        : {}),
     });
 
     if (this.ghost) {
@@ -1767,6 +1837,38 @@ export class ThreeMapRenderer implements IMapRenderer {
       this.lastHoverKey = '';
       this.callbacks.onHoverInfo(undefined);
     }
+  }
+
+  /**
+   * § G2 ④: Der Ursprung eines laufenden Umzugs. Ohne ihn verliert der Spieler
+   * beim Schwenken der Kamera den Bezug — das Gebäude steht ja noch dort, wirkt
+   * aber wie ein beliebiges anderes. Rein visuell, keine Interaktion.
+   */
+  private rebuildMoveOrigin(): void {
+    this.clearOwnedGroup(this.moveOriginGroup);
+    const building = this.movingId ? this.controller.state.buildings[this.movingId] : undefined;
+    const def = building ? this.controller.config.buildings.get(building.defId) : undefined;
+    if (!building || !def) return;
+    const w = def.size.w;
+    const h = def.size.h;
+    const cx = building.x + w / 2;
+    const cz = building.y + h / 2;
+    const base = terrainHeightAt(cx, cz);
+    const color = 0x8fd8ff;
+    const frame = new LineSegments(
+      new EdgesGeometry(new BoxGeometry(w, 0.06, h)),
+      new LineBasicMaterial({ color, transparent: true, opacity: 0.85 }),
+    );
+    frame.position.set(cx, base + 0.16, cz);
+    this.moveOriginGroup.add(frame);
+    // Schlanke Säule: macht den Ursprung auch aus der Ferne und über Bebauung
+    // hinweg auffindbar, ohne das Gebäude selbst zu verdecken.
+    const beam = new Mesh(
+      new CylinderGeometry(0.09, 0.09, 6, 8),
+      new MeshBasicMaterial({ color, transparent: true, opacity: 0.34, depthWrite: false }),
+    );
+    beam.position.set(cx, base + 3, cz);
+    this.moveOriginGroup.add(beam);
   }
 
   // ---- terrain --------------------------------------------------------------

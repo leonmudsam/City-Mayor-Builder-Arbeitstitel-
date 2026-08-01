@@ -3,16 +3,10 @@ import { useEffect, useMemo } from 'react';
 import { formatMoney, t } from '../../i18n/index.ts';
 import { useGame, useUiStore } from '../../state/store.ts';
 import { DataMetric, StatusChip } from '../common/GamePanel.tsx';
+import { costLabel } from '../common/costLabel.ts';
 import { buildSmartRoadPlanView } from './adapters.ts';
 
 const int = (value: number): string => Math.round(value).toLocaleString('de-DE');
-/** Materialkosten als „57.500 · 1.660 Holz" (Geld kompakt, Rest ganzzahlig). */
-function costLabel(cost: Partial<Record<string, number>>): string {
-  const parts = Object.entries(cost)
-    .filter(([, amount]) => (amount ?? 0) > 0)
-    .map(([res, amount]) => (res === 'money' ? formatMoney(amount ?? 0) : `${int(amount ?? 0)} ${t(`resource.${res}`)}`));
-  return parts.length > 0 ? parts.join(' · ') : formatMoney(0);
-}
 
 export function SmartRoadPlannerHud() {
   const game = useGame();

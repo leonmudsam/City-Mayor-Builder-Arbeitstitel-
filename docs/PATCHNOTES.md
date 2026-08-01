@@ -1,5 +1,124 @@
 # Patch Notes
 
+## v1.27 — Core Gameplay G2 ④: Verschieben ist ein Entwurf, kein toter Knopf (Save v29, D-048)
+
+> Auftrag: „weiter mit deiner nächsten empfehlung" — G2 ④ war nach ③ der nächste
+> Punkt der zwingenden Reihenfolge, und der einzige mit einer ausdrücklich in
+> v1.26 vermerkten Altlast.
+
+### Der Befund vor der Arbeit
+
+`ThreeMapRenderer.setMoving()` war ein **No-op**. Sein Kommentar verwies auf den
+2D-/Iso-Modus — „in 3D wechselt der Spieler zum Verschieben nach 2D/iso" —, den
+es seit Ausbaustufe 2.0 nicht mehr gibt. Die Folge war kein Schönheitsfehler:
+
+- **14 der 34 Gebäude tragen `canRelocate`** und zeigen im Gebäudefenster einen
+  „Versetzen"-Knopf: Rathaus (ab Minute eins, kostenlos), Bürgermeisterhaus,
+  **Sägewerk**, **Steinbruch**, **Farm**, Brunnen, Wasserpumpe, Wasserwerk,
+  Markt, Supermarkt, Feuerwache, Polizei, Krankenhaus, Handelsposten.
+- Der Knopf setzte `movingBuildingId`, das Banner erschien — und danach passierte
+  **nichts**. Kein Ghost, keine Ursprungsmarkierung, und der Kartenklick landete
+  im Auswahlpfad statt beim Umzug. `RendererCallbacks.onMove` wurde vom
+  3D-Renderer **an keiner Stelle** aufgerufen. Der einzige Ausweg war ESC.
+- Besonders schwer wiegt das seit A6/D-046: **Stein wächst nie nach**
+  (`regenerationMs: undefined`), der Steinbruch läuft planmäßig leer und **muss**
+  umziehen. Genau die Bewegung, die das Design verlangt, war nicht ausführbar.
+
+### Was sich geändert hat
+
+**Verschieben ist ein Entwurf.** Das Gebäude bleibt logisch und sichtbar an
+seinem Platz; nur der Ghost wandert. Der Ursprung bekommt eine eigene Markierung
+(Umriss der Grundfläche plus schlanke Säule, `moveOriginGroup`) — ohne sie
+verliert man beim Schwenken der Kamera den Bezug, weil das Gebäude ja noch
+dasteht. Abbruch per Rechtsklick oder ESC wirkt sich auf nichts aus. Der
+Bestätigungsklick löst **genau einen** Command aus (`moveBuilding`); das Gebäude
+behält Id, Ausbaustufe und laufenden Betrieb — kein Abriss + Neubau.
+
+**Ein Entwurf, eine Ghost-Strecke.** `placementDraft()` beantwortet „was hängt am
+Cursor" für beide Fälle, danach läuft alles durch dieselbe `updateGhostAt`.
+Sonst könnte das Versetzen eine Kachel anders beurteilen als das Bauen, obwohl
+beide Commands auf `validatePlacement` fußen (§2). Auch `isPlacing()` im
+Eingabepfad heißt jetzt „es hängt ein Entwurf am Cursor" — davon hängen
+Fadenkreuz, Ghost-Verfolgung und vor allem ab, dass der Linksklick absetzt.
+
+**Vorschau und Command teilen die Prüfung (D-048).** Der Umzug kennt Bedingungen,
+die `validatePlacement` gar nicht hat: Versetzbarkeit (`canRelocate` bzw. das
+Dev-Flag) und die Gebühr gegen das Budget. Deshalb ist der Prüfteil von
+`moveBuilding` als reine Funktion `evaluateMove` herausgezogen, und die neue
+Read-Projektion `moveDiagnostics` ruft **genau diese** auf. Zwei Wirkungen sind
+im Spiel direkt sichtbar:
+
+- Ein Umzug **um eine Kachel** ist gültig, weil `ignoreBuildingId` die eigene
+  Grundfläche ausblendet. Ohne ihn meldet dieselbe Kachel `occupied` — der Test
+  prüft beide Seiten gegeneinander.
+- Reicht das Geld für die Gebühr nicht, ist der Ghost **rot** statt grün.
+  Vorher wäre er grün gewesen und der Klick hätte einen Fehler-Toast erzeugt.
+
+**Die Gebühr steht vor dem Klick.** Das Banner nennt sie („Hier absetzen — das
+Versetzen kostet 3.000") und meldet das aktuelle Grundstück als solches („Das ist
+der aktuelle Standort — der Klick ändert nichts"). Die Warnstufe aus D-047 gilt
+unverändert weiter: wer ein `requiresRoad`-Gebäude vom Netz wegzieht, sieht den
+bernsteinfarbenen Ghost. Scheitert der Klick, **endet der Entwurf nicht** — das
+Gebäude bleibt am Cursor, damit direkt eine andere Kachel gewählt werden kann.
+
+### Architektur
+
+- `MoveBlocker = PlacementError | 'feature_disabled' | 'insufficient'` ist die
+  deklarierte Obermenge; `HoverInfo.error` führt sie, damit ein Banner beide
+  Welten über denselben `error.*`-Schlüssel beschriftet.
+- `MoveDiagnostics` erweitert `PlacementDiagnostics` um `relocationCost`,
+  `unchanged` und `rotation` und **überschreibt allein das Urteil**. Untergrund,
+  Anschlusskacheln und Standortbonus kommen unverändert aus der Bauprojektion —
+  kein zweiter Diagnosepfad.
+- `costLabel` liegt jetzt als `src/components/common/costLabel.ts` gemeinsam
+  vor (bisher Kopie im Straßenplaner); das Verschiebe-Banner braucht dieselbe
+  Darstellung, und eine zweite Kopie wäre auseinandergelaufen. Die abweichende
+  Variante im Gebäudefenster bleibt bewusst unangetastet.
+- Keine Simulations-, Schema- oder Balancing-Änderung. **Save bleibt v29.**
+
+### Auswirkung
+
+Der „Versetzen"-Knopf funktioniert — für alle 14 Gebäude. Ein zu eng gesetzter
+Steinbruch, eine Farm auf dem falschen Feld oder ein Rathaus am falschen Ufer
+sind keine dauerhaften Fehlentscheidungen mehr. Für Gebäude ohne `canRelocate`
+ändert sich nichts (abreißen und neu bauen); die Vorschau sagt das jetzt
+allerdings deutlich, statt still zu bleiben.
+
+### Verifikation
+
+`npx tsc -b --force` · `npx eslint src tests` · `npx vitest run`
+(**70 Dateien / 582 Tests**, davon 10 neu in `tests/movePreview.test.ts`) ·
+`npm run build` — alles grün. 3D-Screenshot-Smoke gegen `vite preview`
+(SwiftShader, Basis `/`): Gründung → Rathaus wählen → „Versetzen" → Ghost folgt
+dem Cursor, Ursprung markiert, Banner `banner-ok` „Rathaus: Hier absetzen." →
+Bestätigungsklick → Toast „Gebäude versetzt.", Entwurf beendet, Rathaus im
+Spielstand von **(241,251) auf (252,247)**, **0 Konsolenfehler**.
+
+### Offen (nicht vortäuschen)
+
+- Der Ghost eines ausgebauten Gebäudes zeigt das **Stufe-0-Modell**
+  (`buildingModel(def.id, 0)`) — die Stufe wandert korrekt mit, nur die Vorschau
+  zeigt sie nicht.
+- Kein Drag-and-Drop: der Umzug ist Klick → Klick, kein Ziehen.
+- Der „Versetzen"-Knopf liegt zwei Klicks tief (Gebäudefenster → „Mehr Details" →
+  Verwaltung). Bewusst nicht mit umgebaut — das gehört in einen Sheet-Pass.
+- Weiterhin offen in G2: ⑤ Radien-Overlays, ⑥ Straßenbau als
+  Plan→Vorschau→Bestätigen.
+
+### Dateien
+
+`src/game/commands/controller.ts` (`evaluateMove`, `moveDiagnostics`,
+`MoveBlocker`, `MoveDiagnostics`, `moveBuilding` umgebaut) ·
+`src/renderer/three/ThreeMapRenderer.ts` (`setMoving`, `placementDraft`,
+`rebuildMoveOrigin`, `moveOriginGroup`, Eingabepfad) ·
+`src/renderer/IMapRenderer.ts` (`HoverInfo.error`, `HoverInfo.move`) ·
+`src/components/MapView.tsx` (Banner, Erfolgstoast) ·
+`src/components/common/costLabel.ts` (neu) ·
+`src/components/operations/SmartRoadPlannerHud.tsx` (nutzt den geteilten Helfer) ·
+`src/i18n/de.json` · `tests/movePreview.test.ts` (neu).
+
+**Assets:** keine.
+
 ## v1.26 — Core Gameplay G2 ③: Der Ghost zeigt den Anschlusspunkt (Save v29, D-047)
 
 > Auftrag: „weiter mit deiner empfehlung" — nach dem Sichern von v1.12–v1.25 der
