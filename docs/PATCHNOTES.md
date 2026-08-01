@@ -1,5 +1,1667 @@
 # Patch Notes
 
+## v1.25 — A6 Steinbruch + A7 Farm: die Betriebe heißen nicht mehr alle Sägewerk (Save v29, D-046)
+
+> Auftrag: „dann los mit deiner Empfehlung" — A6 Steinbruch als größte Lücke
+> zwischen Optik und Spiel (das Sägewerk war bis hierher der einzige aktive
+> Betrieb).
+
+### Der Befund vor der Arbeit
+
+Die **Simulation** für A6/A7 lag bereits im Arbeitsbaum: Ressourcenknoten sind auf
+`tree`/`rock`/`crop` verallgemeinert, Steinbruch und Farm haben ein
+`operation`-Profil, Stein wächst **nie** nach, der Logistik-Zuschlag eines Depots
+wirkt bei aktiven Betrieben auf Arbeits- und Laufgeschwindigkeit statt auf eine
+Passivrate — abgesichert durch 12 Tests. Undokumentiert und unfertig war die
+**Bedienung**, und zwar messbar falsch:
+
+- **`deposit_exhausted` hatte keinen Text.** `getOperationThroughput` liefert
+  diesen Grund für einen leergelaufenen Bruch, `de.json` kannte ihn nicht — und
+  `t()` gibt bei fehlendem Eintrag den Schlüssel zurück. Im Gebäudefenster hätte
+  wörtlich `ui.operation.idle.deposit_exhausted` gestanden.
+- **`renewable` und `remainingInArea` wurden berechnet und von keiner Komponente
+  gelesen.** Die Simulation wusste, dass ein Steinbruch endlich ist; der Spieler
+  erfuhr es nie.
+- Die gesamte Oberfläche redete vom Referenzschnitt: „Bäume in Reichweite",
+  „Keine Bäume im Arbeitsgebiet", Knoten hießen „Baum 241,250", und über jedem
+  Betrieb hing eine **Axt** — auch über dem Steinbruch.
+
+### Was sich geändert hat
+
+**Ein Wortfeld je Knotentyp, an einer Stelle.** `nodeVocabulary.ts` liefert
+Singular, Plural, „… in Reichweite" und den Hinweis für ein leeres Arbeitsgebiet.
+Der Record ist über die geschlossene Knoten-Union **total** — ein neuer Knotentyp
+wird vom Compiler eingefordert, nicht vom Spieltest. Noch unbelegte Typen
+(`livestock`, `water_source`, `wild_plant`) bekommen bewusst neutrale Wörter,
+damit nichts Nichtexistierendes benannt wird.
+
+**Die Endlichkeit ist jetzt sichtbar.** Bei einem nicht nachwachsenden Vorkommen
+zeigen die Betriebsdetails „Im Gebiet verbleibend: N Stein" statt des freien
+Lagerplatzes — bei Stein ist das die strategische Zahl, denn sie sagt, wie lange
+der Standort überhaupt noch trägt. Dazu ein dauerhafter Hinweis „Endliches
+Vorkommen — es wächst nicht nach", der bei Restmenge 0 zu „Versetze den Betrieb
+an eine neue Lagerstätte" wird. Bei Holz und Nahrung erscheint beides **nicht**:
+dort wäre dieselbe Zahl irreführend, weil sie sich wieder auffüllt.
+
+**Axt, Spitzhacke, Setzling.** Das Betriebssymbol folgt dem Knotentyp.
+
+### Auswirkung auf bestehende Spielstände
+
+**Kein Schemabruch — Save bleibt v29.** Aber eine echte Verhaltensänderung: Ein
+Gebäude mit `operation` überspringt den passiven `produce`-Pfad. Vorhandene
+Steinbrüche und Farmen liefern deshalb **nicht mehr passiv**, bis der Spieler
+einmal einen Betrieb startet. Das ist sichtbar und in einem Klick gelöst — das
+Gebäudefenster zeigt für genau diesen Fall „Betrieb startklar → Betrieb starten",
+und der Auftrag läuft danach als Dauerbetrieb weiter (R2). Die Stufenwerte sind
+so kalibriert, dass ein gut platzierter Betrieb ungefähr seine frühere Passivrate
+erreicht (38/80/210 Stein, 260/500/1.100 Nahrung je Minute) — testgesichert.
+
+### Architektur
+
+Kein neues System (§2): dieselbe Knoten-Id, dasselbe Delta, derselbe Tick, dieselbe
+Arbeiter-Zustandsmaschine wie beim Sägewerk. Neu ist nur `OPERATION_IDLE_REASONS`
+als **Liste** neben dem Union-Typ, damit ein Test jeden Zustand durchgehen kann
+(D-046), und das reine UI-Modul `nodeVocabulary.ts`.
+
+### Auswirkung
+
+Stein und Nahrung entstehen nicht mehr aus dem Nichts, sondern aus Arbeitern,
+Wegen und einem endlichen Vorkommen — der Steinbruch ist damit der erste Betrieb,
+bei dem der **Standort verbraucht** wird und Umziehen zur echten Entscheidung
+wird (D-039: Ausführung automatisieren, Wahl nicht). 565 Tests (10 neue).
+
+### Zukunft
+
+Offen und nicht vorgetäuscht: A8 Feuerwehr-Dispatch, A9 Regeneration-Ausbau
+(Aufforstung, geologische Neuvorkommen), A10 Automatisierung, Rechteck-/
+Polygon-Arbeitsgebiete, Fäll-/Abbau-Animationen und echtes Knoten-Mesh-Raycast.
+
+### Dateien
+
+`src/components/operations/nodeVocabulary.ts` (neu) · `adapters.ts` ·
+`src/components/panels/FloatingBuildingSheet.tsx` ·
+`src/game/operations/operations.ts` · `src/i18n/de.json` ·
+`tests/operationVocabulary.test.ts` (neu)
+
+### Assets
+
+Keine.
+
+
+## v1.24 — Die Welt lädt vollständig: Entsättigung statt Wolkenwand (Save v29, D-045)
+
+> Nutzerauftrag: „Ich will dass die welt trotz nicht freigeschalteten biomen
+> schon lädt, also etwas anderes als nebel um zu kennzeichnen dass die gebiete
+> nicht freigeschalten sind und quasi die map schon laden." Rückfrage beantwortet
+> mit **entsättigt + Schloss-Marker** und **freier Sicht auf die ganze Insel**.
+
+### Was sich geändert hat
+
+**Die Wolkenwand ist weg.** Bis v1.23 verdeckte eine blickdichte, global
+höhengleiche Nebelfront (D-034) alles Gesperrte — inklusive Gelände, Vegetation
+und Küstenverlauf. Gesperrte Regionen wurden gar nicht erst aufgebaut. Jetzt
+wird die **ganze Insel** gebaut und gezeigt: Terrain, Küsten, Deko und
+Vegetation. Gesperrt heißt nicht mehr „unsichtbar", sondern „sichtbar, aber
+erkennbar nicht deins".
+
+**Die Kennzeichnung ist eine Farbaussage.** Gesperrtes Gelände wird pro
+Bodenknoten zu 70 % in Richtung seiner eigenen Luminanz entsättigt, um 16 %
+abgedunkelt und minimal ins Kühle gezogen (`LOCKED_DESATURATION`,
+`LOCKED_DARKENING`). Das Ergebnis liest sich wie eine Landkarte gegenüber der
+gesättigten, warmen Stadtumgebung — ohne dass irgendeine Form verschwindet. Die
+Schloss-Marker aus der Fog-Zeit bleiben, sie hängen jetzt frei über dem
+Regionsschwerpunkt und wippen leicht; beim Freischalten steigen sie auf und
+blenden aus.
+
+**Die Kamera darf über die ganze Insel.** `CameraExplorationBoundary` und der
+zugehörige Dev-Cheat `cameraBoundsDisabled` sind ersatzlos entfernt — ein
+Blickziel-Clamp auf die freigeschaltete Union ergibt keinen Sinn mehr, wenn es
+nichts zu verbergen gibt. Der Auftrag hat das ausdrücklich so entschieden.
+
+**Die Minimap folgt.** Sie zeichnete für gesperrte Regionen eine prozedurale
+Wolkendecke; das war die 2D-Entsprechung der Nebelwand und widersprach nach dem
+Umbau der 3D-Ansicht. Jetzt zeigt sie dasselbe Terrain, entsättigt.
+
+### Der Fallstrick — und warum es zwei Vegetationsgruppen gibt
+
+Sichtbares gesperrtes Land heißt bewachsenes gesperrtes Land: aus **1.422**
+Instanzen in der Startregion werden **26.851** auf der ganzen Insel (gemessen).
+Der Vegetationsschlüssel enthält aber die **Belegungsmenge** — jedes gesetzte
+Gebäude hätte damit den kompletten Neuaufbau ausgelöst und 51.057 Kacheln für
+eine 3×3-Änderung neu bewertet. Das wäre ein spürbarer Ruckler pro Bauklick
+gewesen.
+
+Gesperrte Regionen hängen aber gar nicht an der Belegung — dort baut niemand.
+Ihr Bestand ändert sich nur beim **Freischalten** oder bei einem Wechsel der
+**Qualitätsstufe**. Deshalb zwei Gruppen mit eigenen Schlüsseln: der teure Teil
+steht still, während der Spieler baut. Zusätzlich läuft gesperrtes Land mit
+halber Dichte (`LOCKED_VEGETATION_DENSITY = 0.5`) und **ohne Schatten** — das
+knappe Schattenbudget gehört der Stadt, nicht der Kulisse.
+
+### Architektur
+
+Beide Aufbauten teilen sich `buildVegetationFor(...)`; die Verteilung bleibt
+`collectRegionNature` (D-042/D-044 unverändert). `fogSurfaceGeometry.ts` und sein
+Test sind gelöscht, ebenso `regionContours`, `worldFogTopY` und die
+Chaikin-Glättung der Nebelkontur. Das Dev-Performance-Panel zählt jetzt **beide**
+Gruppen, sonst meldete es nur noch einen Bruchteil der Insel.
+
+**Keine Simulations- und keine Save-Änderung — Save bleibt v29.** Freischaltung,
+Baubarkeit und `regionUnlockBlocker` sind unberührt: Der Spieler *sieht* mehr,
+er *kann* nicht mehr.
+
+### Auswirkung
+
+Die Insel ist ab dem ersten Frame als Ganzes lesbar — Silhouette, Gebirge,
+Küstenverlauf und die Regionen, auf die man hinspielt. Der Neuaufbau beim
+Bauen bleibt auf dem Niveau von v1.23, weil er nur noch die freigeschalteten
+Regionen betrifft.
+
+### Zukunft
+
+Offen und nicht vorgetäuscht: eine deutlichere Kantenmarkierung der
+Regionsgrenze (aktuell trägt die Entsättigung die Aussage allein), Hover-/
+Auswahl-Hervorhebung gesperrter Regionen direkt in der Welt, und echte LOD-Stufen
+für die nun deutlich größere Vegetationsmasse.
+
+### Dateien
+
+`src/renderer/three/ThreeMapRenderer.ts` · `src/components/hud/WorldMiniMap.tsx` ·
+`src/components/panels/DebugPanel.tsx` · `src/components/MapView.tsx` ·
+`src/renderer/IMapRenderer.ts` · `src/state/store.ts` · `src/i18n/de.json` ·
+gelöscht: `src/renderer/three/fogSurfaceGeometry.ts`,
+`tests/fogSurfaceGeometry.test.ts`
+
+### Assets
+
+Keine.
+
+
+## v1.23 — Natur-/Prop-Overhaul 14.0: die Insel wird bewachsen (Save v29, D-044)
+
+> Nutzerauftrag mit Mockup: „Die aktuelle Welt wirkt zu leer, zu technisch, zu
+> steril und zu gleichförmig. … Es geht rein um die Welt selbst: Natur, Props,
+> Geländeoptik, Küsten, Vegetationsverteilung, Lesbarkeit der Regionen." Die
+> Inselgeometrie bleibt ausdrücklich unangetastet.
+
+### Der Befund — zwei Messungen erklären den Zustand vollständig
+
+**Die Masse der Welt bestand aus Kegeln.** Gemessen standen weltweit **14.038
+Props auf 51.057 Landkacheln — davon nur 502 echte Modelle (3,6 %)**. Alles
+andere war ein Kegel auf einem Zylinder. Die Ursache ist keine Nachlässigkeit,
+sondern Arithmetik: **jedes vorhandene Natur-`.glb` wiegt rund 29.000 Dreiecke**
+— für einen einzelnen Baum. Bei diesem Preis sind schon 500 Instanzen weltweit
+rund 14 Mio. Dreiecke. Das Detailbudget von zwölf Modellen je Region war die
+richtige Antwort auf eine falsche Grundlage.
+
+**Der Katalog ist kleiner als seine Dateinamen.** `pine_tree.glb`,
+`forest_cluster_small.glb` und `forest_cluster_medium.glb` sind **bytegleich**;
+ebenso alle fünf Steinmodelle. Real existieren **fünf** Formen, nicht zwölf.
+Vielfalt konnte also gar nicht aus dem Asset-Ordner kommen — genau wie der
+Auftrag es vorwegnahm („dieselben Grundbaum-Modelle mehrfach verwenden, aber
+intelligent variiert").
+
+### Was sich geändert hat
+
+**Die Verteilung folgt jetzt Zonen statt einer if/else-Kaskade.** Jede Landkachel
+bekommt einen Naturraum — `forest_core`, `forest_edge`, `meadow`,
+`rocky_highland`, `coast_flat`, `coast_rocky`, `wetland`, `small_island` —, und
+**eine** Tabelle entscheidet, was dort mit welcher Dichte, Clusterbindung und
+Größenstreuung wächst. Entscheidend ist die Trennung von Waldkern und Waldrand
+über den **Waldanteil im 5×5-Fenster**: Der Terraintyp allein kennt keine Kante,
+deshalb hatte bisher jeder Wald innen dieselbe Dichte wie außen.
+
+**Die Massengeometrie ist neu und billig.** `naturePropGeometry.ts` liefert
+bewusst gestaltete Silhouetten mit 24–200 Dreiecken: dreistufige Nadelbäume,
+Laubbäume aus versetzten Kronenballen, gestauchte Felsblöcke, Grasbüschel,
+Blumenflecken, Schilf, Totholz, Stümpfe, Geröll. Damit ist Dichte wieder eine
+Gestaltungsfrage statt einer Budgetfrage.
+
+**Fünf neue Prop-Arten** schließen die gemeldeten Lücken: `sapling` (Jungwuchs am
+Waldrand), `stump`, `shoreRock` (Küstensteine), `scree` (Geröllfelder),
+`cliffRock` (markante Felsgruppen an Klippen).
+
+**Regionale Identität** kommt über `REGION_CHARACTER_DENSITY`: derselbe Waldkern
+liest sich im Holzrevier geschlossener (Baumdichte ×1,4) als in einer offenen
+Ackerregion (×0,75). Ohne diesen Schritt sähen alle Regionen gleich aus.
+
+### Zwei Kalibrierungen, die erst der Spieltest zeigte
+
+**Das Massiv war budget-, nicht landschaftsbegrenzt.** Auf der Gipfelterrasse
+standen kaum Steine, obwohl die Regel sie vorsah — das Regionsbudget deckelte
+Fels und Geröll. Nach der Anhebung ist **keine Region mehr budgetbegrenzt**
+(testgesichert); die Landschaft entscheidet.
+
+**„Leere Wiesen" ließen sich nicht mit mehr Bodendeckung beheben.** Gras und
+Blumen werden bewusst nah gecullt und sind auf Spielzoom unsichtbar. Was auf
+mittlerer Distanz liest, sind Büsche und Jungwuchs — deren Wiesendichte wurde
+verdoppelt. Der Wiesencharakter bleibt trotzdem eindeutig: ein Waldkern trägt
+das Zwölffache an Bäumen (§7 des Auftrags, testgesichert).
+
+**Das Südmassiv war sandfarben.** Der Regionsgrundton 0xe7e4d8 las sich auf der
+großen flachen Gipfelterrasse als Wüste. Ein kühler Grauton (0xc9cfd0) trennt
+die Steinregion eindeutig vom Dünensand der Küsten — ohne die Textur anzufassen.
+
+### Architektur
+
+Vier neue Module, die ersten drei frei von `three` und damit testbar:
+`worldSurfaceMasks.ts` (abgeleitete Masken), `natureZones.ts` (die Regeln),
+`natureDistribution.ts` (**die einzige Verteilungsinstanz** — Renderer *und*
+Tests rufen dieselbe Funktion, D-042), `natureRenderer.ts` (Instanzaufbau) und
+`naturePropGeometry.ts` (die Formen). `rebuildVegetation` schrumpfte von **605
+auf 152 Zeilen** und trifft keine Verteilungsentscheidung mehr.
+
+Performance bleibt gedeckelt: eine Geometrie und ein Material je Art, geteilt
+über alle Regionen und Neuaufbauten; ausschließlich `InstancedMesh` in
+räumlichen 72-Kachel-Chunks; Variation ausschließlich pro Instanz über Größe,
+Drehung, Neigung und `setColorAt`. Die teuren Hero-`.glb` bleiben auf ihrem
+bisherigen Niveau.
+
+### Auswirkung
+
+**14.038 → 48.838 Props** bei unveränderten 51.057 Landkacheln. Jede der acht
+Zonen kommt vor und ist bepflanzt; jede der 19 Prop-Arten wird gesetzt; kleine
+Inseln tragen über eine Instanz je Kachel. Keine Geometrie-, Save- oder
+Simulationsänderung — **Save bleibt v29**.
+
+### Zukunft
+
+Offen und ausdrücklich nicht vorgetäuscht: echte LOD-Stufen und
+Impostor-Billboards für die stilisierte Masse (bei 24–200 Dreiecken bisher kein
+Engpass), Shader-Wind (die Vegetation steht still), neue Prop-Assets (jedes
+eingelegte `.glb` wird sofort genutzt, §5), Bergplattformen als Terrain-Klasse.
+
+### Dateien
+
+`src/renderer/three/natureZones.ts` · `natureDistribution.ts` ·
+`natureRenderer.ts` · `naturePropGeometry.ts` · `worldSurfaceMasks.ts` ·
+`vegetationBudget.ts` · `worldVisualProfiles.ts` · `ThreeMapRenderer.ts` ·
+`tests/natureZones.test.ts` · `tests/vegetationBudget.test.ts` ·
+`docs/agents/NATURE_OVERHAUL_14_PLAN.md`
+
+### Assets
+
+Keine neuen. Der Overhaul nutzt ausdrücklich die fünf vorhandenen Formen weiter
+und erzeugt die Vielfalt aus Transformation.
+
+
+## v1.22 — Modelltreue 13.1: der Meeresspiegel liegt an der Terrassenkante (Save v29)
+
+> Nutzerwunsch nach dem Spieltest von v1.21: „Jetzt das Wasser so anpassen, dass
+> es exakt mit der unteren Kante der flacheren Ebenen abschließt, sodass man dort
+> perfekt Hafen etc. platzieren kann."
+
+### Der Befund
+
+Ein Histogramm aller flachen Landkacheln über der alten Wasserlinie zeigt die
+Terrassenstruktur der Quell-GLB unmissverständlich:
+
+| Höhe über Wasser | flache Kacheln |
+| --- | ---: |
+| 0–3 m | **331** — praktisch nichts, das ist die Klippenwand |
+| **4–5 m** | **14.073** — die unterste Ebene |
+| 8–10 m | 15.275 — die zweite Ebene |
+| 17–20 m | 3.405 — die dritte |
+
+Zwischen Wasser und der ersten nutzbaren Fläche lagen also 4 m nackte Wand.
+Genau darauf zeigte der rote Pfeil im Spieltest.
+
+### Was geändert wurde
+
+- **Das Wasser steigt um 4 m** und schließt damit bündig mit der Unterkante der
+  untersten Terrasse ab. Ein Sweep über 0/3/4/5 m belegt, dass 4 m der Punkt ist:
+
+  | Anstieg | Landkacheln | bebaubar | 2×2-Anleger | bebaubare Uferkacheln |
+  | ---: | ---: | ---: | ---: | ---: |
+  | 0 m | 61.322 | 37.841 | 20 | 129 |
+  | 3 m | 57.343 | 38.032 | 114 | 338 |
+  | **4 m** | **55.594** | **37.798** | **344** | **759** |
+  | 5 m | 45.334 | 30.253 | 403 | 812 |
+
+  Bei 4 m verzwanzigfachen sich die Anlegerplätze, während die Baufläche
+  praktisch unverändert bleibt. Bei 5 m säuft die Terrasse selbst ab — zehntausend
+  Landkacheln und 7.500 Bauflächen weg.
+
+- **Die Höhenskala ist vom Meeresspiegel entkoppelt.** Bis 13.0 leitete sich
+  `HEIGHT_SCALE` aus der Wasserlinie ab, damit der Gipfel exakt
+  `PEAK_WORLD_HEIGHT` erreicht. Ein höherer Wasserstand hätte damit das ganze
+  Gelände um 8 % vertikal **gestreckt** — eine Geländeänderung durch die
+  Hintertür, genau das, was D-043 ausschließt. Die Skala hängt jetzt an
+  `SCALE_REFERENCE_N`: das Gelände steht still, das Wasser steigt. Der Gipfel
+  liegt dadurch ehrlich niedriger über dem Wasser (52 → 48 m).
+- **Die Modelltreue bleibt bei 0 veränderten Landknoten.** Der Meeresspiegel ist
+  ein Wasserparameter, keine Geländebearbeitung — die Kennzahl misst weiterhin
+  das Richtige.
+- **Die ursprünglichen Startkriterien gelten wieder.** In 13.0 musste die
+  Forderung nach drei Nachbarregionen auf zwei gesenkt werden, weil sonst kein
+  zentraler Kandidat trug. Mit dem neuen Ufer erfüllt der beste Kandidat sie
+  wieder mit vier — `START_MIN_NEIGHBOUR_REGIONS = 3` ist zurück.
+
+### Die Welt, die dabei herauskommt
+
+- **Neun Regionen statt elf**, alle über Land erreichbar. Die vorgelagerte Insel
+  aus 13.0 ist keine mehr — der höhere Wasserstand schneidet die Landmasse
+  anders. `requiresHarbor` ist deshalb nirgends mehr gesetzt.
+- **Startregion 9 „Gründerland"**, Rathaus **(241,251)**, 1.400 Bauflächen,
+  ΔH 0,12, **20 Kacheln** vom Inselschwerpunkt, **vier** Landnachbarn (1/2/5/7).
+- Die erste Erweiterung bleibt auf **Level 2**: der **Nordwald** (42,7 % Wald).
+- Flache Meeresküste 322 → **557** Kacheln, garantierte 5×5-Uferplattformen
+  24 → **44**. Die Klippe bleibt trotzdem das Gesicht der Küste (1.635 Kacheln).
+
+### Auswirkung
+
+Save **v29** mit Migration `v28→v29` und einmaligem Backup
+`cmb.save.backup.world-v28`. 5.728 vormalige Landkacheln sind jetzt Wasser, und
+die Regions-Ids sind neu — ein Spielstand aus v1.21 hätte Gebäude im Wasser.
+
+**540 Tests grün**, `tsc`/`eslint`/`build` sauber, 3D-Smoke ohne Konsolenfehler.
+
+### Dateien
+
+- `tools/bakeWorld.mjs` (`SCALE_REFERENCE_N`, `WATERLINE_RISE_WORLD`,
+  entkoppelte `HEIGHT_SCALE`, `START_MIN_NEIGHBOUR_REGIONS` zurück auf 3)
+- `src/game/config/regions.config.ts`, `src/i18n/de.json`,
+  `src/renderer/three/worldVisualProfiles.ts` (neun Regionen, neue Rollen)
+- `src/game/newGame.ts`, `src/game/storage/migrations.ts`,
+  `src/game/storage/localStorageAdapter.ts` (Save v29)
+- Tests: `newIslandBake`, `mapBuildability`, `regions`, `regionCost`,
+  `regionPreview`, `worldVisualProfiles`, `world.gen`
+- Generiert: alle `*.gen.ts`, `tools/bake-report.md`, `docs/REGIONS.md`
+
+## v1.21 — Modelltreue 13.0: die GLB IST die Welt (Save v28, D-043)
+
+> Nutzerauftrag mit Beleg (Viewer-Screenshot der rohen GLB): „Das 3D-Modell ist
+> nicht das Problem, sondern die Implementierung. Ich will, dass meine Spielwelt
+> nicht von dem Modell abweicht — Küstenstrukturen, Flussufer, Klippen, alles
+> beibehalten wie in der Raw-Datei. Übernimm das Modell so, wie es ist, und füge
+> erst danach Wasser, Texturen usw. hinzu."
+
+### Der Befund — beziffert, nicht vermutet
+
+Der Bake hat das Gelände nicht angepasst, sondern ersetzt. Gemessen über einen
+Vergleichslauf (`TERRAIN_MODE=flatten` gegen den neuen Standardpfad):
+
+| Kennzahl | vorher | jetzt |
+| --- | ---: | ---: |
+| veränderte Landknoten | **157.749 von 233.287 (67,6 %)** | **0 (0,0 %)** |
+| Ø Betrag der Abweichung | 1,68 m | 0 m |
+| größte Abweichung | 11,15 m | 0 m |
+| Ø Landhöhe | 8,46 → **6,45 m** | 8,46 m |
+
+Vier Stufen zusammen haben das verursacht: `applyFlatShoreProfile()` zog **jede**
+Uferkante in drei Durchläufen auf eine 0,24-m-Plattform — also genau die Klippen,
+die die Insel im Viewer ausmachen; `terraformNonMassifLand()` glättete alles
+unterhalb des Massivs in vier Runden à acht Durchgängen; `flattenBuildableLand()`
+relaxierte 6.000 Sweeps lang; und `buildCliffPlateaus()`/`repairTerrainNeedles()`
+bauten anschließend Ersatz-Landschaft dort auf, wo die Glättung sie entfernt hatte.
+
+### Was geändert wurde
+
+- **Der Bake übernimmt die Geometrie unverändert.** `RAW_TERRAIN_FIDELITY` ist
+  der neue Standardpfad: Ufer-Blend, Terraforming, Glättung, Nadel- und
+  Peak-Reparatur sowie Klippen-Plateaus sind abgeschaltet. Es bleibt die
+  Reihenfolge des Auftrags: erst die Geometrie exakt rastern, **danach** Wasser,
+  Ufer, Biome, Bebaubarkeit und Texturen daraus **ableiten**. Ableitungen lesen
+  das Gelände; sie schreiben es nicht mehr. Der alte Pfad ist über
+  `TERRAIN_MODE=flatten` weiterhin messbar, aber nicht mehr die Welt.
+- **Die Treue ist testgesichert**, nicht nur dokumentiert: `BAKED_WORLD.
+  modelFidelity` liegt in der Gen-Datei, und `newIslandBake.test.ts` verlangt
+  `changedNodes === 0` und `maxAbsDelta === 0`.
+- **Wasser ist der Hebel, der bleibt.** Die GLB modelliert keinen Gewässergrund;
+  die Tiefenrampe ist reine Bake-Entscheidung — und damit die richtige Stelle,
+  wenn eine Anforderung an ihr scheitert. Binnengewässer lagen pauschal bei 0,42,
+  der Ozean am Ufer bei 0,46; beides unter den Mindesttiefen der Wassergebäude.
+  Die Rampe steigt jetzt am Ufer schneller an und bleibt zur Mitte gedeckelt.
+- **Uferkanten-Toleranz für Wassergebäude.** `shorelineTolerance: 0` verlangte
+  ein perfekt rechteckiges Wasserfeld bündig am Ufer. Auf der zackigen
+  Modellküste war der Flusshafen dadurch an **null** Stellen baubar, der Anleger
+  an 32. Ein Drittel der Wasserzellen darf jetzt Land sein (42 bzw. 42 Plätze).
+  Die Waterfront-Vorschau bewertet dieselben Zellen wie die Validierung — vorher
+  meldete sie „Tiefe 0" für eine Platzierung, die sie gleichzeitig als gültig
+  ausgab.
+
+### Die Welt, die dabei herauskommt
+
+- **Elf Regionen** (vorher neun): eine Startregion, neun über Land erreichbare
+  Landschaften und **eine echte vorgelagerte Insel** (10, `adjacent: []`). Die
+  Quell-GLB ist ein Archipel; das war vorher unter der Glättung nicht sichtbar.
+  Region 10 ist über `requiresHarbor` erreichbar — nicht dauerhaft gesperrt.
+- **Startregion 11 „Gründerland"**, Rathaus **(239,251)**, 1.400 Bauflächen,
+  ΔH 0,10, **22 Kacheln** vom Inselschwerpunkt. Ihre Landnachbarn sind das
+  Herzland (1) und der Nordwald (8).
+- **Die erste Erweiterung bleibt auf Level 2** (Nutzerwunsch aus § 12.2 §2) —
+  jetzt der **Nordwald**, das dichteste Holzrevier der Insel (55,5 % Wald). Das
+  passt zum Bedarf: Holz ist der Engpass der Frühphase.
+- **Bebaubare Kacheln 47.806 → 37.891.** Das ist der Preis der Treue und
+  ausdrücklich gewollt; 3×3-Bauplätze bleiben bei über 28.000.
+- **Die Küste ist eine Klippenküste** — 2.244 Steilküsten- gegen 475 flache
+  Uferkacheln. Genau umgekehrt zu vorher, und genau das zeigt das Modell.
+
+### Auswirkung
+
+Save **v28** mit Migration `v27→v28` und einmaligem Backup
+`cmb.save.backup.world-v27`. Ein Weltumbau dieser Größe lässt sich nicht
+migrieren: praktisch jede Kachel hat eine andere Höhe, die Bebaubar-Maske
+beschreibt ein anderes Gelände, und die Regions-Ids sind neu.
+
+**541 Tests grün**, `tsc`/`eslint`/`build` sauber, 3D-Smoke ohne Konsolenfehler.
+
+### Offen (nicht vortäuschen)
+
+Häfen sind auf der Klippeninsel **selten und gezielt zu suchen** — rund 40
+Anleger- und 42 Flusshafenplätze inselweit, in der Startregion **keiner**. Der
+erste Hafen wird im Herzland (L4) oder Nordwald (L2) gebaut; `dock_small` öffnet
+ohnehin erst auf L6. Die Pfahl-/Steglogik, die Anleger an echten Klippen
+möglich machte, bleibt offen — ebenso Bergplattformen als Terrain-Klasse,
+Mesh-Einebnen unter dem Footprint und neue Vegetations-/Prop-Assets.
+
+### Dateien
+
+- `tools/bakeWorld.mjs` (`RAW_TERRAIN_FIDELITY`, Modelltreue-Kennzahl,
+  inselweite Hafentauglichkeit, Wassertiefenrampe, Startkriterien)
+- `src/game/config/regions.config.ts`, `src/i18n/de.json`,
+  `src/renderer/three/worldVisualProfiles.ts` (elf Regionen, neue Rollen)
+- `src/game/config/buildings.config.ts` (`shorelineTolerance`)
+- `src/game/buildings/placement.ts` (Vorschau bewertet dieselben Zellen)
+- `src/game/newGame.ts`, `src/game/storage/migrations.ts`,
+  `src/game/storage/localStorageAdapter.ts` (Save v28)
+- Tests: `newIslandBake`, `mapBuildability`, `regions`, `regionCost`,
+  `regionPreview`, `worldVisualProfiles`, `world.gen`, `waterInfrastructure`
+- Generiert: alle `*.gen.ts`, `tools/bake-report.md`, `docs/REGIONS.md`
+
+## v1.20 — Welt-Feinschliff 12.3: die Zacken waren Platzhalter, nicht Gelände (Save v27)
+
+> Korrektur zu v1.19. Der Spieltest meldete die Küstenzacken erneut — obwohl der
+> Bake nachweislich 0 Geländenadeln liefert. Die Diagnose in v1.19 war richtig
+> gemessen, aber am falschen Objekt.
+
+### Der eigentliche Fehler
+
+Die „Zacken" sind **keine Geometrie**, sondern die prozeduralen
+Landmarken-Platzhalter. Nachgewiesen, nicht vermutet — über eine Szenen-Probe im
+laufenden Spiel (temporärer Handle auf die Three-Szene, alle Meshes nach Höhe,
+Schlankheit, Farbe und Weltposition ausgewertet):
+
+- Das Bodenmesh überschreitet an **keiner** Stelle das gebackene Höhenfeld
+  (Chunk-Hochpunkte gegen `worldHeight.gen.ts` geprüft) — die Insel selbst hat
+  keine Nadeln, weder auf Knoten- noch auf Kachelebene.
+- Es existieren weltweit genau **12** hohe, schlanke Objekte. Ihre Maße und
+  Farben sind eindeutig: `rockArch` = zwei aufrecht stehende graue Kästen
+  (0,9 × 3,8 und 0,9 × 3,4, `#8f8b7d`) plus Deckel, `waterfall` = ein Kasten
+  1,65 × 3,9 × 0,72 in `#59636a`.
+- `SCENIC_PROP_MODELS` listete für diese Landmarken **ausschließlich Wunschnamen**
+  (`landmark_rock_arch`, `rock_arch`, `old_tree_large` …). Keine dieser Dateien
+  existiert — also griff immer die Notgeometrie.
+
+### Was geändert wurde
+
+- **Vorhandene Modelle statt Kästen.** Die Modell-Listen enden jetzt mit
+  Dateien, die es wirklich gibt: `rock_large`/`mountain_boulder` für Felstore und
+  Inselchen, `tree_deciduous`/`tree_pine_large` für Altbäume. Die Wunschnamen
+  bleiben davor stehen, damit ein echtes Drop-in sie weiterhin schlägt.
+- **Notgeometrie repariert**, falls sie doch einmal greift: Ein Felstor ist jetzt
+  breiter als hoch (gedrungene, angeschrägte Pfeiler statt zwei Hochkant-Kästen),
+  die Wasserfallwand ist eine 3,4 × 2,5 breite Wand mit Schulter statt einer
+  3,9 m hohen Platte.
+- **Hochskalierte Bäume und Findlinge (Nutzerwunsch).** Zwei neue Prop-Arten, die
+  ausdrücklich VORHANDENE Modelle vergrößern statt auf neue Assets zu warten:
+  `giantTree` (Footprint 3,1 bzw. 4,4 — zwei Staffeln aus derselben Auswahl) und
+  `boulder` (1,9 bzw. 3,2). Beide mit kräftiger Streuung (`jitterScale` 0,85/0,9),
+  sodass Nachbarn sichtbar unterschiedlich groß sind. Genau das fehlte: eine Welt
+  aus lauter gleich großen Bäumen liest sich flach, egal wie viele es sind.
+- **Klippen-Garantie (Nutzerwunsch „genau da eine Klippe, kein flaches Ufer").**
+  Steilküste entsteht jetzt zusätzlich **immer** dort, wo sich echtes Gebirge bis
+  ans Wasser schiebt (Hinterlandrelief ≥ 18 m im Umkreis 7) — unabhängig von der
+  Zonen-Lotterie. Klippen-Plateaus **136 → 254 Kacheln**, bewusste Steilküste
+  124 → 147.
+  *Warum nicht ganz ohne Lotterie:* gemessen (Schwelle 5 bzw. 11, Hash entfernt)
+  wurde praktisch die gesamte Küste steil — der Bake fand danach **keine**
+  Startregion mehr, die Budget, Wasserzugang, Hafenfläche und drei Nachbarn
+  gleichzeitig erfüllt. Die Kombination hält beides.
+
+### Auswirkung
+
+- Save bleibt **v27**. Die Welt wurde neu gebacken; Regionsanzahl (9),
+  Startregion (9), Rathausvorschlag (228,261) und Startbudget (1.576 bebaubar)
+  sind unverändert. **Die Ids 4 und 5 haben ihre Rollen getauscht** (4 =
+  Nordfelder, 5 = Weite Westaue) — Config, Namen, visuelle Profile und Tests
+  folgen dem Bake, nicht umgekehrt.
+- `REGION_MIN_TILES` 3.000 → 3.300: ohne diese Anpassung blieb nach dem neuen
+  Uferprofil ein 3.005-Kachel-Rest als zehnte Region stehen.
+- **540 Tests grün**, `tsc`/`eslint`/`build` sauber, Smoke ohne Konsolenfehler.
+
+### Lehre (D-042 erweitert)
+
+Eine Messung beweist nur das, was sie misst. „0 Geländenadeln" war korrekt — und
+trotzdem stand die Antwort auf die Frage des Spielers noch aus, weil die Zacken
+nie Gelände waren. Wenn ein Spieltest-Befund einer grünen Messung widerspricht,
+ist als Nächstes der **Gegenstand** der Messung zu prüfen, nicht ihre Schwelle.
+Die Szenen-Probe hat das in drei Durchläufen geklärt; sie ist wieder entfernt.
+
+### Dateien
+
+- `src/assets/modelManifest.ts` (Landmarken-Listen enden mit echten Dateien)
+- `src/renderer/three/ThreeMapRenderer.ts` (Notgeometrie `rockArch`/`waterfall`,
+  neue Prop-Arten `giantTree`/`boulder`)
+- `src/renderer/three/vegetationBudget.ts` (Budgets der neuen Arten)
+- `tools/bakeWorld.mjs` (`CLIFF_ZONE_ALWAYS_RELIEF`, `REGION_MIN_TILES`)
+- `src/game/config/regions.config.ts`, `src/i18n/de.json`,
+  `src/renderer/three/worldVisualProfiles.ts` (Ids 4/5 getauscht)
+- Tests: `regions`, `worldVisualProfiles`, `vegetationBudget`
+- Generiert: alle `*.gen.ts`, `tools/bake-report.md`, `docs/REGIONS.md`,
+  `models/props/README.md`
+
+## v1.19 — Welt-Feinschliff 12.2: Küstenzacken, echte Klippen, freie Gründung (Save v27)
+
+> Zweiter Spieltest-Nachlauf. Fünf gemeldete Punkte, jeder vorher gemessen und
+> an der Ursache behoben — nicht am Symptom.
+
+### Was und warum
+
+- **Die Küstenzacken sind weg (§1 des Auftrags).** Gemeldet als „Fehler an manchen
+  Küsten, irgendwas wird falsch gerendert". Es war kein Renderfehler, sondern
+  Geometrie: die Quell-GLB enthält schmale Felsnadeln, die der Max-Y-Rasterizer
+  zu 1–2 Knoten breiten Nadeln im Höhenfeld verdichtet.
+  **Warum das niemand gemerkt hat:** Der alte Riegel `repairCoastPeaks()`
+  verlangte „mehr als 6 m über dem Nachbar-Median UND höchstens EIN stützender
+  Nachbar". Im ausgelieferten Bake erfüllte genau **1** Knoten diese Bedingung —
+  tatsächlich waren **487** Knoten ≥ 1,5 m überhöht, davon **321** direkt auf der
+  Land/Wasser-Grenze. Die Kennzahl `isolatedPeakCount` stand also auf „fast 0",
+  während der Spieler ein Ufer voller Splitter sah: **die Metrik hat das falsche
+  gemessen.**
+  Die neue Erkennung nutzt eine trennscharfe zweite Bedingung — ein Knoten ist
+  nur dann eine Nadel, wenn er in **mindestens drei der vier Achsen** beidseitig
+  deutlich höher liegt. Eine echte Klippenkante oder ein Bergkamm ist entlang der
+  Kante kein Hochpunkt und bleibt unangetastet (der Weltgipfel hat 8 stützende
+  Nachbarn und 0,26 m Überhöhung). Ergebnis: **208 Nadeln entfernt, 0 übrig**,
+  hart in `tests/newIslandBake.test.ts` geprüft.
+- **Echte Klippen statt Pseudo-Steilküste (§4, Nutzerskizze „gerade Fläche oben").**
+  Zweiter Befund derselben Stelle: Die „bewusste Steilküste" wurde allein per
+  Zonen-Hash ausgewürfelt. Gemessen hatten 223 solcher Kacheln einen Höhenmedian
+  von **0,2–1,3 m** — also flaches Ufer, das nur vom flachen Profil AUSGESCHLOSSEN
+  war, ohne dass je eine Klippe entstand. Steilküste braucht jetzt **zwei**
+  Bedingungen: die bewusste Zonenwahl UND echtes Relief dahinter (≥ 5 m im
+  Umkreis 7). Übrig bleiben **124** Kacheln, die wirklich Klippe sind.
+  Zusammenhängende Abschnitte bekommen zusätzlich einen **ebenen Kopf auf
+  Hinterlandniveau** (`buildCliffPlateaus`): klare Wand zum Wasser, nutzbare
+  flache Fläche oben, bündig ans Land angeschlossen — genau die roten Linien aus
+  dem Screenshot. Aktuell 2 Abschnitte, 136 Kacheln.
+- **Die Welt ist nicht mehr leer (§3).** Gemessen: **6.891** Props auf 61.322
+  Landkacheln, und in acht von neun Regionen war bei Blumen und Feldspuren das
+  BUDGET der Engpass, nicht die Landschaft. Der schlimmste Fall war die
+  Startregion — genau der Ort, an dem der Spieler die meiste Zeit verbringt:
+  **2 Kiefern, 1 Laubbaum, 2 Büsche.** Ursache war der Naturrahmen
+  `starterNatureFrame`, der erst bei Radius 15 begann und bei 32 volle Dichte
+  erreichte, während die Startregion insgesamt rund 40 Kacheln misst — die
+  „Lichtung" war die ganze Region. Zusätzlich blieb die Startregion auch bei
+  vollem Rahmen dauerhaft strenger als jede andere Landschaft (Schwelle 0,28
+  statt 0,08). Jetzt: Rahmen 5→16 statt 15→32, Zielschwellen wie überall,
+  Budgets rund verdoppelt, Deckel 3 → 3,5.
+  **Ergebnis: 15.334 Props weltweit (2,2×), Startregion 183 Bäume/Büsche statt 11.**
+- **Ostterrassen ab Level 2 (§2, ausdrücklicher Nutzerwunsch).** Die gesamte
+  Leiter ist neu gestaffelt, nicht nur eine Zahl getauscht: L2 Ostterrassen ·
+  L4 Nordwald · L6 Mittelmark · L8 Nordfelder · L11 Lagunenküste ·
+  L14 Dünenküste (nur per Hafen) · L17 Weite Westaue · L20 Südmassiv.
+  `FREE_EXPANSION_LEVEL` wandert von 3 auf **2** — sonst wäre ausgerechnet die
+  erste erreichbare Region die einzige, die der Spieler bezahlen müsste.
+  Jede Stufe ist geografisch erreichbar (Land- oder Seenachbar) und jeder Preis
+  bleibt im geprüften Korridor des Faktormodells.
+- **Das Rathaus setzt der Spieler selbst (§5, Nutzerwunsch).** Ein neues Spiel
+  startet ohne Gebäude, ohne Distrikt und ohne Startstraßen. Der vom Bake
+  validierte Anker bleibt als **Vorschlag** (Knopf „Empfohlenen Platz nehmen"),
+  erzwungen wird er nicht. Die Tutorial-Achsen entstehen relativ zum GEWÄHLTEN
+  Anker und nur dort, wo sie wirklich baubar sind.
+
+### Architektur
+
+- **Kein neues Platzierungssystem (§2).** Die Gründung nutzt den vorhandenen
+  Platzierungsmodus (`placingDefId`), denselben Ghost und dieselbe
+  `validatePlacement`-Instanz. `foundCity` ist ein eigener, einmaliger Command,
+  weil `town_hall` bewusst `buildable:false` + `unique` ist — das Rathaus darf im
+  Baumenü nie auftauchen. `getFoundingBlocker` teilt sich die Prüfung mit dem
+  Ghost, damit Vorschau und Ergebnis nie auseinanderlaufen.
+- „Stadt gegründet?" ist **kein Save-Feld**, sondern abgeleitet: existiert ein
+  `town_hall`? Ein Zustand, der nicht gespeichert wird, kann nicht mit der Welt
+  auseinanderlaufen.
+- **Reihenfolge-Fehler im Bake behoben (Testbefund).** Kappung und
+  Nadelreparatur liefen zunächst NACH der letzten `classifyBuildable` — beide
+  verändern Höhen, also beschrieb die ausgelieferte Bebaubar-Maske ein Gelände,
+  das es nicht mehr gab. `tests/mapBuildability.test.ts` hat genau das gefunden:
+  eine als bebaubar markierte Kachel mit Hang 1,35, über `GROUND_ROAD_MAX_SLOPE`
+  (1,25) — ein Bauplatz ohne mögliche Straßenanbindung. Jetzt gilt: alle
+  Höhenänderungen zuerst, danach die verbindliche Ableitung.
+- D-041 bleibt gültig: Terraforming läuft VOR der Regionssegmentierung.
+
+### Auswirkung
+
+- Save-Schema **v27** (Migration `v26→v27`, Backup `cmb.save.backup.world-v26`).
+  Zwei Gründe gleichzeitig: neue Segmentierung (neun statt acht Regionen, jede Id
+  beschreibt eine andere Landschaft, Startregion jetzt 9) und die freie Gründung.
+- **540 Tests grün** (68 Dateien), `tsc`/`eslint`/`build` sauber, Screenshot-Smoke
+  ohne Konsolenfehler.
+- Neue Zusicherungen: `needleCount === 0`, Klippen-Plateaus > 0, erste Erweiterung
+  auf Level 2 = `FREE_EXPANSION_LEVEL`, neun Regionen, Gründung frei wählbar,
+  Bake-Vorschlag immer gültig („der Knopf darf nie fehlschlagen").
+- Die Test-Fixture `newController` gründet standardmäßig auf dem Bake-Anker —
+  exakt der frühere Startzustand. Ohne diese eine Zeile fielen 87 Tests, die
+  alle nur „es gibt eine Stadt" voraussetzen.
+
+### Zahlen
+
+| | vorher | jetzt |
+|---|---:|---:|
+| Geländenadeln | 487 (Metrik meldete 1) | **0** |
+| Steilküste mit echtem Relief | 0 von 223 | **124 von 124** |
+| Klippen mit ebenem Kopf | 0 | **2 Abschnitte / 136 Kacheln** |
+| Props weltweit | 6.891 | **15.334** |
+| Bäume/Büsche in der Startregion | 11 | **183** |
+| Regionen | 8 | 9 (Median unverändert 7.983) |
+| Erste Erweiterung | Level 3 | **Level 2** |
+| Bebaubare Kacheln | 47.806 | 48.203 |
+
+### Bewusst nicht gemacht
+
+- **Regionsanzahl auf 8 zurückzwingen.** Das relief-gesteuerte Uferprofil teilt
+  die vorher größte Region in eine Gras- und eine Sandlandschaft (7.647 und
+  4.456 bebaubar). Beide sind vollwertig; der Median bleibt 7.983. Eine höhere
+  Merge-Schwelle hätte sie künstlich wieder verklebt.
+- **Bergplattformen als eigene Terrain-Klasse**, neue Vegetations-/Prop-Assets
+  (Mammutbäume, Tiere, Landmarken), Mesh-Einebnen unter dem Footprint,
+  Pfahl-/Steglogik für Wassergebäude — unverändert offen.
+
+### Dateien
+
+- Bake: `tools/bakeWorld.mjs` (Nadelerkennung, Klippen-Plateaus, Relief-Tor,
+  korrigierte Ableitungsreihenfolge), `tools/bake-report.md`,
+  `tools/bake-preview.png`, `tools/bake-regions.png` + alle Gen-Dateien
+- Sim: `src/game/commands/controller.ts` (`foundCity`, `getFoundingBlocker`,
+  `isCityFounded`), `src/game/newGame.ts` (v27), `src/game/storage/migrations.ts`,
+  `src/game/storage/localStorageAdapter.ts`, `src/game/progression/levels.ts`
+- Config: `src/game/config/regions.config.ts`, `src/i18n/de.json`
+- UI: `src/components/hud/FoundingHud.tsx` (neu), `src/App.tsx`,
+  `src/components/MapView.tsx`, `src/styles/overhaul-core-ui.css`
+- Renderer: `src/renderer/three/vegetationBudget.ts`,
+  `src/renderer/three/worldVisualProfiles.ts`, `src/renderer/three/ThreeMapRenderer.ts`
+- Tests: `helpers` (Fixture gründet + `townHallOf`), `newGame`, `newIslandBake`,
+  `regions`, `regionCost`, `regionPreview`, `worldVisualProfiles`,
+  `vegetationBudget`, `world.gen`, `mapBuildability`, `move`, `reset`, `storage`,
+  `systems`, `upgrade`
+- Doku: `docs/REGIONS.md` (generiert), `docs/agents/WORLD_OVERHAUL_12_PLAN.md`
+
+## v1.18 — Welt-Feinschliff 12.1: weniger, größere Regionen und ein begehbares Ufer (Save v26)
+
+> Der Spieltest der neuen Insel hat konkrete Mängel gezeigt. Dieser Pass behebt
+> sie an der Ursache statt am Symptom — jede Änderung ist vorher gemessen.
+
+### Was und warum
+
+- **Acht statt dreizehn Regionen (§1).** 13 Regionen mit einer Median-Größe von
+  3.649 Kacheln lasen sich wie ein Raster zum Abhaken. Jetzt sind es acht mit
+  Median 7.983, und jede hat eine gemessene Rolle: Nordwald **55,4 % Wald**
+  (Holzrevier), Südmassiv **59,3 % Gebirge** (Stein), Weite Westaue **11.856
+  Bauflächen** (Kornkammer), Lagunenküste (Wasser), zwei Mischregionen (H+F),
+  die Mittelmark als Scharnier mit fünf Nachbarn — und die Startregion.
+- **Progression folgt dem Ressourcenbedarf (§2).** Die kostenlose Erstwahl ab
+  Level 3 **ist** die Waldregion, direkt an der Startregion: Der Spieler baut ein
+  Sägewerk, merkt den Holzbedarf und erschließt den Wald. Kein Level-Schloss ohne
+  Zusammenhang. Die Weite Westaue — die größte Baufläche der Insel — grenzt über
+  Land nur ans Südmassiv (L20), liegt aber **seenachbar zur Startregion**: wer
+  früher dorthin will, baut einen Hafen. Das ist der Anreiz aus §6, keine
+  Sonderregel.
+- **Das Ufer ist begehbar (§5).** Ursache war die REIHENFOLGE, nicht das Profil:
+  das Uferprofil lief zuletzt VOR der Schlussglättung, und die zog jeden
+  Uferknoten wieder zum höheren Hinterland. Gemessene Wirkung, nachdem es zuletzt
+  läuft — Seeufer **73,9 % → 97,7 %** flach (≤ 1,5 über der Wasserlinie),
+  Flussufer **64,8 % → 98,1 %**, Ozeanufer 94,2 % → 98,3 %; bebaubare Uferkacheln
+  **67 % → 88 %**; Uferzacken **3 → 0**. Nebeneffekt: die Baufläche der Insel
+  steigt von 44.170 auf **47.806** Kacheln.
+- **Häfen funktionieren nachweisbar (§6).** Die erste Fassung verlangte nur „≥ 8
+  Uferkacheln" — bestanden, und trotzdem unbrauchbar: die Startbucht war ein EIN
+  Kachel breiter Kanal, in den kein 2×2-Anleger passte (0 gültige Plätze bei 346
+  weltweit). Der Bake spiegelt jetzt die echte Laufzeitregel aus
+  `waterfrontWaterCells` (2×2-Wasserrechteck bündig an einer der vier Seiten) und
+  erzwingt mindestens drei solcher Hafenflächen. Ergebnis: **17 Hafenflächen im
+  Bake, 18 baubare Anlegerplätze im Spiel.**
+- **Holzproduktion kalibriert (§3).** Gemessen lieferte das Sägewerk auf Stufe 1
+  nur **13,5 Holz/min** gegen seine frühere Passivrate von 45 — Steinbruch (38)
+  und Farm (260) waren seit §A6/A7 kalibriert, das Sägewerk nie. Jetzt **52,7 /
+  134 / 246 Holz/min** über die drei Stufen. Die Upgrades bleiben, was §3
+  verlangt: nicht „+X/min", sondern bessere Infrastruktur — mehr Arbeiter,
+  schnellere Wege, besseres Werkzeug, mehr Traglast, mehr Lager und ein
+  **wachsendes Arbeitsgebiet**, das dem Sägewerk als einzigem Betrieb fehlte.
+- **Die Welt wirkt nicht mehr leer (§8).** `REGION_PROP_BUDGET` war ein FLACHES
+  Budget je Region: eine 12.644-Kachel-Landschaft bekam genauso viele Bäume wie
+  eine mit 2.122, und die Gesamtmenge hing an der ANZAHL der Regionen statt an
+  der Landfläche — die Konsolidierung auf acht Regionen hätte die Insel damit um
+  rund ein Drittel entlaubt, ohne dass ein Baum entfernt worden wäre. Das Budget
+  skaliert jetzt mit der Fläche (Untergrenze 0,85, Deckel 3×), damit große
+  Regionen dicht werden und die kleine Startregion nicht das dünnste Grün bekommt.
+- **Rathaus steht garantiert eben (§4).** Die Flachheit war in §8 nur ein
+  Bewertungssummand — fiel ein flacher Kandidat an einer anderen Bedingung aus,
+  wählte der Bake einen Platz mit ΔH 3,48 und Flachheit 0,000. Jetzt gilt
+  dieselbe harte Schwelle wie für den Startregion-Kern; das Rathaus liegt bei
+  **ΔH 0,53**.
+
+### Architektur
+
+- Alle Weltänderungen entstehen weiter ausschließlich offline in
+  `tools/bakeWorld.mjs`; die Laufzeit liest committete Gen-Dateien.
+- Neu im Bake: das Uferprofil läuft ein drittes Mal NACH der Schlussglättung
+  (danach nur noch Stufenkappung, kein Mitteln), `waterPad2`/`carriesQuay`
+  spiegeln die Wasserfront-Regel der Laufzeit, und die Startregion-Annahme prüft
+  Budget + Wasser + Hafenfläche + Flachheit + Nachbarregionen.
+- `regionPropBudget()` ist rein und getestet; der Renderer liest die Regionsgröße
+  aus `BAKED_REGIONS`.
+- Kein neues System: keine zweite Verkehrs-, Regions- oder Vegetationslogik.
+
+### Auswirkung
+
+- Save-Schema bleibt **v26**: die Welt wurde neu gebacken, aber der Weltaustausch
+  ist derselbe Schritt wie in v1.17 (Backup `cmb.save.backup.world-v25`).
+- 534 Tests grün. Neue Zusicherungen: Sägewerk-Kalibrierung, „jede Ausbaustufe
+  verbessert ALLE Achsen", Regionsgrößen-Median, Anlegerplätze in der Startregion
+  (in allen vier Rotationen), flächenproportionales Vegetationsbudget.
+- Zwei Testfehler waren Fehler der TESTS, nicht der Welt: der Anleger-Test prüfte
+  Rotationen als 0..3 statt 0/90/180/270 und meldete deshalb fälschlich „kein
+  Hafen möglich"; der Ernte-Test verlangte, dass der Stadtpool NICHT wächst — eine
+  Invariante von vor AS-2, die der kalibrierte Durchsatz nun sichtbar machte.
+
+### Bewusst nicht gemacht
+
+- **Startstraßen auf Gras erzwingen.** Umgesetzt, gemessen, verworfen: die
+  geländefolgenden Achsen verschoben die Startbelegung und brachen ein Dutzend
+  Bauplatz-Tests in acht Dateien — für einen rein optischen Gewinn. Die Achsen
+  bleiben auf festen Offsets; garantiert und geprüft ist Bebaubarkeit in der
+  Startregion.
+- **Bergplattformen als eigene Terrain-Klasse**, neue Vegetations-/Prop-Assets,
+  Mesh-Einebnen unter dem Footprint, Pfahl-/Steglogik für Wassergebäude
+  (unverändert offen aus v1.17).
+
+### Dateien
+
+- Bake: `tools/bakeWorld.mjs` (Uferreihenfolge, Regionsparameter, Hafenregel,
+  harte Flachheit), `tools/bake-report.md`, `tools/bake-preview.png`,
+  `tools/bake-regions.png` + alle Gen-Dateien
+- Config: `src/game/config/regions.config.ts`, `src/game/config/buildings.config.ts`,
+  `src/i18n/de.json`
+- Renderer: `src/renderer/three/vegetationBudget.ts`,
+  `src/renderer/three/worldVisualProfiles.ts`, `src/renderer/three/ThreeMapRenderer.ts`
+- Tests: `activeOperations`, `operations`, `regions`, `regionCost`, `regionPreview`,
+  `worldVisualProfiles`, `mapBuildability`, `world.gen`, `vegetationBudget`
+- Doku: `docs/REGIONS.md` (generiert), `docs/agents/WORLD_OVERHAUL_12_PLAN.md`
+
+## v1.17 — World Overhaul 12.0: eine neue Insel als Grundlage (Save v26, D-041)
+
+> Die Welt ist nicht überarbeitet — sie ist ausgetauscht.
+> `reference/world/new island 3d model.glb` ersetzt die bisherige Insel als
+> **einzige** Weltgrundlage. Kein Parallelbetrieb, keine Übergangslösung: die alte
+> `island 3d new.glb` wird von nichts mehr gelesen. Alles, was eine Weltkoordinate
+> kennt — Höhen, Terrain, Wasser, Bebaubarkeit, Regionen, Startpunkt, Minimap,
+> Nebel, Kamera-Grenzen, Infrastruktur-Kandidaten — ist neu erzeugt.
+
+### Was und warum
+
+- **Neue Insel als Bake-Quelle.** 117 Meshes, 1.914.065 Dreiecke, SHA-256
+  `b52c0cfb…4374b0`. Wie bisher wird die GLB **nie** zur Laufzeit geladen; sie ist
+  ausschließlich Eingabe für `tools/bakeWorld.mjs`. `WORLD_GLB` erlaubt
+  Vergleichsbakes ohne Codeänderung.
+- **Die Insel ist deutlich bespielbarer.** 61.322 Landkacheln, davon **44.170
+  bebaubar** (alte Insel nach dem Map-Flattening: 38.126). Vollständig freie
+  Bauplätze: 37.559 für 3×3, 34.596 für 4×4, 32.031 für 5×5. In der Startregion
+  allein sind 1.145 Plätze für ein 3×3-Haus, 1.032 für ein 4×4-Sägewerk, 919 für
+  einen 5×5-Steinbruch und 772 für eine 6×6-Farm gültig — gemessen auf echtem
+  Gelände, ohne Test-Overrides.
+- **Reihenfolge im Bake umgedreht (D-041).** Bis v1.11 wurde das Gelände ERST NACH
+  der Regionssegmentierung eingeebnet — allein, um alte Regions-Ids bitgleich zu
+  halten (D-040). Da dieser Auftrag die Welt vollständig ersetzt, fällt der Grund
+  weg, und die alte Reihenfolge wird zum Fehler: die Segmentierung sah rohe Biome,
+  der Startregion-Ausschnitt zählte rohe Bauflächen (3.983 Kacheln für 1.348
+  „bebaubare"), und `BAKED_REGIONS[].buildable` beschrieb eine Welt, die es nach
+  dem Einebnen nicht mehr gab. Jetzt gilt: **einebnen, dann segmentieren.**
+  Regionen, Startregion, Rathaus und Statistik beschreiben das fertige Gelände.
+- **Zentrale Startregion mit echten Startressourcen.** Region 13 „Gründerland":
+  Zentrum (232,259) bei einem Inselschwerpunkt von (259,260), 1.456 bebaubare
+  Kacheln, 1.222 freie 4×4-Plätze, Rathaus (237,256) mit ΔH 0,34, 365
+  Waldkacheln, 13 Uferkacheln — und **vier** Landnachbarn: Holz (Nordwald),
+  Mischland (Mittelmark, Ostterrassen) und Stein (Kernmassiv). Der Bake erzwingt
+  das jetzt hart: Bauflächenbudget, Wasserzugang, ebener Rathausblock und
+  mindestens drei Nachbarregionen sind Bedingungen, keine Wünsche. Der erste Bake
+  der neuen Insel lieferte eine vollständig binnenländische Startregion ohne
+  Wasser und ohne fruchtbaren Boden — genau das fangen die neuen Prüfungen ab.
+- **Spielerfreundliche Küste.** 90,9 % aller 2.719 Uferkacheln liegen höchstens
+  1,5 Welt-Einheiten über der Wasserlinie (Median 0,26). Das Wasser liest sich als
+  Teil der Landschaft, nicht als Graben um die Insel. Bewusste Steilküste bleibt
+  mit 682 Kacheln als optisches Highlight erhalten. Die Wasserlinie selbst wurde
+  dafür **nicht** angehoben — das hätte nur Land geflutet; es reicht das flache
+  Uferprofil. In der Startregion sind Anleger baubar.
+- **13 Regionen mit klarem Ressourcenprofil.** Eine Startregion und zwölf
+  Freischaltungen: zwei Holzreviere (Nordwald 61,6 % Wald, Ostforst 46,7 %), zwei
+  Gebirge (Kernmassiv 76,1 %, Südmassiv 72,6 %), die Kornkammer Nordfelder mit der
+  größten Baufläche der Insel (7.757), die fruchtbarsten Westweiden, zwei große
+  Ebenen, drei Mischregionen und die Binnenlagune. Die Preise sind weiterhin der
+  abgeleitete Richtwert aus dem Faktormodell, keine gegriffenen Zahlen.
+- **Kein `requiresHarbor` mehr — weil die Geografie es nicht mehr verlangt.** Die
+  alte Welt war ein Archipel; nur sechs Regionen hingen über Land zusammen. Die
+  neue Insel ist EINE Landmasse, von der Startregion aus vollständig über Land
+  erreichbar. Die Hafensperre in `regionUnlockBlocker` ist unverändert wirksam und
+  greift rein geografisch: die Nordfelder etwa grenzen nur über Wasser an den
+  Start, ihr einziger Landnachbar ist der Nordwald. Häfen bleiben für
+  Wassergebäude, Schifffahrt und Handel relevant — sie sind nur keine
+  Freischaltbedingung mehr.
+- **Kein totes Land mehr.** Das Regionswachstum läuft nur über Land; kleine Inseln
+  ohne Landverbindung blieben deshalb bei „Region 0" — auf der neuen Insel 3.217
+  Kacheln in zwei Nordinseln, also sichtbares Land, das der Spieler nie hätte
+  betreten können. Sie gehören jetzt zur Region mit dem kürzesten Wasserabstand.
+  Der Nebel deckt seitdem **alle** Teile einer gesperrten Region ab, nicht nur den
+  flächengrößten.
+- **Regionsnamen nur, wenn man sie braucht (§10).** Zwölf dauerhaft eingeblendete
+  Regionsbanner verdeckten die Insel. Der Ruhezustand ist jetzt ein kompaktes
+  Schloss ohne Text; Name und Freischaltlevel erscheinen beim Zeigen und beim
+  Freischalten. Die Klickfläche zum Regionsdialog bleibt unverändert.
+
+### Architektur
+
+- Weltdaten entstehen weiter **ausschließlich offline** im Bake; die Laufzeit liest
+  committete Gen-Dateien. Genau deshalb mussten `CameraExplorationBoundary`,
+  `WorldMiniMap`, `placement.ts`/`terrainFit.ts`, `roadNetwork`/`roadRouting` und
+  `waterNavigation` **nicht** angefasst werden — sie lesen `regionIdAt`,
+  `terrainAt`, `bakedSurfaceAt` bzw. `validatePlacement`.
+- Neu im Bake: `§6b-flat` (Terraforming vor der Segmentierung), `§7c-bis`
+  (verwaistes Land einsammeln), Kandidatenschleife für die Startregion mit
+  Uferkorridor und Ufer-Vorplatz, zweite Kontrollausgabe `tools/bake-regions.png`
+  (Regionskarte mit Ids), `SOURCE_LABEL` für alle Quellenangaben.
+- `regionContour` → `regionContours`: Nebel deckt jeden Außenrand einer Region ab
+  (Decke **und** Wolkenwand je Kontur), Löcher (Seen) bleiben wie bisher verdeckt.
+- Kein neues System: keine zweite Verkehrs-, Regions- oder Missionssimulation.
+  Die Hafensperre, das Kostenmodell und die Platzierungsinstanz bleiben dieselben.
+
+### Auswirkung
+
+- **Save v26 mit einmaligem Backup und Neustart.** Eine Projektion alter
+  Koordinaten wäre nicht nur verlustbehaftet, sondern sinnlos: (127,250) der alten
+  Insel liegt auf der neuen an einem völlig anderen Ort, und „Region 9
+  erschlossen" bedeutet eine andere Landschaft. Alte Stände werden unter
+  `cmb.save.backup.world-v25` gesichert (wie v14/v16/v19/v20).
+- Testabdeckung erweitert statt nur angepasst: §6-Wasserhöhe an der Uferkante,
+  Footprint-Kapazität, Startregion-Kriterien (zentral, flach, Wasser, ≥3
+  Nachbarn, Wald), vollständige Land-Erreichbarkeit aller Regionen, „kein Land
+  ohne Region", Bauplatzkapazität und Anlegerbarkeit in der Startregion.
+- Betriebstests hingen unbemerkt an absoluten Weltkoordinaten: ein Ressourcenknoten
+  existiert nur, wenn zusätzlich zum Terrain ein Positions-Hash unter der
+  Knotendichte liegt. Wer zwei Waldkacheln malte, bekam je nach Ort keinen Baum.
+  Der neue Helfer `paintResourceNodes` malt genau so viele Kacheln, die auch
+  **wirklich** einen Knoten tragen — damit übersteht die Suite jeden Rebake.
+
+### Zukunft (bewusst offen, nicht vortäuschen)
+
+- Echte Bergplattformen als eigene Terrain-Klasse (`MOUNTAIN_PLATFORM`). Die
+  Gebirge sind mit 474 bzw. 1.349 bebaubaren Kacheln und 292 bzw. 770 freien
+  4×4-Plätzen nicht unbebaubar, und der Steinbruch baut über `buildsOnRock` auf
+  Felsschelfen — eine zusätzliche Höhenquantisierung wurde in v1.11 gemessen und
+  verworfen (sie senkt die Zahl ebener Footprints und macht die Insel steril).
+- Mesh-Einebnen unter dem Footprint, Pfahl-/Steglogik für Wassergebäude.
+- Neue Vegetations-/Prop-Assets bleiben Drop-in; die vorhandene Pipeline
+  (Instancing, Qualitätsstufen, Chunking) bedient die neue Insel unverändert.
+
+### Dateien
+
+- Neu: `reference/world/new island 3d model.glb`,
+  `docs/agents/WORLD_OVERHAUL_12_PLAN.md`, `tools/bake-regions.png`
+- Bake: `tools/bakeWorld.mjs`, `tools/analyzeNewIsland.mjs`, `tools/bake-report.md`,
+  `tools/bake-preview.png`, `tools/new-island-report.json`/`.md`
+- Generiert: `src/game/config/world/island{Terrain,Regions,Buildability,Infrastructure}.gen.ts`,
+  `src/renderer/three/world{Height,Masks}.gen.ts`,
+  `src/assets/ui/{map,minimap,citywork/map}/new_island_*.png`
+- Config/UI: `src/game/config/regions.config.ts`, `src/i18n/de.json`,
+  `src/renderer/three/worldVisualProfiles.ts`, `src/renderer/three/ThreeMapRenderer.ts`
+- Saves: `src/game/newGame.ts`, `src/game/storage/migrations.ts`,
+  `src/game/storage/localStorageAdapter.ts`
+- Tests: `tests/helpers.ts`, `tests/newIslandBake.test.ts`,
+  `tests/mapBuildability.test.ts`, `tests/regions.test.ts`,
+  `tests/regionCost.test.ts`, `tests/regionPreview.test.ts`,
+  `tests/worldVisualProfiles.test.ts`, `tests/storage.test.ts`,
+  `tests/activityStability.test.ts`, `tests/activeOperations.test.ts`,
+  `tests/continuousOperation.test.ts`
+- Doku: `docs/REGIONS.md` (generiert), `docs/WORLD_REBUILD.md`,
+  `docs/agents/{PROJECT_STATE,HANDOFF_LOG,OPEN_TASKS,DECISIONS}.md`,
+  `reference/README.md`, `CLAUDE.md`
+
+### Assets
+
+Keine neuen Kunst-Assets nötig. Die drei Karten-PNGs sind Bake-Ausgaben. Die alte
+`reference/world/island 3d new.glb` bleibt als historische Referenz liegen und
+wird von keinem Werkzeug und keiner Laufzeit mehr gelesen.
+
+## v1.16 — Full Overhaul: aktive Einfachheit und komponierte Cartoon-Welt (Save v25)
+
+> Der Standardbildschirm zeigt wieder das Spiel statt seiner Verwaltung. Dieser
+> Pass ordnet die Informationsarchitektur nach der nächsten sinnvollen
+> Entscheidung, reduziert konkurrierende Flächen und führt Gelände, Küste,
+> Vegetation, Straßen, Wasser, Gebäude und UI in eine ruhige, warme
+> City-Builder-Bildsprache. Die bestehenden Gameplay-Systeme bleiben dabei die
+> einzige Wahrheit; vereinfacht wird ihre Bedienung, nicht ihre Simulation.
+
+### Was und warum
+
+- **Aktive Einfachheit statt permanenter Datenwand.** Die Topbar priorisiert
+  Stadt, Geld, Kernressourcen, Bevölkerung, Zufriedenheit und Zeit. Jede
+  Kennzahl ist weiterhin anklickbar, öffnet aber nur ihre kontextbezogene
+  Detailkarte. Der redundante Hauptmenü-Knopf entfällt; Navigation,
+  Statusfläche, Aufgaben und untere Aktionen besitzen klar getrennte Rollen.
+- **Die HUD-Proportionen folgen wieder der Welt.** Der Stadtblock besitzt eine
+  feste lesbare Breite, die sechs Kernwerte sitzen in einer gemeinsamen
+  kompakten Ressourcenkapsel statt über den ganzen Monitor verteilt zu werden.
+  Stadtstatus, Anliegen, Minimap und laufende Stadtarbeit sind kleiner und
+  typografisch klarer. Der Info-Layer startet als 244-Pixel-Statuskapsel und
+  zeigt seine vollständigen Filter erst nach einem bewussten Aufklappen.
+- **Ein Fokus pro Zustand.** Große Arbeitsflächen unterdrücken konkurrierende
+  passive HUD-Elemente. Popover schließen vor einem Panelwechsel, bleiben im
+  sichtbaren Viewport und liegen nicht länger über den eigentlichen Sheets.
+  Bau-Shop, Wirtschaft, Stadtverwaltung und Gebäudedetails reagieren
+  einheitlich auf `Escape`. Auch bei 1024 Pixeln bleiben Stadtname,
+  Zeitsteuerung, Status und priorisierte Anliegen lesbar.
+- **Stadtstatus wird zur Entscheidungshilfe.** Statt alle freigeschalteten
+  Systeme gleichwertig zu erklären, zeigt er Zufriedenheit, höchstens drei
+  schwächste relevante Werte und genau einen nächsten Schritt. Probleme führen
+  direkt zur passenden Handlung; gesunde Werte erzeugen keine zusätzliche
+  Textlast.
+- **Bürgeranliegen werden priorisiert.** Im Weltbild erscheinen maximal zwei
+  handlungsrelevante Anliegen. Fortschritt, Aufgabe und Belohnung sind visuell
+  getrennt; der Balken folgt dem tatsächlich nächsten Ziel. Die vollständige
+  Liste bleibt als bewusste Vertiefung erreichbar.
+- **Bau-Shop folgt „ansehen, wählen, bauen“.** Empfehlungen stehen vor
+  Kategorien, Karten zeigen Name, Kosten, Größe und Bauzeit in einem ruhigen,
+  scanbaren Raster. Auswahl und Vorschau konkurrieren nicht mehr mit mehreren
+  Scrollflächen. Gesperrte Gebäude bleiben verständlich, drängen sich aber
+  nicht vor die aktuell baubaren Entscheidungen.
+- **Gebäudedetails beantworten vier Fragen sofort:** Was macht das Gebäude, ist
+  es aktiv, was fehlt ihm und welche Aktion ist jetzt sinnvoll? Hero,
+  Betriebsstatus, Kernwerte und nächster Schritt bilden die kurze
+  Standardansicht. Lager, Produktion, Versorgung, Arbeitsgebiet und Upgrades
+  bleiben vollständig erreichbar, liegen aber in einer geordneten Vertiefung.
+- **Wirkungsbereiche gehören zur Entscheidung.** Radiusfähige Dienste und
+  Platzierungs-Ghosts verwenden ein gemeinsames terrainfolgendes
+  Coverage-Visual mit funktionaler Farbe, präzisem Außenring und lesbaren
+  Verbraucherzuständen. Es gibt keinen zweiten Radius- oder
+  Platzierungszustand neben den Controller-ReadModels.
+- **Wirtschaft und Stadtverwaltung haben eine klare Aufgabe.** Wirtschaft zeigt
+  zuerst Einnahmen, Unterhalt, Netto, stärkste Einnahmequelle und größten
+  Kostenblock; Sektoren und Steuern sind einklappbar. Die Stadtverwaltung
+  konzentriert sich auf wirksame Aktionen, Freischaltungen und einen klaren Weg
+  zum Bau-Shop statt auf große leere Verwaltungsflächen.
+- **Stadtarbeit ist „smart first, manual second“.** Auftrag und Fahrzeug führen
+  automatisch zu einer vorgeschlagenen Route. Ladung, Ziele, Fahrzeit,
+  Nachladen und Bestätigung stehen im Vordergrund; die Karte ist die dominante
+  Arbeitsfläche. Die manuelle Routenbearbeitung bleibt optional und verwendet
+  weiterhin dieselben Stopps, Kapazitäten, Straßenanalysen und
+  `ActiveActivity`-Daten.
+- **Straßen lesen sich als zusammenhängende Infrastruktur.** Ein besonders
+  ruhiges, warmes Cartoon-Albedo ersetzt kleinteilige Straßenunruhe.
+  Terrainfolgende Bänder besitzen konsistente Breiten, korrekte
+  Dreiecksorientierung, verbundene Knoten und sichtbare Übergänge zu
+  Brücken-/Hochstraßen. Der kanonische Straßengraph bleibt unverändert für
+  Routing, Auswahl und Platzierung. Die frühe Wohnstraße ist jetzt 0,68 statt
+  0,52 Kacheln breit; ein stärkeres Bankett hält sie auch auf Wiese und in der
+  Dämmerung lesbar. Lokale quadratische Eckrundungen ersetzen die
+  überschwingende Catmull-Kurve, die Rasterwege zuvor unnötig zackig machte.
+- **Fahrzeuge sind keine schwebenden Boxen mehr.** Umgebung, Betriebslogistik
+  und Stadtarbeit verwenden typabhängige Cartoon-Silhouetten mit Fenstern,
+  Rädern, Fahrgestell und stabilem Bodenkontakt. Alle Teile einer Variante
+  werden zu einer vertexgefärbten Geometrie gebündelt; reale Fahrzeug-GLBs
+  ersetzen den Fallback weiterhin über dasselbe Drop-in-Manifest.
+- **Küsten werden gezeichnet statt gerastert.** Marching-Squares-Konturen,
+  zusammenhängende Ketten und Chaikin-Glättung erzeugen ruhige Uferlinien.
+  Flachwasser- und Schaumbänder variieren lokal: breite weiche Strände an
+  flachen Ufern, schmale Säume an Klippen. Gezackte Kachelkanten werden nicht
+  mehr durch gleich breite helle Streifen betont.
+- **Die Welt erhält große Formen statt visuellem Rauschen.** Neue Cartoon-
+  Texturen für Wiese, Waldgrund, Küstensand, Fels und Wege verwenden breite
+  handgemalte Farbflächen. Fotografische Normal-/AO-Mikrodetails sind aus dem
+  aktiven Splat-Pfad entfernt. Gras, Fels, Strand, Wald, Flüsse und Meer bilden
+  eine gemeinsame helle, warme Palette mit klareren Silhouetten.
+- **Vegetation wird komponiert und budgetiert.** Ein kohärentes Clusterfeld
+  bündelt Wälder, Büsche, Wiesen und offene Bauflächen statt Props gleichmäßig
+  zu verstreuen. Nur ein stabiler Teil der Instanzen erhält detaillierte
+  Drop-in-GLBs; räumliche Chunks, Distanz-LOD und Frustum-Culling halten die
+  Übersicht performant. Prozedurale Fallbacks bleiben für jeden Typ vorhanden.
+- **Die 13 aktiven Regionen erhalten wieder ihre echte Bildsprache.** Eine
+  historische 40-Regionen-Tabelle hatte Kronengebirge, Südforst, Binnenau und
+  weitere Flächen mit falschen Wald-, Auen- oder Alpinprofilen versehen. Die
+  Visualprofile folgen jetzt exakt den aktuellen Bake-IDs; Zentralland ist
+  warmes, offenes Gründerland, Waldregionen clustern dichter und Gebirge
+  erhalten alpine Landmarken. Weich gemittelte Profiltöne vermeiden harte
+  Farbgrenzen.
+- **Weltmaßstab wird über klare Ansichten statt einen Dauer-Fernzoom gelöst.**
+  Die normale Stadtansicht liegt bei 38 Distanz, 48 Grad Pitch und einem
+  art-direktierten Landmarkenwinkel. Ein reines Renderer-Framing umfasst
+  Rathaus und nahe Nicht-Straßen-Gebäude dynamisch mit 34 bis 48 Distanz;
+  entfernte Außenposten ziehen die Kamera nicht zurück zur Weltkarte. Nur der
+  explizite Regionsmodus bleibt bei 540 Distanz. Der frühere Minimap-Fehler,
+  der das City-Preset direkt wieder mit Distanz 92 überschrieb, ist beseitigt;
+  ein Kartenklick zeigt nun einen lesbaren Sektor mit Distanz 42.
+- **Sperrgebiete sind Atmosphäre statt graue Platten.** Eine tessellierte,
+  stetig gewellte Grunddecke, drei texturierte Wolkenlagen und geglättete
+  Ober-/Unterkanten verdecken gesperrtes Terrain weiterhin vollständig, lesen
+  sich aber nicht mehr als starre graue Landschaftsflächen. Die Minimap zeigt
+  höchstens drei nahe Freischaltteaser statt eines Schlossrasters.
+- **Dämmerung und Gebirge besitzen wieder Form.** Für den im Screenshot
+  sichtbaren Zeitpunkt 05:42 gibt es einen eigenen Morgen-Key und begrenzten
+  Hemisphere-/Ambient-Fill; Mitternacht bleibt unverändert dunkel. Schnee setzt
+  am Startplateau erst ab Höhe 36 statt bereits ab 11,6 ein. Wärmere
+  Felsstaffelungen und organische Dodekaeder-Findlinge brechen den Eindruck
+  eines großen grauen Blocks.
+- **Das Startgebiet ist eine komponierte Lichtung.** Bis Radius 15 um das
+  Rathaus bleibt die Fläche klar und schnell bebaubar, zwischen 15 und 32
+  wächst ein weicher Naturrahmen, außen gilt wieder die volle Cluster-Dichte.
+  Dieser Pass verändert ausschließlich die Prop-Auswahl im Renderer, nicht
+  Bauflächen, Weltmasken oder gespeicherte Koordinaten.
+
+### Architektur
+
+- `src/game/**` bleibt von React und Three getrennt. UI und Renderer lesen
+  Snapshots/ReadModels über den `GameController`; Aktionen laufen weiterhin als
+  Commands. Kein Panel mutiert den Simulationszustand direkt.
+- Stadtarbeit erweitert den bestehenden Flow durch eine reine
+  `smartRoutePlan`-Ableitung. Es gibt keine zweite Mission-State-Machine, keinen
+  parallelen Cargo-Zustand und keine gespeicherte Standardroute.
+- Straßen- und Küstengeometrie liegen in reinen, separat testbaren
+  Rendererhelfern. Der Renderer projiziert den bestehenden Straßengraph und die
+  vorhandene Land-/Wassermaske; er erfindet keine Gameplay-Topologie.
+- Cartoon-Texturen sind zentral in den bestehenden Terrain- und
+  Straßenmanifesten registriert. Fehlende PNGs fallen weiterhin auf
+  Vertexfarben beziehungsweise prozedurale Materialien zurück und lösen keinen
+  Runtime-Crash aus.
+- Detaillierte Vegetation wird deterministisch aus den vorhandenen
+  Regionskandidaten gewählt, räumlich gruppiert und entfernungsabhängig
+  ausgeblendet. Instancing, Batching, LOD und Culling bleiben Bestandteil des
+  normalen Renderpfads.
+- Visuelle Regionsprofile sind vollständig rendererintern und durch
+  `REGION_COUNT`, die gebackenen IDs und die echte Startregion abgesichert.
+  Regionsconfig, Freischaltungen, Produktionsboni und Weltkoordinaten werden
+  dadurch nicht verändert.
+- **Save-Schema bleibt v25.** Dieser Overhaul benötigt keine Migration und
+  keinen Neustart.
+
+### Auswirkung
+
+- Der Spieler erkennt im Normalzustand Stadtlage, wichtigsten Engpass und
+  nächsten Klick, ohne mehrere gleichwertige Panels auswerten zu müssen.
+- Bau-, Gebäude-, Wirtschafts- und Auftragsentscheidungen beginnen kompakt;
+  fortgeschrittene Details bleiben verfügbar, bestimmen aber nicht mehr den
+  ersten Eindruck.
+- Weltflächen wirken aus Übersicht und Nahansicht ruhiger und bewusster
+  gestaltet. Straßen verschwinden weder durch Backface-Culling noch an
+  Übergängen; Ufer betonen nicht länger das 512²-Raster.
+- Die Insel füllt den Bildschirm schneller, ohne ihre kanonischen
+  Gameplaykoordinaten zu verschieben. Rathaus, Regionen, Freischaltungen,
+  Balancing und gespeicherte Positionen bleiben kompatibel.
+
+### Insel-Bake und Bebaubarkeit
+
+- Der Offline-Bake, die 13 Gameplayregionen, Startregion, Rathauskoordinate und
+  Weltmasken bleiben in v1.16 **absichtlich unverändert**. Ein erneuter Bake
+  würde Save- und Balancingfolgen erzeugen, ohne die aktuell sichtbaren
+  Kompositionsprobleme allein zu lösen.
+- Die strukturelle Grundlage stammt weiterhin aus v1.11: Die dortige
+  Geländeberuhigung verdoppelte ungefähr die nutzbaren 3×3- und
+  4×4-Bauplätze, erweiterte flache Ufer und ließ das zentrale Bergmassiv
+  unangetastet. v1.16 macht diese Flächen durch Vegetationscluster, Kamera,
+  Materialübergänge, Küstenkonturen und Straßen visuell lesbar.
+- Weitere Änderungen an Inselgrundform oder Regionskoordinaten erfolgen erst
+  mit eigenem Bake-Audit, Migrationsentscheidung und messbarer Verbesserung der
+  Bebaubarkeit.
+
+### Dateien
+
+- UI und Informationsarchitektur:
+  `src/App.tsx`, `src/components/hud/GameHud.tsx`,
+  `src/components/hud/QuickActionBar.tsx`,
+  `src/components/hud/HudMetricDetailPopover.tsx`,
+  `src/components/common/Popover.tsx`,
+  `src/components/common/useEscapeClose.ts`,
+  `src/components/panels/CityStatusPanel.tsx`,
+  `src/components/panels/CitizenRequestsPanel.tsx`,
+  `src/components/panels/BuildMenu.tsx`,
+  `src/components/panels/FloatingBuildingSheet.tsx`,
+  `src/components/panels/EconomyPanel.tsx` und
+  `src/components/panels/MayorPanel.tsx`.
+- Stadtarbeit:
+  `src/components/panels/ActivityRoutePlanner.tsx`,
+  `src/components/citywork/smartRoutePlan.ts`,
+  `src/components/citywork/ManualRouteMap.tsx`,
+  `src/components/citywork/VehicleSelector.tsx`,
+  `src/components/citywork/RouteSummary.tsx` und
+  `src/components/citywork/TourOverview.tsx`.
+- Welt:
+  `src/renderer/three/ThreeMapRenderer.ts`,
+  `src/renderer/three/cityFraming.ts`,
+  `src/renderer/three/fogSurfaceGeometry.ts`,
+  `src/renderer/three/shorelineGeometry.ts`,
+  `src/renderer/three/roadSurfaceGeometry.ts`,
+  `src/renderer/three/vehicleFallback.ts`,
+  `src/renderer/three/worldVisualProfiles.ts`,
+  `src/renderer/three/vegetationBudget.ts`,
+  `src/renderer/three/CameraConfig.ts`,
+  `src/renderer/three/CameraController3D.ts` und
+  `src/renderer/three/SkyEnvironment.ts`.
+- Designsystem:
+  `src/styles/visual-overhaul.css`,
+  `src/styles/overhaul-shell.css`,
+  `src/styles/overhaul-core-ui.css`,
+  `src/styles/overhaul-build-ux.css` und
+  `src/styles/citywork-smart.css`.
+- Regressionstests:
+  `tests/roadSurfaceGeometry.test.ts`,
+  `tests/shorelineGeometry.test.ts`,
+  `tests/cityFraming.test.ts`,
+  `tests/fogSurfaceGeometry.test.ts`,
+  `tests/vehicleFallback.test.ts`,
+  `tests/worldVisualProfiles.test.ts`,
+  `tests/vegetationBudget.test.ts`, `tests/camera.test.ts`,
+  `tests/smartRoutePlan.test.ts`, `tests/terrainTextures.test.ts` und
+  `tests/roadTextures.test.ts`.
+
+### Assets
+
+- `src/assets/textures/roads/surface/road_path_cartoon.png`
+- `src/assets/textures/terrain/grass/grass_meadow_cartoon.png`
+- `src/assets/textures/terrain/forest/forest_floor_cartoon.png`
+- `src/assets/textures/terrain/coast/coast_sand_cartoon.png`
+- `src/assets/textures/terrain/mountain/mountain_cliff_cartoon.png`
+- Registrierung und generierte Dokumentation:
+  `src/assets/roadTextureManifest.ts`,
+  `src/assets/terrainTextureManifest.ts`, `docs/ROAD_TEXTURES.md`,
+  `docs/TERRAIN_TEXTURES.md` und
+  `src/assets/textures/roads/PROMPTS.md`.
+
+### Zukunft
+
+- Echte Gebäude-, Fahrzeug-, Boots- und Landmark-GLBs können die vorhandenen
+  stilisierten Fallbacks weiterhin per Drop-in ersetzen. Die UI darf fehlende
+  Art Assets nicht mit eigener Gameplaylogik kompensieren.
+- Ein späterer Insel-Remap muss als eigener World-Bake mit Vorher-/Nachher-
+  Metriken, Save-Entscheidung und Screenshotserie geplant werden. v1.16
+  behauptet keine nicht gebackene Geometrieänderung.
+- Echte alternative Straßentrassen, gemessene Steigung, Straßenzustand und
+  dynamische Ereignisse bleiben dokumentierte Erweiterungen; die neue
+  Oberfläche täuscht diese Daten nicht vor.
+- Nach der technischen Abschlussprüfung folgt ein visueller QA-Pass in einer
+  verfügbaren Browser-/Desktopinstanz mit Neu-Spiel-, Tag-, Dämmerungs-, Nacht-,
+  Küstenbau-, Gebäude-, Bau-Shop- und Stadtarbeit-Szenarien.
+
+### Verifikation
+
+- `npx tsc -b --force`: erfolgreich.
+- `npx eslint src tests`: erfolgreich.
+- `npx vitest run`: **68 Testdateien, 519/519 Tests erfolgreich**.
+- `npm run build`: erfolgreich; die bekannte Vite-Hinweisgrenze für den großen
+  Hauptchunk bleibt eine nicht blockierende spätere Code-Splitting-Aufgabe.
+- Produktions-Preview unter `http://127.0.0.1:4173/`: HTTP 200.
+- `git diff --check`: sauber; ausschließlich erwartete LF-/CRLF-Hinweise.
+- Der lokale Browserpfad ist prüfbar, die verbundene In-App-Browserumgebung
+  stellt jedoch keine Browserinstanz bereit. Der vorgeschriebene interaktive
+  3D-Screenshot-Smoke ist deshalb derzeit technisch blockiert und wird nicht
+  durch ein unabhängiges Browserwerkzeug vorgetäuscht.
+- Ein nativer Windows-Tauri-Build kann in dieser Umgebung ohne installierte
+  Rust-/Cargo-Toolchain nicht ausgeführt werden. Der Browser-/Vite-Pfad wird in
+  der vollständigen Abschlussprüfung separat verifiziert.
+
+## v1.15 — Cartoon-Welt und verbindliches Mockup-HUD (Save v25)
+
+> Dieser Pass korrigiert nicht nur einzelne Farben. Er führt Renderer, Straßen,
+> Wasser, Drop-in-Modelle, HUD, Popover und große Arbeitsfenster auf eine
+> gemeinsame helle Miniaturwelt-Art-Direction zurück und behebt zugleich die
+> nicht erreichbaren Detailansichten der oberen Kennzahlen.
+
+### Was und warum
+
+- **Straßen sind keine schwarzen Schlangen mehr.** Das globale geglättete
+  Straßennetz besitzt keine kachelweisen UVs. Trotzdem wurde bislang die
+  realistische Asphalttextur darauf gelegt; je nach Treiber und Blickwinkel
+  ergab das eine fast schwarze Fläche. Das Netz verwendet jetzt ein eigenes
+  warmes, mattes Fahrbahnmaterial und ein helles Stein-/Sandbankett. Die
+  Fahrbahn ist schmaler, folgt weiter dem Terrain und bleibt als durchgehender
+  Weg klar vom Gras abgesetzt.
+- **Cartoon-Terrain statt Fotoüberzug.** Drei neue handgemalte Basistexturen
+  decken Wiese, alpine Felsen und Küstensand ab. Der Splat-Shader lässt die
+  stilisierten Vertexfarben wieder dominieren, reduziert fotografische
+  Mikronormalen und verdichtet die Farben sanft in breite Helligkeitsstufen.
+  Bestehende Biom-, Höhen-, Hang- und Ufergewichte bleiben unverändert.
+- **Drop-in-Modelle folgen derselben Bildsprache.** Geladene
+  `MeshStandardMaterial`-Modelle werden einmalig auf hellere Farben, matte
+  Oberflächen, geringere Metallanteile und facettierte Schattierung
+  kalibriert. Glas-, Fenster-, Wasser- und Lichtmaterialien werden dabei
+  bewusst ausgenommen.
+- **Meer und Flüsse sind heller und lebendiger.** Flachwasser ist türkis,
+  Tiefwasser klar blau und breite animierte Wellenkämme sorgen für einen
+  lesbaren Cartoon-Rhythmus. Flussströmung, Uferflachwasser und Schaum sind
+  sichtbar, aber weiterhin in wenigen gebündelten Meshes umgesetzt.
+- **Nacht bleibt Nacht, aber die Stadt bleibt spielbar.** ACES-Exposure,
+  Hemisphärenlicht und Ambient-Fill besitzen höhere Mindestwerte. Straßen,
+  Gebäude und Vegetation verschwinden abends nicht mehr in schwarzen
+  Großflächen. Die zuvor als dunkle Kreise sichtbaren Lampenreflexe sind jetzt
+  kleine additive Lichtscheiben ohne Tiefenschreibartefakte.
+- **Alle oberen Kennzahlen sind anklickbar.** Geld, Holz, Stein, Nahrung,
+  Trinkwasser, Wasserabdeckung, Bevölkerung und Zufriedenheit öffnen echte
+  Detailansichten. Bevölkerung zeigt Wohnkapazität, freie Plätze und den
+  controllerseitigen Wachstumsgrund; Wasser zeigt reale Versorgung; die
+  Zufriedenheit listet die schwächsten freigeschalteten Bedürfnisse.
+- **Popover werden nicht mehr abgeschnitten.** Die Detailkarten liegen über ein
+  React-Portal direkt am Viewport, messen ihren Anker und weichen an Fenster-
+  rändern nach links beziehungsweise oberhalb des Auslösers aus. Resize,
+  Scroll, Außenklick und Escape bleiben unterstützt.
+- **HUD und Sheets folgen einem Raster.** Wappenflanke,
+  Ressourcenkapsel, Wetterblock, Navigation, Status, Anliegen und Minimap
+  besitzen eine gemeinsame Navy-/Gold-Geometrie. Bau-Shop, rechte
+  Detail-Sheets und Dialoge verwenden verbindliche Insets, Breiten und
+  Scrollbereiche; der Katalog zeigt ein stabiles Zweispaltenraster plus
+  Vorschau statt leerer oder überlappender Restflächen.
+- **Stadtarbeit und Straßenplanung lesen sich wie Arbeitsflächen.** Die Karte
+  bleibt die größte Spalte, Aufträge und Fahrzeug-/Cargoentscheidungen
+  flankieren sie. Ausgewählte Elemente sind blau, der Missionsstart grün und
+  das Straßenplanungs-HUD sitzt als zentraler, breiter Planungsstreifen über
+  der 3D-Karte. Alle angezeigten Werte stammen weiterhin aus den bestehenden
+  ReadModels.
+
+### Architektur und Auswirkung
+
+- Simulation, Straßengraph, Platzierungsvalidierung, Aktivitäten, Ressourcen
+  und Save-State bleiben unverändert. Der Renderer liest Snapshots; UI-Aktionen
+  verwenden weiterhin ausschließlich den `GameController`.
+- Die drei neuen Texturen sind reguläre Drop-in-Assets und zentral in
+  `terrainTextureManifest.ts` dokumentiert. Fehlt eine Datei, fällt der Shader
+  weiterhin auf die bestehenden Vertexfarben zurück.
+- Wiese und Küste verwenden World-Space-Detiling; Fels wird triplanar gemischt.
+  Es gibt keinen zweiten Terrainpfad und keinen Runtime-Verbrauch der
+  Source-Insel-GLB.
+- Das zusammenhängende Straßennetz bleibt bei zwei gebündelten Oberflächen.
+  Laternenpfosten, Köpfe und Glows bleiben instanziert; Meer, Flüsse und Ufer
+  bleiben gebündelt. Die Cartoon-Kalibrierung erfolgt einmal pro gecachtem
+  Modellmaterial.
+- `Popover` ist eine rein präsentationale gemeinsame Komponente. Es hält weder
+  Ressourcen noch Simulationsergebnisse und kann von bestehenden sowie
+  zukünftigen HUD-Karten wiederverwendet werden.
+- Keine Config-, Balancing- oder Save-Änderung: Schema bleibt **v25**, keine
+  Migration und kein Neustart.
+
+### Dateien und Assets
+
+- `src/renderer/three/ThreeMapRenderer.ts`
+- `src/renderer/three/SkyEnvironment.ts`
+- `src/assets/terrainTextureManifest.ts`
+- `src/assets/textures/terrain/grass/grass_meadow_cartoon.png`
+- `src/assets/textures/terrain/mountain/mountain_cliff_cartoon.png`
+- `src/assets/textures/terrain/coast/coast_sand_cartoon.png`
+- `src/components/common/Popover.tsx`
+- `src/components/hud/GameHud.tsx`
+- `src/components/hud/ResourceCard.tsx`
+- `src/components/hud/HudMetricDetailPopover.tsx`
+- `src/styles/visual-overhaul.css`
+- `src/i18n/de.json`
+- `docs/TERRAIN_TEXTURES.md`
+
+### Zukunft
+
+- Weitere regionale Albedo-Varianten können über dasselbe Manifest ergänzt
+  werden; der neue Shader benötigt dafür kein zweites Materialsystem.
+- Echte alternative Straßenrouten, Steigungsanalyse und dynamische Ereignisse
+  bleiben wie bisher offen und werden in der UI nicht vorgetäuscht.
+- Spezifische Gebäude-GLBs können weiterhin per Drop-in ersetzt werden; die
+  prozeduralen Fallbacks bleiben vollständig spielbar.
+
+### Verifikation
+
+- Die generierte Terrain-Dokumentation ist mit dem Manifest synchron.
+- TypeScript, der gezielte ESLint-Lauf für Renderer, HUD, Popover und Manifest
+  sowie der Produktionsbuild sind erfolgreich.
+- **486/487 Tests sind grün.** Der einzige Fehler bleibt der parallel
+  bearbeitete Baum-Regenerationstest in `tests/operations.test.ts:125`;
+  Renderer-, Terrain-, Straßen-, UI- und Manifesttests laufen vollständig.
+- Der vorgeschriebene Gesamt-Lint wird weiterhin ausschließlich durch drei
+  `no-explicit-any`-Fehler in der fremden, ungetrackten
+  `tests/__probe.test.ts` blockiert. Alle in diesem Pass bearbeiteten
+  TypeScript-Dateien sind ESLint-sauber.
+- Der lokale Browserpfad antwortet; die verbundene Browserumgebung stellt
+  weiterhin keine Browserinstanz bereit. Der vorgeschriebene interaktive
+  3D-Screenshot-Smoke bleibt deshalb in dieser Umgebung technisch blockiert
+  und wurde nicht durch ein unabhängiges Browserwerkzeug vorgetäuscht.
+- Der Tauri-Build wurde angestoßen, kann auf diesem Rechner aber ohne
+  installierte `rustc`-/`cargo`-Toolchain nicht starten. Der gemeinsame
+  TypeScript-/Vite-Produktionspfad ist erfolgreich.
+
+## v1.14 — Sichtbare Straßen und lesbare Abendwelt (Save v25)
+
+> Das neue Straßennetz war vorhanden, zeigte aber mit der Rückseite zur Kamera.
+> Dieser Pass behebt die tatsächliche GPU-Ursache, sichert sie mit einem
+> Geometrietest ab und korrigiert die zu dunkle Weltwirkung des ersten
+> Korrekturpasses.
+
+### Was und warum
+
+- **Straßen rendern wieder.** Die beiden Dreiecke jedes Fahrbahnband-Segments
+  sowie die Fächerdreiecke der Knotenfläche waren im Uhrzeigersinn aus Sicht der
+  Unterseite gewickelt. Ihre Normalen zeigten dadurch zu `-Y`; das normale
+  Backface-Culling entfernte das komplette Mesh aus der schrägen Spielkamera.
+  Bänder und Knoten werden nun explizit mit Normalen zu `+Y` erzeugt.
+- **Rückseiten-Sicherheitsnetz.** Die zwei gebündelten Straßenmaterialien
+  erlauben zusätzlich `DoubleSide`. Extreme Geländegradienten oder
+  treiberspezifische Culling-Abweichungen können dadurch nie wieder das gesamte
+  Straßennetz verschwinden lassen.
+- **Straßen bleiben auch in der Dämmerung lesbar.** Asphalt, Bergstraße und
+  Bankett sind heller und besitzen eine kleine zeitabhängige Eigenhelligkeit.
+  Die Drop-in-Texturen bleiben aktiv; ihre multiplikative Farbe drückt die
+  Fahrbahn aber nicht mehr bis fast Schwarz.
+- **Abendwelt aufgehellt.** ACES-Exposure sowie minimale Hemisphären- und
+  Umgebungsfüllung wurden angehoben. Tageszeit, warme Dämmerung und Nachtfarben
+  bleiben erhalten, während Gebäude, Vegetation und Gelände um 18–19 Uhr nicht
+  mehr in schwarzen Großflächen verschwinden.
+- **Mehr Mittelgrund.** Ein separater deterministischer Wiesenbaum-Pool
+  verhindert, dass Waldkandidaten das gesamte Laubbaum-Budget belegen. Bäume
+  und Büsche sind etwas größer, sodass sie auch aus der normalen
+  Übersichtsdistanz als Landschaft statt als kleine Punkte lesbar sind.
+- **Fog und Küste beruhigt.** Die oberen Regionswolken sind transparenter,
+  kühler und besitzen eine kontrollierte Eigenhelligkeit. Küstenschaum und
+  Flachwasserband sind noch schmaler und schwächer, damit das gebackene Raster
+  nicht durch helle Treppenlinien betont wird.
+- **Navigationswörter bleiben intakt.** Die linke Hauptnavigation bricht lange
+  deutsche Bezeichnungen nicht mehr mitten im Wort um.
+
+### Architektur und Auswirkung
+
+- Die Dreieckserzeugung liegt nun in
+  `src/renderer/three/roadSurfaceGeometry.ts`: eine reine, testbare
+  Rendererfunktion ohne Three-, Controller- oder State-Abhängigkeit.
+- `tests/roadSurfaceGeometry.test.ts` prüft für gerade, gebogene und runde
+  Straßenflächen jede einzelne Dreiecksnormalenrichtung. Ein erneutes
+  „Straßendaten da, Oberfläche unsichtbar“ wird damit vor dem Build erkannt.
+- Straßengraph, Commands, Routing, Platzierung und transparente Pick-Flächen
+  bleiben unverändert. Es gibt weiterhin genau ein Gameplay-Straßensystem.
+- Vegetation bleibt pro Region deterministisch, instanziert, LOD-/Culling-fähig
+  und unabhängig vom Unlock anderer Regionen.
+- Keine Simulation, kein Balancing und keine Save-Änderung: Schema bleibt
+  **v25**, keine Migration und kein Neustart.
+
+### Dateien und Assets
+
+- `src/renderer/three/ThreeMapRenderer.ts`
+- `src/renderer/three/SkyEnvironment.ts`
+- `src/renderer/three/roadSurfaceGeometry.ts`
+- `src/renderer/three/vegetationBudget.ts`
+- `src/styles/visual-overhaul.css`
+- `tests/roadSurfaceGeometry.test.ts`
+- Keine neuen Laufzeit-Assets oder Manifest-Einträge.
+
+### Verifikation
+
+- Die neue Geometriesuite prüft die `+Y`-Ausrichtung aller erzeugten
+  Straßendreiecke.
+- TypeScript, Produktionsbuild und Preview-HTTP-200 sind erfolgreich.
+- **486/487 Tests sind grün.** Der einzige Fehler bleibt der parallel
+  bearbeitete Baum-Regenerationstest in `tests/operations.test.ts:125`.
+- Der Quellcode und der neue Test sind ESLint-sauber. Der vorgeschriebene
+  Gesamtaufruf wird weiterhin nur von drei `no-explicit-any`-Fehlern in der
+  fremden `tests/__probe.test.ts` blockiert.
+- Der verbundene In-App-Browser meldet weiterhin keine verfügbare
+  Browserinstanz; deshalb bleibt der visuelle Screenshot-Smoke in dieser
+  Umgebung technisch blockiert.
+
+## v1.13 — Visual-Overhaul-Korrekturpass (Save v25)
+
+> Keine schwebenden Leuchtflächen, keine Kachelstraßen, keine
+> Popcorn-Wolkenwand und keine Fenster mehr, die gegeneinander kämpfen. Dieser
+> Pass korrigiert die sichtbaren Fehlstellen des ersten Overhauls direkt in den
+> bestehenden UI- und Three-Renderer-Pfaden.
+
+### Was
+
+- **Schwebende Lichtquellen entfernt.** Die prozedural an Gebäudegrundrissen
+  geschätzten Fassadenfenster waren nicht an die tatsächlichen GLB-Fassaden,
+  Drehungen oder Höhen gebunden. Dadurch erschienen weiße Rechtecke in Hecken,
+  neben Häusern und frei über der Straße. Diese Geometrie existiert nicht mehr.
+  Nachtlesbarkeit entsteht jetzt durch kleine, an realen Straßenrändern
+  platzierte Laternenköpfe und sehr zurückhaltende Bodenglows.
+- **Straßen sind ein zusammenhängendes Netz.** Normale Bodenstraßen werden nicht
+  mehr als einzelne quadratische Asphalt-, Bordstein- und Gehwegblöcke
+  gezeichnet. Der Renderer leitet aus dem unveränderten kanonischen
+  Straßengraphen geglättete, terrainfolgende Bänder mit Schulter,
+  Straßenoberfläche und sauberen Knotenflächen ab. Unsichtbare Pick-Flächen
+  bewahren Auswahl und Gameplay; Hochstraßen und Wasserwege verwenden weiterhin
+  ihre spezialisierten vorhandenen Darstellungen.
+- **Wolkenfront statt Kugelwand.** Gesperrte Regionen erzeugen nicht länger
+  hunderte überlappende Kugeln. Eine zusammenhängende, geglättete und
+  texturierte vertikale Front folgt der Regionskontur. Gipfel, Marker,
+  Freischaltanimation und die bestehende Nebeloberkante bleiben erhalten.
+- **Welt sichtbar verdichtet.** Vegetationsbudgets bleiben pro Region
+  deterministisch und instanziert, steigen aber von rund 700 auf rund 1.300
+  Props. Wälder, Hänge, Ufer und freie Flächen wirken dadurch bewusst
+  komponiert statt leer. Größere weiche Farbvariationen brechen flache
+  Grünteppiche auf; hellere Moos-, Fels- und Schneestaffeln geben dem Massiv
+  wieder lesbare Tiefe.
+- **Küste beruhigt.** Schaum- und Flachwasserbänder sind schmaler, transparenter
+  und weniger weiß. Die gebackene Küstenlinie bleibt unverändert, ihre
+  Kachelstufen werden aber nicht länger mit einer harten Leuchtkante betont.
+- **Ein festes PC-HUD-Raster.** Identität, Ressourcen, Navigation, Stadtstatus,
+  Anliegen und Minimap sind größer und näher an den verbindlichen Mockups
+  proportioniert. Die dunkelmaritime Gestaltung bleibt erhalten, erhält aber
+  klarere Hierarchie, größere Typografie und stärkere räumliche Trennung.
+- **Bau-Shop und Sheets überlappen nicht mehr.** Der Bau-Shop besitzt auf großen
+  Ansichten ein eindeutiges dreispaltiges Katalograster plus feste
+  Detailvorschau. Alte Media-Queries können ihn nicht mehr gleichzeitig in
+  Bodenleiste, Einspaltenansicht und rechte Seitenleiste verwandeln. Große
+  Detail-, Status-, Bürger- und Betriebs-Sheets teilen eine feste rechte Spur.
+  Während eine Arbeitsfläche geöffnet ist, entfernt `App.tsx` Stadtstatus,
+  Anliegen, Minimap, Info-Layer und Kameraleiste aus dem konkurrierenden HUD.
+
+### Warum
+
+Die Screenshots aus dem echten Spiel zeigten vier strukturelle Fehler, die in
+isolierten Mockups nicht auffielen: Lichtgeometrie wurde aus Footprints statt
+Modellflächen geschätzt, Straßengeometrie entstand pro Kachel, die gesperrte
+Welt bestand visuell aus einzelnen Kugeln und mehrere responsive CSS-Schichten
+definierten denselben Bau-Shop widersprüchlich. Mehr Dekoration auf diesen
+Grundlagen hätte die Fehler nur verstärkt. Der Korrekturpass ersetzt deshalb
+die jeweiligen Ursachen und verdichtet erst anschließend die Welt.
+
+### Architektur
+
+- **Simulation bleibt unberührt.** Straßengraph, Platzierung, Unlocks,
+  Tageszeit, Gebäudestatus und Kartenmasken werden weiterhin ausschließlich aus
+  den vorhandenen Snapshots gelesen. Kein Renderer- oder UI-Pfad mutiert den
+  Spielzustand.
+- **Ein Straßensystem.** Die geglättete Oberfläche ist eine Darstellung des
+  vorhandenen Straßengraphen. Transparente kachelgenaue Pick-Flächen halten
+  Commands, Routing und Auswahl vollständig kompatibel.
+- **Performance by default.** Straßen werden in zwei gebündelten Meshes
+  dargestellt. Laternenpfosten, -köpfe und Glows sowie alle Vegetationstypen
+  bleiben instanziert. Der Straßensignatur-Cache verhindert einen Neuaufbau,
+  solange sich das Netz nicht ändert. Die neue Wolkenfront ersetzt hunderte
+  Kugelinstanzen durch ein Konturmesh pro gesperrter Region.
+- **Ein UI-Arbeitsflächenvertrag.** Große Sheets haben ein gemeinsames Raster
+  und Vorrang vor passiven HUD-Bereichen. Die Korrekturschicht wird bewusst
+  zuletzt importiert, damit ältere auflösungsabhängige Varianten sie nicht
+  wieder auseinandernehmen.
+- **Kein Save-Eingriff.** Es gibt keine neue Simulation, Konfiguration oder
+  Persistenz. Schema bleibt **v25**, Migration und Neustart sind nicht nötig.
+
+### Auswirkung
+
+- Die im Screenshot markierten weißen Rechtecke werden nicht nur gedimmt,
+  sondern vollständig aus dem Rendererpfad entfernt.
+- Straßen lesen sich auf Distanz als Netz und nicht als schwarze Kachelreihe;
+  Straßenränder und Küste dominieren die Landschaft nicht länger mit weißen
+  Blockkanten.
+- Die Insel erhält wesentlich mehr Mittelgrunddetails und eine lesbarere
+  Bergstaffelung, ohne den Offline-Bake oder Baubarkeitsmasken zu verändern.
+- Bau-Shop, Gebäudedetail und weitere Sheets bleiben vollständig bedienbar und
+  verdecken keine unabhängigen HUD-Panels mehr.
+
+### Zukunft
+
+- Die Straßenoberfläche kann später über die vorhandene Drop-in-Registry um
+  zusätzliche Markierungs- und Kreuzungsvarianten erweitert werden. Routing
+  und Simulation benötigen dafür kein zweites System.
+- Die erhöhte Vegetationsdichte verwendet weiterhin LOD, Culling und
+  Instancing. Ein späterer Profiling-Pass kann Qualitätsstufen differenzieren,
+  ohne die deterministische Auswahl zu ändern.
+- Eine visuelle Feinabnahme im verbundenen In-App-Browser bleibt nötig, sobald
+  dort eine Browserinstanz verfügbar ist. In dieser Sitzung meldete die
+  Browserumgebung weiterhin keine verfügbare Instanz; deshalb wurde kein
+  unverbundener Ersatzbrowser verwendet.
+
+### Dateien
+
+- `src/App.tsx`
+- `src/renderer/three/ThreeMapRenderer.ts`
+- `src/renderer/three/vegetationBudget.ts`
+- `src/styles/visual-overhaul.css`
+- `docs/PATCHNOTES.md`
+- `docs/agents/PROJECT_STATE.md`
+
+### Assets
+
+- Keine neuen Laufzeit-Assets und keine neuen Manifest-Einträge.
+- Vorhandene Baum-, Terrain- und `cloud_bank`-Assets werden weiter über die
+  zentrale Drop-in-Registry bezogen; alle prozeduralen Fallbacks bleiben
+  funktionsfähig.
+
+### Verifikation
+
+- `npx tsc -b --force`: erfolgreich.
+- `npm run build`: erfolgreich; Vite-Preview antwortet mit HTTP 200 und enthält
+  den React-Root.
+- `npx eslint src tests`: die Quelltexte sind sauber; der Gesamtaufruf wird
+  weiterhin ausschließlich von drei `no-explicit-any`-Fehlern in der
+  gleichzeitig angelegten, nicht zu diesem Patch gehörenden
+  `tests/__probe.test.ts` blockiert.
+- `npx vitest run`: **484/485 Tests grün**. Der unveränderte reproduzierbare
+  Fremdfehler liegt in `tests/operations.test.ts:125` beim
+  Baum-Regenerationstest der parallel bearbeiteten Active Operations.
+- Der vorgeschriebene 3D-Screenshot-Smoke konnte nicht ausgeführt werden, weil
+  die verbundene Browserumgebung keine Browserinstanz bereitstellt.
+
+## v1.12 — Maritimer Visual Overhaul (Save v25)
+
+> Stadt, Werkzeuge und Daten lesen sich jetzt wie ein zusammenhängendes
+> Premium-PC-Spiel: klarer in der Bedienung, stärker in der Welt verankert und
+> nachts sichtbar lebendig.
+
+### Was
+
+- **Ein gemeinsames visuelles System für das gesamte Spiel.** Das Haupt-HUD,
+  die linke Navigation, Ressourcenleiste, Statuskarten, Detailfenster,
+  Baukataloge, Stadtarbeit und die großen Infrastruktur-Werkzeuge verwenden
+  jetzt dieselben dunkelmaritimen Flächen, warmen Goldakzente, klaren
+  Hierarchien und großzügigeren Abstände. Die letzte CSS-Schicht bündelt diese
+  Regeln zentral, statt einzelne Fenster noch einmal separat umzubauen.
+- **Die Stadt trägt wieder ihren eigenen Namen.** Im Haupt-HUD steht der echte
+  persistierte Stadtname samt Stadtstufe. Ein statischer Produktname wird nicht
+  länger als Stadtidentität ausgegeben.
+- **Mehr Platz für Welt und Werkzeug zugleich.** Detailfenster, Baukatalog und
+  operative Ansichten sind größer und besser lesbar; die Minimap sitzt
+  standardmäßig unten rechts und weicht geöffneten rechten Detailfenstern, statt
+  Inhalte zu überdecken. Die bestehenden responsiven Zustände halten die
+  Bedienung auch auf schmaleren Fenstern zugänglich.
+- **Reichweiten sind echte Welt-Informationen.** Beim Platzieren eines
+  versorgenden Gebäudes erscheint dessen Reichweite direkt auf dem Gelände.
+  Wird ein bestehendes Gebäude ausgewählt, zeichnet der Renderer die
+  kanonischen Versorgungsquellen als terrainfolgende Kreise und markiert die
+  tatsächlich bewerteten Verbraucher instanziert nach Versorgungszustand.
+  Kapazität und Abdeckung stammen weiterhin aus dem vorhandenen
+  `GameController`-Readmodel.
+- **Hochstraßen sehen konstruiert aus.** Der vorhandene Straßentyp
+  `road_elevated` erhält über Land ein angehobenes Deck, Stützpfeiler und
+  Querträger. Pfeiler und Träger werden jeweils instanziert und aus demselben
+  bereits validierten Straßenpfad abgeleitet; es gibt kein zweites
+  Straßensystem.
+- **Eine glaubwürdige Nacht ohne Lichtobjekt-Flut.** Aktive Gebäude erhalten
+  deterministisch platzierte warme Fassadenfenster, Straßen punktuelle
+  Bodenlichter. Zwei globale Instanz-Meshes und zeitabhängiges Emissive/Opacity
+  ersetzen tausende Einzellichter. Sonnenstand und vorhandene visuelle
+  Tageszeit steuern den Übergang.
+- **Bau- und Betriebszustände sprechen dieselbe Sprache.** Platzierungsbanner,
+  Versorgungsanalyse, Arbeitsgebiete, Straßenvorschau, Wasserbau,
+  Betriebsdetails und Logistik teilen nun Typografie, Aktionsfarben,
+  Warnzustände und Kartenwirkung. Vorhandene Commands und ViewModels bleiben
+  die einzige Quelle ihrer Daten.
+
+### Warum
+
+Die einzelnen Ausbaustufen hatten bereits fast alle benötigten Werkzeuge, aber
+sie wirkten nebeneinander wie verschiedene Entwicklungsphasen: kleine
+Informationsflächen konkurrierten mit großen Karten, die Minimap kollidierte
+mit Detailfenstern, Versorgungsradien blieben zu abstrakt und der Nachtmodus
+veränderte vor allem die Umgebung statt die Stadt. Der Overhaul verbindet die
+vorhandenen Systeme zu einer klaren visuellen Dramaturgie, ohne fertige
+Gameplay-Logik durch Attrappen zu ersetzen.
+
+### Architektur
+
+- **Simulation und Rendering bleiben getrennt.** Die neuen Welt-Overlays lesen
+  ausschließlich `effectiveEffects`, `getCoverageOverlay` und bestehende
+  Renderer-Projektionen. UI und Renderer mutieren keinen Simulationszustand.
+- **Erweitert statt parallel gebaut.** Hochstraßen verwenden `road_elevated`,
+  Nachtlicht verwendet die vorhandenen Gebäude- und Straßeninstanzen,
+  Versorgungsansichten verwenden den bestehenden Coverage-Readmodel-Pfad.
+- **Performance by default:** maximal ein Instanz-Mesh für Gebäudefenster, eines
+  für Straßenglühen, eines für Coverage-Verbraucher sowie je eines für
+  Viaduktpfeiler und -träger. Signatur-Caches verhindern Neuaufbau ohne relevante
+  Zustandsänderung; pro Frame ändern sich nur wenige Materialwerte.
+- **Kein Save- oder Balancing-Eingriff.** Konfiguration, Commands,
+  Simulationsregeln und Save-Schema bleiben unverändert bei **v25**. Es ist
+  keine Migration und kein Neustart nötig.
+
+### Auswirkung
+
+- Die wichtigsten Informationen sind schneller erfassbar und über die großen
+  Werkzeuge hinweg konsistent.
+- Versorgungsprobleme, Hochstraßen und die Aktivität einer Stadt bei Nacht sind
+  in der 3D-Welt sichtbar, nicht nur in Tabellen oder Tooltips.
+- Der Overhaul bleibt auf Desktop-Flächen großzügig, besitzt aber gezielte
+  Breakpoints für kleinere Dev-/Testfenster.
+
+### Zukunft
+
+- Echte Gebäudemodelle können weiterhin über die bestehende Drop-in-Registry
+  ergänzt werden; die neuen Licht- und Coverage-Fallbacks funktionieren ohne
+  zusätzliche Assets.
+- Physische Lieferfahrzeuge, wirtschaftliche Brückenpfeilerwerte und weitere
+  operative Gameplaytiefe bleiben getrennte Folgeaufgaben. Dieser Patch täuscht
+  sie nicht visuell als fertige Simulation vor.
+- Der native Windows-Tauri-Build bleibt lokal auf einer Windows-Umgebung mit
+  Rust-Toolchain zu prüfen.
+
+### Dateien
+
+- `src/styles/visual-overhaul.css`
+- `src/main.tsx`
+- `src/App.tsx`
+- `src/components/hud/GameHud.tsx`
+- `src/renderer/three/ThreeMapRenderer.ts`
+- `src/i18n/de.json`
+- `docs/PATCHNOTES.md`
+- `docs/agents/PROJECT_STATE.md`
+
+### Assets
+
+- Keine neuen Laufzeit-Assets und keine neuen Asset-Namen.
+- Alle Gebäude behalten ihre prozeduralen Fallbacks und die zentrale
+  Drop-in-Registry.
+
+### Verifikation
+
+- TypeScript-Projektbuild und Vite-Produktionsbuild erfolgreich; der gebaute
+  Preview antwortet mit HTTP 200 und enthält den React-Root.
+- ESLint ist für `src` und alle regulären Tests sauber. Der vorgeschriebene
+  exakte Aufruf wird ausschließlich von drei `no-explicit-any`-Fehlern in der
+  gleichzeitig angelegten, nicht zum Overhaul gehörenden
+  `tests/__probe.test.ts` blockiert.
+- 484/485 Tests sind grün. Ein reproduzierbarer Fehler liegt im parallel
+  veränderten Regenerationstest der Active Operations
+  (`tests/operations.test.ts:125`); die UI-/Renderer-Dateien dieses Overhauls
+  sind daran nicht beteiligt.
+- Eine integrierte Browserinstanz stand für den vorgeschriebenen
+  Screenshot-Smoke in dieser Arbeitsumgebung nicht zur Verfügung.
+
 ## Claude – Map Flattening + Buildability Overhaul
 
 ## v1.11 — Die Insel wird bespielbar (Save v25)

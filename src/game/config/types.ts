@@ -176,6 +176,13 @@ export interface BuildingOperationStage {
   carryCapacity: number;
   /** Lokale Lagerkapazität des Betriebs. */
   storageCapacity: number;
+  /**
+   * Optionales Arbeitsgebiet dieser Stufe (§A7). Eine Großfarm bewirtschaftet mehr
+   * Land, ein Tiefbruch greift weiter in den Fels. Fehlt der Wert, gilt der
+   * Profilwert — bestehende Profile bleiben dadurch unverändert.
+   */
+  efficientRadius?: number;
+  maxRadius?: number;
 }
 
 /**
@@ -185,12 +192,14 @@ export interface BuildingOperationStage {
  * Config-only; die Logik lebt in `src/game/operations/**`.
  */
 export interface BuildingOperationProfile {
-  /** Aktiv gewonnene Ressource (Referenzschnitt: 'wood'). */
+  /** Aktiv gewonnene Ressource (Sägewerk 'wood', Steinbruch 'stone', Farm 'food'). */
   resource: ResourceId;
-  /** Bearbeiteter Knotentyp (Referenzschnitt: 'tree'). */
+  /**
+   * Bearbeiteter Knotentyp. Terrain, Dichte, Ergiebigkeit und Nachwachsen stehen
+   * im Knotenprofil (`operations/nodes.ts`), damit Config und Weltableitung nicht
+   * auseinanderlaufen können.
+   */
   nodeType: ResourceNodeType;
-  /** Terrain, das Ressourcenknoten trägt (tree ↔ forest). */
-  nodeTerrain: TerrainType;
   /** Effizientes Arbeitsgebiet: Chebyshev-Radius um die Grundfläche. */
   efficientRadius: number;
   /** Maximale Einsatzentfernung (≥ efficientRadius). */

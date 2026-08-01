@@ -49,18 +49,29 @@ export const BUSH_MODELS = ['bush_small', 'bush', 'bush_medium'] as const;
 export const ROCK_CLUSTER_MODELS = ['rock_cluster_small', 'mountain_boulder', 'rock_medium', 'rock_small'] as const;
 export const REED_MODELS = ['swamp_reed_cluster', 'reeds_water', 'reed_cluster'] as const;
 export const DEADWOOD_MODELS = ['fallen_log', 'dead_branch', 'swamp_log'] as const;
-/** Hand-placed scenic landmarks used by the island-overview pass. */
+/**
+ * Hand-placed scenic landmarks used by the island-overview pass.
+ *
+ * § Welt-Feinschliff 12.2 (Spieltest): Die Listen enden jetzt bewusst mit
+ * VORHANDENEN Modellen. Vorher standen dort ausschließlich Wunschnamen
+ * (`landmark_rock_arch`, `old_tree_large` …) — es griff also immer die
+ * prozedurale Notgeometrie, und die war der eigentliche Fehler: der
+ * `rockArch`-Ersatz besteht aus zwei aufrechten grauen Kästen (0,9 × 3,8) und
+ * las sich im Spiel als „Zacken". Ein hochskaliertes echtes Fels-/Baummodell
+ * ist in jeder Hinsicht besser als ein Kasten; die Wunschnamen bleiben vorn
+ * stehen, damit ein echtes Drop-in sie weiterhin schlägt.
+ */
 export const SCENIC_PROP_MODELS = {
   boat: ['boat_small', 'ship_sailing'],
   windmill: ['windmill_small'],
   lighthouse: ['lighthouse'],
   waterfall: ['waterfall_cliff', 'waterfall_small'],
-  rockArch: ['landmark_rock_arch', 'rock_arch'],
-  oldTree: ['landmark_old_tree', 'old_tree_large'],
+  rockArch: ['landmark_rock_arch', 'rock_arch', 'rock_large', 'mountain_boulder'],
+  oldTree: ['landmark_old_tree', 'old_tree_large', 'tree_deciduous', 'tree_pine_large'],
   ruin: ['landmark_ruin_small', 'ruin_small'],
-  desertSpire: ['landmark_desert_spire', 'desert_rock_spire'],
-  swampTree: ['landmark_swamp_tree', 'swamp_dead_tree'],
-  lakeIslet: ['landmark_lake_islet', 'small_coastal_islet'],
+  desertSpire: ['landmark_desert_spire', 'desert_rock_spire', 'rock_large'],
+  swampTree: ['landmark_swamp_tree', 'swamp_dead_tree', 'tree_deciduous'],
+  lakeIslet: ['landmark_lake_islet', 'small_coastal_islet', 'rock_large'],
 } as const;
 
 /** Traffic car + delivery van (models/vehicles/). Author facing +z. */

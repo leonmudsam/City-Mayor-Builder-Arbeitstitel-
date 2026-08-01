@@ -22,6 +22,14 @@ const FINAL_COMPACTION_BACKUP_KEY = 'cmb.save.backup.world-v15';
 const CENTRAL_START_BACKUP_KEY = 'cmb.save.backup.world-v18';
 /** Sicherung vor der dritten Verdichtung (§ 10.0 R7/R8, v19→v20). */
 const THIRD_COMPACTION_BACKUP_KEY = 'cmb.save.backup.world-v19';
+/** Sicherung vor dem vollständigen Weltaustausch (§ World Overhaul 12.0, v25→v26). */
+const WORLD_OVERHAUL_BACKUP_KEY = 'cmb.save.backup.world-v25';
+/** Sicherung vor neuer Segmentierung + freier Rathauswahl (§ 12.2, v26→v27). */
+const FOUNDING_CHOICE_BACKUP_KEY = 'cmb.save.backup.world-v26';
+/** Sicherung vor dem modelltreuen Gelände (§ Modelltreue 13.0, v27→v28). */
+const MODEL_FIDELITY_BACKUP_KEY = 'cmb.save.backup.world-v27';
+/** Sicherung vor dem höheren Meeresspiegel (§ Modelltreue 13.1, v28→v29). */
+const SEA_LEVEL_BACKUP_KEY = 'cmb.save.backup.world-v28';
 
 /**
  * MVP-1 storage: localStorage with a one-generation backup slot. A corrupt
@@ -66,15 +74,23 @@ export class LocalStorageSaveAdapter implements SaveAdapter {
           // Alten Weltstand einmalig sichern (nie überschreiben) und den
           // aktiven Slot räumen, damit künftige Loads sauber frisch starten.
           const backupKey = error instanceof WorldRebuildSaveError
-            ? error.version >= 19
-              ? THIRD_COMPACTION_BACKUP_KEY
-              : error.version >= 18
-                ? CENTRAL_START_BACKUP_KEY
-                : error.version >= 15
-                  ? FINAL_COMPACTION_BACKUP_KEY
-                  : error.version >= 14
-                    ? TERRAIN_OVERHAUL_BACKUP_KEY
-                    : WORLD_REBUILD_BACKUP_KEY
+            ? error.version >= 28
+              ? SEA_LEVEL_BACKUP_KEY
+              : error.version >= 27
+              ? MODEL_FIDELITY_BACKUP_KEY
+              : error.version >= 26
+              ? FOUNDING_CHOICE_BACKUP_KEY
+              : error.version >= 25
+              ? WORLD_OVERHAUL_BACKUP_KEY
+              : error.version >= 19
+                ? THIRD_COMPACTION_BACKUP_KEY
+                : error.version >= 18
+                  ? CENTRAL_START_BACKUP_KEY
+                  : error.version >= 15
+                    ? FINAL_COMPACTION_BACKUP_KEY
+                    : error.version >= 14
+                      ? TERRAIN_OVERHAUL_BACKUP_KEY
+                      : WORLD_REBUILD_BACKUP_KEY
             : LEGACY_BACKUP_KEY;
           if (localStorage.getItem(backupKey) === null) {
             localStorage.setItem(backupKey, raw);

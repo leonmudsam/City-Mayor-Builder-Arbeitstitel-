@@ -1,9 +1,24 @@
 import type { GameConfig } from './config/index.ts';
 import { startRegionConfig } from './config/startRegion.config.ts';
 import type { GameState } from './types.ts';
-import { allRegionIds, createRegionStub, occupyTiles } from './map/world.ts';
+import { allRegionIds, createRegionStub } from './map/world.ts';
 
 /**
+ * v27 (§ Welt-Feinschliff 12.2, Spieltest 30.07.2026): FREIE GRÜNDUNG + NEUE
+ * SEGMENTIERUNG. Ein neues Spiel startet OHNE Rathaus, ohne Distrikt und ohne
+ * Startstraßen — der Spieler wählt den Gründungsplatz selbst (`foundCity`).
+ * Gleichzeitig verschiebt das relief-gesteuerte Uferprofil die Region-Cluster:
+ * neun statt acht Regionen, Startregion jetzt Id 9, jede Id beschreibt eine
+ * andere Landschaft. Weltumbau wie v25→v26: alte Stände werden einmalig unter
+ * `cmb.save.backup.world-v26` gesichert und neu gestartet (Migration `v26→v27`).
+ * v26 (§ World Overhaul 12.0, D-041): VOLLSTÄNDIGER WELTAUSTAUSCH. Neue
+ * Weltgrundlage `reference/world/new island 3d model.glb`; jede Höhe, jedes
+ * Terrain, alle 13 Region-Zuschnitte, die Startregion (jetzt Id 13
+ * „Gründerland") und der Rathausanker (237,256) sind neu. Zusätzlich läuft das
+ * Terraforming jetzt VOR der Regionssegmentierung, damit Regionen und Statistik
+ * das fertige, bespielbare Gelände beschreiben. Weltumbau wie v14/v16/v19/v20:
+ * alte Stände werden einmalig unter `cmb.save.backup.world-v25` gesichert und
+ * neu gestartet (Migration `v25→v26`).
  * v21 (§ Stadtarbeit-Stabilität 9.1, D-037): additiver, eingefrorener
  * Planungssnapshot `activities.selection` eines noch nicht gestarteten Auftrags.
  * Alte Saves bleiben ladbar (Migration v20→v21 lässt das Feld schlicht weg);
@@ -38,7 +53,7 @@ import { allRegionIds, createRegionStub, occupyTiles } from './map/world.ts';
  * v12 (§ Stadtarbeit 2D): laufende Fahrmissionen speichern Fahrzeugklasse und
  * manuell gezeichnete Straßenkette.
  */
-export const SCHEMA_VERSION = 25;
+export const SCHEMA_VERSION = 29;
 
 export function createNewGame(config: GameConfig, cityName: string, now: number): GameState {
   const state: GameState = {
@@ -100,29 +115,17 @@ export function createNewGame(config: GameConfig, cityName: string, now: number)
   const startRegion = state.world.regions[String(startRegionConfig.startRegionId)];
   if (startRegion) startRegion.status = 'unlocked';
 
-  // Pre-place the town hall (district center of 'main'). Der Bake garantiert
-  // einen flachen 7×7-Gras-Block für das 5×5-Rathaus — kein Terrain-Überschreiben nötig.
-  const th = startRegionConfig.townHall;
-  const townHallDef = config.buildings.get('town_hall');
-  if (!townHallDef) throw new Error('config: town_hall missing');
-  const townHallId = 'b_townhall';
-  state.buildings[townHallId] = {
-    id: townHallId,
-    defId: 'town_hall',
-    x: th.x,
-    y: th.y,
-    upgradeLevel: 0,
-    status: 'active',
-  };
-  occupyTiles(state, th.x, th.y, townHallDef.size.w, townHallDef.size.h, townHallId);
-  state.world.districts['main'] = { id: 'main', nameKey: 'district.main', centerBuildingId: townHallId };
-
-  // Pre-place tutorial roads (Kacheln laut Bake garantiert Gras).
-  let roadIndex = 0;
-  for (const pos of startRegionConfig.startRoads) {
-    const roadId = `b_startroad_${roadIndex++}`;
-    state.buildings[roadId] = { id: roadId, defId: 'road', x: pos.x, y: pos.y, upgradeLevel: 0, status: 'active' };
-    occupyTiles(state, pos.x, pos.y, 1, 1, roadId);
-  }
+  // § 12.2 (Nutzerwunsch): DAS RATHAUS WIRD NICHT MEHR VORPLATZIERT.
+  //
+  // „Das Rathaus soll man am Anfang selbst entscheiden können wo man es
+  // platziert." Ein neues Spiel startet deshalb ohne Gebäude, ohne Distrikt und
+  // ohne Startstraßen; die Gründung ist der erste Zug des Spielers
+  // (`GameController.foundCity`). Der vom Bake validierte Anker bleibt als
+  // VORSCHLAG erhalten (`startRegionConfig.townHall`) — die Kamera startet dort
+  // und die UI markiert ihn, aber nichts erzwingt ihn.
+  //
+  // Damit ist „Stadt gegründet?" keine zusätzliche Save-Variable, sondern
+  // schlicht: existiert ein `town_hall`-Gebäude? Ein Zustand, der nicht
+  // gespeichert wird, kann auch nicht mit der Welt auseinanderlaufen.
   return state;
 }

@@ -22,12 +22,12 @@ Vegetation wird gegen die Stadt gecullt (nie auf Gebäude/Straße). Baustellen-M
 | Szenische Windmühle | `windmill_small.glb` | handplatziert im fruchtbaren Land |
 | Küsten-Leuchtturm | `lighthouse.glb` | handplatziert auf einer Landzunge |
 | Szenischer Wasserfall | `waterfall_cliff.glb` → `waterfall_small.glb` | handplatziert an wassernahem Gebirge |
-| Landmarke Felsbogen | `landmark_rock_arch.glb` → `rock_arch.glb` | Klippen und trockene Felszone |
-| Landmarke alter Baum | `landmark_old_tree.glb` → `old_tree_large.glb` | Grasland/Waldlichtung |
+| Landmarke Felsbogen | `landmark_rock_arch.glb` → `rock_arch.glb` → `rock_large.glb` → `mountain_boulder.glb` | Klippen und trockene Felszone |
+| Landmarke alter Baum | `landmark_old_tree.glb` → `old_tree_large.glb` → `tree_deciduous.glb` → `tree_pine_large.glb` | Grasland/Waldlichtung |
 | Landmarke kleine Ruine | `landmark_ruin_small.glb` → `ruin_small.glb` | neutral, ohne Gameplayfunktion |
-| Landmarke Wuesten-Felsnadel | `landmark_desert_spire.glb` → `desert_rock_spire.glb` | visuelle Suedost-Wueste |
-| Landmarke Sumpfbaum | `landmark_swamp_tree.glb` → `swamp_dead_tree.glb` | visuelle Westbucht |
-| Landmarke Seeinsel | `landmark_lake_islet.glb` → `small_coastal_islet.glb` | Seenland und Buchten |
+| Landmarke Wuesten-Felsnadel | `landmark_desert_spire.glb` → `desert_rock_spire.glb` → `rock_large.glb` | visuelle Suedost-Wueste |
+| Landmarke Sumpfbaum | `landmark_swamp_tree.glb` → `swamp_dead_tree.glb` → `tree_deciduous.glb` | visuelle Westbucht |
+| Landmarke Seeinsel | `landmark_lake_islet.glb` → `small_coastal_islet.glb` → `rock_large.glb` | Seenland und Buchten |
 | Baustelle (Bau & Upgrade) | `construction_site.glb` → `construction_crane.glb` → `scaffold.glb` → `crane.glb` | generisch; pro Gebäude: <id>_construction.glb |
 
 Fehlt ein Modell, greift der prozedurale Fallback — das Spiel bricht nie. Die volle Spezifikation (Footprint, Höhe, Pivot, Platzierung, Biom, Budget) für diese UND alle geplanten Modelle dieses Ordners steht in `PROMPTS.md` daneben.

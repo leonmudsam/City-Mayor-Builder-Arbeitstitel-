@@ -17,6 +17,18 @@ export function wrap01(t: number): number {
   return ((t % 1) + 1) % 1;
 }
 
+/** Zusätzlicher, rein visueller Morgen-Fill zwischen tiefer Nacht und Tag. */
+export function dawnReadability(t: number): number {
+  const x = wrap01(t);
+  const smoothStep = (value: number): number => {
+    const clamped = Math.max(0, Math.min(1, value));
+    return clamped * clamped * (3 - 2 * clamped);
+  };
+  const rise = smoothStep((x - 0.19) / 0.045);
+  const fall = 1 - smoothStep((x - 0.28) / 0.06);
+  return rise * fall;
+}
+
 /** Sun elevation in [-1,1]: 0 at sunrise/sunset, +1 at noon, -1 at midnight. */
 export function sunElevation(t: number): number {
   return Math.sin((wrap01(t) - 0.25) * TAU);
@@ -91,6 +103,7 @@ interface Key {
 const KEYS: Key[] = [
   { t: 0.0, skyTop: 0x0a1230, skyHorizon: 0x16203f, fog: 0x16203f, sunColor: 0x9fb4e0, sunIntensity: 0.18, ambient: 0.1, hemiSky: 0x24304f, hemiGround: 0x10131c, hemiIntensity: 0.35, stars: 1, moon: 1 },
   { t: 0.22, skyTop: 0x243a63, skyHorizon: 0x7a5a72, fog: 0x6f5570, sunColor: 0xd98a5a, sunIntensity: 0.28, ambient: 0.15, hemiSky: 0x3a4a72, hemiGround: 0x2a2620, hemiIntensity: 0.52, stars: 0.5, moon: 0.45 },
+  { t: 0.238, skyTop: 0x334d72, skyHorizon: 0xb27776, fog: 0xa47372, sunColor: 0xf0a474, sunIntensity: 0.52, ambient: 0.23, hemiSky: 0x687c9c, hemiGround: 0x594935, hemiIntensity: 0.74, stars: 0.24, moon: 0.2 },
   { t: 0.28, skyTop: 0x5a86c0, skyHorizon: 0xf0a878, fog: 0xf0b890, sunColor: 0xffd0a0, sunIntensity: 1.05, ambient: 0.27, hemiSky: 0x86b0e0, hemiGround: 0x6a5238, hemiIntensity: 0.9, stars: 0, moon: 0 },
   { t: 0.36, skyTop: 0x6ea6df, skyHorizon: 0xcfe3f2, fog: 0xcfe3f2, sunColor: 0xfff0d8, sunIntensity: 1.3, ambient: 0.31, hemiSky: 0xbcd8f0, hemiGround: 0x74805e, hemiIntensity: 1.05, stars: 0, moon: 0 },
   { t: 0.5, skyTop: 0x4f97e6, skyHorizon: 0x9fd0ef, fog: 0x9fd0ef, sunColor: 0xfff6e2, sunIntensity: 1.42, ambient: 0.33, hemiSky: 0xffffff, hemiGround: 0x74805e, hemiIntensity: 1.1, stars: 0, moon: 0 },

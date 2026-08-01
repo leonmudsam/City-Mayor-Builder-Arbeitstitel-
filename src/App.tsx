@@ -11,6 +11,7 @@ import { getController, setController, useUiStore } from './state/store.ts';
 import { MapView } from './components/MapView.tsx';
 import { GameHud } from './components/hud/GameHud.tsx';
 import { DriveHud } from './components/hud/DriveHud.tsx';
+import { FoundingHud } from './components/hud/FoundingHud.tsx';
 import { QuickActionBar } from './components/hud/QuickActionBar.tsx';
 import { CameraControls } from './components/hud/CameraControls.tsx';
 import { WorldMiniMap } from './components/hud/WorldMiniMap.tsx';
@@ -28,7 +29,6 @@ import { TradePanel } from './components/panels/TradePanel.tsx';
 import { DebugPanel } from './components/panels/DebugPanel.tsx';
 import { ActivityPanel } from './components/panels/ActivityPanel.tsx';
 import { ActivityRoutePlanner } from './components/panels/ActivityRoutePlanner.tsx';
-import { MenuPanel } from './components/panels/MenuPanel.tsx';
 import { WeatherPanel } from './components/panels/WeatherPanel.tsx';
 import { ActivityExecutionWidget } from './components/citywork/ActivityExecutionWidget.tsx';
 import { WorkAreaPlanner } from './components/operations/WorkAreaPlanner.tsx';
@@ -324,17 +324,18 @@ function GameScreen({ onImport, onReset }: { onImport(json: string): boolean; on
           </>
         ) : (
           <>
-            {/* Persistent HUD frame: civic status/minimap on the left, inbox on
-                the right and the mockup-faithful vertical main navigation. */}
-            <CityStatusPanel />
-            <WorldMiniMap />
-            <InfoLayerControl />
+            {/* Eine große Arbeitsfläche hat Vorrang vor dem passiven HUD. Zuvor
+                blieben Status, Minimap und Info-Layer unter Bau-Shop/Sheets
+                liegen und erzeugten die gemeldeten Überlagerungen. */}
+            {!rightSheetOpen && <CityStatusPanel />}
+            {!rightSheetOpen && <WorldMiniMap />}
+            {!rightSheetOpen && <InfoLayerControl />}
             {!rightSheetOpen && (
               <div className="right-hud-stack">
                 <CitizenRequestsPanel />
               </div>
             )}
-            <CameraControls />
+            {!rightSheetOpen && <CameraControls />}
             <QuickActionBar />
 
             {/* Large right-docked detail sheets (§5) — one at a time. */}
@@ -346,13 +347,13 @@ function GameScreen({ onImport, onReset }: { onImport(json: string): boolean; on
             {openPanel === 'debug' && <DebugPanel />}
             {openPanel === 'activities' && <ActivityPanel />}
             {openPanel === 'weather' && <WeatherPanel />}
-            {openPanel === 'menu' && <MenuPanel />}
-
             <FloatingBuildingSheet />
             <RegionDialog />
             {openPanel === 'build' && <BuildMenu />}
             <ActivityExecutionWidget />
             <DriveHud />
+            {/* § 12.2: Gründung — erscheint nur, solange kein Rathaus steht. */}
+            <FoundingHud />
             {placingDefId !== undefined
               && getController().config.buildings.get(placingDefId)?.category === 'roads'
               && <SmartRoadPlannerHud />}

@@ -1,5 +1,250 @@
 # Entscheidungen
 
+## D-046 — Zustände, die die UI beschriftet, werden als Liste exportiert
+
+**Datum:** 01.08.2026 · **Status:** aktiv · **Version:** v1.25 (Save v29)
+
+**Entscheidung.** Jede Zustandsmenge der Simulation, für die die Oberfläche einen
+Text braucht, wird als `as const`-**Liste** exportiert und der Union-Typ daraus
+abgeleitet — nicht umgekehrt. Erster Fall: `OPERATION_IDLE_REASONS` in
+`src/game/operations/operations.ts`.
+
+**Warum.** `OperationThroughput.idleReason` bekam mit A6 den neuen Grund
+`deposit_exhausted`. Der Union-Typ war vollständig, die Übersetzung fehlte, und
+`t()` gibt bei fehlendem Eintrag den Schlüssel zurück — im Gebäudefenster hätte
+wörtlich `ui.operation.idle.deposit_exhausted` gestanden. TypeScript kann das
+nicht fangen: ein i18n-Schlüssel ist für den Compiler eine Zeichenkette. Ein Test
+kann es fangen, aber nur, wenn er die Zustände **aufzählen** kann.
+
+**Folgen.**
+- Ein neuer Zustand ohne Text lässt `tests/operationVocabulary.test.ts`
+  fehlschlagen, statt erst im Spiel aufzufallen.
+- Der Test iteriert die Liste aus der Simulation und baut sie nicht nach —
+  dieselbe Disziplin wie D-042.
+- Gilt sinngemäß für Warn-, Fehler- und Statuscodes, die die UI übersetzt.
+
+
+## D-045 — Gesperrtes Land wird gezeigt, nicht verborgen (löst D-034 ab)
+
+**Datum:** 01.08.2026 · **Status:** aktiv · **Version:** v1.24 (Save v29)
+
+**Entscheidung.** Die gesamte Insel wird von Beginn an gebaut und dargestellt.
+Gesperrte Regionen werden **entsättigt und leicht abgedunkelt** und tragen einen
+Schloss-Marker; sie erhalten Gelände, Deko und Vegetation (halbe Dichte, keine
+Schatten). Die Nebelwand aus D-034 und die Kamera-Explorationsgrenze entfallen
+ersatzlos.
+
+**Warum.** Ausdrücklicher Nutzerauftrag samt Rückfrage-Entscheid. Inhaltlich
+trägt er: Die Wolkenwand versteckte genau das, was die Kaufentscheidung einer
+Region motiviert — Gebirge, Küste, Waldanteil. Und seit dem Natur-Overhaul 14.0
+gibt es dort etwas zu sehen. Sichtbarkeit ist außerdem keine Spielmechanik:
+`regionUnlockBlocker`, Baubarkeit und Kosten bleiben unverändert, der Spieler
+sieht mehr und kann nichts Zusätzliches.
+
+**Folgen.**
+- **Zwei Vegetationsaufbauten mit getrennten Schlüsseln sind Pflicht, kein
+  Feinschliff.** Der Vegetationsschlüssel enthält die Belegungsmenge; mit einem
+  gemeinsamen Schlüssel hätte jeder Bauklick die ganze Insel (26.851 Instanzen,
+  51.057 Kacheln) neu aufgebaut. Wer die Gruppen wieder zusammenlegt, baut den
+  Ruckler zurück.
+- Jede Messung über die Vegetation (Perf-Panel, Tests) muss **beide** Gruppen
+  erfassen, sonst misst sie einen Bruchteil (Konsequenz aus D-042).
+- Die Minimap muss der 3D-Ansicht folgen. Ihre Wolkendecke war die 2D-Fassung
+  der Nebelwand.
+
+**Verhältnis zu D-034.** Abgelöst. D-034 hat den Nebel zu **einer** weichen Front
+vereinheitlicht — das war die richtige Lösung für die damalige Anforderung
+„gesperrt = unsichtbar". Diese Anforderung gilt nicht mehr.
+
+
+## D-044 — Die Naturmasse ist stilisierte Geometrie; `.glb` sind seltene Blickfänger
+
+**Datum:** 31.07.2026 · **Status:** aktiv · **Version:** v1.23 (Save v29)
+
+**Entscheidung.** Die Masse der Vegetation und Props wird aus bewusst
+gestalteten Low-Poly-Formen erzeugt (`naturePropGeometry.ts`, 24–200 Dreiecke).
+Die vorhandenen Natur-`.glb` bleiben seltene Hero-Props auf ihrem bisherigen
+zahlenmäßigen Niveau. Die Verteilung entsteht ausschließlich in
+`natureDistribution.ts` aus der Zonentabelle in `natureZones.ts`; der Renderer
+trifft keine Verteilungsentscheidung mehr.
+
+**Warum.** Zwei Messungen. Erstens wiegt **jedes** vorhandene Natur-`.glb` rund
+**29.000 Dreiecke** — für einen Baum. Deshalb konnte die Welt nur **502** echte
+Modelle tragen, und die restlichen 96 % waren ein Kegel auf einem Zylinder;
+genau das wurde als „zu leer, zu technisch, zu steril" gemeldet. Nicht die
+Menge war das Problem, sondern die Ersatzform. Zweitens sind mehrere Modelle
+**bytegleich** (`pine_tree` = `forest_cluster_small` = `forest_cluster_medium`;
+alle fünf Steine identisch) — der Katalog umfasst real fünf Formen. Vielfalt
+kann also nur aus Transformation kommen: Größe, Drehung, Neigung, ungleichmäßige
+Skalierung und Instanzfarbe.
+
+**Folgen.**
+- Dichte ist wieder eine Gestaltungsfrage. 14.038 → 48.838 Props, ohne dass ein
+  Region-Budget noch die Landschaft überschreibt (testgesichert).
+- Wer die Welt nachjustiert, ändert `NATURE_TUNING`/`NATURE_SPAWN_RULES` — nicht
+  den Renderer.
+- Ein eingelegtes neues `.glb` wird weiterhin sofort genutzt (§5), aber es
+  ersetzt die Masse nicht, sondern akzentuiert sie.
+
+**Verhältnis zu D-042.** Renderer und Tests teilen sich zwingend
+`collectRegionNature`. Eine Messung, die den Aufbau nachbaut statt ihn zu
+benutzen, misst früher oder später etwas anderes als das Spiel zeigt.
+
+**Verhältnis zu D-043.** Unberührt. Der Overhaul leitet ausschließlich ab und
+schreibt kein Höhenfeld; die Inselgeometrie ist bitgleich.
+
+
+## D-043 — Die Quell-GLB ist die Welt; Ableitungen lesen das Gelände, sie schreiben es nicht
+
+**Datum:** 31.07.2026 · **Status:** aktiv · **Version:** v1.21 (Save v28)
+
+**Entscheidung.** `tools/bakeWorld.mjs` übernimmt die Geometrie der Welt-GLB
+**unverändert** (`RAW_TERRAIN_FIDELITY`, Standardpfad). Wasser, Ufertypen,
+Biome, Bebaubarkeit, Regionen und Texturen werden **aus** diesem Gelände
+abgeleitet — keine dieser Stufen darf `HW` noch schreiben.
+
+**Warum.** Der Nutzer hat mit einem Viewer-Screenshot der rohen GLB belegt, dass
+das Modell bereits klare Klippen, ebene Plateaus und saubere Uferkanten hat, und
+dass die Abweichung in der Implementierung entsteht. Die Messung bestätigt es
+eindeutig: der alte Pfad veränderte **157.749 von 233.287 Landknoten (67,6 %)**
+und drückte die mittlere Landhöhe von 8,46 auf 6,45 m. Was im Spiel ankam, war
+nicht das Modell mit Fehlern, sondern eine andere Landschaft.
+
+*Verhältnis zu D-040/D-041:* Beide regelten die REIHENFOLGE von Terraforming und
+Segmentierung. D-043 hebt die Frage auf, indem das Terraforming entfällt. D-041s
+Kern bleibt gültig und wird strenger: Regionen, Startregion und Statistik sehen
+das endgültige Gelände — jetzt trivialerweise, weil es sich nie ändert.
+
+**Was der Auftrag kostet, und warum das richtig ist.** Die Quell-GLB ist eine
+Klippeninsel. Sichtbare Folgen, alle gemessen und keine davon versteckt:
+
+- Bebaubare Kacheln 47.806 → **37.891** (3×3-Bauplätze weiterhin > 28.000).
+- Steilküste dominiert: 2.244 gegen 475 flache Uferkacheln — genau umgekehrt zu
+  vorher.
+- Bebaubare Uferkacheln 900+ → **150**; Häfen sind selten und gezielt zu suchen.
+- **Null** Brückenkandidaten: eine Brücke braucht auf beiden Ufern
+  straßenfähiges Gelände. Gequert wird über die Höhenstraße (I1), die genau
+  dafür existiert (24 Viadukte).
+- Die Insel ist ein **Archipel**: Region 10 hat keinen Landnachbarn und ist über
+  `requiresHarbor` erreichbar.
+
+**Wo weiterhin justiert werden darf — und wo nicht.** Nicht am Gelände. Wohl
+aber an allem, was der Auftrag ausdrücklich NACH dem Modell erlaubt: Die
+Wassertiefenrampe ist reine Bake-Entscheidung (die GLB modelliert keinen
+Gewässergrund) und wurde angehoben, weil Wassergebäude an ihr scheiterten.
+Ebenso sind Schwellen der Ableitung (Hangtoleranz, `shorelineTolerance`) legitime
+Stellschrauben — sie beschreiben, was auf dem Gelände gebaut werden darf, nicht
+wie das Gelände aussieht.
+
+**Nachtrag 13.1 (v1.22, Save v29) — der Meeresspiegel ist ein Wasserparameter.**
+Der Spieltest verlangte, dass das Wasser bündig mit der Unterkante der flachen
+Ebenen abschließt. Gemessen lagen zwischen 0 und 3 m nur 331 flache Kacheln (die
+Klippenwand), bei 4–5 m dagegen 14.073 — die unterste Terrasse. Das Wasser steigt
+deshalb um **4 m**; ein Sweep belegt den Punkt (Anlegerplätze 20 → 344, Baufläche
+unverändert; bei 5 m säuft die Terrasse selbst ab, −10.000 Landkacheln).
+
+Wichtig dabei: `HEIGHT_SCALE` leitete sich bis dahin aus der Wasserlinie ab,
+damit der Gipfel exakt `PEAK_WORLD_HEIGHT` erreicht. Ein höherer Wasserstand
+hätte das Gelände dadurch um 8 % **gestreckt** — Geländeänderung durch die
+Hintertür. Die Skala hängt jetzt an `SCALE_REFERENCE_N` und ist fix: das Gelände
+steht still, das Wasser steigt, der Gipfel liegt ehrlich niedriger (52 → 48 m).
+Die Treue-Kennzahl bleibt bei 0 veränderten Landknoten.
+
+**Konsequenz für künftige Arbeit.** Wer eine Anforderung nicht erfüllt sieht,
+ändert die Ableitung oder die Anforderung — nicht die Geometrie. Ein Test, der
+faktisch nur durch Terraforming erfüllbar ist, misst das Falsche und ist
+umzuschreiben (so geschehen bei „Küsten flacher statt steiler" und der
+5×5-Uferplattform).
+
+## D-042 — Der Spieler gründet selbst; Zackenabwehr misst, was sie repariert
+
+**Datum:** 30.07.2026 · **Status:** aktiv · **Version:** v1.19 (Save v27)
+
+**Entscheidung 1 — freie Gründung.** Ein neues Spiel startet ohne Rathaus,
+ohne Distrikt und ohne Startstraßen. Der Spieler setzt das Rathaus selbst
+(`GameController.foundCity`); der vom Bake validierte Anker bleibt ein
+Vorschlag, kein Zwang.
+
+*Warum kein Sonderpfad in `placeBuilding`:* `town_hall` ist `buildable: false`
+und `unique` — beides ist richtig, denn im Baumenü darf das Rathaus nie
+auftauchen. Ein eigener, einmaliger Command hält den Baupfad sauber (§2).
+Die Platzierung selbst benutzt unverändert `placingDefId`, denselben Ghost und
+dieselbe `validatePlacement`-Instanz; `getFoundingBlocker` teilt die Prüfung mit
+der Vorschau, damit Ghost und Ergebnis nie auseinanderlaufen.
+
+*Warum kein Save-Feld:* „Stadt gegründet?" ist abgeleitet (existiert ein
+`town_hall`?). Ein Zustand, der nicht gespeichert wird, kann nicht mit der Welt
+auseinanderlaufen.
+
+**Entscheidung 2 — eine Kennzahl darf nur messen, was der Riegel repariert.**
+Die Küstenzacken waren vier Versionen lang sichtbar, während
+`isolatedPeakCount` auf „fast 0" stand: Der Riegel verlangte „> 6 m Überhöhung
+UND ≤ 1 stützender Nachbar" und traf 1 von 487 realen Nadeln. Reparatur und
+Messung teilen sich deshalb jetzt zwingend dieselbe Bedingung
+(`isTerrainNeedle`). Wer die Erkennung ändert, ändert automatisch die Kennzahl.
+
+**Folge für den Bake:** Alle Höhenänderungen (Uferprofil, Terraforming, Kappung,
+Nadelreparatur, Klippen-Plateaus) laufen VOR der verbindlichen Ableitung von
+Ufer, Biom und Bebaubarkeit. Ein Zwischenstand hatte es umgekehrt und lieferte
+eine Bebaubar-Maske, die ein nicht mehr existierendes Gelände beschrieb.
+D-041 (Terraforming vor Segmentierung) bleibt unverändert gültig.
+
+## D-041 — Neue Insel als einzige Weltgrundlage; Terraforming VOR der Segmentierung
+
+**Entscheidung (World Overhaul 12.0, 29.07.2026):** `reference/world/new island 3d
+model.glb` ersetzt `island 3d new.glb` vollständig als Weltgrundlage — kein
+Parallelbetrieb, keine Übergangslösung. Und: das Terraforming läuft im Bake
+**vor** der Regionssegmentierung (`tools/bakeWorld.mjs` §6b-flat), also genau
+umgekehrt zu D-040.
+
+**Warum das D-040 nicht widerspricht:** D-040 hat die Reihenfolge
+„Segmentierung zuerst" **ausschließlich** damit begründet, Regions-Ids,
+Startregion und Rathaus bitgleich zu halten, weil `regions.config.ts`, das
+Balancing und bestehende Spielstände daran hingen. Dieser Auftrag ersetzt die Welt
+ausdrücklich vollständig (neue Insel, neue Regionen, Save-Neustart) — damit fällt
+D-040s einziger Grund weg. Was bleibt, sind die Nachteile der alten Reihenfolge:
+
+* Die Segmentierung sah Biome des **rohen**, ungeglätteten Geländes.
+* Der Startregion-Ausschnitt zählte Bauflächen der **rohen** Maske und wuchs
+  deshalb weit über sein Ziel: 3.983 Kacheln für 1.348 „bebaubare" — nach dem
+  Einebnen waren es faktisch viel mehr.
+* `BAKED_REGIONS[].buildable` und damit die Regionskosten beschrieben eine Welt,
+  die es nach dem Einebnen nicht mehr gab.
+
+**Konsequenz:** Regionen, Startregion, Rathaus, Regionsstatistik und alle
+Ausgaben beschreiben ausschließlich das FERTIGE, bespielbare Gelände. Wer die
+Reihenfolge wieder umdreht, macht die Regionsstatistik erneut unehrlich. D-040
+bleibt als historische Begründung gültig; seine Reihenfolge-Vorgabe ist mit
+diesem Entscheid abgelöst.
+
+**Ebenfalls entschieden:**
+- **Startressourcen sind Bedingungen, keine Wünsche.** Der Bake erzwingt für die
+  Startregion Bauflächenbudget (1.200–1.750), Wasserzugang (≥ 8 Uferkacheln),
+  einen ebenen 7×7-Rathausblock (ΔH ≤ 0,85) und **≥ 3 Nachbarregionen**. Der erste
+  Bake der neuen Insel lieferte eine binnenländische Startregion ohne Wasser und
+  ohne fruchtbaren Boden — genau dagegen richten sich die Prüfungen.
+- **Verwaistes Land gehört einer Region.** Kleine Inseln ohne Landverbindung
+  blieben bei „Region 0" (3.217 Kacheln): sichtbares, nie betretbares Land. Sie
+  wandern zur Region mit dem kürzesten Wasserabstand. Keine erfundene Landbrücke,
+  keine neue Region.
+- **Kein `requiresHarbor` mehr.** Nicht als entferntes Feature, sondern als Folge
+  der Geografie: die neue Insel ist EINE Landmasse, von der Startregion aus über
+  Land vollständig erreichbar. `regionUnlockBlocker` bleibt unverändert und greift
+  weiter geografisch (Nordfelder hängen nur über Wasser am Start).
+- **Regionsnamen nur bei Hover/Freischaltung** (Auftrag §10). Zwölf dauerhafte
+  Banner verdeckten die Insel; der Ruhezustand ist ein kompaktes Schloss.
+- **Bergplattformen als eigene Terrain-Klasse bleiben offen.** Die Gebirge sind
+  mit 474/1.349 bebaubaren Kacheln nicht unbebaubar, und `buildsOnRock` deckt
+  Steinbruchflächen ab. Eine Höhenquantisierung wurde in v1.11 (B4) gemessen und
+  verworfen. Wer echte Plattformen will, braucht eine Terrain-Klasse oberhalb
+  `MOUNTAIN_HEIGHT` samt Renderer-Behandlung — nicht vortäuschen.
+
+**Save:** **v26**, Weltumbau mit einmaligem Backup unter
+`cmb.save.backup.world-v25` (Muster wie v14/v16/v19/v20). Eine
+Koordinatenprojektion wäre sinnlos, nicht nur unscharf.
+
+Details: `docs/agents/WORLD_OVERHAUL_12_PLAN.md`.
+
 ## D-040 — Die Karte wird bespielbar gemacht, die Weltstruktur bleibt unangetastet
 
 **Entscheidung (Map Flattening + Buildability Overhaul, 28.07.2026):** Das

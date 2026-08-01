@@ -132,6 +132,18 @@ export function MapView() {
       },
       onCoverageInfo: (info) => setCoverage(info),
       onPlace: (defId, x, y, rotation) => {
+        // § 12.2 Gründung: Der allererste Klick setzt das Rathaus. Eigener
+        // Command (kostenlos, einmalig) statt einer Ausnahme im Baupfad.
+        if (defId === 'town_hall' && !controller.isCityFounded()) {
+          const founded = controller.foundCity(x, y);
+          if (!founded.ok) {
+            ui.pushToast(placementErrorText(defId, founded.error), 'error');
+            return;
+          }
+          useUiStore.getState().stopPlacing();
+          ui.pushToast(t('ui.founding.done'), 'success');
+          return;
+        }
         // Alle Straßen-Bauklassen (Bodenstraße, Höhenstraße/Brücke) laufen über den
         // Straßenentwurf-Planer, nicht über Sofortbau (§ Infrastruktur 2.0 / I1).
         if (controller.config.buildings.get(defId)?.category === 'roads') {
@@ -177,7 +189,6 @@ export function MapView() {
     const syncWorldReveal = (state = useUiStore.getState()) => renderer.setWorldReveal({
       fogDisabled: state.fogDisabled,
       revealLockedRegionsVisually: state.revealLockedRegionsVisually,
-      cameraBoundsDisabled: state.cameraBoundsDisabled,
       unlockAllRegionsGameplay: [...controller.config.regions.values()]
         .filter((region) => region.unlockable)
         .every((region) => controller.state.world.regions[String(region.id)]?.status === 'unlocked'),

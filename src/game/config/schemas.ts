@@ -73,8 +73,10 @@ export const buildingDefSchema = z.object({
   operation: z
     .object({
       resource: resourceId,
-      nodeType: z.enum(['tree', 'rock', 'crop', 'livestock', 'water_source', 'wild_plant']),
-      nodeTerrain: terrainType,
+      // Das Terrain steht NICHT hier, sondern im Knotenprofil
+      // (`RESOURCE_NODE_PROFILES`) — sonst könnten Config und Weltableitung
+      // auseinanderlaufen. Nur belegte Knotentypen sind erlaubt (§A6/A7).
+      nodeType: z.enum(['tree', 'rock', 'crop']),
       efficientRadius: z.number().int().positive(),
       maxRadius: z.number().int().positive(),
       stages: z
@@ -85,11 +87,19 @@ export const buildingDefSchema = z.object({
             workSpeed: z.number().positive(),
             carryCapacity: z.number().positive(),
             storageCapacity: z.number().positive(),
+            // Optional je Ausbaustufe: eine Großfarm bewirtschaftet mehr Land,
+            // ein Tiefbruch greift weiter aus. Fehlt der Wert, gilt der Profilwert.
+            efficientRadius: z.number().int().positive().optional(),
+            maxRadius: z.number().int().positive().optional(),
           }),
         )
         .min(1),
     })
     .refine((op) => op.maxRadius >= op.efficientRadius, { message: 'operation: maxRadius < efficientRadius' })
+    .refine(
+      (op) => op.stages.every((s) => (s.maxRadius ?? op.maxRadius) >= (s.efficientRadius ?? op.efficientRadius)),
+      { message: 'operation: Stufe mit maxRadius < efficientRadius' },
+    )
     .optional(),
   locationBonus: z
     .object({ terrain: terrainType, radius: z.number().positive(), perTilePct: z.number().positive(), maxPct: z.number().positive() })

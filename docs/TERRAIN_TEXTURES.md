@@ -59,6 +59,14 @@ Seamless tileable stylized terrain texture for a premium low-poly city-builder g
 
 **Spec:** Ordner `textures/terrain/grass/` · 2048×2048 · nahtlos kachelbar · Stil: painterly stylized realism, weich und natuerlich · Palette: Mittelgruen, Oliv und Moos mit sehr kleinen cremefarbenen und blauen Bluetentupfern · Einsatz: hochwertige Graslandbasis und offene Lichtungen · Material: kurzes Wiesengras, organische Cluster, geringe Mikrounruhe · Mischverhalten: Basis-Layer der Ebene; trockenes Gras, Waldboden und fruchtbare Erde ueberblenden regional · Maps: Normal ✓ · Roughness ✓ · AO ✓ · Height ✓ · Detailstufe: nah–fern · Priorität: **Pflicht** · Biome: Grasland, Hügelland
 
+### `grass_meadow_cartoon.png`
+
+```text
+Seamless tileable stylized terrain texture for a premium low-poly city-builder game. Soft painterly look, natural color variation, subtle height variation, no baked lighting, no shadows, top-down orthographic view, perfect seamless edges, PBR-ready — helle malerische cartoon-wiesenbasis für bauland und täler, broad painterly low-poly shapes, restrained micro detail
+```
+
+**Spec:** Ordner `textures/terrain/grass/` · 1024×1024 · nahtlos kachelbar · Stil: stilisiert, low-poly-kompatibel, malerische Makroformen · Palette: Smaragd, Moosgrün, Gelbgrün und kleine Ockertupfer · Einsatz: Helle malerische Cartoon-Wiesenbasis für Bauland und Täler · Material: matt bis natürlich feucht, breite Formen statt Foto-Mikrorauschen · Mischverhalten: weltkoordinatenbasiert nach Biom, Höhe, Neigung und Wassernähe; Nahdetail per LOD · Maps: Normal ✓ · Roughness ✓ · AO ✓ · Height ✓ · Detailstufe: nah–fern · Priorität: **Pflicht** · Biome: Grasland
+
 ### `grass_meadow_fresh.png`
 
 ```text
@@ -181,6 +189,14 @@ Seamless tileable stylized terrain texture for a premium low-poly city-builder g
 
 **Spec:** Ordner `textures/terrain/earth/` · 2048×2048 · nahtlos kachelbar · Stil: painterly, rural · Palette: mittelbraun, gleichmäßig · Einsatz: Acker-Basisboden vor der Bepflanzung · Material: körnig, matt · Mischverhalten: Basis unter terrain_field_plowed/terrain_field_wheat/terrain_field_harvest · Maps: Normal ✓ · Roughness ✓ · AO ✓ · Height ✓ · Detailstufe: nah–mittel · Priorität: **Pflicht** · Biome: Fruchtbares Land
 
+### `forest_floor_cartoon.png`
+
+```text
+Seamless tileable stylized terrain texture for a premium low-poly city-builder game. Soft painterly look, natural color variation, subtle height variation, no baked lighting, no shadows, top-down orthographic view, perfect seamless edges, PBR-ready — ruhige helle cartoon-waldbodenbasis mit breiten moos- und laubformen, broad painterly low-poly shapes, restrained micro detail
+```
+
+**Spec:** Ordner `textures/terrain/forest/` · 1024×1024 · nahtlos kachelbar · Stil: stilisiert, low-poly-kompatibel, malerische Makroformen · Palette: Moosgrün, warmes Oliv, Erdbraun und kleine Goldakzente · Einsatz: Ruhige helle Cartoon-Waldbodenbasis mit breiten Moos- und Laubformen · Material: matt bis natürlich feucht, breite Formen statt Foto-Mikrorauschen · Mischverhalten: weltkoordinatenbasiert nach Biom, Höhe, Neigung und Wassernähe; Nahdetail per LOD · Maps: Normal ✓ · Roughness ✓ · AO ✓ · Height ✓ · Detailstufe: nah–mittel · Priorität: **Pflicht** · Biome: Mischwald
+
 ### `forest_floor_needles.png`
 
 ```text
@@ -297,6 +313,14 @@ Seamless tileable stylized terrain texture for a premium low-poly city-builder g
 
 **Spec:** Ordner `textures/terrain/mountain/` · 2048×2048 · nahtlos kachelbar · Stil: painterly stylized realism, kompakt und windgeformt · Palette: warmes Off-White mit sehr hellem Blaugrau · Einsatz: Gipfelzone oberhalb der Felsbaender · Material: weiche breite Verwehungen, dezente Eiskrusten · Mischverhalten: nur in grosser Hoehe; Alpine-Profil verstaerkt, Hang reduziert · Maps: Normal ✓ · Roughness ✓ · AO ✓ · Height ✓ · Detailstufe: nah–fern · Priorität: **Pflicht** · Biome: Gebirge
 
+### `mountain_cliff_cartoon.png`
+
+```text
+Seamless tileable stylized terrain texture for a premium low-poly city-builder game. Soft painterly look, natural color variation, subtle height variation, no baked lighting, no shadows, top-down orthographic view, perfect seamless edges, PBR-ready — helle malerische cartoon-felsbasis für berge und klippen, broad painterly low-poly shapes, restrained micro detail
+```
+
+**Spec:** Ordner `textures/terrain/mountain/` · 1024×1024 · nahtlos kachelbar · Stil: stilisiert, low-poly-kompatibel, malerische Makroformen · Palette: warmes Hellgrau, Beige und Moosgrün · Einsatz: Helle malerische Cartoon-Felsbasis für Berge und Klippen · Material: matt bis natürlich feucht, breite Formen statt Foto-Mikrorauschen · Mischverhalten: weltkoordinatenbasiert nach Biom, Höhe, Neigung und Wassernähe; Nahdetail per LOD · Maps: Normal ✓ · Roughness ✓ · AO ✓ · Height ✓ · Detailstufe: nah–fern · Priorität: **Pflicht** · Biome: Gebirge, Küste
+
 ### `mountain_granite_base.png`
 
 ```text
@@ -398,6 +422,14 @@ Seamless tileable stylized terrain texture for a premium low-poly city-builder g
 ```
 
 **Spec:** Ordner `textures/terrain/coast/` · 2048×2048 · nahtlos kachelbar · Stil: painterly stylized realism, rund gewaschene Kuestensteine · Palette: Blaugrau, warmes Steingrau, Beige und dezentes Seegruen · Einsatz: Kiesbuchten, Felskuesten und Flussmuendungen · Material: runde Kiesel, feuchter Schotter und wenig Sand · Mischverhalten: niedrige Kuestenlagen; mischt Sand, Fels und den tuerkisen Flachwassersaum · Maps: Normal ✓ · Roughness ✓ · AO ✓ · Height ✓ · Detailstufe: nah–mittel · Priorität: **Pflicht** · Biome: Küste, Flusstal
+
+### `coast_sand_cartoon.png`
+
+```text
+Seamless tileable stylized terrain texture for a premium low-poly city-builder game. Soft painterly look, natural color variation, subtle height variation, no baked lighting, no shadows, top-down orthographic view, perfect seamless edges, PBR-ready — helle malerische cartoon-basis für strände und flache bauufer, broad painterly low-poly shapes, restrained micro detail
+```
+
+**Spec:** Ordner `textures/terrain/coast/` · 1024×1024 · nahtlos kachelbar · Stil: stilisiert, low-poly-kompatibel, malerische Makroformen · Palette: Elfenbein, Honigbeige, Hellgold und Türkisgrau · Einsatz: Helle malerische Cartoon-Basis für Strände und flache Bauufer · Material: matt bis natürlich feucht, breite Formen statt Foto-Mikrorauschen · Mischverhalten: weltkoordinatenbasiert nach Biom, Höhe, Neigung und Wassernähe; Nahdetail per LOD · Maps: Normal ✓ · Roughness ✓ · AO ✓ · Height ✓ · Detailstufe: nah–mittel · Priorität: **Pflicht** · Biome: Küste, Flusstal
 
 ### `coast_shore_accessible.png`
 
@@ -599,13 +631,13 @@ Welche Texturen pro Biom im Splatmap-Mix zur Auswahl stehen; die Höhen-/Neigung
 
 | Biom | Texturen |
 |---|---|
-| Grasland | `grass_meadow_fresh`, `grass_meadow_dark`, `grass_wildflowers`, `grass_trampled`, `grass_wet` |
-| Mischwald | `forest_floor_moss`, `forest_floor_needles`, `forest_floor_leaves`, `forest_floor_roots`, `forest_edge_grass` |
+| Grasland | `grass_meadow_cartoon`, `grass_meadow_fresh`, `grass_meadow_dark`, `grass_wildflowers`, `grass_trampled`, `grass_wet` |
+| Mischwald | `forest_floor_cartoon`, `forest_floor_moss`, `forest_floor_needles`, `forest_floor_leaves`, `forest_floor_roots`, `forest_edge_grass` |
 | Fruchtbares Land | `fertile_valley_ground`, `coast_mud_fertile`, `terrain_field_plowed`, `terrain_field_wheat`, `terrain_field_harvest` |
-| Gebirge | `mountain_granite_base`, `mountain_cliff_faceted`, `mountain_strata`, `mountain_scree`, `mountain_moss`, `mountain_snow`, `mountain_wet_rock` |
+| Gebirge | `mountain_cliff_cartoon`, `mountain_granite_base`, `mountain_cliff_faceted`, `mountain_strata`, `mountain_scree`, `mountain_moss`, `mountain_snow`, `mountain_wet_rock` |
 | Wüste | `desert_sand_red`, `terrain_sand_dune`, `terrain_earth_light`, `terrain_rock_granite` |
 | Sumpf | `moor_heather_ground`, `swamp_mud`, `forest_floor_dark_soil`, `grass_mossy` |
-| Küste | `coast_shore_accessible`, `coast_sand_wet`, `coast_gravel_stylized`, `coast_mud_fertile` |
+| Küste | `coast_sand_cartoon`, `coast_shore_accessible`, `coast_sand_wet`, `coast_gravel_stylized`, `coast_mud_fertile` |
 | Fluss/See/Meer | `terrain_deep_water`, `terrain_shallow_water`, `terrain_riverbed`, `terrain_river_delta`, `terrain_swamp`, `terrain_ice` |
 | Straßen/Wege | `terrain_path`, `terrain_road_edge`, `terrain_gravel`, `terrain_stone` |
 

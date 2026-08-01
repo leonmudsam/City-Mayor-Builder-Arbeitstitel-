@@ -20,6 +20,7 @@ export function TourOverview({
   cargoStops,
   progress,
   vehicle,
+  compact = false,
 }: {
   source: TourDisplayPoint;
   targets: TourDisplayPoint[];
@@ -27,6 +28,7 @@ export function TourOverview({
   cargoStops?: CargoRouteStop[];
   progress?: ActivityProgress;
   vehicle?: ActivityVehicleDef;
+  compact?: boolean;
 }) {
   const targetMap = new Map(targets.map((target) => [target.id, target]));
   const stops: CargoRouteStop[] = cargoStops?.length
@@ -47,6 +49,45 @@ export function TourOverview({
   const deliveriesTotal = progress?.deliveryTargetsTotal ?? targets.length;
   const resupplyDone = progress?.resupplyStopsCompleted ?? 0;
   const resupplyTotal = progress?.resupplyStopsTotal ?? 0;
+
+  if (compact) {
+    return (
+      <section className="citywork-smart-tour">
+        <div className="citywork-smart-subhead">
+          <div><small>Automatische Reihenfolge</small><strong>Stopps</strong></div>
+          <span>{deliveriesDone}/{deliveriesTotal} Ziele</span>
+        </div>
+        <ol>
+          {stops.map((stop, index) => {
+            const point = stop.type === 'delivery' ? targetMap.get(stop.buildingId) : source;
+            if (!point) return null;
+            const meta = stopMeta(stop.type);
+            return (
+              <li key={`${stop.type}-${stop.buildingId}-${stop.pathIndex}-${index}`} className={stop.status}>
+                <i>{index + 1}</i>
+                <span>{meta.icon}</span>
+                <div>
+                  <strong>{point.label}</strong>
+                  <small>
+                    {stop.type === 'resupply'
+                      ? 'Automatisch nachladen'
+                      : stop.type === 'source'
+                        ? 'Start und Ladung'
+                        : stop.amount > 0
+                          ? `${stop.amount.toLocaleString('de-DE')} liefern`
+                          : point.subtitle}
+                  </small>
+                </div>
+              </li>
+            );
+          })}
+        </ol>
+        {resupplyTotal > 0 && (
+          <p><RotateCcw size={13} /> Nachladen {resupplyDone}/{resupplyTotal} ist bereits in der Route enthalten.</p>
+        )}
+      </section>
+    );
+  }
 
   return (
     <section className="citywork-v4-tour">

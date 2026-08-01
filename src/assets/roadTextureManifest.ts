@@ -70,6 +70,18 @@ export const TEXTURE_STYLE_PREFIX =
 
 export const ROAD_TEXTURES: RoadTextureEntry[] = [
   {
+    name: 'road_path_cartoon',
+    category: 'surface',
+    style: 'hell, handgemalt, ruhig',
+    palette: 'Honigbeige, helles Ocker und warmes Kiesbraun',
+    useCase: 'Frühe Bodenstraßen und Wege im zusammenhängenden geglätteten Straßennetz',
+    materialProps: 'matt, verdichtete Erde, breite ruhige Farbflächen ohne lesbare Kiesel',
+    usage: 'Gespiegelte World-Space-UVs auf dem gebündelten Fahrbahnband; ersetzt die dunkle Prototyp-Fläche ohne Richtungsnaht oder Kachelraster',
+    priority: 'Pflicht',
+    alpha: false,
+    motif: 'warm honey-beige packed earth, exceptionally calm broad painterly fields, virtually no gravel or micro detail, no borders and no lane markings',
+  },
+  {
     name: 'road_asphalt',
     category: 'surface',
     style: 'painterly, leicht verwittert',

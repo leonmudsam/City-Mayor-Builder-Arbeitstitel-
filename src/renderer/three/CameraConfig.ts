@@ -49,18 +49,20 @@ export const CAMERA_LIMITS = {
  *   center   — recentre on the town hall at a comfortable angle
  */
 export const CAMERA_PRESETS: Record<CameraPreset, CameraPresetDef> = {
-  city: { pitch: 52 * DEG, dist: 62 },
-  build: { pitch: 78 * DEG, dist: 46 },
+  city: { pitch: 48 * DEG, dist: 38, yaw: 225 * DEG, focusCity: true },
+  build: { pitch: 72 * DEG, dist: 32 },
   // Insel-Überblick: weit genug für die vollständige 512²-Welt.
   overview: { pitch: 58 * DEG, dist: 540, focusWorld: true },
-  center: { pitch: 52 * DEG, dist: 70, focusCity: true },
+  center: { pitch: 48 * DEG, dist: 40, yaw: 225 * DEG, focusCity: true },
 };
 
 /** Default camera state values on first load / reset. */
 export const CAMERA_DEFAULTS = {
-  dist: 62,
-  yaw: 45 * DEG,
-  pitch: 52 * DEG,
+  // Kompakter Startausschnitt: Rathaus, erste Straßen und frühe Gebäude füllen
+  // den Blick, statt in einer großen leeren Grünfläche zu verschwinden.
+  dist: 38,
+  yaw: 225 * DEG,
+  pitch: 48 * DEG,
 } as const;
 
 /** Pan-bounds from the finite island world plus a little padding. */

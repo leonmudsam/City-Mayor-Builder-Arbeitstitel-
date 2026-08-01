@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { nearTownHall, newController, setLevel, flattenTerrain, T0 } from './helpers.ts';
+import { nearTownHall, newController, setLevel, flattenTerrain, T0 , townHallOf } from './helpers.ts';
 
 // Insel-Layout (v11): Startstrassen-Zeile bei Rathaus-y+5, Gebaeude ab y+6.
 const at = (dx: number, dy: number) => nearTownHall(dx, dy);
@@ -10,7 +10,7 @@ const at = (dx: number, dy: number) => nearTownHall(dx, dy);
 describe('upgrade keeps old effects until it completes (§2)', () => {
   it('town hall keeps its storage while the prestige upgrade is running', () => {
     const { controller } = newController();
-    const th = controller.state.buildings['b_townhall']!;
+    const th = townHallOf(controller);
     setLevel(controller, 6); // Stadtverwaltung-Gate (§ Gebaeudesystem 2.0)
     controller.state.resources.money = 500_000;
     controller.state.resources.wood = 500;
@@ -34,25 +34,26 @@ describe('upgrade keeps old effects until it completes (§2)', () => {
     expect(controller.derived.storageCaps.wood).toBe(700);
   });
 
-  // § Active Operations 2.0: Upgrade-Kontinuität am passiven Steinbruch geprüft —
-  // das Sägewerk produziert nicht mehr passiv (kein productionPerMin-Eintrag).
-  it('a quarry keeps producing at its old rate throughout the upgrade', () => {
+  // § Active Operations 2.0 / A6+A7: Upgrade-Kontinuität an der Bäckerei geprüft —
+  // Sägewerk, Steinbruch und Farm produzieren nicht mehr passiv (kein
+  // productionPerMin-Eintrag). Die Bäckerei ist der verbliebene Passivproduzent.
+  it('a bakery keeps producing at its old rate throughout the upgrade', () => {
     const { controller } = newController();
-    setLevel(controller, 8);
+    setLevel(controller, 12);
     flattenTerrain(controller); // zero terrain bonus → exact rates
-    controller.state.resources = { money: 500_000, wood: 500, stone: 500, food: 100, freshwater: 0 };
-    controller.placeBuilding('quarry', at(1, 6).x, at(1, 6).y); // 5×5 unter den Startstrassen
-    controller.update(T0 + 95_000); // quarry finishes (90s)
-    const quarry = Object.values(controller.state.buildings).find((b) => b.defId === 'quarry')!;
-    expect(controller.derived.productionPerMin.stone).toBe(38); // base stage
+    controller.state.resources = { money: 900_000, wood: 500, stone: 500, food: 0, freshwater: 0 };
+    controller.placeBuilding('bakery', at(1, 6).x, at(1, 6).y); // 2×2 unter den Startstrassen
+    controller.update(T0 + 245_000); // bakery finishes (240s)
+    const bakery = Object.values(controller.state.buildings).find((b) => b.defId === 'bakery')!;
+    expect(controller.derived.productionPerMin.food).toBe(90); // base stage
 
-    expect(controller.upgradeBuilding(quarry.id)).toEqual({ ok: true });
-    // Mid-upgrade: still producing the OLD 38/min, not 0 (no production blackout).
-    expect(controller.derived.productionPerMin.stone).toBe(38);
+    expect(controller.upgradeBuilding(bakery.id)).toEqual({ ok: true });
+    // Mid-upgrade: still producing the OLD 90/min, not 0 (no production blackout).
+    expect(controller.derived.productionPerMin.food).toBe(90);
 
-    controller.update(T0 + 95_000 + 320_000); // 300s upgrade completes
-    expect(quarry.upgradeLevel).toBe(1);
-    expect(controller.derived.productionPerMin.stone).toBe(80); // Tiefbruch-Stufe
+    controller.update(T0 + 245_000 + 320_000); // 300s upgrade completes
+    expect(bakery.upgradeLevel).toBe(1);
+    expect(controller.derived.productionPerMin.food).toBe(180); // Großbäckerei-Stufe
   });
 });
 

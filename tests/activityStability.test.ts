@@ -109,12 +109,15 @@ describe('Stadtarbeit-Stabilität 9.1 — eingefrorener Planungssnapshot (§2.3/
     expect(roundtrip.activities.selection?.targetBuildingIds).toEqual(frozen);
   });
 
-  it('lädt Alt-Saves ohne Snapshot (additive Migration v20→v21)', () => {
+  it('lädt Saves ohne Snapshot (das Feld bleibt additiv/optional)', () => {
+    // § World Overhaul 12.0: Ein echter v20-Save erreicht die neue Welt nicht mehr
+    // (Weltaustausch v25→v26 = Backup + Neustart, siehe storage.test.ts). Was
+    // hier zählt, ist die additive Natur des Snapshots selbst: fehlt er, wird
+    // nichts erfunden.
     const { controller } = deliveryCity();
     const raw = JSON.parse(exportSave(controller.state)) as Record<string, unknown>;
     const activities = raw.activities as Record<string, unknown>;
     delete activities.selection;
-    raw.schemaVersion = 20;
     const migrated = migrateAndValidate(raw);
     expect(migrated.schemaVersion).toBe(SCHEMA_VERSION);
     expect(migrated.activities.selection).toBeUndefined();

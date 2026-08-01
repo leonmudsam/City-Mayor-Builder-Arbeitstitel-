@@ -233,7 +233,14 @@ export function waterfrontPlacementPreview(
     fallbackReason ??= reason;
     if (reason) continue;
     const cells = waterfrontWaterCells(def, x, y, rotation);
+    // § Modelltreue 13.0: Seit `shorelineTolerance` > 0 darf ein Teil des
+    // Wasser-Footprints an einer zackigen Uferlinie Land sein. Die Vorschau muss
+    // dieselben Zellen bewerten wie `validateWaterfrontFootprint` — sonst meldet
+    // sie „Tiefe 0" für eine Platzierung, die sie im selben Atemzug als gültig
+    // ausgibt.
     const minimumDepth = cells.reduce((minimum, cell) => {
+      const tile = tileAt(state, cell.x, cell.y);
+      if (!tile || (tile.terrain !== 'water' && tile.terrain !== 'river')) return minimum;
       return Math.min(
         minimum,
         (waterDepthGrid[cell.y * BUILDABILITY_WORLD_TILES + cell.x] ?? 0) / WATER_DEPTH_SCALE,

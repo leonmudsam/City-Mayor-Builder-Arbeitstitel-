@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { flattenTerrain, nearTownHall, newController, setLevel, START_REGION, T0 } from './helpers.ts';
+import { flattenTerrain, nearTownHall, newController, setLevel, START_REGION, T0 , townHallOf } from './helpers.ts';
 import { tileAt } from '../src/game/map/world.ts';
 import { bakedSurfaceAt, regionIdAt, terrainAt, WORLD_TILES } from '../src/game/config/startRegion.config.ts';
 import type { GameController } from '../src/game/commands/controller.ts';
@@ -95,7 +95,7 @@ describe('moveBuilding', () => {
 
   it('moves unique buildings (town hall) even though they cannot be demolished', () => {
     const controller = movableController();
-    const townHall = controller.state.buildings['b_townhall']!;
+    const townHall = townHallOf(controller);
     expect(controller.demolishBuilding(townHall.id)).toEqual({ ok: false, error: 'invalid' });
     expect(controller.moveBuilding(townHall.id, at(-7, -3).x, at(-7, -3).y)).toEqual({ ok: true });
     expect(tileAt(controller.state, at(-7, -3).x, at(-7, -3).y)?.buildingId).toBe(townHall.id);
@@ -104,7 +104,7 @@ describe('moveBuilding', () => {
 
   it('rejects moves into locked regions', () => {
     const controller = movableController();
-    const townHall = controller.state.buildings['b_townhall']!;
+    const townHall = townHallOf(controller);
     const t = lockedTile();
     expect(controller.moveBuilding(townHall.id, t.x, t.y)).toEqual({ ok: false, error: 'region_locked' });
   });
@@ -117,7 +117,7 @@ describe('relocate special buildings', () => {
     const { controller } = newController();
     flattenTerrain(controller);
     expect(controller.config.features.moveBuildings).toBe(false);
-    const townHall = controller.state.buildings['b_townhall']!;
+    const townHall = townHallOf(controller);
     expect(controller.demolishBuilding(townHall.id)).toEqual({ ok: false, error: 'invalid' });
     expect(controller.moveBuilding(townHall.id, at(-7, -3).x, at(-7, -3).y)).toEqual({ ok: true });
     expect(tileAt(controller.state, at(-7, -3).x, at(-7, -3).y)?.buildingId).toBe(townHall.id);

@@ -1,7 +1,10 @@
 # ACTIVE OPERATIONS PLAN — Aktive Betriebs-, Lager- und Logistik-Ökonomie 2.0
 
-> Status: **Phase A1–A5 umgesetzt** (Sägewerk-Referenzschnitt + Lagertransport
-> ins Zentrallager, v0.79), A6–A10 geplant. Verbindlicher Einstieg für die
+> Status: **Phase A1–A7 umgesetzt** — Sägewerk-Referenzschnitt + Lagertransport
+> ins Zentrallager (v0.79), **Steinbruch + Farm (v1.25, D-046)**; A8–A10 geplant.
+> Die Aussage weiter unten „Nur das Sägewerk erhält vorerst dieses Profil" gilt
+> seit v1.25 **nicht mehr**: drei Betriebe teilen sich dieselbe Schleife, Stein
+> wächst dabei nie nach. Verbindlicher Einstieg für die
 > Weiterarbeit an diesem System. Ergänzt: `RESOURCE_NODE_SYSTEM.md`,
 > `LOCAL_INVENTORY_SYSTEM.md`, `WORKER_OPERATION_SYSTEM.md`,
 > `LOGISTICS_INTEGRATION.md` (A5-Details).

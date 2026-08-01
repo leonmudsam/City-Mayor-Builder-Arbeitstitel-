@@ -276,13 +276,18 @@ Transport-Betriebskosten je Fahrt (Geldsenke). +4 Tests.
 - **A5-Reste (Rest):** Zwischenlager-Lagerhäuser als eigene lokale Puffer
   (aktuell globaler Pool über ein Lagergebäude als Anlieferpunkt),
   Kraftstoff/Fahrzeugzustand.
-- **A6 Steinbruch** (nächster großer Schritt): braucht die Generalisierung von
-  `operations/nodes.ts` (aktuell nur `tree`/Holz) auf `rock`/Stein und eine
-  **Migration der Passiv-Produktionstests** (simulation/systems/upgrade) auf einen
-  dauerhaft passiven Produzenten — der Steinbruch ist heute deren Baseline, und
-  der „Standort-Bonus"-Test ist steinspezifisch (Stein +Bonus auf Gebirge).
-- **A7 Farm / A8 Feuerwehr-Dispatch:** weitere `operation`-Profile
-  bzw. Einsatzsystem über dasselbe Framework — keine Parallel-Simulation.
+- ✅ **A6 Steinbruch + A7 Farm** (v1.25, Save v29, D-046): `operations/nodes.ts` ist
+  auf `tree`/`rock`/`crop` verallgemeinert (ein `ResourceNodeProfile` je Typ);
+  **Stein wächst nie nach**; Logistik-Zuschlag wirkt über `derived.logisticsBoost`
+  auf Tempo statt Passivrate; Stufen auf die früheren Passivraten kalibriert
+  (38/80/210 Stein, 260/500/1.100 Nahrung). Bedienung: `nodeVocabulary.ts` (ein
+  Wortfeld je Knotentyp, total über die Union), sichtbare Endlichkeit
+  (Restmenge + Umzugshinweis) nur bei nicht nachwachsenden Vorkommen,
+  `OPERATION_IDLE_REASONS` als Liste (D-046). 22 Tests.
+  ⏳ Offen: Rechteck-/Polygon-Arbeitsgebiete, Abbau-/Fällanimationen, echtes
+  Knoten-Mesh-Raycast.
+- **A8 Feuerwehr-Dispatch:** Einsatzsystem über dasselbe Framework — keine
+  Parallel-Simulation.
 - **A9 Regeneration-Ausbau:** Aufforstung/Setzlinge, `RegenerationProfile`,
   geologische neue Vorkommen statt fester Nachwachszeit.
 - **A10 Automatisierung:** Vorarbeiter, wiederholbare Arbeitszonen, Lagerregeln,

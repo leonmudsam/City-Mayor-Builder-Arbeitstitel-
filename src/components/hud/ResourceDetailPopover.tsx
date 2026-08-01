@@ -13,8 +13,15 @@ function fmt(n: number): string {
   return Math.floor(n).toLocaleString('de-DE');
 }
 
-export function ResourceDetailPopover({ id }: { id: ResourceId }) {
+export function ResourceDetailPopover({
+  id,
+  onNavigate,
+}: {
+  id: ResourceId;
+  onNavigate?: () => void;
+}) {
   const game = useGame();
+  const openPanel = useUiStore((s) => s.openPanel);
   const setPanel = useUiStore((s) => s.setPanel);
   const openResourceNetwork = useUiStore((s) => s.openResourceNetwork);
   const stock = game.state.resources[id];
@@ -38,7 +45,13 @@ export function ResourceDetailPopover({ id }: { id: ResourceId }) {
           <DetailRow label={t('ui.finance.net')} value={`${income.net >= 0 ? '+' : '−'}${formatMoney(Math.abs(income.net))}`} strong />
         </div>
         <p className="res-detail-note">{t('ui.resource.note.money')}</p>
-        <button className="btn-link res-detail-link" onClick={() => setPanel('economy')}>
+        <button
+          className="btn-link res-detail-link"
+          onClick={() => {
+            onNavigate?.();
+            if (openPanel !== 'economy') setPanel('economy');
+          }}
+        >
           {t('ui.economy.open')}
         </button>
       </div>
@@ -86,7 +99,13 @@ export function ResourceDetailPopover({ id }: { id: ResourceId }) {
         </div>
       )}
       <p className="res-detail-note">{full ? t('ui.storage.full') : t(`ui.resource.note.${id}`)}</p>
-      <button className="btn-link res-detail-link" onClick={() => openResourceNetwork(id)}>
+      <button
+        className="btn-link res-detail-link"
+        onClick={() => {
+          onNavigate?.();
+          openResourceNetwork(id);
+        }}
+      >
         Gesamtes Ressourcennetz öffnen
       </button>
     </div>

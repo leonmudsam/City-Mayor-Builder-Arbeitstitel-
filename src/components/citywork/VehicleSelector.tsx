@@ -1,4 +1,4 @@
-import { Clock3, Fuel, Gauge, LockKeyhole, Plane, ShieldCheck, TrainFront, Truck } from 'lucide-react';
+import { Check, Clock3, Fuel, Gauge, LockKeyhole, Plane, ShieldCheck, Sparkles, TrainFront, Truck } from 'lucide-react';
 import { uiImage, vehicleImage } from '../../assets/registry.ts';
 import type { CargoPlan, CargoRouteEvaluation } from '../../game/activities/logistics.ts';
 import type { ActivityVehicleDef, DriveVehicle } from '../../game/config/types.ts';
@@ -12,6 +12,8 @@ export function VehicleSelector({
   cargoPlan,
   cargoRoute,
   cargoAssetKey,
+  compact = false,
+  recommended,
   onSelect,
 }: {
   vehicles: ActivityVehicleDef[];
@@ -21,6 +23,8 @@ export function VehicleSelector({
   cargoPlan?: CargoPlan;
   cargoRoute?: CargoRouteEvaluation;
   cargoAssetKey?: string;
+  compact?: boolean;
+  recommended?: DriveVehicle;
   onSelect(vehicle: DriveVehicle): void;
 }) {
   const selectedVehicle = vehicles.find((vehicle) => vehicle.id === selected);
@@ -30,6 +34,51 @@ export function VehicleSelector({
   const restCapacity = Math.max(0, (cargoPlan?.capacity ?? 0) - plannedLoad);
   const loadPct = cargoPlan?.capacity ? Math.min(100, (plannedLoad / cargoPlan.capacity) * 100) : 0;
   const cargoImage = uiImage(cargoAssetKey ?? cargoKey(cargoPlan?.resource));
+
+  if (compact) {
+    return (
+      <section className="citywork-smart-vehicles">
+        <div className="citywork-smart-subhead">
+          <div><small>Optional</small><strong>Fahrzeug ändern</strong></div>
+          <span>{vehicles.length} verfügbar</span>
+        </div>
+        <div className="citywork-smart-vehicle-list">
+          {vehicles.map((vehicle) => {
+            const image = vehicleImage(vehicle.imageKey);
+            const locked = vehicle.unlockLevel > level;
+            const isSelected = selected === vehicle.id;
+            return (
+              <button
+                type="button"
+                key={vehicle.id}
+                className={`${isSelected ? 'selected' : ''}${locked ? ' locked' : ''}`}
+                onClick={() => !locked && onSelect(vehicle.id)}
+                disabled={locked}
+              >
+                <span>{image ? <img src={image} alt="" /> : <Truck size={30} />}</span>
+                <div>
+                  <strong>{t(vehicle.nameKey)}</strong>
+                  <small>{vehicle.capacity.toLocaleString('de-DE')} Ladung · {vehicle.speedKph} km/h</small>
+                </div>
+                {locked
+                  ? <i><LockKeyhole size={12} /> L{vehicle.unlockLevel}</i>
+                  : isSelected
+                    ? <i className="selected"><Check size={12} /> Gewählt</i>
+                    : recommended === vehicle.id
+                      ? <i className="recommended"><Sparkles size={12} /> Empfohlen</i>
+                      : null}
+              </button>
+            );
+          })}
+        </div>
+        {futureVehicles.length > 0 && (
+          <small className="citywork-smart-future-note">
+            {futureVehicles.length} weitere Transportmittel werden später freigeschaltet.
+          </small>
+        )}
+      </section>
+    );
+  }
 
   return (
     <section className="citywork-v4-vehicle-zone">

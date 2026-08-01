@@ -39,23 +39,25 @@ describe('Aktives Spiel: keine Offline-Produktion (§ C7/§26)', () => {
   it('produziert nur im Live-Tick, nicht im Offline-Catch-up', () => {
     const { controller } = newController();
     setLevel(controller, 4);
-    controller.state.resources = { money: 500_000, wood: 100, stone: 100, food: 40, freshwater: 0 };
+    setLevel(controller, 9);
+    controller.state.resources = { money: 500_000, wood: 400, stone: 400, food: 0, freshwater: 0 };
     for (let dx = 1; dx <= 5; dx++) controller.placeBuilding('road', at(dx, 5).x, at(dx, 5).y);
-    // § Active Operations 2.0: passive Produktion am Steinbruch geprüft (das
-    // Sägewerk produziert nur noch aktiv über Arbeiter, siehe operations.test.ts).
-    expect(controller.placeBuilding('quarry', at(1, 6).x, at(1, 6).y).ok).toBe(true);
-    // Bauzeit läuft auch offline ab (non-live) → Steinbruch wird aktiv.
+    // § Active Operations 2.0 / A6+A7: Sägewerk, Steinbruch und Farm gewinnen ihre
+    // Ware nur noch aktiv über Arbeiter (siehe operations.test.ts /
+    // activeOperations.test.ts). Passive Produktion wird an der Bäckerei geprüft.
+    expect(controller.placeBuilding('bakery', at(1, 6).x, at(1, 6).y).ok).toBe(true);
+    // Bauzeit läuft auch offline ab (non-live) → Bäckerei wird aktiv.
     controller.update(T0 + HOUR, false);
-    const quarry = Object.values(controller.state.buildings).find((b) => b.defId === 'quarry')!;
-    expect(quarry.status).toBe('active');
+    const bakery = Object.values(controller.state.buildings).find((b) => b.defId === 'bakery')!;
+    expect(bakery.status).toBe('active');
 
-    // Offline-Tick: KEINE Steinproduktion.
-    const stoneBefore = controller.state.resources.stone;
+    // Offline-Tick: KEINE Nahrungsproduktion.
+    const foodBefore = controller.state.resources.food;
     controller.update(T0 + HOUR + 60_000, false);
-    expect(controller.state.resources.stone).toBe(stoneBefore);
+    expect(controller.state.resources.food).toBe(foodBefore);
 
-    // Live-Tick: Stein steigt.
+    // Live-Tick: Nahrung steigt.
     controller.update(T0 + HOUR + 120_000, true);
-    expect(controller.state.resources.stone).toBeGreaterThan(stoneBefore);
+    expect(controller.state.resources.food).toBeGreaterThan(foodBefore);
   });
 });

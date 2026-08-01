@@ -170,7 +170,9 @@ Großauftrag in Phasen S1–S8. Verbindliche Vorab-Audits:
 gebacken; Regionsbalancing mit rotierten Forst-Ids (Nordwald→12, Südforst→11,
 Ostforst→10) und L3-Erstwahl {7,12}. **Save v19** (Weltumbau, Backup/Neustart
 `cmb.save.backup.world-v18`). Entscheidung **D-033**.
-**v0.81 = S3 erledigt (D-034):** Fog of War als EINE weiche, zusammenhängende
+**v0.81 = S3 erledigt (D-034) — seit v1.24 durch D-045 ABGELÖST (kein Nebel mehr,
+gesperrtes Land wird entsättigt gezeigt; der folgende Absatz ist Historie):**
+Fog of War als EINE weiche, zusammenhängende
 Wolkenfront statt Pro-Region-Kapseln — globale absolute Nebelhöhe (`worldFogTopY`)
 + `alphaHash`-Dithering; **Kamera-Clamping neu** (`CameraExplorationBoundary` hält
 das Blickziel über der freigeschalteten Union, weiches Randband) mit getrenntem
@@ -262,6 +264,236 @@ Sockelhöhe); `validatePlacement` bleibt die **einzige** Platzierungsinstanz (§
 Renderer liest dieselben Werte. Verbindlich vor Gelände-/Platzierungsarbeit:
 `docs/agents/MAP_FLATTENING_AND_BUILDABILITY_PLAN.md`. Offen (nicht vortäuschen):
 echtes Mesh-Einebnen unter dem Footprint, Pfahl-/Steglogik für Wassergebäude.
+
+## Status: A6 Steinbruch + A7 Farm — DREI AKTIVE BETRIEBE (v1.25, Save v29, D-046) — AKTUELL
+Das Sägewerk ist nicht mehr der einzige aktive Betrieb. Steinbruch und Farm nutzen
+**dieselbe** Knoten-/Arbeiter-/Lagerschleife (§2, kein zweites System):
+Ressourcenknoten sind auf `tree`/`rock`/`crop` verallgemeinert
+(`RESOURCE_NODE_PROFILES` in `operations/nodes.ts` = EIN Profil je Knotentyp),
+**Stein wächst nie nach** (`regenerationMs: undefined` → der Bruch läuft leer und
+muss umziehen), der Logistik-Zuschlag eines Depots wirkt bei aktiven Betrieben über
+`derived.logisticsBoost` auf Arbeits-/Laufgeschwindigkeit statt auf eine Passivrate.
+Stufen sind auf die früheren Passivraten kalibriert (38/80/210 Stein, 260/500/1.100
+Nahrung je Minute) — testgesichert, die Progression kippt nicht.
+**Bedienung (der eigentliche v1.25-Anteil):** `src/components/operations/
+nodeVocabulary.ts` hält **ein** Wortfeld je Knotentyp (total über die
+Knoten-Union → der Compiler fordert neue Typen ein); Endlichkeit ist sichtbar
+(Restmenge im Arbeitsgebiet + Umzugshinweis) — aber **nur** bei nicht
+nachwachsenden Vorkommen, sonst wäre die Zahl irreführend. **D-046: Zustandsmengen,
+die die UI beschriftet, werden als `as const`-Liste exportiert** (erster Fall
+`OPERATION_IDLE_REASONS`) — `t()` gibt bei fehlendem Eintrag den Schlüssel zurück,
+TypeScript kann das nicht fangen, ein aufzählender Test schon.
+**Achtung bei Bestandsspielständen:** Gebäude mit `operation` überspringen den
+passiven `produce`-Pfad — vorhandene Steinbrüche/Farmen liefern erst wieder nach
+einmaligem „Betrieb starten" (das Gebäudefenster weist darauf hin). **Kein
+Schemabruch, Save bleibt v29.** Offen (nicht vortäuschen): A8 Feuerwehr-Dispatch,
+A9 Regeneration-Ausbau, A10 Automatisierung, Rechteck-/Polygon-Arbeitsgebiete,
+Abbau-/Fällanimationen, echtes Knoten-Mesh-Raycast.
+
+## Status: Welt lädt vollständig — ENTSÄTTIGUNG STATT NEBEL (v1.24, Save v29, D-045)
+Nutzerauftrag: „Ich will dass die welt trotz nicht freigeschalteten biomen schon
+lädt, also etwas anderes als nebel"; Rückfrage entschieden auf **entsättigt +
+Schloss-Marker** und **freie Kamerasicht auf die ganze Insel**. Die **ganze Insel**
+wird jetzt ab dem ersten Frame gebaut — Gelände, Küsten, Deko, Vegetation, auch
+gesperrt. **Entfernt:** die blickdichte Wolkenwand aus D-034,
+`fogSurfaceGeometry.ts` (+ Test), `regionContours`, `worldFogTopY`, die
+`CameraExplorationBoundary` und die gesamte `cameraBoundsDisabled`-Verkabelung.
+Gesperrt = **entsättigt** (70 % Richtung eigener Luminanz, 16 % dunkler, minimal
+kühler: `LOCKED_DESATURATION`/`LOCKED_DARKENING`) plus schwebender Schloss-Marker;
+die Minimap zeigt dasselbe entsättigte Terrain statt ihrer Wolkendecke.
+**Zwingend (D-045): zwei Vegetationsaufbauten mit getrennten Schlüsseln.**
+Sichtbares gesperrtes Land ist bewachsen (1.422 → **26.851** Instanzen), und der
+Vegetationsschlüssel enthält die **Belegungsmenge** — ein gemeinsamer Schlüssel
+hätte bei **jedem Bauklick** die ganze Insel neu aufgebaut. Gesperrte Regionen
+hängen nicht an der Belegung: eigener Schlüssel (Regionsliste + Qualitätsstufe),
+halbe Dichte (`LOCKED_VEGETATION_DENSITY`), keine Schatten (das knappe
+Schattenbudget gehört der Stadt). Gemeinsame Implementierung `buildVegetationFor`;
+Verteilung bleibt `collectRegionNature` (D-042/D-044 unberührt). Jede Messung über
+die Vegetation muss **beide** Gruppen erfassen. Sichtbarkeit ist keine Mechanik —
+`regionUnlockBlocker`, Baubarkeit und Kosten sind unverändert, **Save bleibt v29**.
+Offen (nicht vortäuschen): deutlichere Regionsgrenzen in der Welt, Hover-/
+Auswahl-Hervorhebung gesperrter Regionen, echte LOD-Stufen für die größere Masse.
+
+## Status: Natur-/Prop-Overhaul 14.0 — DIE INSEL IST BEWACHSEN (v1.23, Save v29, D-044)
+Auftrag mit Mockup: die Welt wirkt „zu leer, zu technisch, zu steril und zu
+gleichförmig"; Geometrie ausdrücklich unangetastet lassen. **Zwei Messungen
+erklären den Zustand vollständig:** weltweit standen **14.038 Props auf 51.057
+Landkacheln, davon nur 502 echte Modelle (3,6 %)** — der Rest ein Kegel auf einem
+Zylinder, weil **jedes Natur-`.glb` rund 29.000 Dreiecke** wiegt; und der Katalog
+ist kleiner als seine Dateinamen (`pine_tree` = `forest_cluster_small` =
+`forest_cluster_medium`, alle fünf Steine bytegleich → real **fünf** Formen).
+**Deshalb D-044: die Masse ist stilisierte Low-Poly-Geometrie (24–200 Dreiecke),
+die `.glb` bleiben seltene Blickfänger.** Vielfalt entsteht aus Transformation
+(Größe/Drehung/Neigung/`setColorAt`), nie aus zusätzlicher Geometrie.
+Die Verteilung folgt **acht Naturzonen** (`forest_core`/`forest_edge`/`meadow`/
+`rocky_highland`/`coast_flat`/`coast_rocky`/`wetland`/`small_island`); Waldkern
+gegen Waldrand trennt der **Waldanteil im 5×5-Fenster** (der Terraintyp kennt
+keine Kante). **Eine** Tabelle (`NATURE_SPAWN_RULES` in `natureZones.ts`) hält
+Dichte, Clusterbindung, Größenband und Terrainbindung; Stellschrauben in
+`NATURE_TUNING`. Fünf neue Arten: `sapling`, `stump`, `shoreRock`, `scree`,
+`cliffRock`. Regionale Identität über `REGION_CHARACTER_DENSITY`.
+**`natureDistribution.ts` ist die EINZIGE Verteilungsinstanz — Renderer und Tests
+rufen dieselbe Funktion (D-042); kein Nachbau in Tests.** `rebuildVegetation`
+schrumpfte 605 → 152 Zeilen und entscheidet nichts mehr über Verteilung.
+Ergebnis **14.038 → 48.838 Props**, **kein Regionsbudget begrenzt mehr die
+Dichte** (testgesichert). Keine Geometrie-, Save- oder Simulationsänderung
+(Save bleibt v29); D-043 unberührt. Verbindlich vor Vegetations-/Proparbeit:
+`docs/agents/NATURE_OVERHAUL_14_PLAN.md`. Offen (nicht vortäuschen): echte
+LOD-Stufen und Impostoren für die stilisierte Masse, Shader-Wind, neue
+Prop-Assets, Bergplattformen als Terrain-Klasse.
+
+## Status: Modelltreue 13.1 — WASSER AN DER TERRASSENKANTE (v1.22, Save v29)
+Spieltest-Nachlauf: „Das Wasser so anpassen, dass es exakt mit der unteren Kante
+der flacheren Ebenen abschließt, sodass man dort perfekt Hafen etc. platzieren
+kann." Histogramm der flachen Landkacheln über der alten Wasserlinie: **0–3 m =
+331** (die Klippenwand), **4–5 m = 14.073** (die unterste Terrasse). Das Wasser
+steigt deshalb um **4 m**. Sweep 0/3/4/5 m belegt den Punkt: 2×2-Anlegerplätze
+**20 → 344**, bebaubare Uferkacheln **129 → 759**, Baufläche praktisch unverändert
+(37.841 → 37.798); bei 5 m säuft die Terrasse selbst ab (−10.000 Landkacheln).
+**Entscheidend: `HEIGHT_SCALE` hängt jetzt an `SCALE_REFERENCE_N`, nicht an der
+Wasserlinie.** Sonst hätte jeder Meeresspiegel-Wechsel das Gelände vertikal
+gestreckt — Geländeänderung durch die Hintertür. Das Gelände steht still, das
+Wasser steigt; der Gipfel liegt ehrlich niedriger über dem Wasser (52 → 48 m).
+Modelltreue unverändert **0 veränderte Landknoten**.
+**Neun Regionen**, alle über Land erreichbar — `requiresHarbor` ist nirgends mehr
+gesetzt (die vorgelagerte Insel aus 13.0 gibt es bei diesem Wasserstand nicht).
+Startregion **9 „Gründerland"** (Rathaus (241,251), 1.400 bebaubar, ΔH 0,12,
+20 Kacheln vom Schwerpunkt, **vier** Landnachbarn 1/2/5/7), erste Erweiterung
+**L2 = Nordwald** (42,7 % Wald). Weil vier Nachbarn erreicht werden, gilt
+`START_MIN_NEIGHBOUR_REGIONS = 3` wieder wie ursprünglich. Save **v29** (Backup
+`cmb.save.backup.world-v28`).
+Offen (nicht vortäuschen): Pfahl-/Steglogik für Anleger an echten Klippen,
+Bergplattformen als Terrain-Klasse, Mesh-Einebnen unter dem Footprint, neue
+Vegetations-/Prop-Assets.
+
+## Status: Modelltreue 13.0 — DIE GLB IST DIE WELT (v1.21, Save v28, D-043)
+Nutzerauftrag mit Beleg (Viewer-Screenshot der rohen GLB): „Das 3D-Modell ist
+nicht das Problem, sondern die Implementierung … übernimm das Modell so, wie es
+ist, und füge erst danach Wasser, Texturen usw. hinzu." Die Messung gibt ihm
+recht: der Bake veränderte **157.749 von 233.287 Landknoten (67,6 %)** und drückte
+die mittlere Landhöhe von **8,46 auf 6,45 m**. Ufer-Blend, Terraforming,
+Schlussglättung und die Ersatz-Landschaft aus Nadelreparatur/Klippen-Plateaus
+haben zusammen eine andere Insel erzeugt.
+**Jetzt gilt: `RAW_TERRAIN_FIDELITY` ist der Standardpfad — die Geometrie wird
+exakt gerastert (0 veränderte Knoten), danach werden Wasser, Ufer, Biome,
+Bebaubarkeit und Regionen daraus ABGELEITET. Keine Ableitung schreibt `HW`.**
+Der alte Pfad bleibt über `TERRAIN_MODE=flatten` messbar, ist aber nicht die
+Welt. Verbindliche Kennzahl `BAKED_WORLD.modelFidelity`, testgesichert
+(`changedNodes === 0`).
+Die Insel ist damit das, was sie im Viewer ist: **Klippeninsel mit Plateaus** und
+**Archipel**. **Elf Regionen**, Startregion **11 „Gründerland"** (Rathaus
+(239,251), 1.400 bebaubar, ΔH 0,10, 22 Kacheln vom Schwerpunkt, Nachbarn 1/8),
+erste Erweiterung **L2 = Nordwald** (55,5 % Wald — Holz ist der Frühengpass).
+Region **10** hat `adjacent: []` und ist über `requiresHarbor` erreichbar.
+**Preis der Treue, gemessen:** bebaubar 47.806 → 37.891 · bebaubare Uferkacheln
+900+ → 150 · Steilküste 2.244 gegen 475 flach · **0 Brückenkandidaten** (gequert
+wird über die Höhenstraße I1, 24 Viadukte). Häfen sind selten und gezielt zu
+suchen; in der Startregion existiert **keiner** (`dock_small` öffnet erst L6).
+**Wasser bleibt der erlaubte Hebel** — die GLB modelliert keinen Gewässergrund:
+Tiefenrampe angehoben, `shorelineTolerance` 0 → 0,34, sonst wäre `river_port` an
+NULL Stellen baubar. Save **v28** (Backup `cmb.save.backup.world-v27`).
+**Regel für die Weiterarbeit (D-043): Wer eine Anforderung nicht erfüllt sieht,
+ändert die Ableitung oder die Anforderung — nie die Geometrie.** Ein Test, der
+faktisch nur durch Terraforming erfüllbar ist, misst das Falsche.
+Offen (nicht vortäuschen): Pfahl-/Steglogik für Anleger an Klippen,
+Bergplattformen als Terrain-Klasse, Mesh-Einebnen unter dem Footprint, neue
+Vegetations-/Prop-Assets.
+
+## Status: Welt-Feinschliff 12.3 (v1.20, Save v27) — AKTUELL
+Korrektur zu v1.19. **Die gemeldeten „Küstenzacken" sind KEIN Gelände**, sondern
+die prozeduralen Landmarken-Platzhalter: `SCENIC_PROP_MODELS` listete für
+`rockArch`/`waterfall`/`oldTree` nur Wunschnamen, also griff immer die
+Notgeometrie — beim Felstor zwei aufrecht stehende graue Kästen (0,9 × 3,8).
+Nachgewiesen über eine Szenen-Probe im laufenden Spiel (inzwischen entfernt):
+das Bodenmesh überschreitet nirgends das gebackene Höhenfeld, und weltweit
+existieren genau 12 hohe schlanke Objekte. **Die Modell-Listen enden jetzt mit
+vorhandenen Dateien** (`rock_large`, `tree_deciduous` …), die Notgeometrie ist
+repariert. **Neue Prop-Arten `giantTree`/`boulder`** skalieren vorhandene
+Modelle hoch (Footprint 3,1/4,4 bzw. 1,9/3,2) mit kräftiger Größenstreuung —
+der Größenunterschied ist der Effekt, nicht die Menge. **Klippen-Garantie:**
+Steilküste entsteht immer, wo echtes Gebirge ans Wasser reicht (Relief ≥ 18 im
+Umkreis 7); Plateaus 136 → 254 Kacheln. Ganz ohne Zonen-Lotterie wurde die
+gesamte Küste steil und der Bake fand keine gültige Startregion mehr.
+**Regions-Ids 4 und 5 haben getauscht** (4 = Nordfelder, 5 = Weite Westaue);
+`REGION_MIN_TILES` 3.000 → 3.300 hält die Zahl bei 9. **Lehre (D-042 erweitert):
+Eine Messung beweist nur, was sie misst — widerspricht ein Spieltest einer
+grünen Messung, ist der GEGENSTAND der Messung zu prüfen, nicht ihre Schwelle.**
+
+## Status: Welt-Feinschliff 12.2 (v1.19, Save v27, D-042)
+Zweiter Spieltest-Nachlauf; fünf gemeldete Punkte, jeder gemessen behoben.
+**Küstenzacken sind Geometrie, kein Renderfehler:** schmale Felsnadeln der GLB
+werden zu 1–2-Knoten-Nadeln verdichtet. Der alte Riegel (`> 6 m` Überhöhung UND
+`≤ 1` Stütze) traf **1 von 487** realen Nadeln — die Kennzahl maß das Falsche.
+Neue Bedingung: Hochpunkt in **≥ 3 von 4 Achsen** (Klippenkanten/Grate sind das
+entlang der Kante nie); Reparatur und Messung teilen sich zwingend
+`isTerrainNeedle` (D-042). **208 entfernt, 0 übrig.** **Steilküste braucht jetzt
+echtes Relief** (≥ 5 m im Umkreis 7) statt nur einen Zonen-Hash — vorher hatten
+223 „Steilküsten"-Kacheln einen Höhenmedian von 0,2–1,3 m; jetzt 124 echte, und
+zusammenhängende Abschnitte bekommen über `buildCliffPlateaus` einen **ebenen
+Kopf auf Hinterlandniveau**. **Vegetation:** weltweit 6.891 → **15.334** Props,
+Startregion **11 → 183** Bäume/Büsche (`starterNatureFrame` reichte mit Radius
+15→32 über die ganze ~40-Kachel-Region). **Progression:** Ostterrassen ab **L2**
+(Nutzerwunsch), Leiter komplett neu, `FREE_EXPANSION_LEVEL` 3 → **2**.
+**Freie Gründung:** neues Spiel ohne Rathaus/Distrikt/Straßen; `foundCity` ist
+ein eigener einmaliger Command (Rathaus ist bewusst `buildable:false`+`unique`),
+nutzt aber denselben Ghost und dieselbe `validatePlacement`-Instanz — **kein
+zweites Platzierungssystem (§2)**. „Gegründet?" ist abgeleitet, kein Save-Feld.
+**9 Regionen**, Startregion **9**, Save **v27** (Backup
+`cmb.save.backup.world-v26`). **Bake-Reihenfolge zwingend:** ALLE
+Höhenänderungen zuerst, danach die verbindliche Ableitung von Ufer/Biom/
+Bebaubarkeit — sonst beschreibt die Bebaubar-Maske ein Gelände, das es nicht
+mehr gibt (gefunden von `tests/mapBuildability.test.ts`). D-041 gilt weiter.
+Offen (nicht vortäuschen): Bergplattformen als Terrain-Klasse, neue Vegetations-/
+Prop-Assets, Mesh-Einebnen unter dem Footprint, Pfahl-/Steglogik, benannte
+Terrain-Klassen samt Radius-Overlays, Straßen-Feinschliff.
+
+## Status: Welt-Feinschliff 12.1 (v1.18, Save v26)
+Nachlauf zum Spieltest der neuen Insel. **8 statt 13 Regionen** (Median 3.649 →
+7.983 Kacheln), jede mit gemessener Rolle: Nordwald 55,4 % Wald (Holz) · Südmassiv
+59,3 % Gebirge (Stein, Endgame L20) · Weite Westaue 11.856 Bauflächen (Kornkammer)
+· Lagunenküste (Wasser) · zwei Mischregionen (H+F) · Mittelmark als Scharnier ·
+Startregion **8 „Gründerland"** (1.576 bebaubar, Rathaus (228,261), ΔH 0,53).
+**Progression folgt dem Ressourcenbedarf:** die kostenlose Erstwahl ab L3 IST die
+Waldregion (direkter Startnachbar). Die größte Baufläche der Insel ist seenachbar
+zum Start — früher Zugang nur per Hafen (`regionUnlockBlocker` unverändert).
+**Uferbefund (wichtig für künftige Bake-Arbeit): das Uferprofil MUSS zuletzt**
+**laufen** — vorher lief es vor `flattenBuildableLand`, und die Glättung zog jeden
+Uferknoten wieder zum höheren Hinterland. Wirkung: Seeufer 73,9 → 97,7 % flach,
+Flussufer 64,8 → 98,1 %, bebaubare Uferkacheln 67 → 88 %, Uferzacken 3 → 0,
+Baufläche 44.170 → 47.806. **Hafenprüfung spiegelt die Laufzeitregel** aus
+`waterfrontWaterCells` (2×2-Wasserrechteck bündig) — reines Uferkachel-Zählen
+hatte eine unbrauchbare 1-Kachel-Bucht durchgelassen (0 baubare Anleger).
+**Sägewerk kalibriert** (Stufe 1 13,5 → 52,7 Holz/min; Radius-Ausbau ergänzt);
+Upgrades verbessern Arbeiter/Tempo/Werkzeug/Traglast/Lager/Radius, nie „+X/min".
+**Vegetationsbudget folgt der Fläche** (`regionPropBudget`), nicht der
+Regionsanzahl — sonst entlaubt jede Regionskonsolidierung die Welt.
+Offen (nicht vortäuschen): Bergplattformen als eigene Terrain-Klasse, neue
+Vegetations-/Prop-Assets, Mesh-Einebnen unter dem Footprint, Pfahl-/Steglogik.
+
+## Status: World Overhaul 12.0 — NEUE INSEL ist die Welt (v1.17, Save v26, D-041)
+Die Weltgrundlage ist **ausgetauscht**: `reference/world/new island 3d model.glb`
+(117 Meshes) ist die **einzige** Bake-Quelle; die alte `island 3d new.glb` wird von
+nichts mehr gelesen (kein Parallelbetrieb). Wie bisher wird **keine** GLB zur
+Laufzeit geladen — `tools/bakeWorld.mjs` ist der einzige Konsument, die Laufzeit
+liest committete Gen-Dateien. Kennzahlen: 61.322 Landkacheln, **44.170 bebaubar**
+(vorher 38.126), freie Footprints 37.559/34.596/32.031 (3×3/4×4/5×5), ein zentrales
+Massiv (7.069 Kacheln), Uferkante 90,9 % ≤ 1,5 über der Wasserlinie.
+**Entscheidend (D-041): Das Terraforming läuft im Bake jetzt VOR der
+Regionssegmentierung** (`§6b-flat`) — genau umgekehrt zu D-040. D-040 hat diese
+Reihenfolge ausschließlich gewählt, um alte Regions-Ids und Spielstände zu
+schützen; bei vollständigem Weltaustausch entfällt der Grund, und die alte
+Reihenfolge machte Regionsstatistik und Startregion-Zuschnitt unehrlich. Wer sie
+zurückdreht, bricht das erneut.
+13 Regionen: Startregion **13 „Gründerland"** (zentral, 1.456 bebaubar, Rathaus
+(237,256), ΔH 0,34, 13 Uferkacheln, **vier** Landnachbarn) + 12 Freischaltungen mit
+klarem Ressourcenprofil. **Kein `requiresHarbor` mehr** — nicht entfernt, sondern
+Folge der Geografie (eine zusammenhängende Landmasse); `regionUnlockBlocker` ist
+unverändert und greift weiter geografisch. Regionsnamen erscheinen nur bei Hover
+und Freischaltung (§10). Save **v26** = Weltumbau mit einmaligem Backup
+`cmb.save.backup.world-v25`. Verbindlich vor Welt-/Regionsarbeit:
+`docs/agents/WORLD_OVERHAUL_12_PLAN.md`. Offen (nicht vortäuschen): echte
+Bergplattformen als eigene Terrain-Klasse, neue Vegetations-/Prop-Assets,
+Mesh-Einebnen unter dem Footprint, Pfahl-/Steglogik für Wassergebäude.
 
 Verbindlicher Einstieg für die Weiterarbeit:
 `docs/HANDOFF_CLAUDE.md` → `docs/agents/PROJECT_STATE.md` →

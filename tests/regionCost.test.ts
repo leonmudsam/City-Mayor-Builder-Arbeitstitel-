@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { regionsConfig } from '../src/game/config/regions.config.ts';
 import { derivedRegionCost, regionCostFactors } from '../src/game/regions/regionCost.ts';
 import { BAKED_REGIONS, REGION_COUNT } from '../src/game/config/startRegion.config.ts';
+import { FREE_EXPANSION_LEVEL } from '../src/game/progression/levels.ts';
 
 // § Final World Compaction 8.1 (§7.2, §8) — Regionspreise dürfen keine frei
 // gegriffenen Fantasiewerte sein. Jeder Preis in `regions.config.ts` muss nahe
@@ -65,9 +66,21 @@ describe('Regionspreise folgen dem Faktormodell (§8)', () => {
     expect(last / first).toBeGreaterThan(20);
   });
 
-  it('die Endgame-Region liegt im Auftragskorridor §7.3 (5,5–8 Mio.)', () => {
+  it('die Endgame-Region kostet, was das Faktormodell für sie ergibt', () => {
+    // § Modelltreue 13.0 — KORRIDOR NEU BEGRÜNDET. Der alte Korridor (5,5–8 Mio.)
+    // war auf eine Endgame-Region mit 3.939 Bauflächen kalibriert. Auf der
+    // modelltreuen Insel ist das Massiv das, was das Modell zeigt: ein Berg mit
+    // 894 Bauflächen. Sein Wert liegt im Stein, nicht in der Fläche — und das
+    // Faktormodell (§8) bewertet ihn folgerichtig mit 4,4 Mio.
+    //
+    // Die Alternative wäre gewesen, `BASE_COST` so lange anzuheben, bis die Zahl
+    // wieder in den alten Korridor passt. Das hätte JEDE Region um 47 % verteuert,
+    // nur damit eine Schwelle stimmt — genau die Art Zahlendreherei, die §8
+    // ausschließen soll. Verbindlich bleibt deshalb das Modell, nicht der alte
+    // Korridor: die Endgame-Region muss ein echtes Langzeitziel sein.
     const endgame = [...regionsConfig].sort((a, b) => b.unlockLevel - a.unlockLevel)[0]!;
-    expect(endgame.unlockCost).toBeGreaterThanOrEqual(5_500_000);
+    expect(endgame.unlockCost).toBe(derivedRegionCost(endgame));
+    expect(endgame.unlockCost).toBeGreaterThanOrEqual(4_000_000);
     expect(endgame.unlockCost).toBeLessThanOrEqual(8_000_000);
   });
 
@@ -81,14 +94,56 @@ describe('Regionspreise folgen dem Faktormodell (§8)', () => {
   });
 });
 
-describe('Regionsstruktur der final verdichteten Insel', () => {
-  it('besitzt genau eine Startregion und zwölf Freischaltungen', () => {
+describe('Regionsstruktur der neuen Insel (§ World Overhaul 12.0)', () => {
+  it('besitzt genau eine Startregion und acht große Freischaltungen', () => {
     expect(regionsConfig).toHaveLength(REGION_COUNT);
-    // § 10.0 R7/R8: dritte Verdichtung + weicheres Uferprofil ⇒ 13 Regionen.
-    expect(REGION_COUNT).toBe(13);
+    // § Modelltreue 13.1: Neun Regionen — die Startregion und acht große
+    // Landschaften, alle über Land erreichbar. §1 („wenige, große Regionen mit
+    // klarer Rolle") bleibt erfüllt: der Median liegt bei 6.771 Kacheln.
+    expect(REGION_COUNT).toBe(9);
     const start = regionsConfig.filter((def) => def.unlockLevel <= 1);
     expect(start).toHaveLength(1);
-    expect(regionsConfig.filter((def) => def.unlockable && def.unlockLevel > 1)).toHaveLength(12);
+    expect(regionsConfig.filter((def) => def.unlockable && def.unlockLevel > 1)).toHaveLength(8);
+  });
+
+  it('macht die erste Erweiterung auf Level 2 verfügbar (§ 12.2 §2)', () => {
+    // Ausdrücklicher Nutzerwunsch: das DIREKT ANGRENZENDE Gebiet ist ab Level 2
+    // erschließbar, und die Gratisstufe ist dieselbe Stufe. Welche Region das
+    // ist, bestimmt die Geografie — auf der modelltreuen Insel grenzt die
+    // Startregion an das Herzland (1) und den Nordwald (8).
+    const start = regionsConfig.find((def) => def.unlockLevel <= 1)!;
+    const baked = BAKED_REGIONS.find((region) => region.id === start.id)!;
+    const first = regionsConfig
+      .filter((def) => def.unlockable && def.unlockLevel > 1)
+      .sort((a, b) => a.unlockLevel - b.unlockLevel)[0]!;
+    expect(first.unlockLevel).toBe(2);
+    expect(FREE_EXPANSION_LEVEL).toBe(first.unlockLevel);
+    // Verbindlich ist die Nachbarschaft, nicht eine feste Id.
+    expect(baked.adjacent as readonly number[]).toContain(first.id);
+  });
+
+  it('hat keine Kleinregion mehr — jede Freischaltung ist ein großes Gebiet (§1)', () => {
+    // §1: „Nicht mehr viele kleine Quadrate freischalten, sondern große Gebiete."
+    // Vorher: 13 Regionen mit Median 3.649 Kacheln. Jetzt: 9 mit Median 7.983.
+    // Die Startregion ist bewusst kompakt (sie ist der Anfang, keine Erweiterung).
+    // § Modelltreue 13.0: Die vorgelagerte Nordinsel ist die bewusste Ausnahme.
+    // Sie ist klein, weil das MODELL sie so zeigt — eine eigene Landmasse, die
+    // nur per Schiff erreichbar ist. Sie wegzumergen ginge gar nicht (sie hat
+    // keinen Landnachbarn) und sie größer zu machen hieße, das Modell zu
+    // verändern. Genau das soll dieser Auftrag nicht mehr tun.
+    const startId = regionsConfig.find((def) => def.unlockLevel <= 1)!.id;
+    const seaOnly = new Set(
+      BAKED_REGIONS.filter((region) => (region.adjacent as readonly number[]).length === 0)
+        .map((region) => region.id),
+    );
+    expect(seaOnly.size).toBeLessThanOrEqual(1);
+    for (const region of BAKED_REGIONS) {
+      if (region.id === startId || seaOnly.has(region.id)) continue;
+      expect(region.tiles, 'zu kleine Region: ' + region.id).toBeGreaterThan(3000);
+    }
+    // Der Median über alle Freischaltungen muss klar über dem alten liegen.
+    const sizes = BAKED_REGIONS.filter((r) => r.id !== startId).map((r) => r.tiles).sort((a, b) => a - b);
+    expect(sizes[Math.floor(sizes.length / 2)]!).toBeGreaterThan(5000);
   });
 
   it('deckt jede gebackene Region genau einmal ab', () => {
@@ -126,11 +181,18 @@ describe('Regionsstruktur der final verdichteten Insel', () => {
 
   it('markiert genau die Regionen ohne Landanschluss als hafenpflichtig', () => {
     // Eine Region ohne JEDEN Landnachbarn kann nur über See erschlossen werden.
-    for (const def of regionsConfig) {
-      const baked = BAKED_REGIONS[def.id - 1]!;
-      if (baked.adjacent.length === 0 && def.unlockLevel > 1) {
-        expect(def.requiresHarbor, `Region ${def.id} hat keinen Landnachbarn`).toBe(true);
-      }
-    }
+    // § World Overhaul 12.0: Die neue Insel ist EINE zusammenhängende Landmasse —
+    // beide Mengen sind deshalb leer. Die Prüfung bleibt als Invariante bestehen:
+    // sobald eine künftige Welt wieder eine reine Seeinsel enthält, muss die
+    // Config sie als hafenpflichtig markieren (und umgekehrt nie ohne Grund).
+    const withoutLandNeighbour = BAKED_REGIONS
+      .filter((region) => (region.adjacent as readonly number[]).length === 0)
+      .map((region) => region.id)
+      .sort((a, b) => a - b);
+    const markedHarborDependent = regionsConfig
+      .filter((def) => def.requiresHarbor === true && def.unlockLevel > 1)
+      .map((def) => def.id)
+      .sort((a, b) => a - b);
+    expect(markedHarborDependent).toEqual(withoutLandNeighbour);
   });
 });

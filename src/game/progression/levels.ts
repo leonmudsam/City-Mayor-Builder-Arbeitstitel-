@@ -11,8 +11,13 @@ import { BAKED_REGIONS, startRegionConfig } from '../config/startRegion.config.t
  * nach der Startregion kostenlos. In der Progressions-Schicht definiert (kein
  * Renderer-/State-Bezug), damit sowohl der Level-Hinweis als auch der Controller
  * dieselbe Wahrheit nutzen.
+ *
+ * § 12.2 (Spieltest): von 3 auf **2** gezogen. Der Auftrag verlangt, dass die
+ * direkt angrenzenden Ostterrassen ab Level 2 erschließbar sind; die Gratisstufe
+ * muss dann dieselbe Stufe sein, sonst wäre die erste erreichbare Region
+ * ausgerechnet die einzige, die der Spieler bezahlen müsste.
  */
-export const FREE_EXPANSION_LEVEL = 3;
+export const FREE_EXPANSION_LEVEL = 2;
 
 /** Kurzcharakter einer Region als Bürger-Hinweis-Schlüssel (§4 Auftrag B). */
 function regionBoonKey(mods: Partial<Record<string, number>> | undefined, roadCostFactor: number | undefined, buildable: number): string {

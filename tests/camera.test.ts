@@ -1,7 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { CameraController3D } from '../src/renderer/three/CameraController3D.ts';
-import { CameraExplorationBoundary } from '../src/renderer/three/CameraExplorationBoundary.ts';
-import { worldOverviewCenter } from '../src/game/config/startRegion.config.ts';
+import { startRegionConfig, worldOverviewCenter } from '../src/game/config/startRegion.config.ts';
 import { CAMERA_LIMITS, worldCameraBounds } from '../src/renderer/three/CameraConfig.ts';
 import { DEFAULT_CAMERA_SETTINGS, type CameraSettings } from '../src/renderer/three/cameraSettings.ts';
 import { deriveClickAction, deriveDragMode } from '../src/renderer/three/cameraInputMapping.ts';
@@ -59,16 +58,6 @@ describe('cameraInputMapping — Belegung §10.3 (G2.2)', () => {
 
 const settings = (over: Partial<CameraSettings> = {}) => () => ({ ...DEFAULT_CAMERA_SETTINGS, ...over });
 
-/** Erlaubtes Rechteck [60..90]×[60..90] als Mini-„freigeschaltete Union". */
-const rectBoundary = (soft = 6, hard = 10) =>
-  new CameraExplorationBoundary({
-    worldTiles: 128,
-    allowed: (x, y) => x >= 60 && x <= 90 && y >= 60 && y <= 90,
-    softDistance: soft,
-    hardDistance: hard,
-    step: 2,
-  });
-
 describe('CameraController3D bounds', () => {
   it('clamps pan target to the world bounds', () => {
     const cam = new CameraController3D(worldCameraBounds(), settings());
@@ -98,64 +87,36 @@ describe('CameraController3D bounds', () => {
   });
 });
 
-describe('CameraExplorationBoundary (§ Change 9.0 / S3b)', () => {
-  it('leaves targets deep inside the unlocked union untouched at full speed', () => {
-    const b = rectBoundary();
-    const c = b.constrain(75, 75); // Mitte des erlaubten Rechtecks
-    expect(c.x).toBeCloseTo(75, 5);
-    expect(c.z).toBeCloseTo(75, 5);
-    expect(c.slow).toBe(1);
-  });
-
-  it('pulls a target far outside back onto the hard ring', () => {
-    const hard = 10;
-    const b = rectBoundary(6, hard);
-    const c = b.constrain(300, 300); // weit außerhalb
-    // Zurückgeführt in die Nähe der nächsten erlaubten Ecke (~90,90) + hartes Band.
-    expect(c.x).toBeLessThan(90 + hard + 4);
-    expect(c.z).toBeLessThan(90 + hard + 4);
-    expect(c.slow).toBe(0);
-  });
-
-  it('slows down within the soft band before the hard limit', () => {
-    const b = rectBoundary(6, 12);
-    const near = b.constrain(96, 75); // ~6 Kacheln jenseits der rechten Kante
-    expect(near.slow).toBeGreaterThan(0);
-    expect(near.slow).toBeLessThan(1);
-  });
-
-  it('never constrains when nothing is unlocked (empty union = no boundary)', () => {
-    const b = new CameraExplorationBoundary({ worldTiles: 128, allowed: () => false, step: 2 });
-    const c = b.constrain(10, 200);
-    expect(c.x).toBe(10);
-    expect(c.z).toBe(200);
-    expect(c.slow).toBe(1);
-  });
-});
-
-describe('CameraController3D exploration boundary', () => {
-  it('keeps the pan/focus target inside the unlocked union', () => {
+describe('CameraController3D — freie Sicht auf die ganze Insel (D-045)', () => {
+  // Seit v1.24 lädt die Welt vollständig; gesperrtes Land wird entsättigt
+  // gezeigt statt vernebelt. Damit gibt es nichts mehr zu verbergen, und die
+  // frühere Explorationsgrenze (D-034/S3b) ist entfallen. Einzige Schranke ist
+  // das Weltrechteck.
+  it('lässt das Blickziel überall auf der Insel zu — nur die Welt begrenzt', () => {
     const cam = new CameraController3D(worldCameraBounds(), settings({ smooth: false }));
-    cam.setExplorationBoundary(rectBoundary(6, 10));
-    cam.focusGround(400, 400); // versuche, in gesperrtes Gebiet zu zielen
-    const g = cam.goals();
-    expect(g.targetX).toBeLessThan(90 + 10 + 4);
-    expect(g.targetZ).toBeLessThan(90 + 10 + 4);
-  });
-
-  it('lets the camera roam freely again once the boundary is cleared (dev cheat)', () => {
-    const cam = new CameraController3D(worldCameraBounds(), settings({ smooth: false }));
-    cam.setExplorationBoundary(rectBoundary(6, 10));
-    cam.setExplorationBoundary(undefined); // Cheat „Kamera-Grenzen aus"
-    cam.focusGround(300, 300);
-    const g = cam.goals();
-    // Nur noch die Welt-Rechteckgrenze begrenzt (padding 8 → maxX = 512+8).
-    expect(g.targetX).toBeCloseTo(300, 5);
-    expect(g.targetZ).toBeCloseTo(300, 5);
+    const b = worldCameraBounds();
+    for (const [x, z] of [[40, 40], [300, 300], [480, 120]] as const) {
+      cam.focusGround(x, z);
+      const g = cam.goals();
+      expect(g.targetX).toBeCloseTo(x, 5);
+      expect(g.targetZ).toBeCloseTo(z, 5);
+      expect(g.targetX).toBeLessThanOrEqual(b.maxX + 1e-6);
+      expect(g.targetZ).toBeLessThanOrEqual(b.maxZ + 1e-6);
+    }
   });
 });
 
 describe('CameraController3D presets & focus', () => {
+  it('zentriert den 5×5-Rathaus-Footprint statt dessen alte 3×3-Mitte', () => {
+    const cam = new CameraController3D(worldCameraBounds(), settings({ smooth: false }));
+    cam.focusGround(12, 18);
+    cam.focusCity();
+    cam.update(1);
+    const pose = cam.pose();
+    expect(pose.targetX).toBeCloseTo(startRegionConfig.townHall.x + 2.5, 5);
+    expect(pose.targetZ).toBeCloseTo(startRegionConfig.townHall.y + 2.5, 5);
+  });
+
   it('build preset is steeper and closer than city preset', () => {
     const city = new CameraController3D(worldCameraBounds(), settings());
     city.applyPreset('city');
@@ -164,6 +125,17 @@ describe('CameraController3D presets & focus', () => {
     expect(build.goals().pitch).toBeGreaterThan(city.goals().pitch);
     expect(build.goals().dist).toBeLessThan(city.goals().dist);
     expect(build.goals().pitch).toBeLessThanOrEqual(CAMERA_LIMITS.maxPitch);
+  });
+
+  it('rahmt die normale Stadtansicht nah, schräg und von der Landmarken-Seite', () => {
+    const cam = new CameraController3D(worldCameraBounds(), settings({ smooth: false }));
+    cam.applyPreset('city');
+    const view = cam.goals();
+    expect(view.dist).toBeLessThanOrEqual(40);
+    expect(view.pitch).toBeLessThan(55 * Math.PI / 180);
+    expect(view.yaw).toBeCloseTo(225 * Math.PI / 180, 6);
+    expect(view.targetX).toBeCloseTo(startRegionConfig.townHall.x + 2.5, 5);
+    expect(view.targetZ).toBeCloseTo(startRegionConfig.townHall.y + 2.5, 5);
   });
 
   it('overview zooms further out than city', () => {

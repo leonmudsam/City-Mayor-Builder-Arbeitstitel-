@@ -23,12 +23,32 @@ import { centerOf, chebyshev } from '../buildings/effects.ts';
 import { locationBonusPct } from '../buildings/location.ts';
 import { regionProductionFactorAt } from '../map/world.ts';
 import { newId } from '../engine/rng.ts';
-import { nodeIdOf, parseNodeId, resolveNode, TREE_REGEN_MS, type ResourceNode } from './nodes.ts';
+import { nodeIdOf, nodeProfile, parseNodeId, resolveNode, type ResourceNode } from './nodes.ts';
 
 /** Effizienz-Untergrenze am Rand der maximalen Reichweite (§6). */
 const MIN_RANGE_EFFICIENCY = 0.55;
 /** Obergrenze pro Auftrag automatisch gewählter Knoten (Klickspam-Schutz, §16). */
 export const MAX_OPERATION_NODES = 60;
+
+/**
+ * Arbeitsgebiet der aktuellen Ausbaustufe (§A7). Stufenwerte schlagen die
+ * Profilwerte; fehlen sie, bleibt alles wie im Referenzschnitt.
+ */
+export function operationRadii(
+  profile: BuildingOperationProfile,
+  upgradeLevel: number,
+): { efficientRadius: number; maxRadius: number } {
+  const stage = operationStage(profile, upgradeLevel);
+  return {
+    efficientRadius: stage.efficientRadius ?? profile.efficientRadius,
+    maxRadius: stage.maxRadius ?? profile.maxRadius,
+  };
+}
+
+/** Wächst der bearbeitete Knotentyp nach? Stein: nein — der Bruch läuft leer (§A6). */
+export function isRenewableOperation(profile: BuildingOperationProfile): boolean {
+  return nodeProfile(profile.nodeType)?.regenerationMs !== undefined;
+}
 
 // ---- State-Zugriff ---------------------------------------------------------
 
@@ -103,7 +123,7 @@ export function nodesInWorkArea(state: GameState, def: BuildingDef, b: BuildingI
   const nodes: ResourceNode[] = [];
   for (let y = bounds.minY; y <= bounds.maxY; y++) {
     for (let x = bounds.minX; x <= bounds.maxX; x++) {
-      const node = resolveNode(state, profile.nodeTerrain, nodeIdOf(x, y), now);
+      const node = resolveNode(state, profile.nodeType, nodeIdOf(x, y), now);
       if (node) nodes.push(node);
     }
   }
@@ -130,17 +150,36 @@ export function selectAreaNodeIds(state: GameState, def: BuildingDef, b: Buildin
 
 // ---- Standort-/Wegeffizienz (§6) ------------------------------------------
 
-/** Terrain-/Regionsgüte des Standorts als Tempo-Multiplikator (>1 bei gutem Wald). */
-function siteQuality(state: GameState, config: GameConfig, def: BuildingDef, b: BuildingInstance, resource: ResourceId): number {
-  const bonus = locationBonusPct(state, def, b.x, b.y) + (regionProductionFactorAt(config, b.x, b.y, resource) - 1) * 100;
+/**
+ * Terrain-/Regionsgüte des Standorts als Tempo-Multiplikator (>1 bei gutem Wald,
+ * am Fels, auf fruchtbarem Boden).
+ *
+ * `logisticsBoostPct` ist der Zuschlag eines Logistikzentrums in Reichweite. Er
+ * kommt aus `derived.logisticsBoost` — **derselbe** Wert, den passive Produzenten
+ * bekommen, nur wirkt er hier auf Arbeitstempo und Weg statt auf eine „+X/min"-
+ * Zahl. Ohne diesen Durchgriff hätte ein Logistikzentrum neben einem aktiven
+ * Betrieb gar keine Wirkung (§A6/A7).
+ */
+function siteQuality(
+  state: GameState,
+  config: GameConfig,
+  def: BuildingDef,
+  b: BuildingInstance,
+  resource: ResourceId,
+  logisticsBoostPct = 0,
+): number {
+  const bonus =
+    locationBonusPct(state, def, b.x, b.y) +
+    (regionProductionFactorAt(config, b.x, b.y, resource) - 1) * 100 +
+    logisticsBoostPct;
   return 1 + bonus / 200; // gedeckelt weich: +50 % Bonus ⇒ ×1.25 Tempo
 }
 
 /** Wegeffizienz eines Knotens: volle Leistung im effizienten Gebiet, sonst weniger. */
-function rangeEfficiency(profile: BuildingOperationProfile, dist: number): number {
-  if (dist <= profile.efficientRadius) return 1;
-  const span = Math.max(1, profile.maxRadius - profile.efficientRadius);
-  const t = Math.min(1, (dist - profile.efficientRadius) / span);
+function rangeEfficiency(radii: { efficientRadius: number; maxRadius: number }, dist: number): number {
+  if (dist <= radii.efficientRadius) return 1;
+  const span = Math.max(1, radii.maxRadius - radii.efficientRadius);
+  const t = Math.min(1, (dist - radii.efficientRadius) / span);
   return 1 - (1 - MIN_RANGE_EFFICIENCY) * t;
 }
 
@@ -183,7 +222,7 @@ function claimNode(
   now: number,
 ): ResourceNode | undefined {
   for (const id of op.targetNodeIds) {
-    const node = resolveNode(state, profile.nodeTerrain, id, now);
+    const node = resolveNode(state, profile.nodeType, id, now);
     if (!node || node.remainingAmount <= 0) continue;
     if (node.state === 'regrowing' || node.state === 'depleted') continue;
     const delta = ops.nodeDeltas[id];
@@ -208,7 +247,14 @@ function lerp(a: number, b: number, t: number): number {
  * offline). `dtMin` ist bereits mit dem Zeitfaktor skaliert, deshalb steuern
  * Pause/1×/2×/4× die Arbeit automatisch korrekt (§26.22/23).
  */
-export function advanceOperations(state: GameState, config: GameConfig, dtMin: number, now: number): void {
+export function advanceOperations(
+  state: GameState,
+  config: GameConfig,
+  dtMin: number,
+  now: number,
+  /** Logistik-Zuschlag je Gebäude (`derived.logisticsBoost`) — optional, damit Tests ohne Derived laufen. */
+  logisticsBoost: Record<string, number> = {},
+): void {
   const ops = state.operations;
   if (!ops) return;
   for (const op of Object.values(ops.active)) {
@@ -221,7 +267,7 @@ export function advanceOperations(state: GameState, config: GameConfig, dtMin: n
       const resumed = resumeWaitingOperation(state, def, b, op, operationStage(def.operation, b.upgradeLevel), now);
       if (!resumed) continue;
     }
-    advanceBuildingOperation(state, config, ops, op, b, def, def.operation, dtMin, now);
+    advanceBuildingOperation(state, config, ops, op, b, def, def.operation, dtMin, now, logisticsBoost[b.id] ?? 0);
   }
   regenerateNodes(ops, now);
 }
@@ -236,17 +282,19 @@ function advanceBuildingOperation(
   profile: BuildingOperationProfile,
   dtMin: number,
   now: number,
+  logisticsBoostPct: number,
 ): void {
   const stage = operationStage(profile, b.upgradeLevel);
+  const radii = operationRadii(profile, b.upgradeLevel);
   const { cx, cy } = centerOf(def, b);
   const inv = ensureInventory(state, b.id, stage.storageCapacity);
-  const quality = siteQuality(state, config, def, b, profile.resource);
+  const quality = siteQuality(state, config, def, b, profile.resource, logisticsBoostPct);
   const workers = ensureWorkers(state, b, stage.workerSlots, cx, cy);
 
   for (const w of workers) {
     const target = w.targetNodeId ? parseNodeId(w.targetNodeId) : undefined;
     const dist = target ? Math.max(1, chebyshev(cx, cy, target.x, target.y)) : 1;
-    const eff = target ? rangeEfficiency(profile, dist) : 1;
+    const eff = target ? rangeEfficiency(radii, dist) : 1;
     const moveStep = (stage.movementSpeed * quality * eff * dtMin) / dist;
 
     switch (w.status) {
@@ -278,7 +326,7 @@ function advanceBuildingOperation(
         break;
       }
       case 'working': {
-        const node = w.targetNodeId ? resolveNode(state, profile.nodeTerrain, w.targetNodeId, now) : undefined;
+        const node = w.targetNodeId ? resolveNode(state, profile.nodeType, w.targetNodeId, now) : undefined;
         if (!node || node.remainingAmount <= 0) {
           // Knoten weg/erschöpft: mit dem, was getragen wird, zurückkehren.
           w.status = w.carriedAmount > 0 ? 'returning' : 'idle';
@@ -295,10 +343,13 @@ function advanceBuildingOperation(
         ops.nodeDeltas[node.id] = delta;
         w.progress = Math.min(1, w.carriedAmount / stage.carryCapacity);
         if (delta.remaining <= 0) {
-          // Baum gefällt → erschöpft, Nachwachsen terminieren, Reservierung lösen.
+          // Knoten abgearbeitet → erschöpft, Reservierung lösen. Nachwachsen wird
+          // NUR terminiert, wenn der Typ nachwächst: ein Baum kommt wieder, ein
+          // Felsvorkommen nicht (§A6) — dann bleibt das Delta als „leer" stehen.
           delta.remaining = 0;
           delta.depletedAt = now;
-          delta.regenerationAt = now + TREE_REGEN_MS;
+          const regenMs = nodeProfile(profile.nodeType)?.regenerationMs;
+          if (regenMs !== undefined) delta.regenerationAt = now + regenMs;
           delete delta.reservedBy;
         }
         if (w.carriedAmount >= stage.carryCapacity || (delta.remaining ?? 0) <= 0) {
@@ -341,7 +392,7 @@ function advanceBuildingOperation(
   // Auftrag automatisch abschließen, wenn keine bearbeitbaren Knoten mehr da sind
   // und kein Arbeiter mehr etwas trägt oder unterwegs ist.
   const anyWorkable = op.targetNodeIds.some((id) => {
-    const node = resolveNode(state, profile.nodeTerrain, id, now);
+    const node = resolveNode(state, profile.nodeType, id, now);
     return node && node.remainingAmount > 0 && node.state !== 'regrowing' && node.state !== 'depleted';
   });
   const anyBusy = workers.some((w) => w.status !== 'idle' && w.status !== 'waiting');
@@ -371,7 +422,18 @@ function advanceBuildingOperation(
  * § R2: Ein wartender Dauerbetrieb sucht sein Arbeitsgebiet erneut ab und nimmt die
  * Arbeit selbst wieder auf, sobald Knoten nachgewachsen sind. Das ersetzt das
  * manuelle Neu-Auswählen nach jeder Abernte.
+ *
+ * § A7: Eine Ausbaustufe wächst **auf das gewählte Gebiet drauf** — eine Großfarm
+ * bewirtschaftet mehr Land, ohne dass der Spieler neu zeichnen muss (D-039:
+ * Ausführung automatisieren, Wahl nicht). Entscheidend ist der **Zuwachs**
+ * gegenüber dem Grundprofil, nicht der Stufenwert selbst: wer bewusst einen
+ * kleinen Radius gewählt hat, behält ihn auf Stufe 0 exakt.
  */
+export function effectiveWorkRadius(profile: BuildingOperationProfile, upgradeLevel: number, chosenRadius: number): number {
+  const growth = operationRadii(profile, upgradeLevel).efficientRadius - profile.efficientRadius;
+  return Math.max(1, chosenRadius + Math.max(0, growth));
+}
+
 function resumeWaitingOperation(
   state: GameState,
   def: BuildingDef,
@@ -380,8 +442,9 @@ function resumeWaitingOperation(
   stage: BuildingOperationStage,
   now: number,
 ): boolean {
-  if (!op.workArea) return false;
-  const nodeIds = selectAreaNodeIds(state, def, b, op.workArea.radius, stage.workerSlots * 4, now);
+  if (!op.workArea || !def.operation) return false;
+  const radius = effectiveWorkRadius(def.operation, b.upgradeLevel, op.workArea.radius);
+  const nodeIds = selectAreaNodeIds(state, def, b, radius, stage.workerSlots * 4, now);
   if (nodeIds.length === 0) return false;
   op.targetNodeIds = nodeIds;
   op.status = 'active';
@@ -439,13 +502,34 @@ export function startOperation(
  * Bedingungen** (Entfernung, Standortgüte, Ausbaustufe) — und wird genau so benannt.
  * Ablade-/Wartezeiten sind nicht enthalten; der reale Wert liegt leicht darunter.
  */
+/**
+ * Alle Leerlaufgründe als **Liste**, nicht nur als Typ. Die UI braucht für jeden
+ * einen Text; steht der Grund nur im Union-Typ, fällt ein fehlender Text erst im
+ * Spiel auf (genau so entstand die rohe Schlüsselanzeige bei `deposit_exhausted`).
+ * Ein Test iteriert diese Liste — Messung und Gegenstand teilen sich die Quelle
+ * (D-042).
+ */
+export const OPERATION_IDLE_REASONS = [
+  'paused',
+  'waiting_for_regrowth',
+  'deposit_exhausted',
+  'storage_full',
+  'no_targets',
+] as const;
+
+export type OperationIdleReason = (typeof OPERATION_IDLE_REASONS)[number];
+
 export interface OperationThroughput {
   buildingId: string;
   resource: ResourceId;
   /** Einheiten pro Minute unter den aktuellen Bedingungen (0, wenn nichts läuft). */
   perMinute: number;
-  /** Warum gerade nichts fließt. */
-  idleReason?: 'paused' | 'waiting_for_regrowth' | 'storage_full' | 'no_targets';
+  /**
+   * Warum gerade nichts fließt. `deposit_exhausted` gilt nur für Knotentypen, die
+   * **nicht** nachwachsen (Stein): dort ist Warten sinnlos, der Betrieb muss
+   * umziehen. Für Holz/Nahrung bleibt es `waiting_for_regrowth` (§A6).
+   */
+  idleReason?: OperationIdleReason;
   activeWorkers: number;
   /** Mittlere Entfernung der aktuellen Ziele (Kacheln) — der Haupt-Tempohebel. */
   avgDistance: number;
@@ -456,6 +540,7 @@ export function getOperationThroughput(
   config: GameConfig,
   buildingId: string,
   now: number,
+  logisticsBoost: Record<string, number> = {},
 ): OperationThroughput | undefined {
   const b = state.buildings[buildingId];
   const def = b ? config.buildings.get(b.defId) : undefined;
@@ -471,9 +556,12 @@ export function getOperationThroughput(
     activeWorkers: 0,
     avgDistance: 0,
   };
+  const renewable = isRenewableOperation(profile);
   if (!op) return { ...base, idleReason: 'no_targets' };
   if (op.status === 'paused') return { ...base, idleReason: 'paused' };
-  if (op.status === 'waiting') return { ...base, idleReason: 'waiting_for_regrowth' };
+  if (op.status === 'waiting') {
+    return { ...base, idleReason: renewable ? 'waiting_for_regrowth' : 'deposit_exhausted' };
+  }
   if (inv && inventoryFree(inv) <= 0) return { ...base, idleReason: 'storage_full' };
 
   const { cx, cy } = centerOf(def, b);
@@ -481,7 +569,7 @@ export function getOperationThroughput(
   // nachwachsende Knoten tragen nichts zum Durchsatz bei.
   const targets = op.targetNodeIds
     .filter((id) => {
-      const node = resolveNode(state, profile.nodeTerrain, id, now);
+      const node = resolveNode(state, profile.nodeType, id, now);
       return !!node && node.remainingAmount > 0 && node.state !== 'regrowing' && node.state !== 'depleted';
     })
     .map((id) => parseNodeId(id))
@@ -490,14 +578,17 @@ export function getOperationThroughput(
 
   const avgDistance =
     targets.reduce((sum, t) => sum + Math.max(1, chebyshev(cx, cy, t.x, t.y)), 0) / targets.length;
-  const quality = siteQuality(state, config, def, b, profile.resource);
-  const eff = rangeEfficiency(profile, avgDistance);
+  const quality = siteQuality(state, config, def, b, profile.resource, logisticsBoost[buildingId] ?? 0);
+  const eff = rangeEfficiency(operationRadii(profile, b.upgradeLevel), avgDistance);
+  // Ein Arbeiter kehrt auch dann heim, wenn der Knoten leer ist — mehr als eine
+  // Knotenmenge passt nie auf einen Weg (§A6: Traglast > Knotenmenge wäre gelogen).
+  const carry = Math.min(stage.carryCapacity, nodeProfile(profile.nodeType)?.maxAmount ?? stage.carryCapacity);
   // Dieselben Formeln wie im Tick: Laufzeit = dist / (Tempo × Güte × Reichweite),
-  // Fällzeit = Traglast / (Arbeitstempo × Güte).
+  // Abbauzeit = Traglast / (Arbeitstempo × Güte).
   const walkMin = avgDistance / Math.max(1e-6, stage.movementSpeed * quality * eff);
-  const cutMin = stage.carryCapacity / Math.max(1e-6, stage.workSpeed * quality);
+  const cutMin = carry / Math.max(1e-6, stage.workSpeed * quality);
   const cycleMin = walkMin * 2 + cutMin;
-  const perWorker = cycleMin > 0 ? stage.carryCapacity / cycleMin : 0;
+  const perWorker = cycleMin > 0 ? carry / cycleMin : 0;
   const workers = Math.min(stage.workerSlots, targets.length);
   return {
     ...base,
@@ -520,6 +611,13 @@ export interface ContinuousOperationStatus {
   availableInArea: number;
   /** Frühester Zeitpunkt, zu dem im Gebiet wieder etwas nachgewachsen ist (ms). */
   nextRegrowthAt?: number;
+  /**
+   * Wächst der bearbeitete Knotentyp nach? Bei `false` (Stein) ist ein leeres Gebiet
+   * endgültig — die UI darf dann **kein** „wartet auf Nachwuchs" zeigen (§A6).
+   */
+  renewable: boolean;
+  /** Gesamtmenge, die im Arbeitsgebiet noch im Boden steckt (echte Restmengen). */
+  remainingInArea: number;
 }
 
 export function getContinuousOperationStatus(
@@ -532,11 +630,14 @@ export function getContinuousOperationStatus(
   const b = state.buildings[buildingId];
   const def = b ? config.buildings.get(b.defId) : undefined;
   if (!op || !b || !def?.operation) return undefined;
-  const radius = op.workArea?.radius;
+  const radius =
+    op.workArea === undefined ? undefined : effectiveWorkRadius(def.operation, b.upgradeLevel, op.workArea.radius);
   const available = radius === undefined ? [] : availableWorkNodes(state, def, b, radius, now);
   let nextRegrowthAt: number | undefined;
+  let remainingInArea = 0;
   if (radius !== undefined) {
     for (const node of nodesInWorkArea(state, def, b, radius, now)) {
+      remainingInArea += node.remainingAmount;
       const at = state.operations?.nodeDeltas[node.id]?.regenerationAt;
       if (at !== undefined && (nextRegrowthAt === undefined || at < nextRegrowthAt)) nextRegrowthAt = at;
     }
@@ -549,6 +650,8 @@ export function getContinuousOperationStatus(
     targetCount: op.targetNodeIds.length,
     availableInArea: available.length,
     ...(nextRegrowthAt !== undefined ? { nextRegrowthAt } : {}),
+    renewable: isRenewableOperation(def.operation),
+    remainingInArea: Math.round(remainingInArea),
   };
 }
 
@@ -603,15 +706,16 @@ export function previewOperation(state: GameState, config: GameConfig, b: Buildi
   if (!def?.operation) return undefined;
   const profile = def.operation;
   const stage = operationStage(profile, b.upgradeLevel);
+  const radii = operationRadii(profile, b.upgradeLevel);
   const { cx, cy } = centerOf(def, b);
   const validTargetIds: string[] = [];
   const invalidTargetIds: string[] = [];
   let yieldSum = 0;
   let distSum = 0;
   for (const id of nodeIds) {
-    const node = resolveNode(state, profile.nodeTerrain, id, now);
+    const node = resolveNode(state, profile.nodeType, id, now);
     const dist = parseNodeId(id);
-    if (!node || node.remainingAmount <= 0 || node.state === 'regrowing' || node.state === 'depleted' || (dist && chebyshev(cx, cy, dist.x, dist.y) > profile.maxRadius)) {
+    if (!node || node.remainingAmount <= 0 || node.state === 'regrowing' || node.state === 'depleted' || (dist && chebyshev(cx, cy, dist.x, dist.y) > radii.maxRadius)) {
       invalidTargetIds.push(id);
       continue;
     }
@@ -624,9 +728,10 @@ export function previewOperation(state: GameState, config: GameConfig, b: Buildi
   const avgDist = validTargetIds.length > 0 ? distSum / validTargetIds.length : 0;
   const collectible = Math.min(yieldSum, storageFree);
   const quality = siteQuality(state, config, def, b, profile.resource);
-  // Grobe Dauer: Ladezyklen ÷ Arbeiter, Zyklus = Fällen + Hin-/Rückweg.
-  const loads = stage.carryCapacity > 0 ? Math.ceil(collectible / stage.carryCapacity) : 0;
-  const cycleMin = stage.carryCapacity / (stage.workSpeed * quality) + (2 * avgDist) / (stage.movementSpeed * quality);
+  const carry = Math.min(stage.carryCapacity, nodeProfile(profile.nodeType)?.maxAmount ?? stage.carryCapacity);
+  // Grobe Dauer: Ladezyklen ÷ Arbeiter, Zyklus = Abbauen + Hin-/Rückweg.
+  const loads = carry > 0 ? Math.ceil(collectible / carry) : 0;
+  const cycleMin = carry / (stage.workSpeed * quality) + (2 * avgDist) / (stage.movementSpeed * quality);
   const durationMin = stage.workerSlots > 0 ? (loads * cycleMin) / stage.workerSlots : 0;
   const warnings: string[] = [];
   if (yieldSum > storageFree && storageFree >= 0) warnings.push('ui.operation.warn_storage');

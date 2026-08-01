@@ -1,4 +1,4 @@
-import { Menu, Settings } from 'lucide-react';
+import { Settings } from 'lucide-react';
 import { useGame, useUiStore } from '../../state/store.ts';
 import { xpForNextLevel } from '../../game/progression/levels.ts';
 import { formatMoney, t } from '../../i18n/index.ts';
@@ -6,6 +6,7 @@ import { ResourceArt } from '../art/index.ts';
 import { brandImage } from '../../assets/registry.ts';
 import { ResourceCard } from './ResourceCard.tsx';
 import { ResourceDetailPopover } from './ResourceDetailPopover.tsx';
+import { HudMetricDetailPopover } from './HudMetricDetailPopover.tsx';
 import { DayNightControl, FpsIndicator } from './CameraControls.tsx';
 
 const int = (n: number) => Math.floor(n).toLocaleString('de-DE');
@@ -33,8 +34,6 @@ export function GameHud() {
   const prod = derived.productionPerMin;
   const growth = game.getGrowthStatus();
   const happiness = Math.round(state.citizens.happiness);
-  const hasFreshwater = caps.freshwater > 0;
-  const waterFulfil = Math.round(state.citizens.needs.water.fulfillment * 100);
   const crest = brandImage('mayor_crest');
 
   return (
@@ -45,8 +44,8 @@ export function GameHud() {
           {crest && <span className="hud-level-number">{level}</span>}
         </div>
         <div className="hud-level-text">
-          <span className="hud-brand-name">City Mayor Builder</span>
-          <span className="hud-level-label">{t('ui.level')} {level}</span>
+          <span className="hud-brand-name">{state.meta.cityName}</span>
+          <span className="hud-level-label">{t('ui.hud.city_rank')} · {t('ui.level')} {level}</span>
           <div className="hud-xpbar">
             <div className="hud-xpbar-fill" style={{ width: `${xpProgress * 100}%` }} />
           </div>
@@ -70,7 +69,7 @@ export function GameHud() {
           warn={income < 0}
           accent="var(--res-money)"
           title={t('resource.money')}
-          detail={<ResourceDetailPopover id="money" />}
+          detail={(close) => <ResourceDetailPopover id="money" onNavigate={close} />}
         />
         <ResourceCard
           icon={<ResourceArt id="wood" size={30} />}
@@ -79,7 +78,7 @@ export function GameHud() {
           warn={caps.wood > 0 && res.wood >= caps.wood}
           accent="var(--res-wood)"
           title={t('resource.wood')}
-          detail={<ResourceDetailPopover id="wood" />}
+          detail={(close) => <ResourceDetailPopover id="wood" onNavigate={close} />}
         />
         <ResourceCard
           icon={<ResourceArt id="stone" size={30} />}
@@ -88,7 +87,7 @@ export function GameHud() {
           warn={caps.stone > 0 && res.stone >= caps.stone}
           accent="var(--res-stone)"
           title={t('resource.stone')}
-          detail={<ResourceDetailPopover id="stone" />}
+          detail={(close) => <ResourceDetailPopover id="stone" onNavigate={close} />}
         />
         <ResourceCard
           icon={<ResourceArt id="food" size={30} />}
@@ -97,30 +96,8 @@ export function GameHud() {
           warn={caps.food > 0 && res.food >= caps.food}
           accent="var(--res-food)"
           title={t('resource.food')}
-          detail={<ResourceDetailPopover id="food" />}
+          detail={(close) => <ResourceDetailPopover id="food" onNavigate={close} />}
         />
-        {hasFreshwater ? (
-          <ResourceCard
-            icon={<ResourceArt id="freshwater" size={30} />}
-            value={int(res.freshwater)}
-            sub={perMin(prod.freshwater)}
-            warn={res.freshwater >= caps.freshwater}
-            accent="var(--res-water)"
-            title={t('resource.freshwater')}
-          />
-        ) : (
-          level >= 3 && (
-            <ResourceCard
-              icon={<ResourceArt id="freshwater" size={30} />}
-              value={`${waterFulfil}%`}
-              sub={t('ui.water.coverage')}
-              subTone="muted"
-              warn={waterFulfil < 100}
-              accent="var(--res-water)"
-              title={t('need.water')}
-            />
-          )
-        )}
         <ResourceCard
           icon={<ResourceArt id="population" size={30} />}
           value={int(state.citizens.population)}
@@ -128,6 +105,7 @@ export function GameHud() {
           subTone="good"
           accent="var(--res-population)"
           title={t('ui.population')}
+          detail={(close) => <HudMetricDetailPopover metric="population" onNavigate={close} />}
         />
         <ResourceCard
           icon={<ResourceArt id="happiness" size={30} />}
@@ -137,6 +115,7 @@ export function GameHud() {
           warn={happiness < 40}
           accent="var(--res-happy)"
           title={t('ui.happiness')}
+          detail={(close) => <HudMetricDetailPopover metric="happiness" onNavigate={close} />}
         />
       </div>
 
@@ -148,13 +127,6 @@ export function GameHud() {
         title={t('ui.settings')}
       >
         <Settings size={19} />
-      </button>
-      <button
-        className={`hud-menu-btn${openPanel === 'menu' ? ' active' : ''}`}
-        onClick={() => setPanel('menu')}
-        title={t('ui.menu')}
-      >
-        <Menu size={20} />
       </button>
     </header>
   );

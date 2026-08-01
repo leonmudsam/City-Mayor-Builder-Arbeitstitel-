@@ -64,6 +64,7 @@ export function ManualRouteMap({
   cargoStops,
   fitNonce,
   focusRequest,
+  editEnabled = true,
   onPathChange,
   onInvalid,
 }: {
@@ -78,6 +79,8 @@ export function ManualRouteMap({
   cargoStops?: CargoRouteStop[];
   fitNonce: number;
   focusRequest?: { x: number; y: number; nonce: number };
+  /** Standardmäßig bleibt die Smart-Route gesperrt; Zoomen und Verschieben funktionieren weiter. */
+  editEnabled?: boolean;
   onPathChange(path: { x: number; y: number }[]): void;
   onInvalid(): void;
 }) {
@@ -263,6 +266,7 @@ export function ManualRouteMap({
   };
 
   const appendRoad = (clientX: number, clientY: number, noisy: boolean) => {
+    if (!editEnabled) return;
     const world = worldAt(clientX, clientY);
     if (!world || !anchors) return;
     const tile = { x: Math.floor(world.x), y: Math.floor(world.y) };
@@ -304,7 +308,7 @@ export function ManualRouteMap({
   };
 
   return (
-    <div className={`citywork-v4-map${spaceHeld ? ' is-panning' : ''}`}>
+    <div className={`citywork-v4-map${spaceHeld ? ' is-panning' : ''}${editEnabled ? ' is-editable' : ' is-smart-locked'}`}>
       <canvas
         ref={canvasRef}
         width={CANVAS_W}
@@ -312,13 +316,13 @@ export function ManualRouteMap({
         aria-label="Interaktive, stilisierte 2D-Routenkarte"
         onContextMenu={(event) => {
           event.preventDefault();
-          if (!rightDraggedRef.current && roadPath.length > 1) onPathChange(roadPath.slice(0, -1));
+          if (editEnabled && !rightDraggedRef.current && roadPath.length > 1) onPathChange(roadPath.slice(0, -1));
           rightDraggedRef.current = false;
         }}
         onPointerDown={(event) => {
           const world = worldAt(event.clientX, event.clientY);
           const overRoad = world ? roadTiles.has(`${Math.floor(world.x)},${Math.floor(world.y)}`) : false;
-          const pan = event.button === 1 || event.button === 2 || spaceHeld || !overRoad;
+          const pan = !editEnabled || event.button === 1 || event.button === 2 || spaceHeld || !overRoad;
           interactionRef.current = {
             kind: pan ? 'pan' : 'draw',
             clientX: event.clientX,
@@ -370,8 +374,10 @@ export function ManualRouteMap({
       />
 
       <div className="citywork-v4-map-hint">
-        <span>Auf Straße ziehen: Route</span>
-        <span>Freie Fläche / rechte Taste: Verschieben</span>
+        {editEnabled
+          ? <span>Auf Straße ziehen: Route korrigieren</span>
+          : <span>Smart-Route aktiv · Ziehen: Karte verschieben</span>}
+        <span>Mausrad: Zoom</span>
       </div>
       <div className="citywork-v4-map-zoom">
         <button onClick={() => setView((current) => ({ ...current, zoom: clamp(current.zoom * 1.2, MIN_ZOOM, MAX_ZOOM) }))} title="Hineinzoomen"><Plus size={18} /></button>
@@ -381,7 +387,9 @@ export function ManualRouteMap({
       <div className="citywork-v4-map-layers">
         <button className={showTraffic ? 'active' : ''} onClick={() => setShowTraffic((value) => !value)} title="Verkehrslast"><TrafficCone size={17} /></button>
         <button className={showBuildings ? 'active' : ''} onClick={() => setShowBuildings((value) => !value)} title="Gebäude"><Building2 size={17} /></button>
-        <button onClick={() => onPathChange(anchors ? [{ ...anchors.source }] : [])} title="Route zurücksetzen"><RotateCcw size={17} /></button>
+        {editEnabled && (
+          <button onClick={() => onPathChange(anchors ? [{ ...anchors.source }] : [])} title="Route zurücksetzen"><RotateCcw size={17} /></button>
+        )}
         <span><Layers3 size={14} /> Ebenen</span>
       </div>
     </div>

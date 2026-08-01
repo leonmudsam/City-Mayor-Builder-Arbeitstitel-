@@ -45,6 +45,14 @@ export interface Derived {
   roadSegments: RoadSegmentIndex;
   /** Location bonus percent per producing building (terrain-dependent). */
   productionBonus: Record<string, number>;
+  /**
+   * Logistik-Zuschlag (%) je Gebäude in Reichweite eines Logistikzentrums —
+   * getrennt von `productionBonus`, weil ihn seit A6/A7 auch **aktive Betriebe**
+   * brauchen: dort wirkt er auf Arbeitstempo und Weg, nicht auf eine „+X/min"-Zahl.
+   * Ohne diesen Eintrag hätte ein Depot neben Sägewerk/Steinbruch/Farm gar keine
+   * Wirkung, obwohl es genau dafür gebaut wird.
+   */
+  logisticsBoost: Record<string, number>;
   /** Environment score per residential building (ambience auras; zoning). */
   ambience: Record<string, number>;
   /** Housing-weighted average ambience across the city (drives happiness). */
@@ -90,6 +98,9 @@ export function recomputeDerived(state: GameState, config: GameConfig): Derived 
   // regardless of iteration order (the depot may sit anywhere in the map).
   const logisticsSources: { cx: number; cy: number; radius: number; boostPct: number }[] = [];
   const producers: { id: string; resource: ResourceId; perMinute: number; cx: number; cy: number; terrainBonus: number }[] = [];
+  /** Aktive Betriebe (§A6/A7) — sie bekommen den Logistik-Zuschlag, aber keine Passivrate. */
+  const operationSites: { id: string; cx: number; cy: number }[] = [];
+  const logisticsBoost: Record<string, number> = {};
 
   const addCoverageSource = (need: NeedId, source: RadiusSource): void => {
     (coverageSources[need] ??= []).push(source);
@@ -105,6 +116,9 @@ export function recomputeDerived(state: GameState, config: GameConfig): Derived 
     if (!def) continue;
     if (!isInfrastructureOperational(buildingInfrastructureStatus(state, config, roadNetwork, b))) continue;
     const { cx, cy } = centerOf(def, b);
+    // Aktive Betriebe tauchen bewusst NICHT in `producers` auf (keine Passivrate),
+    // brauchen den Logistik-Zuschlag aber trotzdem — deshalb eine eigene Liste.
+    if (def.operation) operationSites.push({ id: b.id, cx, cy });
     let housingHere = 0;
     let sensitivityHere = 1;
     for (const eff of effectiveEffects(def, b.upgradeLevel)) {
@@ -183,14 +197,26 @@ export function recomputeDerived(state: GameState, config: GameConfig): Derived 
     if (housingHere > 0) residential.push({ id: b.id, cx, cy, housing: housingHere, sensitivity: sensitivityHere });
   }
 
+  /** Summierter Zuschlag aller Logistikzentren, die diesen Punkt erreichen. */
+  const logisticsBoostAt = (cx: number, cy: number): number => {
+    let boost = 0;
+    for (const s of logisticsSources) {
+      if (chebyshev(cx, cy, s.cx, s.cy) <= s.radius) boost += s.boostPct;
+    }
+    return boost;
+  };
+  // § A6/A7: Ein Logistikzentrum hilft auch einem aktiven Betrieb — dort über
+  // Arbeits-/Laufgeschwindigkeit (`siteQuality`), nicht über eine Passivrate.
+  for (const site of operationSites) {
+    const boost = logisticsBoostAt(site.cx, site.cy);
+    if (boost !== 0) logisticsBoost[site.id] = boost;
+  }
+
   // Second pass: production output = base × (terrain bonus + logistics boost).
   // A depot in range lifts every producer it reaches; the tick reads the same
   // productionBonus per building, so no tick change is needed.
   for (const p of producers) {
-    let bonus = p.terrainBonus;
-    for (const s of logisticsSources) {
-      if (chebyshev(p.cx, p.cy, s.cx, s.cy) <= s.radius) bonus += s.boostPct;
-    }
+    const bonus = p.terrainBonus + logisticsBoostAt(p.cx, p.cy);
     // Auch NEGATIVE Boni speichern (§ Welt 2.0: Regions-Malus, z. B. Gebirge
     // −40 % Nahrung) — sonst produziert der Tick voll, während das Derived-Total
     // reduziert ist. Bonus wird bei −100 % gekappt (nie negative Produktion).
@@ -255,6 +281,7 @@ export function recomputeDerived(state: GameState, config: GameConfig): Derived 
     roadNetwork,
     roadSegments,
     productionBonus,
+    logisticsBoost,
     ambience,
     avgAmbience,
     productionPerMin,

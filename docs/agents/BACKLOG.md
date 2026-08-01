@@ -96,9 +96,11 @@ Transport (A5), zentraler Start (S1/S2), Fog/Kamera (S3).
 ## 3. Aktive Betriebe (Active Operations 2.0) — überlappt 9.0 S6–S8
 - ✅ A1–A4 Sägewerk aktiv (Arbeiter, Baumknoten, lokales Lager, Regeneration).
 - ✅ A5 Transport ins Zentrallager (+ Mehrfachladung, Rückruf, Betriebskosten).
-- ❌ `[P0]` **A6 Steinbruch** (= S7): `operations/nodes.ts` `tree→rock` generalisieren
-  + Passiv-Produktionstests migrieren.
-- ❌ `[P0]` **A7 Farm** (= S7, Feld-Lebenszyklus) · **A8 Feuerwehr-Dispatch** (= S8).
+- ✅ `[P0]` **A6 Steinbruch + A7 Farm** (= S7, v1.25, D-046): Knoten auf
+  `tree`/`rock`/`crop` generalisiert, Stein wächst nie nach, Logistik-Zuschlag auf
+  Tempo statt Passivrate, Wortfeld je Knotentyp (`nodeVocabulary.ts`), sichtbare
+  Endlichkeit. 22 Tests. ⏳ offen: Rechteck/Polygon, Abbauanimationen, Mesh-Raycast.
+- ❌ `[P0]` **A8 Feuerwehr-Dispatch** (= S8).
 - ❌ `[P1]` A9 Regeneration-Ausbau (Aufforstung/Setzlinge, `RegenerationProfile`,
   geologische Neuvorkommen).
 - ❌ `[P1]` A10 Automatisierung (Vorarbeiter, wiederkehrende Arbeitszonen,
