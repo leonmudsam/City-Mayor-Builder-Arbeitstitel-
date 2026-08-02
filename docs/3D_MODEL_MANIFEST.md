@@ -89,10 +89,22 @@ passender Name gewinnt** (Präzis vor Alias). Alles ohne Modell bleibt prozedura
 | Welt-UI Upgrade-Button | `ui/…` | `ui_upgrade_button` → `ui_button_upgrade` → `button_upgrade` | schwebt über ausgew. Gebäude, wenn Upgrade bereit |
 | Welt-UI Aktions-Button | `ui/…` | `ui_build_button` → `ui_button_build` → `button_build` | schwebt über ausgew. Gebäude |
 | Welt-UI Level-Badge | `ui/…` | `ui_level_badge` → `level_badge` → `ui_badge` | reserviert |
+| Straßen-Nahdetails | `roads/…` | `road_flat` · `road_slope` · `road_support` · `road_viaduct` · `road_hairpin_curve` · `road_coast` | automatisch gewählte Variante, instanziertes Near-LOD |
+| Brücken-Nahdetail | `bridges/…` | `road_bridge` | automatisch über Wasser, instanziertes Near-LOD |
 
-**Straßen & Brücken laden seit v0.44 kein `.glb` mehr** — sie sind texturbasiert
-(§ Straßen als Textur), siehe `docs/ROAD_TEXTURES.md`. `src/assets/models/
-roads/`/`.../bridges/` bleiben nur noch als historische Doku-Hülle.
+**Straßen & Brücken nutzen eine hybride Drop-in-Pipeline.** Die prozedurale,
+durchgehende Fahrbahn- und Brückengeometrie bleibt die kanonische Autorität und
+der vollständige Fallback; die Texturen aus `docs/ROAD_TEXTURES.md` bleiben ihre
+Materialbasis. Optional ergänzen die sieben oben benannten GLBs die automatisch
+ermittelte Variante als instanzierte Nahdetails. Die Registry erkennt Dateien
+rekursiv unter `src/assets/models/roads/` und `src/assets/models/bridges/` über
+`roadModel()`. `ROAD_VARIANT_MODELS` in `src/assets/modelManifest.ts` definiert
+die Priorität je Variante (erster vorhandener Name gewinnt): `flat` →
+`road_flat`; `slope` → `road_slope`, `road_flat`; `pass` →
+`road_hairpin_curve`, `road_slope`; `support` → `road_support`; `viaduct` →
+`road_viaduct`, `road_support`; `bridge` → `road_bridge`, `road_viaduct`; `coast`
+→ `road_coast`, `road_support`. Fehlt ein Kit oder ist es defekt, bleibt die
+prozedurale Geometrie vollständig sichtbar.
 
 **Gebäude** siehe §1 (`buildingModel`, Dateiname = ID). Modelle werden gecacht &
 instanziert; ein fehlendes/defektes Modell = Fallback.
@@ -203,13 +215,17 @@ fix (§3 in `docs/3D_WORLD_ASSETS.md`).
 | deco_fountain | `deco_fountain.glb` | XS | 1×1 | 7 |
 | deco_bench | `deco_bench.glb` | XS | 1×1 | 7 |
 
-### Straßen (Sonderfall) — texturbasiert, kein `.glb`
+### Straßen (Sonderfall) — prozedurale Autorität + GLB-Near-LOD
 Die Gebäude-IDs **`road`** und **`road_elevated`** (Höhenstraße/Brücke, 1×1,
-§ Infrastruktur 2.0 / I1) nutzen **kein** `buildings/*.glb` und auch kein
-`roads/`-Segmentmodell mehr: seit v0.44 ist das Straßen-/Brücken-System
-texturbasiert (§ Straßen als Textur), siehe `docs/ROAD_TEXTURES.md`. Die
-Höhenstraße wird prozedural aufgebaut — über Wasser als Brückendeck + Geländer +
-Pfeiler (`buildBridgeDeck`), auf Land als geländeangepasste Straßenkachel.
+§ Infrastruktur 2.0 / I1) nutzen weiterhin kein `buildings/*.glb`. Fahrbahn,
+Höhenprofil, Deck, Geländer und Stützen entstehen aus der kanonischen
+prozeduralen Straßengeometrie und bleiben auch ohne Assets vollständig sichtbar.
+Für automatisch ermittelte Varianten lädt `roadModel()` optional die sechs Kits
+aus `src/assets/models/roads/` sowie `road_bridge.glb` aus
+`src/assets/models/bridges/`; Single-Mesh-Kits werden als Near-LOD instanziert.
+Die Zuordnung und Fallbackreihenfolge kommt ausschließlich aus
+`ROAD_VARIANT_MODELS` in `src/assets/modelManifest.ts`, nicht aus einer manuellen
+Modellauswahl.
 
 ### Landmarken / Hero-Bauten (geplant) — `buildings/landmarks/`
 Noch keine BuildingDefs, aber vollständig spezifiziert (Footprint, Größenklasse,
@@ -232,6 +248,8 @@ was der Renderer heute lädt) in der jeweiligen `README.md`:
 | Ordner | Namensliste (live) | Volle Spezifikation (live + geplant) |
 |---|---|---|
 | Terrain, Gebirge, Flüsse, Küste, Hero-Weltformen | `src/assets/models/terrain/README.md` | `src/assets/models/terrain/PROMPTS.md` |
+| Straßen-Near-LOD | `src/assets/models/roads/README.md` | `src/assets/models/roads/PROMPTS.md` |
+| Brücken-Near-LOD | `src/assets/models/bridges/README.md` | `src/assets/models/bridges/PROMPTS.md` |
 | Props (Natur, Stadt, Hafen, Farm, Infrastruktur) | `src/assets/models/props/README.md` | `src/assets/models/props/PROMPTS.md` |
 | Weidetiere (Landwirtschaft, A7 — nur geplant) | — (prozedural) | `src/assets/models/animals/PROMPTS.md` |
 | Fahrzeuge (inkl. Stadtarbeit-Fahrzeuge A6) | `src/assets/models/vehicles/README.md` | `src/assets/models/vehicles/PROMPTS.md` |
@@ -243,7 +261,10 @@ Beide Dateien je Ordner sind aus `src/assets/modelManifest.ts` generiert und
 werden von `tests/modelReadmes.test.ts` gegen Drift geprüft — hier von Hand
 nichts duplizieren.
 
-**Straßen & Brücken stehen hier bewusst nicht mehr in der Tabelle** — seit v0.44
-(§ Straßen als Textur) laden sie nie ein `.glb`, siehe `docs/ROAD_TEXTURES.md`
-und `src/assets/roadTextureManifest.ts`. `src/assets/models/roads/README.md`/
-`.../bridges/README.md` existieren nur noch als historischer Hinweis.
+**Straßen & Brücken sind wieder aktive Drop-in-Kategorien.** Ihre GLBs ersetzen
+nicht die prozedurale Geometrie, sondern ergänzen sie als instanzierte
+Nahdetails. Die sieben aktiven Namen und ihre Variantenpriorität stehen in
+`ROAD_VARIANT_MODELS`; `roadModel()` durchsucht beide Ordner rekursiv. Die
+generierten READMEs/PROMPTS sind deshalb wieder verbindliche Live-Dokumentation,
+während `src/assets/roadTextureManifest.ts` weiterhin die Materialtexturen der
+kanonischen Oberfläche beschreibt.

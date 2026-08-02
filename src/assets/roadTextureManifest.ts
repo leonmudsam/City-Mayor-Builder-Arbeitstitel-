@@ -198,30 +198,28 @@ export function renderRoadTexturesDoc(): string {
   }).join('\n');
 
   const conceptSection =
-    `## Konzept: Textur statt 3D-Modell\n\n` +
-    `Straßen laden nie mehr ein \`.glb\` (der alte Drop-in-Pfad über \`roadModel\`/\`bridgeModel\` ` +
-    `wurde aus \`ThreeMapRenderer.ts\` entfernt). Stattdessen bleibt die vorhandene, Mask-` +
-    `getriebene Geometrie aus \`buildRoadTile\`/\`buildBridgeDeck\` (Kern + Arme + Randstreifen, ` +
-    `flach nahe \`y≈0\` ins Höhenfeld integriert) bestehen — sie bekommt nur echte Texturen statt ` +
-    `Flächenfarben, sobald eine Datei hier abgelegt wird:\n\n` +
+    `## Konzept: nahtlose Textur plus instanziertes Detailkit\n\n` +
+    `Die durchgehende, profilgesteuerte Fahrbahn bleibt prozedural und texturbasiert. Optional ergänzt ` +
+    `\`roadModel\` die automatisch gewählte Variante mit einem instanzierten Single-Mesh-Near-LOD aus ` +
+    `\`models/roads\` oder \`models/bridges\`; fehlt es, bleibt die Straße vollständig sichtbar. Dadurch ` +
+    `entstehen weder GLB-Kachelnähte noch ein Crash bei fehlenden Assets:\n\n` +
     `- **Form** ergibt sich direkt aus den gesetzten Nachbar-Mask-Bits (ein Box-Arm pro Bit in ` +
     `\`buildRoadTile\`) — kein separates Shape-Lookup mehr nötig.\n` +
     `- **Kreisverkehr** ist keine neue Instanz, sondern dieselbe 4-Wege-Form (\`mask === 15\`) mit ` +
     `einer runden statt eckigen Kern-Geometrie + \`road_roundabout\`.\n` +
-    `- **Bergstraße/Pass** ist eine reine Textur-Umschaltung, sobald die Kachel auf ` +
-    `\`terrainAt==="mountain"\` liegt — kein eigener Straßentyp.\n` +
+    `- **Bergstraße/Pass** folgt dem kanonischen Längsprofil (maximal 8 %) und den automatisch ` +
+    `gerouteten Kehren — kein eigener auswählbarer Straßentyp.\n` +
     `- **Brücke vs. Steg** unterscheidet sich an der gemessenen Wasser-Spannweite (1 Kachel → Steg, ` +
     `mehrere → Brücke) — ebenfalls keine neue Sim-Instanz.\n` +
     `- **Randübergang** zu Gras/Erde nutzt die bereits dokumentierte \`terrain_road_edge.png\` ` +
     `(siehe \`docs/TERRAIN_TEXTURES.md\`, Kategorie „Wege") — hier bewusst nicht dupliziert.\n`;
 
   return (
-    `# Straßen-Texturen — Textur statt 3D-Modell (v0.44)\n\n` +
+    `# Straßen-Texturen — nahtlose Fahrbahn und Detailkits\n\n` +
     `${GEN_BANNER}\n\n` +
-    `Ersetzt die 3D-Straßen-/Brücken-Modelle durch texturierte, flach ins Terrain integrierte ` +
-    `Fahrbahnflächen. **Drop-in:** \`.png\`/\`.webp\`/\`.jpg\` in den unten angegebenen Ordner ` +
-    `unter \`src/assets/textures/roads/…\` legen, Dateiname exakt wie hier — greift automatisch, ` +
-    `kein weiterer Code nötig.\n\n` +
+    `Die Texturen kleiden die nahtlose, profilgesteuerte Fahrbahn ein. **Drop-in:** ` +
+    `\`.png\`/\`.webp\`/\`.jpg\` unter \`src/assets/textures/roads/…\`; optionale ` +
+    `Varianten-GLBs liegen getrennt unter \`src/assets/models/roads\` und \`models/bridges\`.\n\n` +
     `${categorySections}\n` +
     `${conceptSection}`
   );

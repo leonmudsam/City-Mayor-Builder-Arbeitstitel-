@@ -4,7 +4,8 @@ import { ThreeMapRenderer } from '../renderer/three/ThreeMapRenderer.ts';
 import type { HoverInfo, IMapRenderer, RendererCallbacks } from '../renderer/IMapRenderer.ts';
 import { getController, setMapApi, useUiStore, type MapApi } from '../state/store.ts';
 import { ServiceOverlayBanner } from './hud/ServiceOverlayBanner.tsx';
-import { t } from '../i18n/index.ts';
+import { formatGameDuration, t } from '../i18n/index.ts';
+import { costLabel } from './common/costLabel.ts';
 import { buildSmartRoadPlanView, buildWorkAreaPlannerView } from './operations/adapters.ts';
 import { WaterfrontPlacementHud } from './operations/WaterfrontPlacementHud.tsx';
 
@@ -91,10 +92,14 @@ export function MapView() {
         useUiStore.getState().stopMoving();
       },
       onRequestMove: (id) => useUiStore.getState().startMoving(id),
+      // § G2 ④: Der Bestätigungsklick eines Umzugs — genau EIN Command. Der
+      // Entwurf endet nur bei Erfolg; scheitert er, bleibt das Gebäude am Cursor,
+      // damit der Spieler direkt eine andere Kachel wählen kann.
       onMove: (id, x, y) => {
         const result = controller.moveBuilding(id, x, y);
         if (result.ok) {
           useUiStore.getState().stopMoving();
+          ui.pushToast(t('ui.move.done'), 'success');
         } else {
           ui.pushToast(t(`error.${result.error}`), 'error');
         }
@@ -165,7 +170,11 @@ export function MapView() {
       // but a real blocker (funds, locked sector) still surfaces once.
       onDragPlace: (defId, x, y) => {
         if (controller.config.buildings.get(defId)?.category === 'roads') {
-          pushRoadPoint({ x, y });
+          const state = useUiStore.getState();
+          const tile = { x: Math.round(x), y: Math.round(y) };
+          if (state.roadPlanPath.length === 0) state.setRoadPlanPath([tile]);
+          else if (state.roadPlanPath.length === 1) state.setRoadPlanPath([state.roadPlanPath[0]!, tile]);
+          else state.setRoadPlanPath([...state.roadPlanPath.slice(0, -1), tile]);
           return;
         }
         const result = controller.placeBuilding(defId, x, y);
@@ -207,7 +216,7 @@ export function MapView() {
         ? s.placingDefId
         : undefined;
       const roadPlan = placingRoadClass && s.roadPlanPath.length > 0
-        ? buildSmartRoadPlanView(controller, s.roadPlanPath, placingRoadClass)
+        ? buildSmartRoadPlanView(controller, s.roadPlanPath, 'road')
         : undefined;
       renderer.setRoadPlanOverlay(roadPlan?.tiles ?? []);
       syncWorldReveal(s);
@@ -362,9 +371,35 @@ function PlacementBanner({ info, moving }: { info: HoverInfo | undefined; moving
   const placingDefId = useUiStore((s) => s.placingDefId);
   const placingRotation = useUiStore((s) => s.placingRotation);
   const rotatePlacing = useUiStore((s) => s.rotatePlacing);
+  const placingDef = placingDefId ? controller.config.buildings.get(placingDefId) : undefined;
   // Rotation is cosmetic-only and roads auto-orient from their neighbour mask
   // (§ Gebäude-Rotation), so the control only makes sense for regular buildings.
-  const rotatable = !moving && placingDefId !== undefined && controller.config.buildings.get(placingDefId)?.category !== 'roads';
+  const rotatable = !moving && placingDefId !== undefined && placingDef?.category !== 'roads';
+
+  // § G2 ④: Der Umzug kostet — und was er kostet, gehört VOR den Klick, nicht in
+  // einen Fehler-Toast danach. Reicht das Budget nicht, meldet die Vorschau das
+  // bereits als `error: 'insufficient'` (dieselbe Prüfung wie `moveBuilding`).
+  const move = info?.move;
+  const foundingTownHall = placingDefId === 'town_hall' && !controller.isCityFounded();
+  const foundationLabel = info && !moving && !foundingTownHall && placingDef?.category !== 'roads' && info.foundation.kind !== 'natural'
+    ? {
+        stepped: 'Hangfundament',
+        terrace: 'Terrassenfundament',
+        piles: 'Pfahlfundament',
+        cliff_wall: 'Klippen-Stützwand',
+        natural: 'Naturfundament',
+      }[info.foundation.kind]
+    : undefined;
+  const foundationCost = info && foundationLabel ? costLabel(info.foundation.extraCost) : undefined;
+  const foundationSuffix = info && foundationLabel
+    ? ` · ${foundationLabel}${foundationCost ? ` +${foundationCost}` : ''} · +${formatGameDuration(info.foundation.extraConstructionSec)}`
+    : '';
+  const feeLabel = move?.relocationCost ? costLabel(move.relocationCost) : undefined;
+  const moveValidText = move?.unchanged
+    ? t('ui.move.unchanged')
+    : feeLabel
+      ? t('ui.move.valid_cost', { cost: feeLabel })
+      : t('ui.move.valid');
 
   let className = 'placement-banner';
   let icon = <Move size={18} />;
@@ -384,6 +419,7 @@ function PlacementBanner({ info, moving }: { info: HoverInfo | undefined; moving
     className += ' banner-bonus';
     icon = <Sparkles size={18} />;
     text = `${defName}: ${t('ui.location_bonus', { pct: Math.round(info.bonusPct) })}`;
+    if (feeLabel) text += ` · ${t('ui.move.fee', { cost: feeLabel })}`;
   } else if (info) {
     className += ' banner-ok';
     icon = <CheckCircle2 size={18} />;
@@ -392,8 +428,9 @@ function PlacementBanner({ info, moving }: { info: HoverInfo | undefined; moving
           depth: info.waterfront.minimumDepth.toFixed(1),
           road: info.waterfront.roadAccess ? t('ui.yes') : t('ui.not_yet'),
         })}`
-      : `${defName}: ${moving ? t('ui.move.valid') : t('ui.placement.valid')}`;
+      : `${defName}: ${moving ? moveValidText : t('ui.placement.valid')}`;
   }
+  if (info && !info.error && foundationSuffix) text += foundationSuffix;
 
   return (
     <div className={className}>

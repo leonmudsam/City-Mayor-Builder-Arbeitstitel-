@@ -17,8 +17,12 @@ import type { GameState } from '../types.ts';
 import type { Derived } from '../simulation/derived.ts';
 import type { BuildingDef } from '../config/types.ts';
 import { validatePlacement } from '../buildings/placement.ts';
-import { worldTerrainAt } from '../map/world.ts';
-import { WORLD_TILES, bakedSurfaceAt } from '../config/startRegion.config.ts';
+import { samplePlacementSurface, worldTerrainAt } from '../map/world.ts';
+import { WORLD_TILES } from '../config/startRegion.config.ts';
+import {
+  buildRoadHeightProfile,
+  minimumRoadSegmentsForGrade,
+} from './roadProfile.ts';
 
 export interface RoadRouteContext {
   state: GameState;
@@ -80,7 +84,7 @@ export function tileWeight(ctx: RoadRouteContext, x: number, y: number): number 
   // beiläufig tut, kostet Steigung extra — der Router legt die Trasse von
   // selbst ins flache Land und klettert nur, wenn der Umweg teurer wäre.
   // Passierbarkeit bleibt allein Sache von `validatePlacement` (§2).
-  return WEIGHT_LAND + bakedSurfaceAt(x, y).slope * WEIGHT_SLOPE;
+  return WEIGHT_LAND + samplePlacementSurface(ctx.state, x, y, 1, 1).slope * WEIGHT_SLOPE;
 }
 
 /** Orthogonaler L-Rückfall (früheres `extendRoadDraft`), falls kein Weg gefunden
@@ -216,6 +220,130 @@ function routeSegment(ctx: RoadRouteContext, a: { x: number; y: number }, b: { x
   return undefined;
 }
 
+const sameTile = (a: { x: number; y: number }, b: { x: number; y: number }): boolean =>
+  a.x === b.x && a.y === b.y;
+
+/**
+ * Synthetische Kehren-Kontrollpunkte für einen zu kurzen Höhenzug. Die Punkte
+ * liegen abwechselnd links/rechts der direkten Achse und sind bewusst weit
+ * auseinander, damit `roundedRoadPolyline` später echte Radien statt Zacken
+ * zeichnen kann. Passierbarkeit wird erst im Router-Kontext geprüft.
+ */
+export function serpentineControlPoints(
+  a: { x: number; y: number },
+  b: { x: number; y: number },
+  requiredSegments: number,
+  amplitude: number,
+  initialSide: -1 | 1 = 1,
+): { x: number; y: number }[] {
+  const dx = b.x - a.x;
+  const dy = b.y - a.y;
+  const distance = Math.max(1, Math.hypot(dx, dy));
+  const directSegments = Math.abs(dx) + Math.abs(dy);
+  const extra = Math.max(0, requiredSegments - directSegments);
+  const bends = Math.max(2, Math.min(10, Math.ceil(extra / Math.max(4, amplitude * 1.6))));
+  const px = -dy / distance;
+  const py = dx / distance;
+  const points: { x: number; y: number }[] = [a];
+  for (let index = 1; index <= bends; index++) {
+    const t = index / (bends + 1);
+    const side = (index % 2 === 1 ? initialSide : -initialSide);
+    points.push({
+      x: clampTile(a.x + dx * t + px * amplitude * side),
+      y: clampTile(a.y + dy * t + py * amplitude * side),
+    });
+  }
+  points.push(b);
+  return points.filter((point, index, all) => index === 0 || !sameTile(point, all[index - 1]!));
+}
+
+function nearestPassable(
+  ctx: RoadRouteContext,
+  desired: { x: number; y: number },
+): { x: number; y: number } | undefined {
+  for (let radius = 0; radius <= 5; radius++) {
+    for (let oy = -radius; oy <= radius; oy++) {
+      for (let ox = -radius; ox <= radius; ox++) {
+        if (radius > 0 && Math.max(Math.abs(ox), Math.abs(oy)) !== radius) continue;
+        const x = clampTile(desired.x + ox);
+        const y = clampTile(desired.y + oy);
+        const terrain = worldTerrainAt(ctx.state, x, y);
+        // Eine Kehre braucht tragfähigen Boden; Wasser-/Schluchtabschnitte
+        // entstehen später automatisch zwischen den Landankern.
+        if ((terrain === 'water' || terrain === 'river') || samplePlacementSurface(ctx.state, x, y, 1, 1).cliffOverlap > 0) continue;
+        if (tileWeight(ctx, x, y) !== null) return { x, y };
+      }
+    }
+  }
+  return undefined;
+}
+
+function routeThrough(
+  ctx: RoadRouteContext,
+  controlPoints: readonly { x: number; y: number }[],
+): { x: number; y: number }[] | undefined {
+  const out: { x: number; y: number }[] = [];
+  const seen = new Set<string>();
+  for (let index = 1; index < controlPoints.length; index++) {
+    const segment = routeSegment(ctx, controlPoints[index - 1]!, controlPoints[index]!);
+    if (!segment) return undefined;
+    for (const tile of segment) {
+      const last = out.at(-1);
+      if (last && sameTile(last, tile)) continue;
+      const tileKey = key(tile.x, tile.y);
+      // Ein selbstkreuzender Rasterpfad hätte an dieser Stelle zwei voneinander
+      // abweichende Profilhöhen. Solche Kandidaten werden verworfen.
+      if (seen.has(tileKey)) return undefined;
+      seen.add(tileKey);
+      out.push(tile);
+    }
+  }
+  return out;
+}
+
+function routeSegmentWithGrade(
+  ctx: RoadRouteContext,
+  a: { x: number; y: number },
+  b: { x: number; y: number },
+): { x: number; y: number }[] | undefined {
+  const direct = routeSegment(ctx, a, b);
+  if (!direct) return undefined;
+  const startHeight = samplePlacementSurface(ctx.state, a.x, a.y, 1, 1).averageHeight;
+  const endHeight = samplePlacementSurface(ctx.state, b.x, b.y, 1, 1).averageHeight;
+  const requiredSegments = minimumRoadSegmentsForGrade(startHeight, endHeight);
+  const directProfile = buildRoadHeightProfile(ctx.state, direct);
+  if (direct.length - 1 >= requiredSegments && directProfile.feasible) return direct;
+
+  // Kleine bis große Korridore beidseitig prüfen. Die erste gültige Lösung ist
+  // wegen fester Reihenfolge deterministisch; kürzere, direkte Flachlandrouten
+  // zahlen keinen Serpentinen-Overhead.
+  const minimumAmplitude = Math.max(3, Math.ceil((requiredSegments - direct.length + 1) / 12));
+  for (let amplitude = minimumAmplitude; amplitude <= 22; amplitude += 2) {
+    for (const side of [1, -1] as const) {
+      const desired = serpentineControlPoints(a, b, requiredSegments, amplitude, side);
+      const anchors: { x: number; y: number }[] = [a];
+      let anchorsValid = true;
+      for (const point of desired.slice(1, -1)) {
+        const anchor = nearestPassable(ctx, point);
+        if (!anchor || sameTile(anchor, anchors.at(-1)!)) {
+          anchorsValid = false;
+          break;
+        }
+        anchors.push(anchor);
+      }
+      if (!anchorsValid) continue;
+      anchors.push(b);
+      const candidate = routeThrough(ctx, anchors);
+      if (!candidate || candidate.length - 1 < requiredSegments) continue;
+      if (buildRoadHeightProfile(ctx.state, candidate).feasible) return candidate;
+    }
+  }
+  // Rückgabe der direkten Trasse ist absichtlich erlaubt: Die kanonische
+  // Profilprüfung markiert sie unbaubar und zeigt den Grund in der Vorschau,
+  // statt heimlich eine >8-%-Straße zu errichten.
+  return direct;
+}
+
 /**
  * Expandiert eine Kette von Kontrollpunkten zu einem lückenlosen, orthogonal
  * verbundenen Kachelweg. Zwischen zwei Punkten wird terrainbewusst geroutet;
@@ -245,7 +373,7 @@ export function routeRoadWaypoints(
   for (let i = 1; i < points.length; i++) {
     const a = points[i - 1]!;
     const b = points[i]!;
-    const segment = routeSegment(ctx, a, b) ?? straightFill(a, b);
+    const segment = routeSegmentWithGrade(ctx, a, b) ?? straightFill(a, b);
     for (const tile of segment) pushTile(tile);
   }
   return out;

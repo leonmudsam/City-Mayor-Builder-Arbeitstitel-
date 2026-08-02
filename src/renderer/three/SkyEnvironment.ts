@@ -34,6 +34,7 @@ import {
 import { dawnReadability, grade, sunDirection, sunElevation, wrap01, type EnvGrade } from './environment.ts';
 import { getEnvironmentSettings, subscribeEnvironmentSettings } from './environmentSettings.ts';
 import { environmentImage } from '../../assets/registry.ts';
+import type { GraphicsQualityLevel } from './graphicsQuality.ts';
 
 const DOME_RADIUS = 3000;
 const BODY_DIST = 2600; // sun/moon distance from the camera
@@ -70,6 +71,8 @@ export class SkyEnvironment {
 
   private tod: number;
   private _water = new Color(0x2a6a94);
+  /** Exakter Look-at-Punkt der Orbitkamera für das Schattenfrustum. */
+  private shadowFocus = new Vector3();
   private unsub: () => void;
 
   constructor(
@@ -234,9 +237,41 @@ export class SkyEnvironment {
     return this._water;
   }
 
+  /** Horizontfarbe für die analytische Wasserreflexion im bestehenden Ozean. */
+  get horizonColor(): Color {
+    return this.weatherHorizon;
+  }
+
   /** Aktuelle, tatsächlich gerenderte Tageszeit inklusive Auto-Zyklus. */
   get timeOfDay(): number {
     return this.tod;
+  }
+
+  setShadowFocus(x: number, y: number, z: number): void {
+    this.shadowFocus.set(x, y, z);
+  }
+
+  /**
+   * Staffelt ausschließlich vorhandene Atmosphärenkosten. Der SkyEnvironment
+   * bleibt damit alleiniger Besitzer von Licht, Schatten und Wolken; es entsteht
+   * kein paralleles Qualitätssystem.
+   */
+  applyGraphicsQuality(level: GraphicsQualityLevel): void {
+    const shadowSize = level === 'low' ? 512 : level === 'medium' ? 1024 : 2048;
+    const castShadow = level !== 'low';
+    if (this.sun.castShadow !== castShadow) this.sun.castShadow = castShadow;
+    if (
+      this.sun.shadow.mapSize.width !== shadowSize ||
+      this.sun.shadow.mapSize.height !== shadowSize
+    ) {
+      this.sun.shadow.map?.dispose();
+      this.sun.shadow.map = null;
+      this.sun.shadow.mapSize.set(shadowSize, shadowSize);
+    }
+    const visibleClouds = level === 'low' ? 5 : level === 'medium' ? 8 : this.clouds.length;
+    this.clouds.forEach((cloud, index) => {
+      cloud.sprite.visible = index < visibleClouds;
+    });
   }
 
   /** Advance the clock (if cycling) and repaint the sky/lights for this frame. */
@@ -333,15 +368,13 @@ export class SkyEnvironment {
     // from the opposite side (grade already carries the moonlit intensity/colour).
     const elev = sunElevation(this.tod);
     const dir = elev >= 0 ? sunDirection(this.tod) : { x: -sunDirection(this.tod).x, y: -sunDirection(this.tod).y, z: sunDirection(this.tod).z };
-    // Boden-Fokus der Kamera (§ MVP4 P3): Blickstrahl auf y=0 projiziert — Sonne
-    // und Schatten-Target wandern mit, damit das Schatten-Fenster die Stadt trifft.
-    const fwd = new Vector3();
-    this.camera.getWorldDirection(fwd);
-    const t = fwd.y < -0.05 ? this.camera.position.y / -fwd.y : 0;
-    const fx = this.camera.position.x + fwd.x * t;
-    const fz = this.camera.position.z + fwd.z * t;
-    this.sun.position.set(fx + dir.x * 180, Math.max(20, dir.y * 180), fz + dir.z * 180);
-    this.sun.target.position.set(fx, 0, fz);
+    // Der Renderer übergibt den exakten Look-at-Punkt. Ein Schnitt mit y=0
+    // läge auf Hochplateaus zig Kacheln hinter der sichtbaren Stadt.
+    const fx = this.shadowFocus.x;
+    const fy = this.shadowFocus.y;
+    const fz = this.shadowFocus.z;
+    this.sun.position.set(fx + dir.x * 180, fy + Math.max(20, dir.y * 180), fz + dir.z * 180);
+    this.sun.target.position.set(fx, fy, fz);
     this.sun.color.copy(this.weatherSun);
     this.sun.intensity = g.sunIntensity * (weather === 'rain' ? 0.48 : weather === 'fog' ? 0.72 : 1);
 

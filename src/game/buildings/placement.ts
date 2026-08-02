@@ -5,7 +5,12 @@ import type { Derived } from '../simulation/derived.ts';
 import { isTerrainBuildable, regionOfTile, samplePlacementSurface, tileAt } from '../map/world.ts';
 import { unlockedBuildings } from '../progression/levels.ts';
 import { buildLimitAt, countOf } from './limits.ts';
-import { GROUND_ROAD_MAX_SLOPE, footprintHeightBudget, minimumBuildableRatio } from './terrainFit.ts';
+import {
+  GROUND_ROAD_MAX_SLOPE,
+  TOLERATED_UNBUILDABLE_RATIO,
+  footprintHeightBudget,
+  minimumBuildableRatio,
+} from './terrainFit.ts';
 import {
   BUILDABILITY_WORLD_TILES,
   WATER_DEPTH_SCALE,
@@ -88,7 +93,7 @@ export function validatePlacement(
   } else if (
     // Wasser, Fluss und Fels bleiben hart gesperrt — hier wird nichts toleriert.
     surface.waterOverlap > 0 ||
-    surface.cliffOverlap > 0 ||
+    surface.cliffOverlap > TOLERATED_UNBUILDABLE_RATIO ||
     // § Map Flattening C1: Das gebackene Bebaubar-Bit ist eine Kachel-
     // Klassifikation mit erodiertem Rand. Eine einzelne Randkachel neben einer
     // sonst ebenen Fläche darf ein Gebäude nicht mehr komplett verhindern.

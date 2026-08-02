@@ -1,33 +1,80 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
-import { Building2, Focus, Layers3, Minus, Plus, RotateCcw, TrafficCone } from 'lucide-react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Building2, Focus, Gamepad2, Layers3, Minus, Plus, RotateCcw, TrafficCone, Trees } from 'lucide-react';
 import { uiImage } from '../../assets/registry.ts';
+import {
+  DRIVE_KEYS,
+  beginDrive,
+  driveInputFromKeys,
+  drivePose,
+  nextTurn,
+  reachedTarget,
+  stepDrive,
+  loadedTileSpeed,
+  vehicleTileSpeed,
+  type DriveState,
+  type TurnHint,
+} from '../../game/activities/driving.ts';
 import type { CargoRouteStop } from '../../game/activities/logistics.ts';
 import type { RouteAnalysis, RouteRoadAnchors, RouteSegment } from '../../game/activities/routeAnalysis.ts';
 import type { GameController } from '../../game/commands/controller.ts';
-import { WORLD_TILES, regionIdAt, terrainAt } from '../../game/config/startRegion.config.ts';
-import type { BuildingCategory, TerrainType } from '../../game/types.ts';
+import { WORLD_TILES, regionIdAt } from '../../game/config/startRegion.config.ts';
+import { worldTerrainAt } from '../../game/map/world.ts';
+import { ROAD_TILE_METERS } from '../../game/roads/roadProfile.ts';
+import type { BuildingCategory, BuildingInstance, RoadVariant } from '../../game/types.ts';
+import type { BuildingDef } from '../../game/config/types.ts';
+import {
+  buildNatureChunks,
+  buildWorldImage,
+  drawNature,
+  type NatureChunks,
+  type WorldImage,
+} from './worldMapLayers.ts';
 
 const CANVAS_W = 1400;
 const CANVAS_H = 900;
-const MIN_ZOOM = 0.55;
+/**
+ * Ganz herausgezoomt passt die komplette Insel ins Bild (§10 „große 2D
+ * Weltkarte"): 512 Kacheln × Grundmaßstab müssen unter die Leinwandhöhe passen.
+ */
+const MIN_ZOOM = 0.055;
 const MAX_ZOOM = 7;
-const TERRAIN: Record<TerrainType, string> = {
-  water: '#17637c',
-  river: '#2a8ca4',
-  sand: '#ad9b65',
-  fertile: '#76954b',
-  grass: '#4f814d',
-  forest: '#2e633f',
-  mountain: '#777b78',
-};
+/** Ab dieser Kachelgröße (px) lohnen Gebäudedetails, Beschriftungen, Fahrbahnmarkierung. */
+const DETAIL_SCALE = 15;
+/**
+ * Unterhalb dieser Kachelgröße ist die Karte eine Übersicht: Gebäude und
+ * Infrastruktur-Marker entfallen. Ohne das läge über der ganzen Insel ein
+ * Teppich aus Mindestbreiten — die Übersicht zeigte dann alles außer der Insel.
+ */
+const OVERVIEW_SCALE = 5;
 const BUILDINGS: Partial<Record<BuildingCategory, { wall: string; roof: string }>> = {
-  residential: { wall: '#dfbd7b', roof: '#9c4933' },
-  economy: { wall: '#c78d4e', roof: '#69452d' },
-  production: { wall: '#9c8053', roof: '#4f4030' },
-  services: { wall: '#d4d9d0', roof: '#476b7b' },
-  government: { wall: '#ded6bd', roof: '#ad7d2c' },
-  leisure: { wall: '#89a66a', roof: '#3f6d56' },
+  residential: { wall: '#e3c68a', roof: '#9c4933' },
+  economy: { wall: '#cf9755', roof: '#69452d' },
+  production: { wall: '#a68a5c', roof: '#4f4030' },
+  services: { wall: '#dde2d9', roof: '#476b7b' },
+  government: { wall: '#e6dec5', roof: '#ad7d2c' },
+  leisure: { wall: '#93b072', roof: '#3f6d56' },
 };
+/**
+ * § 5 des Auftrags — hervorzuhebende Infrastruktur. Die Zuordnung kommt aus der
+ * echten Gebäude-Config (Lagerwirkung, Logistikwirkung, Hafenfläche, aktiver
+ * Betrieb), nicht aus einer Id-Liste: ein neues Lagergebäude erscheint dadurch
+ * automatisch auf der Karte, ohne dass hier jemand nachträgt.
+ */
+type InfraKind = 'storage' | 'logistics' | 'harbour' | 'operation';
+const INFRA_STYLE: Record<InfraKind, { color: string; label: string }> = {
+  storage: { color: '#f0b74a', label: 'Lager' },
+  logistics: { color: '#57c8e0', label: 'Logistik' },
+  harbour: { color: '#5ad0a8', label: 'Hafen' },
+  operation: { color: '#e08a4a', label: 'Betrieb' },
+};
+
+function infraKindOf(def: BuildingDef): InfraKind | undefined {
+  if (def.waterfront) return 'harbour';
+  if (def.effects?.some((effect) => effect.type === 'storage')) return 'storage';
+  if (def.effects?.some((effect) => effect.type === 'logistics')) return 'logistics';
+  if (def.operation) return 'operation';
+  return undefined;
+}
 
 export interface CityworkMapPoint {
   id: string;
@@ -35,6 +82,16 @@ export interface CityworkMapPoint {
   y: number;
   label: string;
   subtitle: string;
+}
+
+/** Was das Fahr-HUD anzeigt. Bewusst gedrosselt aus der Fahrschleife gemeldet. */
+export interface DriveReadout {
+  speedKph: number;
+  targetLabel: string | undefined;
+  targetMeters: number | undefined;
+  turn: TurnHint | undefined;
+  turnMeters: number | undefined;
+  remaining: number;
 }
 
 interface ViewState {
@@ -52,6 +109,13 @@ interface Interaction {
   button: number;
 }
 
+type Transform = { centerX: number; centerY: number; scale: number };
+
+// Weltbild und Vegetation überleben das Schließen des Planers: sie hängen nur am
+// Freischaltzustand, und ihn erneut zu backen kostet spürbar Zeit.
+let worldImageCache: { key: string; image: WorldImage } | undefined;
+let natureCache: { key: string; chunks: NatureChunks } | undefined;
+
 export function ManualRouteMap({
   game,
   source,
@@ -60,11 +124,18 @@ export function ManualRouteMap({
   roadPath,
   analysis,
   referenceSegments,
+  referencePath,
   visitOrder,
   cargoStops,
   fitNonce,
   focusRequest,
+  vehicleSpeedKph,
+  loadRatio,
   editEnabled = true,
+  driving = false,
+  onArrive,
+  onExitDrive,
+  onDriveReadout,
   onPathChange,
   onInvalid,
 }: {
@@ -75,12 +146,34 @@ export function ManualRouteMap({
   roadPath: { x: number; y: number }[];
   analysis: RouteAnalysis | undefined;
   referenceSegments: RouteSegment[] | undefined;
+  /** Der automatisch optimierte Weg — als „alternative Route" sichtbar (§5). */
+  referencePath?: { x: number; y: number }[] | undefined;
   visitOrder: string[];
   cargoStops?: CargoRouteStop[];
   fitNonce: number;
   focusRequest?: { x: number; y: number; nonce: number };
+  /** Höchstgeschwindigkeit des gewählten Fahrzeugs (Config-Wert, kein zweiter Tempowert). */
+  vehicleSpeedKph?: number | undefined;
+  /**
+   * § P4: Füllstand des Fahrzeugs 0..1. Ein volles Fahrzeug fährt langsamer
+   * (`loadedTileSpeed`) — dieselbe Regel wie in der Sim, keine zweite Tabelle.
+   */
+  loadRatio?: number | undefined;
   /** Standardmäßig bleibt die Smart-Route gesperrt; Zoomen und Verschieben funktionieren weiter. */
   editEnabled?: boolean;
+  /**
+   * § P2 (D-050): DIESE Karte ist die Fahransicht. Ist `driving` gesetzt, steuert
+   * der Spieler das Fahrzeug hier mit WASD/Pfeiltasten über dasselbe
+   * Straßennetz, das er sonst mit der Maus zeichnet — kein zweiter Renderer,
+   * keine 3D-Welt, keine zweite Karte.
+   */
+  driving?: boolean;
+  /** Zielgebäude erreicht — der Aufrufer schließt den Stopp über den Command ab. */
+  onArrive?(buildingId: string): void;
+  /** Q/ESC: aussteigen. */
+  onExitDrive?(): void;
+  /** Gedrosselte Fahrdaten fürs HUD (≈4×/s, nicht je Bild). */
+  onDriveReadout?(readout: DriveReadout): void;
   onPathChange(path: { x: number; y: number }[]): void;
   onInvalid(): void;
 }) {
@@ -90,18 +183,98 @@ export function ManualRouteMap({
   const [spaceHeld, setSpaceHeld] = useState(false);
   const [showTraffic, setShowTraffic] = useState(true);
   const [showBuildings, setShowBuildings] = useState(true);
+  const [showNature, setShowNature] = useState(true);
   const [routePhase, setRoutePhase] = useState(0);
   const fit = useMemo(() => fitView([source, ...targets]), [source, targets]);
   const [view, setView] = useState<ViewState>(fit);
+  // § P2: Zustand der laufenden Fahrt. Bewusst Refs — 60 Bilder/s durch React
+  // zu schicken wäre genau die Art Re-Render, die CLAUDE.md §6 verbietet.
+  const driveRef = useRef<DriveState>();
+  const viewRef = useRef<ViewState>();
+  const heldRef = useRef<Set<string>>(new Set());
+  const drivingRef = useRef(false);
+  /** Bereits gefahrene Strecke (§5 „Handelswege"), gedeckelt. */
+  const trailRef = useRef<{ x: number; y: number }[]>([]);
+
   const roadTiles = useMemo(() => {
-    const roads = new Map<string, string>();
+    const roads = new Map<string, BuildingInstance>();
     for (const building of Object.values(game.state.buildings)) {
       if (game.config.buildings.get(building.defId)?.category === 'roads') {
-        roads.set(`${building.x},${building.y}`, building.defId);
+        roads.set(`${building.x},${building.y}`, building);
       }
     }
     return roads;
   }, [game, game.version]);
+  /** Befahrbare Kacheln als reine Menge — die Form, die `stepDrive` erwartet. */
+  const roadSet = useMemo<ReadonlySet<string>>(() => new Set(roadTiles.keys()), [roadTiles]);
+  /** Alle von Stadtgebäuden belegten Kacheln — dort wird Vegetation verdeckt. */
+  const occupied = useMemo(() => {
+    const result = new Set<string>();
+    for (const building of Object.values(game.state.buildings)) {
+      const definition = game.config.buildings.get(building.defId);
+      if (!definition) continue;
+      for (let dy = 0; dy < definition.size.h; dy++) {
+        for (let dx = 0; dx < definition.size.w; dx++) result.add(`${building.x + dx},${building.y + dy}`);
+      }
+    }
+    return result;
+  }, [game, game.version]);
+
+  // § P3: Weltbild und Vegetation der ECHTEN Insel. Beide hängen NUR am
+  // Freischaltzustand — hingen sie an der Belegung, würde jeder Bauklick das
+  // halbe Eiland neu backen (D-045).
+  const unlockKey = useMemo(
+    () => Object.values(game.state.world.regions)
+      .filter((region) => region.status === 'unlocked')
+      .map((region) => region.id)
+      .sort((a, b) => a - b)
+      .join(','),
+    [game, game.version],
+  );
+  // Als Menge, nicht als Zeichenkettensuche: Das Weltbild fragt das für JEDE
+  // der 262.144 Kacheln ab — ein `split()` je Kachel kostete dort mehr als die
+  // gesamte Farbberechnung.
+  const unlockedIds = useMemo(
+    () => new Set(unlockKey ? unlockKey.split(',').map(Number) : []),
+    [unlockKey],
+  );
+  const isLocked = useCallback(
+    (regionId: number) => regionId !== 0 && !unlockedIds.has(regionId),
+    [unlockedIds],
+  );
+  const worldImage = useMemo(() => {
+    if (worldImageCache?.key === unlockKey) return worldImageCache.image;
+    const image = buildWorldImage(isLocked, regionIdAt);
+    worldImageCache = { key: unlockKey, image };
+    return image;
+  }, [unlockKey, isLocked]);
+  const natureChunks = useMemo(() => {
+    if (natureCache?.key === unlockKey) return natureCache.chunks;
+    const regionIds = Object.values(game.state.world.regions).map((region) => region.id);
+    const chunks = buildNatureChunks(regionIds, isLocked, (x, y) => worldTerrainAt(game.state, x, y));
+    natureCache = { key: unlockKey, chunks };
+    return chunks;
+    // `game` liefert nur die Terrain-Overrides; die Verteilung selbst hängt am
+    // Freischaltzustand, deshalb ist `unlockKey` der Schlüssel.
+  }, [unlockKey, isLocked, game]);
+
+  /**
+   * Noch offene Ziele in Reihenfolge, mit Footprint. Als Ref, damit die
+   * Fahr-Schleife sie ohne Neuaufbau lesen kann; die Wahrheit über „erledigt"
+   * bleibt der Spielstand (`targets[].done`), nicht die Karte.
+   */
+  const arrivalTargetsRef = useRef<
+    { buildingId: string; label: string; x: number; y: number; size: { w: number; h: number } }[]
+  >([]);
+  arrivalTargetsRef.current = (game.state.activities.active?.targets ?? [])
+    .filter((target) => !target.done)
+    .flatMap((target) => {
+      const building = game.state.buildings[target.buildingId];
+      const definition = building && game.config.buildings.get(building.defId);
+      if (!building || !definition) return [];
+      const label = targets.find((point) => point.id === target.buildingId)?.label ?? 'Ziel';
+      return [{ buildingId: target.buildingId, label, x: building.x, y: building.y, size: definition.size }];
+    });
   const traffic = useMemo(() => {
     const result = new Map<string, number>();
     for (const segment of referenceSegments ?? []) {
@@ -159,51 +332,54 @@ export function ManualRouteMap({
     };
   }, []);
 
-  useEffect(() => {
+  // § P2: Der Zeichenvorgang ist eine FUNKTION, kein Effekt-Rumpf — die
+  // Fahr-Schleife muss ihn 60×/s aufrufen können, ohne React neu zu rendern
+  // (CLAUDE.md §6: keine unnötigen Re-Renders).
+  const drawScene = useCallback((view: ViewState, drive: DriveState | undefined) => {
     const canvas = canvasRef.current;
     const ctx = canvas?.getContext('2d');
     if (!canvas || !ctx) return;
     const transform = mapTransform(view);
+    const project = (x: number, y: number) => toScreen(x, y, transform);
     ctx.clearRect(0, 0, CANVAS_W, CANVAS_H);
+    // Offener Ozean außerhalb der Insel.
     const background = ctx.createLinearGradient(0, 0, 0, CANVAS_H);
-    background.addColorStop(0, '#163d43');
-    background.addColorStop(1, '#0a242c');
+    background.addColorStop(0, '#0f3c4c');
+    background.addColorStop(1, '#07222c');
     ctx.fillStyle = background;
     ctx.fillRect(0, 0, CANVAS_W, CANVAS_H);
 
-    const minX = Math.max(0, Math.floor(view.centerX - CANVAS_W / transform.scale / 2) - 3);
-    const maxX = Math.min(WORLD_TILES - 1, Math.ceil(view.centerX + CANVAS_W / transform.scale / 2) + 3);
-    const minY = Math.max(0, Math.floor(view.centerY - CANVAS_H / transform.scale / 2) - 3);
-    const maxY = Math.min(WORLD_TILES - 1, Math.ceil(view.centerY + CANVAS_H / transform.scale / 2) + 3);
-    const unlocked = new Set(
-      Object.values(game.state.world.regions)
-        .filter((region) => region.status === 'unlocked')
-        .map((region) => region.id),
+    const bounds = {
+      minX: Math.max(0, Math.floor(view.centerX - CANVAS_W / transform.scale / 2) - 2),
+      maxX: Math.min(WORLD_TILES - 1, Math.ceil(view.centerX + CANVAS_W / transform.scale / 2) + 2),
+      minY: Math.max(0, Math.floor(view.centerY - CANVAS_H / transform.scale / 2) - 2),
+      maxY: Math.min(WORLD_TILES - 1, Math.ceil(view.centerY + CANVAS_H / transform.scale / 2) + 2),
+    };
+
+    // ---- Ebene 1: die echte Welt --------------------------------------------
+    // Ein Zeichenaufruf. Terrain, Höhenrelief, Klippen, Küste und Wassertiefe
+    // stecken im gebackenen Weltbild (`worldMapLayers`), das dieselben Höhen und
+    // Masken liest wie der 3D-Renderer.
+    const origin = project(0, 0);
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = 'high';
+    ctx.drawImage(
+      worldImage.canvas,
+      origin.x,
+      origin.y,
+      WORLD_TILES * transform.scale,
+      WORLD_TILES * transform.scale,
     );
 
-    for (let y = minY; y <= maxY; y += 1) {
-      for (let x = minX; x <= maxX; x += 1) {
-        const point = toScreen(x, y, transform);
-        const terrain = terrainAt(x, y);
-        const regionId = regionIdAt(x, y);
-        const visible = regionId === 0 || unlocked.has(regionId);
-        const shade = ((x * 31 + y * 17) % 7) - 3;
-        ctx.globalAlpha = visible ? 1 : 0.32;
-        ctx.fillStyle = shadeColor(TERRAIN[terrain], shade * 1.35);
-        ctx.fillRect(point.x - 0.5, point.y - 0.5, transform.scale + 1, transform.scale + 1);
-        if (transform.scale > 13 && terrain !== 'water' && terrain !== 'river' && (x + y) % 5 === 0) {
-          ctx.fillStyle = terrain === 'forest' ? 'rgba(11,54,31,.24)' : 'rgba(255,245,192,.08)';
-          ctx.beginPath();
-          ctx.arc(point.x + transform.scale * 0.65, point.y + transform.scale * 0.35, transform.scale * 0.08, 0, Math.PI * 2);
-          ctx.fill();
-        }
-      }
-    }
-    ctx.globalAlpha = 1;
+    // ---- Ebene 2: Vegetation aus derselben Verteilung wie die 3D-Welt -------
+    if (showNature) drawNature(ctx, natureChunks, occupied, bounds, project, transform.scale);
 
-    drawRegionBorders(ctx, minX, maxX, minY, maxY, transform);
-    drawRoadNetwork(ctx, roadTiles, traffic, showTraffic, minX, maxX, minY, maxY, transform);
-    if (showBuildings) drawBuildings(ctx, game, targets, minX, maxX, minY, maxY, transform);
+    drawRegionBorders(ctx, bounds, transform);
+    drawRoadNetwork(ctx, roadTiles, traffic, showTraffic, bounds, transform);
+    if (showBuildings && transform.scale >= OVERVIEW_SCALE) drawBuildings(ctx, game, targets, bounds, transform);
+    drawInfrastructure(ctx, game, bounds, transform);
+    if (referencePath && referencePath.length > 1 && !drive) drawAlternativeRoute(ctx, referencePath, transform);
+    if (trailRef.current.length > 1) drawTrail(ctx, trailRef.current, transform);
     drawRoute(ctx, roadPath, cargoStops, transform, routePhase, analysis !== undefined);
 
     if (anchors) {
@@ -235,6 +411,8 @@ export function ManualRouteMap({
         );
       });
     }
+
+    if (drive) drawVehicle(ctx, drive, transform);
   }, [
     analysis,
     anchors,
@@ -242,17 +420,189 @@ export function ManualRouteMap({
     game,
     game.version,
     markerImages,
+    natureChunks,
+    occupied,
+    referencePath,
     roadPath,
     roadTiles,
     routePhase,
     showBuildings,
+    showNature,
     showTraffic,
     source.label,
     targets,
     traffic,
-    view,
     visitOrder,
+    worldImage,
   ]);
+
+  // Normaler Neuzeichnen-Pfad (Planung): React-Zustand ändert sich → neu malen.
+  useEffect(() => {
+    if (drivingRef.current) return; // während der Fahrt führt die rAF-Schleife
+    drawScene(view, undefined);
+  }, [drawScene, view]);
+
+  /**
+   * Alles, was die Fahr-Schleife braucht, aber bei jedem Command eine neue
+   * Identität bekommt. Über diesen Ref sieht sie stets die aktuellen Werte,
+   * ohne dass der Effekt (und mit ihm die Fahrt) neu aufgesetzt wird.
+   */
+  const liveRef = useRef({
+    drawScene,
+    roadSet,
+    roadPath,
+    anchors,
+    zoom: view.zoom,
+    maxSpeed: loadedTileSpeed(vehicleTileSpeed(vehicleSpeedKph ?? 0), loadRatio ?? 0),
+    onArrive,
+    onExitDrive,
+    onDriveReadout,
+  });
+  liveRef.current = {
+    drawScene,
+    roadSet,
+    roadPath,
+    anchors,
+    zoom: view.zoom,
+    maxSpeed: loadedTileSpeed(vehicleTileSpeed(vehicleSpeedKph ?? 0), loadRatio ?? 0),
+    onArrive,
+    onExitDrive,
+    onDriveReadout,
+  };
+  /**
+   * Der Startpunkt als WERT, nicht als Objektidentität.
+   *
+   * `anchors` ist ein `useMemo` über `game.version` — es bekommt bei JEDEM
+   * Command eine neue Identität. Stand es im Abhängigkeitsarray der Fahrt (so
+   * war es zuerst), setzte schon ein erreichter Stopp die Schleife neu auf: das
+   * Fahrzeug sprang an den Start zurück und der Zoom auf den Anfangswert. Der
+   * Fahrer merkt das sofort, ein Test ohne Ankunft nie — gefunden hat es der
+   * Smoke im laufenden Spiel.
+   */
+  const spawnKey = anchors ? `${anchors.source.x},${anchors.source.y}` : '';
+
+  // ---- § P2/P3: die Fahrt in DIESER Karte ---------------------------------
+  //
+  // Physik und Reichweite kommen aus `game/activities/driving.ts` — derselben
+  // Quelle, aus der auch der 3D-Renderer fährt (§2/§8: kein zweites Fahrmodell).
+  // Seit P3 ist die Fahrt straßengebunden: W gibt Gas, A/D wählen an der
+  // Kreuzung, S bremst und fährt rückwärts. Die Schleife läuft an React vorbei
+  // über Refs; nur Ein-/Aussteigen und erreichte Ziele lösen ein Update aus.
+  useEffect(() => {
+    drivingRef.current = driving;
+    if (!driving) {
+      driveRef.current = undefined;
+      heldRef.current.clear();
+      trailRef.current = [];
+      // Beim Aussteigen die zuletzt gefahrene Ansicht in den React-Zustand
+      // zurückschreiben, damit die Karte nicht zurückspringt.
+      if (viewRef.current) setView(viewRef.current);
+      return;
+    }
+
+    // Startpunkt: der Quellanker der Route, sonst der Anfang des Weges.
+    const spawn = liveRef.current.anchors?.source ?? liveRef.current.roadPath[0];
+    if (!spawn) return;
+    const towards = liveRef.current.roadPath.find((point) => point.x !== spawn.x || point.y !== spawn.y);
+    const initial = beginDrive(liveRef.current.roadSet, spawn, towards);
+    if (!initial) {
+      // Eine einzelne Straßenkachel ist kein Netz — das wird gesagt, nicht
+      // durch ein stehendes Fahrzeug vorgetäuscht.
+      liveRef.current.onExitDrive?.();
+      return;
+    }
+    driveRef.current = initial;
+    trailRef.current = [drivePose(initial)];
+    // Fahrzoom: nah genug, um Abzweigungen zu erkennen, weit genug, um die
+    // Umgebung zu sehen. Ein engerer Wert (der erste Ansatz stand bei 4,2)
+    // zeigte nur noch Fahrbahn und Wiese.
+    viewRef.current = { centerX: spawn.x, centerY: spawn.y, zoom: clamp(liveRef.current.zoom, 2.1, 2.8) };
+
+    const onKey = (event: KeyboardEvent, down: boolean) => {
+      const element = event.target as HTMLElement | null;
+      if (element?.tagName === 'INPUT' || element?.tagName === 'TEXTAREA' || element?.isContentEditable) return;
+      const key = event.key.toLowerCase();
+      if (down && (key === 'escape' || key === 'q')) {
+        liveRef.current.onExitDrive?.();
+        return;
+      }
+      if (!DRIVE_KEYS.has(key)) return;
+      if (down) heldRef.current.add(key);
+      else heldRef.current.delete(key);
+      event.preventDefault();
+    };
+    const onKeyDown = (event: KeyboardEvent) => onKey(event, true);
+    const onKeyUp = (event: KeyboardEvent) => onKey(event, false);
+    window.addEventListener('keydown', onKeyDown);
+    window.addEventListener('keyup', onKeyUp);
+
+    let raf = 0;
+    let last = performance.now();
+    let lastReadout = 0;
+    const frame = (now: number) => {
+      raf = requestAnimationFrame(frame);
+      // Ein Tabwechsel darf das Fahrzeug nicht quer über die Insel schleudern.
+      const dt = Math.min(0.05, (now - last) / 1000);
+      last = now;
+      const drive = driveRef.current;
+      const currentView = viewRef.current;
+      if (!drive || !currentView) return;
+
+      const live = liveRef.current;
+      const input = driveInputFromKeys(heldRef.current);
+      const stepped = stepDrive(drive, input, dt, live.roadSet, live.maxSpeed);
+      driveRef.current = stepped;
+      const pose = drivePose(stepped);
+      // Gefahrene Strecke mitschreiben (grob, damit die Liste nicht wächst).
+      const lastTrail = trailRef.current.at(-1);
+      if (!lastTrail || Math.hypot(pose.x - lastTrail.x, pose.y - lastTrail.y) > 0.6) {
+        trailRef.current.push({ x: pose.x, y: pose.y });
+        if (trailRef.current.length > 600) trailRef.current.shift();
+      }
+      // Die Karte folgt dem Fahrzeug (Verfolgerblick von oben).
+      currentView.centerX += (pose.x - currentView.centerX) * Math.min(1, dt * 6);
+      currentView.centerY += (pose.y - currentView.centerY) * Math.min(1, dt * 6);
+      live.drawScene(currentView, stepped);
+
+      // Nächstes offenes Ziel erreicht? Genau dieselbe Regel wie in 3D.
+      const openTarget = arrivalTargetsRef.current[0];
+      if (openTarget && reachedTarget(pose, openTarget, openTarget.size)) {
+        live.onArrive?.(openTarget.buildingId);
+      }
+
+      // HUD-Daten gedrosselt melden — 60×/s durch React zu schicken wäre genau
+      // der Re-Render, den die Schleife vermeidet.
+      if (now - lastReadout > 240 && live.onDriveReadout) {
+        lastReadout = now;
+        const turn = nextTurn(stepped, live.roadSet, input.steer);
+        const distance = openTarget
+          ? Math.hypot(
+              openTarget.x + openTarget.size.w / 2 - pose.x,
+              openTarget.y + openTarget.size.h / 2 - pose.y,
+            )
+          : undefined;
+        live.onDriveReadout({
+          speedKph: Math.abs(stepped.speed) * ROAD_TILE_METERS * 3.6,
+          targetLabel: openTarget?.label,
+          targetMeters: distance === undefined ? undefined : distance * ROAD_TILE_METERS,
+          turn: turn?.turn,
+          turnMeters: turn ? turn.distanceTiles * ROAD_TILE_METERS : undefined,
+          remaining: arrivalTargetsRef.current.length,
+        });
+      }
+    };
+    raf = requestAnimationFrame(frame);
+    return () => {
+      cancelAnimationFrame(raf);
+      window.removeEventListener('keydown', onKeyDown);
+      window.removeEventListener('keyup', onKeyUp);
+    };
+    // ABSICHTLICH nur `driving` und der Startanker ALS WERT: Straßen,
+    // Zeichenfunktion, Anker und Rückrufe wechseln bei JEDEM Command die
+    // Identität (`game.version`). Stünden sie hier, würde ein erreichter Stopp
+    // die Fahrt neu aufsetzen und das Fahrzeug zum Startpunkt zurückwerfen.
+    // Sie kommen deshalb aus `liveRef`.
+  }, [driving, spawnKey]);
 
   const worldAt = (clientX: number, clientY: number) => {
     const canvas = canvasRef.current;
@@ -313,13 +663,16 @@ export function ManualRouteMap({
         ref={canvasRef}
         width={CANVAS_W}
         height={CANVAS_H}
-        aria-label="Interaktive, stilisierte 2D-Routenkarte"
+        aria-label="Logistikkarte der Stadt – Draufsicht auf die echte Spielwelt"
         onContextMenu={(event) => {
           event.preventDefault();
           if (editEnabled && !rightDraggedRef.current && roadPath.length > 1) onPathChange(roadPath.slice(0, -1));
           rightDraggedRef.current = false;
         }}
         onPointerDown={(event) => {
+          // § P2: Während der Fahrt führt die Verfolgeransicht — Ziehen und
+          // Zeichnen würden gegen sie arbeiten.
+          if (driving) return;
           const world = worldAt(event.clientX, event.clientY);
           const overRoad = world ? roadTiles.has(`${Math.floor(world.x)},${Math.floor(world.y)}`) : false;
           const pan = !editEnabled || event.button === 1 || event.button === 2 || spaceHeld || !overRoad;
@@ -368,17 +721,32 @@ export function ManualRouteMap({
           if (closest) setView((current) => ({ ...current, centerX: closest.x, centerY: closest.y, zoom: Math.max(3.4, current.zoom) }));
         }}
         onWheel={(event) => {
-          event.preventDefault();
-          setView((current) => ({ ...current, zoom: clamp(current.zoom * (event.deltaY < 0 ? 1.14 : 0.87), MIN_ZOOM, MAX_ZOOM) }));
+          // Kein `preventDefault()`: React hängt `wheel` passiv ein, der Aufruf
+          // wirkt nicht und schreibt nur eine Warnung in die Konsole.
+          const factor = event.deltaY < 0 ? 1.14 : 0.87;
+          // Beim Fahren gehört die Ansicht der Schleife: den Zoom dort ändern,
+          // sonst würde ein React-Update die Verfolgeransicht überschreiben.
+          if (driving && viewRef.current) {
+            viewRef.current.zoom = clamp(viewRef.current.zoom * factor, MIN_ZOOM, MAX_ZOOM);
+            return;
+          }
+          setView((current) => ({ ...current, zoom: clamp(current.zoom * factor, MIN_ZOOM, MAX_ZOOM) }));
         }}
       />
 
-      <div className="citywork-v4-map-hint">
-        {editEnabled
-          ? <span>Auf Straße ziehen: Route korrigieren</span>
-          : <span>Smart-Route aktiv · Ziehen: Karte verschieben</span>}
-        <span>Mausrad: Zoom</span>
-      </div>
+      {driving ? (
+        <div className="citywork-v4-map-drive">
+          <span><Gamepad2 size={15} /> W Gas · S Bremse/Rückwärts · A/D Abzweigung</span>
+          <span>Q oder ESC: aussteigen</span>
+        </div>
+      ) : (
+        <div className="citywork-v4-map-hint">
+          {editEnabled
+            ? <span>Auf Straße ziehen: Route korrigieren</span>
+            : <span>Smart-Route aktiv · Ziehen: Karte verschieben</span>}
+          <span>Mausrad: Zoom</span>
+        </div>
+      )}
       <div className="citywork-v4-map-zoom">
         <button onClick={() => setView((current) => ({ ...current, zoom: clamp(current.zoom * 1.2, MIN_ZOOM, MAX_ZOOM) }))} title="Hineinzoomen"><Plus size={18} /></button>
         <button onClick={() => setView((current) => ({ ...current, zoom: clamp(current.zoom / 1.2, MIN_ZOOM, MAX_ZOOM) }))} title="Herauszoomen"><Minus size={18} /></button>
@@ -387,6 +755,7 @@ export function ManualRouteMap({
       <div className="citywork-v4-map-layers">
         <button className={showTraffic ? 'active' : ''} onClick={() => setShowTraffic((value) => !value)} title="Verkehrslast"><TrafficCone size={17} /></button>
         <button className={showBuildings ? 'active' : ''} onClick={() => setShowBuildings((value) => !value)} title="Gebäude"><Building2 size={17} /></button>
+        <button className={showNature ? 'active' : ''} onClick={() => setShowNature((value) => !value)} title="Landschaft"><Trees size={17} /></button>
         {editEnabled && (
           <button onClick={() => onPathChange(anchors ? [{ ...anchors.source }] : [])} title="Route zurücksetzen"><RotateCcw size={17} /></button>
         )}
@@ -432,31 +801,55 @@ function fitView(points: { x: number; y: number }[]): ViewState {
   };
 }
 
-function mapTransform(view: ViewState) {
+function mapTransform(view: ViewState): Transform {
   const baseScale = Math.min(CANVAS_W / 38, CANVAS_H / 28);
   return { centerX: view.centerX, centerY: view.centerY, scale: baseScale * view.zoom };
 }
 
-function toScreen(x: number, y: number, transform: { centerX: number; centerY: number; scale: number }) {
+function toScreen(x: number, y: number, transform: Transform) {
   return {
     x: CANVAS_W / 2 + (x - transform.centerX) * transform.scale,
     y: CANVAS_H / 2 + (y - transform.centerY) * transform.scale,
   };
 }
 
-function drawRegionBorders(
-  ctx: CanvasRenderingContext2D,
-  minX: number,
-  maxX: number,
-  minY: number,
-  maxY: number,
-  transform: ReturnType<typeof mapTransform>,
-) {
-  ctx.strokeStyle = 'rgba(245,217,145,.15)';
+/**
+ * § P2/P3: Das gesteuerte Fahrzeug in der Draufsicht — ein gerichteter Keil,
+ * damit die Fahrtrichtung auch bei kleinem Zoom ablesbar bleibt. Bewusst
+ * schlicht: die Karte ist eine Logistikansicht, kein zweiter Renderer.
+ */
+function drawVehicle(ctx: CanvasRenderingContext2D, drive: DriveState, transform: Transform): void {
+  const pose = drivePose(drive);
+  const point = toScreen(pose.x, pose.y, transform);
+  const size = Math.max(9, transform.scale * 0.62);
+  ctx.save();
+  ctx.translate(point.x, point.y);
+  // Der Keil zeigt ungedreht nach oben (−y). Weltvorwärts ist `(sin h, cos h)`,
+  // und die Karte bildet +y nach UNTEN ab — daraus folgt der Bildwinkel π − h.
+  ctx.rotate(Math.PI - pose.heading);
+  ctx.shadowColor = 'rgba(0, 0, 0, 0.55)';
+  ctx.shadowBlur = size * 0.5;
+  ctx.beginPath();
+  ctx.moveTo(0, -size * 0.72);
+  ctx.lineTo(size * 0.5, size * 0.6);
+  ctx.lineTo(0, size * 0.3);
+  ctx.lineTo(-size * 0.5, size * 0.6);
+  ctx.closePath();
+  ctx.fillStyle = '#ffd45e';
+  ctx.fill();
+  ctx.shadowBlur = 0;
+  ctx.lineWidth = Math.max(1, size * 0.09);
+  ctx.strokeStyle = 'rgba(38, 24, 4, 0.85)';
+  ctx.stroke();
+  ctx.restore();
+}
+
+function drawRegionBorders(ctx: CanvasRenderingContext2D, bounds: Bounds, transform: Transform) {
+  ctx.strokeStyle = 'rgba(245,217,145,.16)';
   ctx.lineWidth = Math.max(1, transform.scale * 0.05);
   ctx.setLineDash([Math.max(3, transform.scale * 0.22), Math.max(3, transform.scale * 0.18)]);
-  for (let y = minY; y <= maxY; y += 1) {
-    for (let x = minX; x <= maxX; x += 1) {
+  for (let y = bounds.minY; y <= bounds.maxY; y += 1) {
+    for (let x = bounds.minX; x <= bounds.maxX; x += 1) {
       const region = regionIdAt(x, y);
       if (regionIdAt(x + 1, y) !== region) {
         const a = toScreen(x + 1, y, transform);
@@ -473,36 +866,63 @@ function drawRegionBorders(
   ctx.setLineDash([]);
 }
 
+interface Bounds {
+  minX: number;
+  maxX: number;
+  minY: number;
+  maxY: number;
+}
+
+/** Bauwerksvarianten, die als Brücke/Viadukt eigenständig gezeichnet werden. */
+const ELEVATED_VARIANTS: ReadonlySet<RoadVariant> = new Set(['bridge', 'viaduct', 'support']);
+
+/**
+ * Straßennetz in der Draufsicht.
+ *
+ * Die Straßenklasse kommt aus dem Spielstand, nicht aus einem Namensvergleich:
+ * `roadEngineering.variant` ist das aus dem Höhenprofil abgeleitete Bauwerk
+ * (Brücke, Viadukt, Stützmauer …), das auch die 3D-Welt baut. Die Strichstärke
+ * folgt zusätzlich der ECHTEN Verkehrslast der Referenzanalyse — eine
+ * Straßenhierarchie (Haupt-/Nebenstraße) gibt es im Spiel bisher nicht und wird
+ * hier deshalb auch nicht erfunden.
+ */
 function drawRoadNetwork(
   ctx: CanvasRenderingContext2D,
-  roads: ReadonlyMap<string, string>,
+  roads: ReadonlyMap<string, BuildingInstance>,
   traffic: ReadonlyMap<string, number>,
   showTraffic: boolean,
-  minX: number,
-  maxX: number,
-  minY: number,
-  maxY: number,
-  transform: ReturnType<typeof mapTransform>,
+  bounds: Bounds,
+  transform: Transform,
 ) {
-  for (const [id, defId] of roads) {
+  for (const [id, building] of roads) {
     const [x, y] = id.split(',').map(Number) as [number, number];
-    if (x < minX || x > maxX || y < minY || y > maxY) continue;
+    if (x < bounds.minX || x > bounds.maxX || y < bounds.minY || y > bounds.maxY) continue;
     const center = toScreen(x + 0.5, y + 0.5, transform);
-    const highway = defId.includes('highway') || defId.includes('avenue');
+    const variant = building.roadEngineering?.variant;
+    const elevated = variant !== undefined && ELEVATED_VARIANTS.has(variant);
+    const load = traffic.get(id) ?? 0;
+    const busy = load >= 2;
+    // Nach OBEN gedeckelt: eine Kachel ist 4 m breit, aber beim Heranzoomen darf
+    // die Fahrbahn nicht zur Landebahn werden — sonst verschwindet die Stadt
+    // unter ihren eigenen Straßen.
+    // Die Mindestbreite darf die Kachel nicht überschreiten — in der
+    // Inselübersicht sonst ein Straßenteppich statt einer Landkarte.
+    const floor = Math.min(1, transform.scale / 9);
+    const casing = clamp(transform.scale * (busy ? 0.76 : 0.62), (busy ? 9 : 7) * floor, busy ? 30 : 25);
+    const surface = clamp(transform.scale * (busy ? 0.54 : 0.42), (busy ? 6 : 4) * floor, busy ? 21 : 17);
     ctx.lineCap = 'round';
-    ctx.strokeStyle = 'rgba(3,12,16,.74)';
-    ctx.lineWidth = Math.max(highway ? 9 : 7, transform.scale * (highway ? 0.74 : 0.62));
+    ctx.strokeStyle = elevated ? 'rgba(12,26,32,.85)' : 'rgba(3,12,16,.74)';
+    ctx.lineWidth = casing;
     drawRoadLinks(ctx, center, x, y, roads, transform);
-    ctx.strokeStyle = highway ? '#809ba2' : '#697d7d';
-    ctx.lineWidth = Math.max(highway ? 6 : 4, transform.scale * (highway ? 0.52 : 0.42));
+    ctx.strokeStyle = elevated ? '#9aa8ae' : busy ? '#7d8f90' : '#697d7d';
+    ctx.lineWidth = surface;
     drawRoadLinks(ctx, center, x, y, roads, transform);
     if (showTraffic) {
-      const load = traffic.get(id) ?? 0;
       ctx.strokeStyle = ['rgba(91,213,125,.28)', 'rgba(211,210,73,.38)', 'rgba(244,163,48,.46)', 'rgba(235,78,58,.58)'][load]!;
       ctx.lineWidth = Math.max(2, transform.scale * 0.16);
       drawRoadLinks(ctx, center, x, y, roads, transform);
     }
-    if (transform.scale > 18) {
+    if (transform.scale > DETAIL_SCALE + 3) {
       ctx.setLineDash([transform.scale * 0.2, transform.scale * 0.23]);
       ctx.strokeStyle = 'rgba(237,232,193,.42)';
       ctx.lineWidth = Math.max(1, transform.scale * 0.035);
@@ -516,15 +936,14 @@ function drawBuildings(
   ctx: CanvasRenderingContext2D,
   game: GameController,
   targets: CityworkMapPoint[],
-  minX: number,
-  maxX: number,
-  minY: number,
-  maxY: number,
-  transform: ReturnType<typeof mapTransform>,
+  bounds: Bounds,
+  transform: Transform,
 ) {
   const targetIds = new Set(targets.map((target) => target.id));
   const buildings = Object.values(game.state.buildings)
-    .filter((building) => building.x >= minX - 8 && building.x <= maxX + 2 && building.y >= minY - 8 && building.y <= maxY + 2)
+    .filter((building) =>
+      building.x >= bounds.minX - 8 && building.x <= bounds.maxX + 2
+      && building.y >= bounds.minY - 8 && building.y <= bounds.maxY + 2)
     .sort((a, b) => a.y - b.y || a.x - b.x);
   for (const building of buildings) {
     const definition = game.config.buildings.get(building.defId);
@@ -541,7 +960,7 @@ function drawBuildings(
     }
     const palette = BUILDINGS[definition.category] ?? { wall: '#a89b83', roof: '#5d6670' };
     const lift = Math.min(height * 0.24, transform.scale * 0.9);
-    ctx.fillStyle = 'rgba(0,8,10,.27)';
+    ctx.fillStyle = 'rgba(0,8,10,.3)';
     roundedRect(ctx, point.x + transform.scale * 0.14, point.y + transform.scale * 0.2, width, height, Math.max(2, transform.scale * 0.12));
     ctx.fill();
     ctx.fillStyle = targetIds.has(building.id) ? '#d7a55a' : palette.wall;
@@ -556,7 +975,7 @@ function drawBuildings(
     ctx.lineTo(point.x + width * 0.18, point.y + height * 0.36);
     ctx.closePath();
     ctx.fill();
-    if (transform.scale > 15 && width > 14) {
+    if (transform.scale > DETAIL_SCALE && width > 14) {
       ctx.fillStyle = 'rgba(188,229,238,.75)';
       const windowSize = clamp(transform.scale * 0.12, 2, 6);
       ctx.fillRect(point.x + width * 0.22, point.y + height * 0.53, windowSize, windowSize * 0.75);
@@ -565,11 +984,135 @@ function drawBuildings(
   }
 }
 
+/**
+ * § 5 des Auftrags: „Die 2D Stadtarbeit-Karte muss besonders zeigen … Lager,
+ * Häfen, Produktionsgebäude." Die Auswahl ist config-getrieben (`infraKindOf`).
+ */
+function drawInfrastructure(
+  ctx: CanvasRenderingContext2D,
+  game: GameController,
+  bounds: Bounds,
+  transform: Transform,
+) {
+  if (transform.scale < OVERVIEW_SCALE) return;
+  for (const building of Object.values(game.state.buildings)) {
+    if (building.x < bounds.minX - 4 || building.x > bounds.maxX + 2) continue;
+    if (building.y < bounds.minY - 4 || building.y > bounds.maxY + 2) continue;
+    const definition = game.config.buildings.get(building.defId);
+    if (!definition) continue;
+    const kind = infraKindOf(definition);
+    if (!kind) continue;
+    const style = INFRA_STYLE[kind];
+    const center = toScreen(building.x + definition.size.w / 2, building.y + definition.size.h / 2, transform);
+    const radius = clamp(transform.scale * 0.42, 7, 17);
+    ctx.save();
+    ctx.shadowColor = 'rgba(0,0,0,.55)';
+    ctx.shadowBlur = 7;
+    ctx.fillStyle = 'rgba(6,24,32,.92)';
+    ctx.beginPath();
+    ctx.arc(center.x, center.y - radius * 1.5, radius, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+    ctx.strokeStyle = style.color;
+    ctx.lineWidth = Math.max(1.5, radius * 0.18);
+    ctx.beginPath();
+    ctx.arc(center.x, center.y - radius * 1.5, radius, 0, Math.PI * 2);
+    ctx.stroke();
+    drawInfraGlyph(ctx, kind, center.x, center.y - radius * 1.5, radius * 0.52, style.color);
+  }
+}
+
+function drawInfraGlyph(
+  ctx: CanvasRenderingContext2D,
+  kind: InfraKind,
+  x: number,
+  y: number,
+  size: number,
+  color: string,
+) {
+  ctx.strokeStyle = color;
+  ctx.fillStyle = color;
+  ctx.lineWidth = Math.max(1.2, size * 0.3);
+  ctx.beginPath();
+  if (kind === 'harbour') {
+    // Anker: Schaft, Querbalken, Haken.
+    ctx.moveTo(x, y - size);
+    ctx.lineTo(x, y + size * 0.7);
+    ctx.moveTo(x - size * 0.7, y - size * 0.35);
+    ctx.lineTo(x + size * 0.7, y - size * 0.35);
+    ctx.moveTo(x - size * 0.75, y + size * 0.2);
+    ctx.quadraticCurveTo(x, y + size * 1.15, x + size * 0.75, y + size * 0.2);
+  } else if (kind === 'operation') {
+    // Werk: Schornstein und Halle.
+    ctx.moveTo(x - size, y + size * 0.7);
+    ctx.lineTo(x - size, y - size * 0.2);
+    ctx.lineTo(x, y + size * 0.2);
+    ctx.lineTo(x, y - size * 0.2);
+    ctx.lineTo(x + size, y + size * 0.2);
+    ctx.lineTo(x + size, y + size * 0.7);
+    ctx.closePath();
+  } else if (kind === 'logistics') {
+    // Verteilkreuz.
+    ctx.moveTo(x - size, y);
+    ctx.lineTo(x + size, y);
+    ctx.moveTo(x, y - size);
+    ctx.lineTo(x, y + size);
+  } else {
+    // Lagerkiste.
+    ctx.rect(x - size * 0.85, y - size * 0.7, size * 1.7, size * 1.4);
+    ctx.moveTo(x - size * 0.85, y - size * 0.15);
+    ctx.lineTo(x + size * 0.85, y - size * 0.15);
+  }
+  ctx.stroke();
+}
+
+/** Der automatisch optimierte Weg als „alternative Route" (§5, blau gestrichelt). */
+function drawAlternativeRoute(
+  ctx: CanvasRenderingContext2D,
+  path: readonly { x: number; y: number }[],
+  transform: Transform,
+) {
+  ctx.save();
+  ctx.setLineDash([Math.max(6, transform.scale * 0.34), Math.max(5, transform.scale * 0.3)]);
+  ctx.strokeStyle = 'rgba(90,166,232,.5)';
+  ctx.lineWidth = Math.max(3, transform.scale * 0.2);
+  ctx.lineCap = 'round';
+  ctx.beginPath();
+  path.forEach((point, index) => {
+    const screen = toScreen(point.x + 0.5, point.y + 0.5, transform);
+    if (index === 0) ctx.moveTo(screen.x, screen.y);
+    else ctx.lineTo(screen.x, screen.y);
+  });
+  ctx.stroke();
+  ctx.restore();
+}
+
+/** Bereits gefahrene Strecke (§5) — die eigene Spur, hell und ohne Pfeile. */
+function drawTrail(
+  ctx: CanvasRenderingContext2D,
+  trail: readonly { x: number; y: number }[],
+  transform: Transform,
+) {
+  ctx.save();
+  ctx.strokeStyle = 'rgba(255, 226, 150, .34)';
+  ctx.lineWidth = Math.max(3, transform.scale * 0.24);
+  ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
+  ctx.beginPath();
+  trail.forEach((point, index) => {
+    const screen = toScreen(point.x, point.y, transform);
+    if (index === 0) ctx.moveTo(screen.x, screen.y);
+    else ctx.lineTo(screen.x, screen.y);
+  });
+  ctx.stroke();
+  ctx.restore();
+}
+
 function drawRoute(
   ctx: CanvasRenderingContext2D,
   path: readonly { x: number; y: number }[],
   cargoStops: readonly CargoRouteStop[] | undefined,
-  transform: ReturnType<typeof mapTransform>,
+  transform: Transform,
   phase: number,
   complete: boolean,
 ) {
@@ -630,7 +1173,7 @@ function drawImageMarker(
   title: string,
   subtitle: string,
   order: number | undefined,
-  transform: ReturnType<typeof mapTransform>,
+  transform: Transform,
 ) {
   const point = toScreen(anchor.x + 0.5, anchor.y + 0.5, transform);
   const size = clamp(transform.scale * 1.45, 38, 72);
@@ -686,7 +1229,7 @@ function drawMarkerBadge(
   anchor: { x: number; y: number },
   image: HTMLImageElement | undefined,
   count: number,
-  transform: ReturnType<typeof mapTransform>,
+  transform: Transform,
 ) {
   const point = toScreen(anchor.x + 0.5, anchor.y + 0.5, transform);
   const size = clamp(transform.scale * 0.64, 24, 34);
@@ -720,8 +1263,8 @@ function drawRoadLinks(
   center: { x: number; y: number },
   x: number,
   y: number,
-  roads: ReadonlyMap<string, string>,
-  transform: ReturnType<typeof mapTransform>,
+  roads: ReadonlyMap<string, BuildingInstance>,
+  transform: Transform,
 ) {
   for (const [dx, dy] of [[1, 0], [0, 1]] as const) {
     if (!roads.has(`${x + dx},${y + dy}`)) continue;
@@ -743,12 +1286,6 @@ function roundedRect(ctx: CanvasRenderingContext2D, x: number, y: number, width:
   ctx.arcTo(x, y + height, x, y, r);
   ctx.arcTo(x, y, x + width, y, r);
   ctx.closePath();
-}
-
-function shadeColor(hex: string, amount: number) {
-  const value = Number.parseInt(hex.slice(1), 16);
-  const channel = (shift: number) => clamp(((value >> shift) & 255) + amount, 0, 255);
-  return `rgb(${channel(16)},${channel(8)},${channel(0)})`;
 }
 
 function clamp(value: number, min: number, max: number) {

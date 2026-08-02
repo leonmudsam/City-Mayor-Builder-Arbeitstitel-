@@ -11,8 +11,29 @@ import { computeRoadSegments, type RoadSegmentIndex } from '../infrastructure/ne
  * structural changes (place/complete/demolish/upgrade/pause), never per tick —
  * this keeps the tick O(production buildings) even for huge cities (§8).
  */
+/**
+ * Ein Lagerort der Stadt (§ Stadtarbeit P4). `storageCaps` sagt, WIE VIEL die
+ * Stadt fassen kann — diese Liste sagt, WO. Beide entstehen in derselben
+ * Schleife über denselben `case 'storage'`, damit die Summe der Orte den
+ * Deckel nicht verfehlen kann (Lehre D-042/D-049: eine Zahl ohne die Menge,
+ * aus der sie folgt, lädt zum zweiten Modell ein).
+ */
+export interface StorageSite {
+  buildingId: string;
+  defId: string;
+  cx: number;
+  cy: number;
+  /** Fassungsvermögen je Ressource an der aktuellen Ausbaustufe. */
+  caps: Partial<Record<ResourceId, number>>;
+}
+
 export interface Derived {
   storageCaps: Record<ResourceId, number>;
+  /**
+   * Die Lagergebäude, aus denen `storageCaps` besteht — deterministisch nach
+   * Gebäude-Id sortiert. Grundlage des Bestandsregisters (`economy/stockLedger.ts`).
+   */
+  storageSites: StorageSite[];
   /** Static supply per capacity-need (housing, water, work→jobs). */
   capacity: Record<NeedId, number>;
   /**
@@ -80,6 +101,7 @@ export function recomputeDerived(state: GameState, config: GameConfig): Derived 
   const roadNetwork = computeRoadNetwork(state, config);
   const roadSegments = computeRoadSegments(state, config, roadNetwork);
   const storageCaps: Record<ResourceId, number> = { money: Number.POSITIVE_INFINITY, wood: 0, stone: 0, food: 0, freshwater: 0 };
+  const storageSiteOf = new Map<string, StorageSite>();
   const capacity: Record<NeedId, number> = { housing: 0, water: 0, food: 0, work: 0, leisure: 0, energy: 0, safety: 0, health: 0, freshwater: 0 };
   const productionPerMin: Record<ResourceId, number> = { money: 0, wood: 0, stone: 0, food: 0, freshwater: 0 };
   const productionBonus: Record<string, number> = {};
@@ -123,9 +145,18 @@ export function recomputeDerived(state: GameState, config: GameConfig): Derived 
     let sensitivityHere = 1;
     for (const eff of effectiveEffects(def, b.upgradeLevel)) {
       switch (eff.type) {
-        case 'storage':
+        case 'storage': {
           storageCaps[eff.resource] += eff.amount;
+          // Derselbe Zweig füllt den Deckel UND die Ortsliste — deshalb kann die
+          // Summe der Lagerorte niemals von `storageCaps` abweichen.
+          let site = storageSiteOf.get(b.id);
+          if (!site) {
+            site = { buildingId: b.id, defId: def.id, cx, cy, caps: {} };
+            storageSiteOf.set(b.id, site);
+          }
+          site.caps[eff.resource] = (site.caps[eff.resource] ?? 0) + eff.amount;
           break;
+        }
         case 'capacity':
           capacity[eff.need] += eff.amount;
           if (eff.radius !== undefined) addCoverageSource(eff.need, { cx, cy, radius: eff.radius });
@@ -272,6 +303,7 @@ export function recomputeDerived(state: GameState, config: GameConfig): Derived 
 
   return {
     storageCaps,
+    storageSites: [...storageSiteOf.values()].sort((a, b) => (a.buildingId < b.buildingId ? -1 : a.buildingId > b.buildingId ? 1 : 0)),
     capacity,
     needCoverage,
     coverageCapacity,

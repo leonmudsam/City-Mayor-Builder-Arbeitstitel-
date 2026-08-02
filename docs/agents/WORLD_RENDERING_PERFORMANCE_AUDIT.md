@@ -1,4 +1,61 @@
-# WORLD RENDERING PERFORMANCE AUDIT — § Change 9.0, Phase S4
+# WORLD RENDERING PERFORMANCE AUDIT — v1.32
+
+## Aktueller Umsetzungsstand (1. August 2026)
+
+Der Vorimplementierungs-Audit aus Change 9.0 bleibt weiter unten vollständig
+als historische Entscheidungsgrundlage erhalten. Die damaligen Aussagen
+„fehlt“ und „geplant“ beschreiben nicht mehr durchgehend den Laufzeitstand von
+v1.32. Verbindlich für den aktuellen Renderer ist folgende Abgrenzung.
+
+### Umgesetzt
+
+- **Drei räumliche Ebenen:** Das Terrain besteht aus 64-Kachel-Chunks
+  (`GROUND_CHUNK = 64`, 8×8 Meshes für die 512²-Welt), die prozedurale
+  Massenvegetation aus 72-Kachel-Chunks (`NATURE_CHUNK_TILES = 72`) und
+  GLB-Hero-Props verwenden 48-Kachel-Chunks über `spatialPropChunks`. Frustum-
+  und Distanz-Culling arbeiten damit auf räumlichen Gruppen statt auf der
+  vollständigen Insel.
+- **Echtes Nature-HLOD:** Volle Bauminstanzen werden in der Ferne durch
+  gebündelte Waldsilhouetten ersetzt. Die Quellbäume bleiben logisch erhalten;
+  nur ihre Darstellung wechselt. Das Windmaterial arbeitet im Vertex-Shader
+  mit einer von allen Naturmeshes geteilten Zeit-Uniform. Das Update ist damit
+  **O(1)** und enthält keine JavaScript-Schleife pro Baum oder Instanz.
+- **Gebäude-HLOD nach Rolle:** `buildingHlodRenderer.ts` fasst ferne Gebäude als
+  schattenfreie `InstancedMesh`-Silhouetten der Rollen `civic`, `rural`,
+  `industrial`, `residential` und `neutral` zusammen. Die detaillierten GLBs
+  bleiben für den Nahbereich zuständig.
+- **Instanzierte Gebäudeumgebungen:** Rathaus-, Farm-, Sägewerk- und
+  Industrieumgebungen werden über `buildingEnvironmentRenderer.ts` je Prop-Art
+  und räumlichem Stadtsektor gebündelt. So bleiben die Gruppen cullbar, ohne
+  einen Draw-Call pro Bank, Zaun, Holzstapel oder Materialhaufen zu erzeugen.
+- **Qualitätsabhängiges Postprocessing:** `postProcessingQuality.ts` und
+  `WorldPostProcessing.ts` besitzen abgestufte Profile. Niedrig rendert direkt;
+  Mittel ergänzt SSAO/SMAA, Hoch zusätzlich subtilen Bloom und Ultra optional
+  eine sehr schwache Tiefenunschärfe. `OutputPass` bleibt für Tonemapping und
+  Ausgabefarbraum der letzte Composer-Pass.
+
+### Ehrlich offen nach v1.32
+
+- Nature-HLOD verwendet noch **keine echten Billboard-/Impostor-Atlanten** und
+  keinen weichen LOD-Crossfade. Sichtbarkeitswechsel bleiben diskret.
+- Änderungen an Vegetation und Ressourcenknoten markieren noch keine
+  kleinstmögliche Menge „dirtied“ Nature-Chunks für einen partiellen Rebuild;
+  der Neuaufbau ist gröber als die vorhandene Render-Chunkstruktur.
+- Die GLB-Pipeline besitzt weiterhin keine Draco-/Meshopt-Dekompression, keine
+  KTX2/BasisU-Texturen, keine Cache-Eviction und keine konsequent authored
+  Gebäude-/Hero-LOD-Kette. Hohe Polygonzahlen und 2048²-Texturen werden dadurch
+  nicht automatisch behoben.
+- Das Dev-Panel weist noch keine belastbare GPU-Zeit, GPU-/Texturspeicherbelegung,
+  vollständige LOD-Verteilung oder GLB-Cachebelegung aus. Vorher-/Nachher-Werte
+  auf echter Windows-Zielhardware stehen weiterhin aus; Desktop-Zielwerte
+  dürfen bis dahin nicht als erreicht behauptet werden.
+- Das Straßennetz wird bei einer Netzänderung weiterhin als **globales
+  Straßenmesh** neu aufgebaut. Die Terrainmeshes sind cullbare Chunks, besitzen
+  aber noch kein entfernungsabhängiges Geometrie-LOD.
+
+---
+
+## Historischer Vorimplementierungs-Audit — § Change 9.0, Phase S4
 
 > Audit vor Implementierung (Auftrag §2/§10/§11/§24.7). **Baut auf**
 > `WORLD_PERFORMANCE_AUDIT.md` (v0.76/0.77, Säule B) auf — hier nur die *neuen*

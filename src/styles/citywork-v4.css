@@ -398,6 +398,35 @@
   backdrop-filter: blur(10px);
   font-size: 12px;
 }
+/* § P2: Fahr-HUD — diese Karte IST die Fahransicht. Deutlich abgesetzt vom
+   Planungshinweis, damit sofort klar ist, dass jetzt gefahren wird. */
+.citywork-v4-map-drive {
+  position: absolute;
+  z-index: 4;
+  top: 9px;
+  left: 9px;
+  display: flex;
+  gap: 6px;
+  pointer-events: none;
+}
+.citywork-v4-map-drive span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 11px;
+  color: #17240a;
+  border-radius: 7px;
+  background: rgba(255, 212, 94, .93);
+  font-size: 12.5px;
+  font-weight: 850;
+  letter-spacing: .01em;
+}
+.citywork-v4-map-drive span + span {
+  color: #f2e6c2;
+  background: rgba(3, 18, 27, .84);
+  font-weight: 700;
+}
+
 .citywork-v4-map-zoom,
 .citywork-v4-map-layers {
   position: absolute;

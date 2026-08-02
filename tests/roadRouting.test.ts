@@ -68,7 +68,7 @@ describe('Straßen-Router (Infrastruktur 2.0 / I2)', () => {
     expect(preview.tiles.length).toBeGreaterThan(5);
   });
 
-  it('Höhenstraße überbrückt eine breite Wasserwand statt endlos auszuweichen', () => {
+  it('die eine automatische Straße überbrückt eine breite Wasserwand', () => {
     const controller = ready();
     setLevel(controller, 2); // road_elevated freigeschaltet
     // Breites Wasserband quer über die ganze Suchbreite, WEIT südlich des
@@ -87,10 +87,10 @@ describe('Straßen-Router (Infrastruktur 2.0 / I2)', () => {
     expect(isGapless(elevated.tiles)).toBe(true);
     expect(elevated.tiles.some((t) => t.status === 'bridge')).toBe(true);
 
-    // Die Bodenstraße kommt hier nicht durch (Regressionsschutz der Trennlinie).
-    const ground = controller.roadPathPreview([at(0, 6), at(0, 46)], 'road');
-    expect(ground.valid).toBe(false);
-    expect(ground.blocked).toBeGreaterThan(0);
+    // Das öffentliche Werkzeug wählt dieselbe Brückenkonstruktion automatisch.
+    const automatic = controller.roadPathPreview([at(0, 6), at(0, 46)], 'road');
+    expect(automatic.valid).toBe(true);
+    expect(automatic.tiles.some((tile) => tile.variant === 'bridge')).toBe(true);
   });
 
   it('buildRoadPath baut den ganzen Pfad atomar (Instanzen + Abbuchung + Netz)', () => {
@@ -98,13 +98,14 @@ describe('Straßen-Router (Infrastruktur 2.0 / I2)', () => {
     const moneyBefore = controller.state.resources.money;
     const roadsBefore = Object.values(controller.state.buildings).filter((b) => b.defId === 'road').length;
 
+    const preview = controller.roadPathPreview([at(0, 6), at(0, 10)], 'road');
     const result = controller.buildRoadPath([at(0, 6), at(0, 10)], 'road');
     expect(result.ok).toBe(true);
     if (result.ok) expect(result.built).toBe(5); // y 6..10
     const roadsAfter = Object.values(controller.state.buildings).filter((b) => b.defId === 'road').length;
     expect(roadsAfter).toBe(roadsBefore + 5);
-    // Basis 300 Geld je Bodenstraßenkachel → 5 × 300.
-    expect(controller.state.resources.money).toBe(moneyBefore - 5 * 300);
+    // Vorschau und atomare Abbuchung sind exakt dieselbe Kostenprojektion.
+    expect(controller.state.resources.money).toBe(moneyBefore - (preview.totalCost.money ?? 0));
     // Alle Kacheln sind Teil des Straßennetzes.
     for (let dy = 6; dy <= 10; dy++) {
       expect(controller.derived.roadNetwork.has(`${at(0, dy).x},${at(0, dy).y}`)).toBe(true);
@@ -120,5 +121,21 @@ describe('Straßen-Router (Infrastruktur 2.0 / I2)', () => {
     expect(result.ok).toBe(false);
     expect(Object.keys(controller.state.buildings).length).toBe(buildingsBefore);
     expect(controller.state.resources.money).toBe(moneyBefore);
+  });
+
+  it('verlängert einen echten steilen Inselhang automatisch zu einer 8-%-Serpentine', () => {
+    const { controller } = newController(undefined, { flatten: false, found: false });
+    unlockAll(controller);
+    // Stabiler Bake-Korridor: 14 Kacheln Luftlinie, aber rund 2,57
+    // Welt-Höheneinheiten Unterschied. Direkt wären das >18 %.
+    const start = { x: 275, y: 105 };
+    const end = { x: 275, y: 119 };
+    controller.derived.roadNetwork = new Set([`${start.x},${start.y}`]);
+    const preview = controller.roadPathPreview([start, end], 'road');
+    expect(preview.valid).toBe(true);
+    expect(preview.tiles.length).toBeGreaterThan(40);
+    expect(preview.profile.turnCount).toBeGreaterThanOrEqual(4);
+    expect(preview.profile.maxGradePercent).toBeLessThanOrEqual(8.000_001);
+    expect(preview.profile.variantCounts.pass).toBeGreaterThan(0);
   });
 });

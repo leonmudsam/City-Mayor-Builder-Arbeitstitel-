@@ -173,7 +173,7 @@ interface UiState {
   openInfrastructureNetwork(): void;
   closeInfrastructureNetwork(): void;
   /** UI-only Straßenentwurf. Kosten/Validierung kommen aus roadPathPreview;
-   *  gebaut wird erst nach Bestätigung über placeBuilding. */
+   *  gebaut wird erst nach Bestätigung atomar über buildRoadPath. */
   roadPlanPath: { x: number; y: number }[];
   setRoadPlanPath(path: { x: number; y: number }[]): void;
   clearRoadPlan(): void;

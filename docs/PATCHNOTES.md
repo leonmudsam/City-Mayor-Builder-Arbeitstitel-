@@ -1,5 +1,886 @@
 # Patch Notes
 
+## v1.34 — Stadtarbeit P4: Jedes Lager hat seinen eigenen Bestand (Save v32)
+
+### Was
+
+Der Auftrag verlangt in §8 wörtlich: **„Keine globale magische Ressource. Jedes
+Lager hat eigene Bestände."** Genau das gibt es jetzt.
+
+- **Bestandsregister.** Rathaus, Lagerhäuser, Markt, Wasserwerk und die Häfen
+  halten ihren Vorrat **einzeln**. Was die Stadt insgesamt besitzt, ist ab sofort
+  die Summe dessen, was irgendwo wirklich liegt.
+- **Der Ladeort ist eine Entscheidung.** Der Planer zeigt je Lager Bestand,
+  Fassungsvermögen, Entfernung zum ersten Ziel und die einzige Frage, die zählt:
+  reicht das hier? Ein knappes Lager wird nicht ausgeblendet, sondern mit seinem
+  Preis gezeigt (Umweg gegen Nachladen).
+- **Die Wahl hat Folgen.** Entnommen wird an genau diesem Lager, ein Abbruch gibt
+  die Ladung genau dorthin zurück, und reicht der Vorrat nicht, startet die
+  Mission nicht — statt still aus dem Stadtkonto zu ziehen.
+- **Beladung bremst.** Ein volles Fahrzeug erreicht noch 72 % seines Tempos, ein
+  leeres volles. Damit ist „direkt losfahren oder erst leer zum Zwischenlager?"
+  eine Rechnung statt einer Geschmacksfrage.
+
+### Warum
+
+Vorher entschied die Simulation den Ladeort **stumm über die alphabetische
+Gebäude-Id** und entnahm aus `state.resources`. Ein Spieler, der „ich lade im
+großen Lager im Norden" dachte, lud faktisch woanders — die Wahl eines Lagers war
+folgenlos, und jedes Nachlade-Panel darauf wäre eine Attrappe gewesen.
+
+### Architektur
+
+**Kein drittes Lagermodell (§2/§8).** Das Register benutzt denselben
+`BuildingInventory`-Typ und dieselbe Map wie die lokalen Betriebslager aus Save
+v17. Möglich wurde das durch eine Messung: von 34 Gebäudetypen haben **3** ein
+Betriebslager (Sägewerk, Steinbruch, Farm), **7** eine Lagerwirkung — und
+**keines beides**. Ein Test prüft diese Überschneidungsfreiheit zuerst.
+
+**Die Invariante ist der Vertrag:** `state.resources[r] === Σ Stadtlager[r]`
+(Geld ausgenommen — es liegt in keinem Lagerhaus). `state.resources` bleibt die
+Bilanzsumme, die Baukosten, Verbrauch, Quests und Balancing unverändert lesen.
+
+**Zwei Regeln (D-052).** (1) Die Ableitung gibt die **Orte** heraus, nicht nur
+die Summe: `Derived.storageSites` entsteht in derselben Schleife wie
+`storageCaps` — eine getrennt gepflegte Liste könnte vom Deckel abweichen.
+(2) Der Abgleich läuft an **einer** Stelle: `state.resources` wird an 31 Stellen
+in 8 Modulen verändert; ein Register, das jede davon selbst pflegen müsste,
+driftet beim ersten vergessenen Aufruf.
+
+### Auswirkung
+
+Save **v32** mit linearer Migration `v31→v32`. Alte Spielstände behalten
+Ressourcen, Gebäude und laufende Missionen vollständig; ihr Vorrat wird beim
+ersten Abgleich auf die vorhandenen Lager verteilt — derselbe Code, der auch in
+jedem späteren Frame läuft, also kein Sonderpfad im Ladeweg. Balancing
+unverändert.
+
+### Ehrliche Grenze
+
+Nur Gebäude mit `storage`-Wirkung haben einen eigenen Bestand. **Farm, Sägewerk,
+Pumpwerk und Feuerwache sind Abholpunkte ohne Lager** — dort bleibt die Ware die
+Bilanz der Stadt, und die Oberfläche zeigt für sie keine Bestandswahl, statt eine
+Zahl zu erfinden.
+
+### Zukunft
+
+Offen und in der UI **nicht vorgetäuscht**: Nachladen an einem zweiten Lager
+während der Fahrt, Gebäude-Interaktion direkt auf der Karte (Bestand ansehen,
+laden/entladen), freie Stoppreihenfolge, Verkehrsrückkopplung, Häfen als
+Netzknoten. Der Folgeauftrag verlangt zusätzlich eine **isometrische Weltkamera
+statt der 2D-Karte** — das kehrt D-050/D-051 um und ist als **D-053** zur
+Entscheidung vorgelegt, nicht still umgesetzt.
+
+### Dateien
+
+`src/game/economy/stockLedger.ts` (neu) · `src/game/simulation/derived.ts`
+(`storageSites`) · `src/game/commands/controller.ts` (Abgleich, Ladeortwahl,
+`setActivitySource`) · `src/game/operations/transport.ts` (Netzübersicht zählt
+Stadtlager nicht doppelt) · `src/game/activities/driving.ts` (`loadedTileSpeed`)
+· `src/components/citywork/SupplyPicker.tsx` (neu) ·
+`src/components/panels/ActivityRoutePlanner.tsx` ·
+`src/components/citywork/ManualRouteMap.tsx` · `src/game/types.ts` ·
+`src/game/config/schemas.ts` · `src/game/storage/migrations.ts` ·
+`src/game/newGame.ts` · `tests/stockLedger.test.ts` (neu, 24 Tests) ·
+`src/styles/citywork-smart.css`
+
+### Assets
+
+Keine.
+
+---
+
+## v1.33 — Stadtarbeit-Overhaul P3: Die Logistikkarte ist die Welt (Save bleibt v31)
+
+### Was
+
+Die 2D-Stadtarbeitskarte zeigt ab sofort die **echte Insel** statt einer
+stilisierten Platzhalterfläche, und das Selbstfahren ist **straßengebunden**
+statt frei gelenkt.
+
+- **Höhenrelief.** Gebirge, Täler, Klippen und Terrassenkanten sind in der
+  Draufsicht sichtbar — als Hangschattierung aus denselben Höhen, mit denen der
+  3D-Renderer sein Gelände baut.
+- **Vegetation.** Die Karte zeigt die Bäume, Büsche und Felsen, die auch in der
+  Welt stehen — nicht ähnliche, sondern dieselben.
+- **Wasser mit Tiefe.** Uferbank und offenes Meer unterscheiden sich; Klippen-
+  und Strandküsten sind auseinanderzuhalten.
+- **Infrastruktur hervorgehoben.** Lager, Logistikzentren, Häfen und aktive
+  Betriebe tragen eigene Marker. Brücken und Viadukte heben sich vom
+  Bodenstraßennetz ab.
+- **Alternative Route.** Weicht der gezeichnete Weg vom optimierten Vorschlag
+  ab, erscheint dieser blau gestrichelt daneben.
+- **Fahren wurde einfacher.** W gibt Gas, S bremst und fährt rückwärts, A und D
+  wählen an der **Kreuzung** die Abzweigung. Dazwischen folgt das Fahrzeug der
+  Straße von selbst. Es kann sie nicht mehr verlassen — kein Abkommen, kein
+  Zurückgezogenwerden, kein Ausrichten.
+- **Fahr-Status.** Tempo, nächstes Ziel mit Entfernung, nächste Anweisung
+  („rechts abbiegen in 32 m") und erledigte Ziele stehen während der Fahrt unten
+  in der Karte. Die gefahrene Strecke bleibt als Spur sichtbar.
+- **Fahrzeugwahl wirkt.** Die Höchstgeschwindigkeit kommt aus `speedKph` des
+  gewählten Fahrzeugs — derselben Angabe, mit der die automatische Tour rechnet.
+
+### Warum
+
+Der Auftrag nannte die alte Ansicht „eine vereinfachte Platzhalterkarte" und das
+WASD-System „zu kompliziert". Die Messung stützt beides nur zur Hälfte: Die
+Karte war **nie** eine Fake-Karte — Terrain, Regionen, Straßen und Gebäude kamen
+schon vorher aus dem echten Spielstand. Was fehlte, war alles, woran man eine
+Landschaft **erkennt**: Höhe, Bewuchs, Küstenform. Eine flache Farbfläche je
+Terrainklasse sieht aus wie ein Platzhalter, auch wenn die Daten echt sind.
+
+Beim Fahren war der Befund eindeutiger. Die Arcade-Lenkung hielt Position und
+Winkel frei und zog das Fahrzeug bei Bedarf zur Fahrbahn zurück — der Spieler
+kämpfte gegen die Rückstellung, statt zu navigieren. Der Auftrag verlangt
+„Straßen-Navigation wie ein vereinfachtes Strategiespiel": Das Fahrzeug sitzt
+jetzt **immer** auf einer Kante zwischen zwei Straßenkacheln. Damit erledigt sich
+auch die alte Frage „hart blockieren oder weich zurückziehen?" — sie stellt sich
+nicht mehr.
+
+### Architektur
+
+**D-051: Die Logistikkarte hat keine eigenen Weltdaten.** Es gibt genau eine
+Leseinstanz, `src/renderer/worldProjection.ts` — ohne `three`, ohne `react`, ohne
+Canvas. Sie liefert Zahlen und Farben; wie daraus Dreiecke werden (3D) oder Pixel
+(2D), ist Sache des Aufrufers. Deshalb entsteht **kein zweiter Renderer**, wie
+der Auftrag ausdrücklich fordert.
+
+Das ist prüfbar und geprüft: `tests/worldProjection.test.ts` vergleicht die
+Kachelabtastung über ein Weltraster gegen `bakedSurfaceAt`/`terrainAt`/
+`terrainHeightAt` und die Vegetation **Instanz für Instanz** gegen
+`collectRegionNature` — dieselbe Funktion, aus der die 3D-Welt wächst
+(D-042/D-044). Auch die Regel für gesperrtes Land liegt jetzt einmal statt
+zweimal vor und wird von beiden Ansichten gelesen.
+
+**Eine Fahrphysik, beide Ansichten (D-050 unverändert).**
+`src/game/activities/driving.ts` trägt weiterhin die einzige Fahrdynamik; sie
+wurde ersetzt, nicht ergänzt. Der Zustand ist jetzt `{from, to, t, speed}` —
+Position und Blickwinkel werden daraus **abgeleitet** (`drivePose`) statt
+getrennt gehalten, sonst könnten Position und Straßenbindung auseinanderlaufen.
+Der 3D-Renderer ruft dieselbe Funktion.
+
+**Leistung.** Weltbild (ein Pixel je Kachel, ein `drawImage`) und Vegetation
+(in 24-Kachel-Chunks) werden gebacken und hängen **ausschließlich am
+Freischaltzustand** — hingen sie an der Gebäudebelegung, würde jeder Bauklick die
+halbe Insel neu berechnen (die Falle aus D-045). Props unter Gebäuden werden beim
+Zeichnen verdeckt statt aus der Verteilung entfernt: sichtbar identisch, aber
+zwischenspeicherbar. Bodendeckung (Gras, Blumen, Ackerspuren) wird gar nicht erst
+gesammelt — aus dieser Höhe liegt sie unter einer Kachel.
+
+### Zwei Befunde aus der Messung
+
+**Die Insel hat keinen Gewässergrund.** Die Tiefenrampe stand zuerst bei 7 m.
+Gemessen: tiefste Stelle **5,06 m**, 94 % aller Wasserkacheln zwischen 2 und 3 m.
+Mit dem geschätzten Wert wäre das Meer eine einzige Fläche ohne Uferbank
+geblieben — die Rampe erreicht ihr dunkles Ende nirgends. Konstanten, die die
+Welt beschreiben, gehören gemessen.
+
+**Ein erreichter Stopp warf das Fahrzeug an den Start zurück.** Die Fahrschleife
+hatte `anchors` als Objekt im Abhängigkeitsarray. Das ist ein `useMemo` über
+`game.version` und bekommt bei **jedem** Command eine neue Identität — also auch,
+wenn ein Ziel abgeschlossen wird. Jetzt steht dort der Startpunkt als **Wert**.
+Gefunden hat das der Smoke im laufenden Spiel, nicht ein Test: ein Test, der nie
+ankommt, sieht es nie.
+
+### Auswirkung
+
+Keine Save-Änderung (**v31**), keine Simulations- oder Balancing-Änderung. Die
+Fahrdynamik ist neu und wirkt in beiden Ansichten — die 3D-Fahrt ist weiterhin
+nicht verdrahtet, teilt aber dieselbe Funktion. Bestehende Spielstände laufen
+unverändert.
+
+### Zukunft
+
+Nicht umgesetzt und in der UI **nicht vorgetäuscht**: Lagerbestände je Gebäude
+(P4 — die einzige echte Simulationsarbeit, mit Migration; ohne sie wäre die Wahl
+des Lagers eine Attrappe), Verkehrsrückkopplung aus gefahrenen Routen, Fähren
+und Häfen als Netzknoten, Stoppliste mit „Ziel außerhalb Reichweite", echte
+Gebäudesilhouetten in der Karte.
+
+### Dateien
+
+- **Neu:** `src/renderer/worldProjection.ts`,
+  `src/components/citywork/worldMapLayers.ts`,
+  `tests/worldProjection.test.ts`, `docs/agents/CITYWORK_MAP_PIPELINE.md`
+- **Ersetzt:** `src/game/activities/driving.ts` (Straßengraph statt Arcade),
+  `tests/driving.test.ts`
+- **Geändert:** `src/components/citywork/ManualRouteMap.tsx`,
+  `src/components/panels/ActivityRoutePlanner.tsx`,
+  `src/renderer/three/ThreeMapRenderer.ts`, `src/styles/citywork-smart.css`
+
+### Assets
+
+Keine neuen Assets.
+
+## v1.32 — World Visual Overhaul (Save bleibt v31)
+
+### Was
+
+Die Insel erhält einen vollständigen visuellen Laufzeit-Umbau nach den
+verbindlichen World-Mockups, ohne das v0.72-Bake, die 40 Regionen oder
+Gameplaydaten zu ersetzen.
+
+- Terrain-Chunks binden nur noch die örtlich relevanten Splat- und Detailmaps.
+  Klippen und Berge teilen ihre Texturprojektion; Normal-, Roughness- und
+  AO-Details ergänzen Wiesen, Waldboden und Fels. Gewichtete 5×5-Übergänge
+  verbinden Biome und Küsten weicher.
+- Vegetation besitzt unterscheidbare Zonenpaletten, instanzierte Wald-Cluster
+  als Fern-HLOD und gemeinsamen Shaderwind. Zufällige Wiesenfelsen entfallen;
+  Hochland-, Küsten- und Waldfelsen bleiben gezielt gesetzt.
+- Wasser nutzt Tiefenfarben, drei Wellen, Strömung, Uferschaum, analytisches
+  Fresnel und einen transparenten Flachwasserbereich, der zur Tiefe wieder
+  vollständig blickdicht wird. Ein fein aufgelöstes inneres Wassergitter hält
+  Tiefen- und Schaumübergänge an der Küste präzise; der äußere Ring bleibt
+  geometrisch günstig.
+- Gebäude werden rollenabhängig farblich und materiell harmonisiert. Rathaus,
+  Sägewerk, Farmen, Lager/Depot, Steinbruch, Wasserwerk und Industrie/Energie
+  erhalten automatisch instanzierte, deterministische Außenbereiche. In der
+  Fernsicht ersetzen räumlich gechunkte, pickbare HLOD-Silhouetten die
+  Vollmodelle; Rebuilds geben ihre GPU-Instanzbuffer wieder frei.
+- Qualitätsprofile steuern Schatten, Wolken, SSAO, zurückhaltendes HDR-Bloom,
+  SMAA und optional sehr subtilen DOF. Die Kamera verfolgt Terrain-, Wasser- und
+  Fahrbahnhöhe, fokussiert ausgewählte Gebäude näher und führt den
+  Schattenfokus über dasselbe exakte Kameraziel.
+
+### Warum
+
+Der vorhandene Renderer war funktional und drop-in-fähig, erzeugte aber ein
+uneinheitliches Gesamtbild: fast alle Terrain-Sampler waren global aktiv,
+Biome wechselten kachelnah, Natur besaß kein echtes Fern-LOD und die teuren
+Gebäude-GLBs blieben auch in der Übersicht vollständig sichtbar. Globales
+Materialtinting konnte gemeinsame Cache-Quellen verändern, und wichtige
+Gebäudetypen standen ohne lesbare Arbeitsflächen in der Landschaft. Die neue
+Pipeline bringt Terrain, Natur, Wasser, Architektur, Atmosphäre und Kamera in
+eine gemeinsame malerische Low-Poly-Bildsprache und begrenzt gleichzeitig die
+Kosten pro Qualitätsstufe.
+
+### Architektur
+
+Die Änderungen bleiben unter `src/renderer/three/**`. Simulation und Renderer
+sind weiterhin getrennt; Gebäudeumgebungen und HLODs werden ausschließlich aus
+Snapshots projiziert und erzeugen keinen neuen Spielzustand.
+
+Der Terrainshader ermittelt je Chunk ein kompaktes Layer-Set und teilt
+Shaderprogramme über stabile Cache-Schlüssel. Nicht vorhandene optionale
+Wüsten-/Trockenlayer werden auf der aktuellen Insel gar nicht gebunden.
+Klippen- und Berggewichte lesen dieselbe triplanare Textur. Die bestehenden
+Terrain-, Natur- und Hero-Chunks bleiben die Culling-Grenzen.
+
+Natur-HLOD und Gebäude-HLOD verwenden instanzierte Geometrie. Baumbewegung
+ändert pro Frame nur ein gemeinsames Uniform. Gebäude-GLBs behalten gemeinsame
+Geometrien und Texturen, erhalten aber pro sichtbarer Instanz eine kleine
+Materialhülle; die Farbkorrektur greift nach dem Albedo-Sampling und schützt
+Glas, transparente und emissive Materialien. Die prozeduralen
+Gebäudeumgebungen werden nach Prop-Typ und räumlichem Stadtsektor instanziert.
+
+`WorldPostProcessing` besitzt eine explizite Passreihenfolge. Niedrige Qualität
+rendert direkt; höhere Profile enden nach SSAO/Bloom/DOF/SMAA in genau einem
+Output-Pass, sodass ACES-Tonemapping nicht doppelt angewendet wird.
+`SkyEnvironment` bleibt einzige Autorität für Licht, Nebel und Himmelsfarben.
+Wasser verwendet eine analytische Horizontreflexion statt einer zusätzlichen
+Spiegelkamera.
+
+### Auswirkung
+
+Die Welt zeigt weichere Landschaftszonen, lesbarere Gebirgskörper, bewusstere
+Freiflächen, stärker gegliederte Wälder und glaubwürdigere Küsten. Gebäude
+erhalten aus der Entfernung eine ruhigere Silhouette und im Nahbereich einen
+erkennbaren funktionalen Kontext. Die nähere, höhenfolgende Kamera stärkt den
+Stadtfokus, während große Übersichten weiterhin verfügbar bleiben.
+
+Das Save-Schema bleibt **v31**. Es gibt keine Migration, kein Terraforming,
+keine Änderung der Baubarkeit und keine neue Simulation. Browser- und
+Desktop-Pfad verwenden dieselbe Codebasis; fehlende Bild-/GLB-Drop-ins bleiben
+crash-sicher durch vorhandene prozedurale Fallbacks abgedeckt.
+
+### Zukunft (bewusst offen)
+
+Die vorhandenen 54 Gebäude-GLBs umfassen zusammen ungefähr 81 MB und 1,20 Mio.
+Dreiecke; 47 Modelle verwenden 2048²-Texturen, 47 überschreiten 6.000 und 36
+überschreiten 20.000 Dreiecke. Noch ausstehend sind daher ein Offline-
+Assetprozess mit Draco/Meshopt/KTX2, Cache-Eviction und authored LODs. Ebenfalls
+offen bleiben echte Natur-Billboards mit Crossfade, ein GPU-/Speicher-/LOD-
+Telemetriepanel, Messungen auf Zielhardware, Terrain-Geometrie-LOD, Chunking des
+globalen Straßenmeshs und die interaktive visuelle Validierung beziehungsweise
+das Feintuning der neuen World-Space-/triplanaren Terrain-Details. Der
+Vite-Hauptchunk ist weiterhin etwa 10 MB groß und
+benötigt später gezieltes Code-/Asset-Splitting.
+
+### Verifikation
+
+- `npx tsc -b --force`: grün.
+- `npx eslint src tests`: 0 Fehler, keine Warnungen.
+- `npx vitest run --reporter=dot`: **86 Testdateien / 697 Tests**, alle grün.
+- `npm run build`: grün; Produktions-Preview antwortet mit HTTP 200.
+- Der verbindliche interaktive 3D-Screenshot-Smoke ist technisch blockiert,
+  weil keine Browserinstanz bereitgestellt wird (`agent.browsers.list() = []`).
+  Eine Shader- oder Look-Freigabe wird deshalb nicht behauptet.
+- Der native Windows-Tauri-Build ist ohne installiertes `rustc`/`cargo` nicht
+  ausführbar.
+
+### Dateien
+
+Kernänderungen liegen in `ThreeMapRenderer.ts`, `CameraController3D.ts`,
+`SkyEnvironment.ts`, `graphicsQuality.ts`, `natureRenderer.ts` und
+`natureZones.ts`. Neu hinzugekommen sind `WorldPostProcessing.ts`,
+`postProcessingQuality.ts`, `waterAppearance.ts`, `buildingAppearance.ts`,
+`buildingAppearanceRenderer.ts`, `buildingEnvironment.ts`,
+`buildingEnvironmentRenderer.ts` und `buildingHlodRenderer.ts`. Reine Tests
+decken Post-Reihenfolge und Qualitätsprofile, Wasserfunktionen, Natur-HLOD und
+Shaderwind, Gebäudeharmonisierung, Umgebungsprojektion, Gebäude-HLOD sowie den
+höhenfolgenden Kamerafokus ab.
+
+Die verbindlichen Übergabedokumente `PROJECT_STATE.md`, `HANDOFF_LOG.md` und
+`OPEN_TASKS.md` sowie Terrainmaterial- und Performance-Audits wurden auf den
+v1.32-Iststand gebracht; historische Auditabschnitte bleiben als Historie
+erhalten.
+
+### Assets
+
+Es wurden keine neuen Bild- oder Gebäude-GLBs benötigt. Der Renderer verwendet
+die vorhandenen Drop-in-Assets und aktiviert selektiv die bereits registrierten
+Wiesen-Normalmap, Waldboden-AO sowie Fels-Normal-/Roughness-Maps. Der
+Gebäude-Audit ändert keine Quelldatei; die genannten Kompressions- und
+LOD-Arbeiten bleiben ein separater, reproduzierbarer Offline-Schritt.
+
+## v1.31 — Straßen-, Höhen- und Terrain-Overhaul (Save v31)
+
+### Was
+
+Der Baushop bietet spielerseitig nur noch **eine Straße** an. Der Spieler setzt
+Start und Ziel; dieselbe Vorschau wählt aus dem gebackenen Inselterrain
+automatisch Land-, Hang-, Pass-, Stütz-, Viadukt-, Brücken- oder Küstenabschnitte.
+Zu kurze Steilverbindungen werden nicht kaschiert: Der Router sucht
+deterministisch nach einer längeren Serpentine und sperrt die Trasse, wenn selbst
+diese kein durchgehendes Profil mit höchstens **8 %** Steigung ergibt.
+
+Die neue große Straßenvorschau zeigt vor dem Bau:
+
+- Länge in Metern, Höhendifferenz sowie maximale und mittlere Steigung;
+- Terrain- und Fahrbahnprofil, dominante Variante und alle verwendeten Varianten;
+- den exakten Bedarf an Geld, Stein und Holz sowie Blockierungsgründe;
+- Start, Live-Ziel und die echte Fahrbahnhöhe der Vorschau im 3D-Overlay.
+
+Bestätigen baut den gesamten Pfad atomar: Entweder werden alle neuen Abschnitte
+mit genau den angezeigten Kosten gebaut oder keiner. Ein langer Mauszug erzeugt
+nur Start und Live-Endpunkt, keine Flut dauerhafter Wegpunkte. Die interne
+Definition `road_elevated` bleibt ausschließlich zum Laden alter Spielstände
+erhalten und erscheint nicht mehr als zweites Werkzeug.
+
+Gebäude erhalten außerdem einen gemeinsamen, datengetriebenen Fundamentplan mit
+den Terrainklassen `BUILDABLE_FLAT`, `BUILDABLE_SLOPE`, `BUILDABLE_TERRACE`,
+`WATER_EDGE` und `CLIFF`. Hang, Küste und Klippe erzeugen passende talwärtige
+Stützwände, Terrassen, Pfähle oder Klippenanker samt Mehrkosten und Bauzeit.
+Ghost und fertiges Gebäude verwenden denselben Plan; die alten gestapelten
+grauen Vollplattformen entfallen.
+
+### Warum
+
+Die bisherige Kachelstraße kannte weder ein zusammenhängendes Höhenprofil noch
+stabile Deckhöhen. Vorschau, Fahrbahn, Pfeiler und Fahrzeuge lasen teilweise
+unabhängig die Terrainhöhe. Dadurch konnten Brücken im Wasser liegen, Fahrzeuge
+durch Decks fahren und steile Verbindungen als unleserliche Treppen erscheinen.
+Der Overhaul macht die Simulation zur einzigen Autorität für Trasse, Höhe,
+Variante und Preis; UI und Renderer lesen nur dieses Ergebnis.
+
+### Architektur
+
+`src/game/roads/roadProfile.ts` berechnet das kanonische Längsprofil aus der
+gleichen Placement-Oberfläche wie der Gebäudebau. Bereits gebaute Straßenknoten
+sind harte Höhenanker. `roadRouting.ts` erweitert das vorhandene Vierer-Routing
+um deterministische Kehren; es gibt kein zweites Straßennetz. `roadPlanning.ts`
+reicht Profil, Varianten und positionsabhängige Materialkosten bis zum
+`GameController` durch. Der Controller validiert und bezahlt einmal und schreibt
+alle Abschnitte in einem strukturellen Update.
+
+Neue Straßen speichern optional `roadEngineering` mit Fahrbahn-/Terrainhöhe,
+Steigung, Variante und gemeinsamer Routen-ID. Dadurch verwenden Renderer,
+Brückenpfeiler, Ambientverkehr, Missions- und Transferfahrzeuge nach dem Laden
+dieselbe Fahrbahnhöhe. Save **v31** ist additiv; `v30→v31` erhöht nur die
+Versionsnummer, alte Straßen bleiben über den prozeduralen Legacy-Fallback
+vollständig ladbar.
+
+`src/game/buildings/foundation.ts` ist die gemeinsame reine Fundamentprojektion.
+Vorschaukosten, Abbuchung, Bauzeit, Ghost und fertige Geometrie lesen denselben
+`FoundationPlan`. Das bewahrt die Trennung Simulation/Rendering.
+
+Die durchgehende prozedurale Fahrbahn bleibt geometrische Autorität und
+Crash-sicherer Fallback. Sieben kleine Single-Mesh-GLBs liefern instanzierte
+Nahbereichsdetails: `road_flat`, `road_slope`, `road_support`, `road_viaduct`,
+`road_bridge`, `road_hairpin_curve` und `road_coast`. Pfeiler und Querträger
+werden instanziert und reichen bis zum tatsächlichen Untergrund.
+
+### Auswirkung
+
+Ravinen und Wasser werden automatisch überspannt, Berghänge erhalten bei
+genügend Raum echte Kehren, und Fahrzeuge folgen auch auf erhöhten Abschnitten
+der gespeicherten Fahrbahn. Die Anzeige und die tatsächliche Abbuchung nutzen
+dieselbe Kostenquelle. Normale Alt-Spielstände brauchen keinen Neustart; es gibt
+keine Welt- oder Balancing-Neuberechnung.
+
+### Zukunft (bewusst offen)
+
+Manuelle Deckhöhen, Tunnel sowie frei verschiebbare Kontrollpunkt-Griffe sind
+nicht vorgetäuscht. Das Straßenoberflächen-Mesh wird bei Netzänderungen noch
+global statt chunkweise neu aufgebaut; die unsichtbare Auswahlfläche pro
+Straßenkachel ist ebenfalls noch ein ehrlicher Optimierungspunkt. Hochwertige
+handmodellierte Asset-Sets können die vorhandenen Drop-ins später ersetzen,
+ohne Simulation oder Save anzufassen.
+
+### Verifikation
+
+`npx tsc -b --force`, `npx eslint src tests`, die vollständige Vitest-Suite
+(**78 Testdateien / 638 Tests**) und `npm run build` sind grün. Der gebaute
+Produktions-Preview antwortet mit HTTP 200. Der vorgeschriebene interaktive
+3D-Screenshot-Smoke konnte nicht ausgeführt werden, weil die integrierte
+Browser-Laufzeit keine Browserinstanz bereitstellt
+(`agent.browsers.list() = []`). Es wird deshalb keine visuelle Freigabe
+behauptet. Der native Windows-Tauri-Build kann auf diesem Rechner mangels
+installiertem `rustc`/`cargo` nicht gestartet werden.
+
+### Dateien
+
+`src/game/roads/{roadProfile,roadRouting,roadPlanning}.ts` ·
+`src/game/buildings/{foundation,placement}.ts` ·
+`src/game/commands/controller.ts` ·
+`src/game/{types,newGame}.ts` · `src/game/storage/migrations.ts` ·
+`src/game/config/{types,schemas,buildings.config}.ts` ·
+`src/components/{MapView,operations/SmartRoadPlannerHud}.tsx` ·
+`src/components/operations/{adapters,viewModels}.ts` ·
+`src/components/panels/BuildMenu.tsx` · `src/renderer/IMapRenderer.ts` ·
+`src/renderer/three/ThreeMapRenderer.ts` ·
+`src/assets/{modelManifest,registry,roadTextureManifest}.ts` ·
+`src/styles/visual-overhaul.css` ·
+`tests/{roadProfile,roadRouting,roadOverhaul,roadModels,foundation}.test.ts`
+
+### Assets
+
+Neu: sieben aktive GLBs unter `src/assets/models/{roads,bridges}/`. Die
+generierten `README.md`/`PROMPTS.md`, `docs/3D_MODEL_MANIFEST.md` und
+`docs/ROAD_TEXTURES.md` wurden mit Registry und Manifest synchronisiert.
+
+## v1.30 — Stadtarbeit P2: Selbst fahren in der 2D-Karte (Save v30, D-050)
+
+> Auftrag: „Stadtarbeit Overhaul / Manuelle Logistik & Verkehrssystem", Phase
+> **P2 (Transportmodell)** — mit der Nutzerentscheidung vom 01.08.2026:
+> D-039 bleibt bestehen, Fahren wird eine **Variante**, und gefahren wird in der
+> **bestehenden 2D-Stadtarbeitskarte**, nicht in der 3D-Welt.
+
+### Was
+
+Ein Auftrag trägt jetzt eine **Ausführungsart**. Im Planer stehen zwei
+gleichwertige Knöpfe:
+
+- **Fahren lassen** — die Stadt fährt die Strecke selbst ab. Bequem, reguläre
+  Prämie. Das ist der Standard.
+- **Selbst fahren** — der Planer **wird zur Fahransicht**: dieselbe Karte, in der
+  eben noch mit der Maus die Route gezogen wurde, zeigt jetzt das Fahrzeug, das
+  mit W/A/S/D oder den Pfeiltasten über das Straßennetz gesteuert wird. Q oder
+  ESC steigen aus, das Lenkrad im Auftrags-Widget führt wieder hinein.
+  Prämienaufschlag **+20 %** (`activitiesConfig.manualDriveBonusFactor`).
+
+Genau ein Modus ist wirksam. Bei `manual` steht der Missionswagen am Startpunkt
+still, statt die Tour selbst zu Ende zu fahren — sonst erledigte die Stadt genau
+die Fahrt, für die der Spieler den Aufschlag bekommt.
+
+### Warum das D-039 nicht bricht
+
+Active Simplicity automatisiert **Ausführung**, nie **Wahl**. Fahren als Pflicht
+wäre wiederholte Ausführung. Fahren als Angebot ist das Gegenteil: Der Spieler
+entscheidet je Auftrag, ob er die Ausführung abgibt. Die Automatik bleibt
+vollständig erhalten und ist der Standard. D-039 wird **ergänzt, nicht
+aufgehoben** (D-050).
+
+### Architektur
+
+**Ein Auftragsmodell** — `src/game/activities/transportOrder.ts` hält
+`{start, cargo, vehicle, stops, targets, priority, mode}` für alle Aufgabenarten.
+Es ist eine **Projektion** der bestehenden `CargoRouteEvaluation`: Stopps,
+Mengen und Reihenfolge werden aus `logistics.ts` übernommen und nur in die
+Auftragssprache übersetzt (`source→load`, `delivery→unload`, `resupply→reload`).
+Kein zweites Logistiksystem (§2/§8); ein Test vergleicht jede Zahl gegen die
+Vorschau.
+
+**Eine Fahrphysik** — das manuelle Fahren lag als private Methode im
+Three-Renderer und war für die 2D-Karte unerreichbar. Statt es dort nachzubauen
+(zwei Reichweitenregeln, zwei Straßenbindungen), liegt der Fahrschritt jetzt als
+reine Funktion in `src/game/activities/driving.ts`. **Beide** Ansichten rufen
+`stepDrive`/`reachedTarget`; der Renderer rechnet nichts mehr selbst. Dadurch ist
+die Fahrdynamik erstmals ohne Renderer testbar (11 Tests): Straßenbindung **ohne
+harte Blockade**, WASD und Pfeiltasten gleichwertig, Determinismus.
+
+**Kein zweiter Renderer.** Die Fahrt läuft im vorhandenen Canvas der
+`ManualRouteMap` über eine rAF-Schleife, die an React vorbei zeichnet — 60
+Bilder/s durch React zu schicken wäre genau der Re-Render, den §6 verbietet.
+Straßen, Zeichenfunktion und Rückrufe kommen über einen `liveRef`, weil sie bei
+**jedem** Command die Identität wechseln: stünden sie in den Abhängigkeiten des
+Effekts, würde ein erreichter Stopp die Fahrt neu aufsetzen und das Fahrzeug zum
+Startpunkt zurückwerfen.
+
+### Befund am Rande
+
+`enterDrive` war im laufenden Spiel **überhaupt nicht erreichbar**: Der einzige
+Aufrufer saß in `CityWorkPanel`, einer Komponente, die nirgends gemountet ist.
+Das vollständig vorhandene Fahren hatte damit keinen Einstieg — das erklärt den
+Testbefund aus dem Phase-1-Audit vollständig.
+
+### Auswirkung
+
+Save **v30**, rein additiv (`ActiveActivity.mode`), Migration `v29→v30` ändert
+nur die Versionsnummer. Ein v29-Stand ohne das Feld verhält sich exakt wie
+bisher (`auto`); eine beim Laden laufende Mission wird nicht umgestellt. Keine
+Welt-, Balancing- oder Koordinatenänderung.
+
+### Zukunft (nicht vortäuschen)
+
+`priority` ist deklarierter Vertrag **ohne Wirkung** — nicht persistiert, nicht
+in der UI; wirksam erst mit P4. Offen bleiben: **P3** Lagerbestände je Gebäude
+(die einzige echte Simulationsarbeit, mit Save-Migration — ohne sie bleibt das
+Nachlade-Panel des Mockups eine Attrappe), **P4** Stoppliste + „Ziel außerhalb
+Reichweite" mit Richtungspfeil, **P5** UI nach Mockup, **P6**
+Verkehrsrückkopplung, **P7** Fähren. Der 3D-Fahrmodus im Renderer ist nicht mehr
+verdrahtet; sein Code bleibt vorerst stehen und teilt sich die neue Physik.
+
+### Dateien
+
+`src/game/activities/transportOrder.ts` (neu) ·
+`src/game/activities/driving.ts` (neu) · `src/game/types.ts` ·
+`src/game/commands/controller.ts` · `src/game/config/{types,schemas,activities.config}.ts` ·
+`src/game/newGame.ts` · `src/game/storage/migrations.ts` ·
+`src/renderer/three/ThreeMapRenderer.ts` ·
+`src/components/citywork/{ManualRouteMap,ActivityExecutionWidget}.tsx` ·
+`src/components/panels/{ActivityRoutePlanner,CityWorkPanel}.tsx` ·
+`src/styles/{citywork-smart,citywork-v4}.css` ·
+`tests/{transportOrder,driving}.test.ts` (neu, 22 Tests)
+
+### Assets
+
+Keine neuen Assets.
+
+## v1.29 — Stadtarbeit-Overhaul Phase 1 + „immer Tag" (Save v29)
+
+> Auftrag: „Stadtarbeit Overhaul / Manuelle Logistik & Verkehrssystem" mit
+> Mockup, Phasenplan 1–7. Dieser Eintrag deckt **Phase 1 (Bestandsaufnahme)**
+> und den eigenständigen Punkt 11 (Zeitsystem) ab.
+
+### Immer Tag — GAME TIME und VISUAL TIME OF DAY getrennt
+
+Die Welt bleibt im Prototyp dauerhaft hell, **die Spieluhr läuft normal weiter**.
+Tag, Uhrzeit und Jahreszeit stehen unverändert im HUD; Bau, Betriebe, Transport
+und Missionen hängen weiter an derselben einen Simulationsuhr (D-038).
+
+- Neu: `EnvironmentSettings.visualTimeMode: 'day_only' | 'dynamic'`,
+  Prototyp-Standard **`day_only`**. Fester Sonnenstand
+  `DAY_ONLY_TIME_OF_DAY = 0.36` — heller Vormittag, bewusst **nicht** der Zenit
+  (dort stehen die Schatten senkrecht und das Relief verschwindet).
+- **Durchgesetzt wird der Modus in `sanitize`**, also am Wert selbst, nicht bei
+  den Lesern: `SkyEnvironment`, die Laternen-Glows und das Sonnen-Grading im
+  Renderer lesen `timeOfDay` direkt. Ein Filter nur an der schreibenden Stelle
+  hätte einen alten `localStorage`-Eintrag die Welt weiter in der Nacht halten
+  lassen — so erledigt dieselbe Stelle zugleich die Migration bestehender
+  Einstellungen, ohne eigenen Migrationspfad.
+- Die Sonnenkopplung aus D-038 (`CameraControls`) läuft nur noch im Modus
+  `dynamic`. Zurückschalten genügt, um das alte Verhalten zu bekommen.
+- **Kein Save-Feld:** `cmb.environment` ist eine eigene, nicht
+  spielstandsgebundene Einstellung. Save bleibt **v29**.
+
+### Phase 1: Bestandsaufnahme Stadtarbeit
+
+`docs/agents/CITYWORK_OVERHAUL_AUDIT.md` — verbindlich vor jeder weiteren
+Stadtarbeit-Änderung. Die Messung verschiebt den Auftrag deutlich:
+
+- **Das manuelle WASD-Fahren existiert bereits vollständig**
+  (`enterDrive`/`updateDrive`: Arcade-Dynamik, Pfeiltasten, Q/ESC,
+  Verfolgerkamera, Straßenbindung mit Abbremsen und Zug zur Fahrbahnmitte).
+  Die Akzeptanzkriterien 1–3 des Auftrags sind damit **schon erfüllt** — das
+  Problem ist die Erreichbarkeit: nur **8 von 28** Aktivitäten tragen
+  `drive: true`, und bis zum Lenkrad sind es fünf Schritte.
+- **Das „Excel"-Gefühl kommt aus dem Planer, nicht aus der Fahrt:** 2.125 Zeilen
+  Stadtarbeit-UI, davon **1.346 (63 %) reine Planung** vor der ersten
+  gefahrenen Kachel — gegen 46 Zeilen Fahr-HUD.
+- **Verkehr existiert** mit exakt den vier Stufen des Mockups
+  (`load: 0|1|2|3`), aber `congestionScore` kommt aus der **Anrainerdichte**,
+  nicht aus Fahrzeugen. Die Lücke in Auftragspunkt 7 ist die Rückkopplung, nicht
+  die Anzeige.
+- **Der schwerwiegendste Befund ist Simulation, nicht UI:** Stadtarbeit kennt
+  **keine Lagerbestände je Gebäude** — Ressourcen liegen im globalen Pool
+  (`logistics.ts` sagt das ausdrücklich). Das Nachlade-Panel des Mockups zeigt
+  drei verschiedene Bestände (600/1200 · 800/1000 · 400/800); auf dem globalen
+  Pool gebaut zeigten alle drei **dieselbe Zahl**, und die Entscheidung „näheres
+  oder volleres Lager" wäre eine Attrappe. Zugleich existieren bereits lokale
+  Inventare im Betriebssystem — zwei Lagermodelle, die zusammengeführt werden
+  müssen statt ein drittes anzulegen (§2/§8).
+
+### Zwei benannte Konflikte (nicht entschieden)
+
+- **Manuelles Fahren gegen Active Simplicity (D-039).** Die oberste Designregel
+  automatisiert ausdrücklich **Ausführung**, nie **Wahl**, und löst A5/D-032
+  (manueller Transport) als Bedienkonzept ab. WASD-Fahren ist wiederholte
+  Ausführung. Wird der Auftrag umgesetzt, muss D-039 **ausdrücklich geändert**
+  werden. Vorschlag im Audit: Fahren als **Wahl** modellieren (selbst fahren mit
+  Bonus *oder* fahren lassen), dann bleibt D-039 im Kern gültig.
+- **„2D ANSICHT" im Mockup.** Der 2D-/Iso-Renderer ist seit Ausbaustufe 2.0
+  endgültig entfernt. Das Mockup wird als **Planungsansicht** gelesen
+  (Draufsicht-Kamera + Karten-Overlay im Three-Renderer), nicht als zweiter
+  Renderer.
+
+### Verifikation
+
+`npx tsc -b --force` · `npx eslint src tests` · `npx vitest run`
+(**72 Dateien / 591 Tests**, davon 5 neu in `tests/visualTimeMode.test.ts`) ·
+`npm run build` — alles grün. 3D-Smoke gegen `vite preview`: derselbe
+Ladezeitpunkt, der vorher stockdunkle Nacht zeigte, ist jetzt heller Tag; HUD-Uhr
+und Jahreszeit unverändert, **0 Konsolenfehler**.
+
+### Offen (nicht vortäuschen)
+
+Phasen 2–7 des Auftrags sind **nicht** umgesetzt. Reihenfolge nach Abhängigkeit
+im Audit §5: P2 gemeinsames Transportauftrags-Modell → P3 Lagerbestände je
+Gebäude (Save-Migration `v29→v30`) → P4 Stoppliste + „Ziel außerhalb Reichweite"
+→ P5 UI nach Mockup → P6 Verkehrsrückkopplung → P7 Fähren-Datenstruktur.
+
+### Dateien
+
+`src/renderer/three/environmentSettings.ts` (`VisualTimeMode`,
+`DAY_ONLY_TIME_OF_DAY`, `sanitize`) · `src/components/hud/CameraControls.tsx`
+(Kopplung nur noch bei `dynamic`) · `tests/visualTimeMode.test.ts` (neu) ·
+`docs/agents/CITYWORK_OVERHAUL_AUDIT.md` (neu).
+
+## v1.28 — Core Gameplay G2 ⑤: Der Wirkungsradius ist ein Quadrat (Save v29, D-049)
+
+> Auftrag: „weiter mit deiner nächsten empfehlung" — ⑤ war nach ④ der nächste
+> Punkt der zwingenden G2-Reihenfolge.
+
+### Der Befund vor der Arbeit
+
+Wie schon bei ③ galt: **erst den Code prüfen, dann die Aufgabenliste.** Von dem,
+was der Plan für ⑤ verlangt („terrainfolgend, keine schwebende Scheibe, Farbe je
+Serviceart, sichtbar bei Hover, Auswahl und während der Platzierung"), war das
+Terrainfolgen längst umgesetzt — `addTerrainCoverageVisual` liest pro Stützpunkt
+`terrainHeightAt`. Offen waren zwei Dinge, und das erste war kein
+Schönheitsfehler:
+
+- **Die gezeichnete Form war die falsche.** Die Reichweitenprüfung ist
+  `chebyshev(...) <= radius` (`coverage.ts`, `derived.ts`) — ein
+  **achsenparalleles Quadrat**. Der Renderer bekam nur `radius` übergeben, musste
+  die Metrik also raten, nahm die euklidische an und zeichnete einen
+  eingeschriebenen **Kreis**. Gemessen über alle Radiusgebäude:
+
+  | Gebäude | versorgt | gezeichnet | versorgt, aber unsichtbar |
+  |---|---|---|---|
+  | Brunnen (r9, 1×1) | 361 | 253 | **108 (29,9 %)** |
+  | Markt (r14, 2×2) | 784 | 616 | 168 (21,4 %) |
+  | Krankenhaus (r18, 3×3) | 1.369 | 1.009 | 360 (26,3 %) |
+  | Feuerwache Stufe 3 (r32, 2×2) | 4.096 | 3.228 | 868 (21,2 %) |
+
+  Der Fehler war **einseitig**: der Kreis hat nie zu viel versprochen, immer zu
+  wenig gezeigt — die vier Ecken, in denen ein Haus versorgt **ist**, ohne dass
+  man es sah. Wer seine Wohnhäuser an der gezeichneten Kante ausrichtet,
+  verschenkt rund ein Fünftel bis knapp ein Drittel jeder Versorgungsanlage.
+- **Es gab keinen Hover.** Der Radius erschien ausschließlich nach einem Klick —
+  und ein Klick öffnet das Gebäudefenster. „Wie weit reicht dieser Brunnen?" war
+  nur mit Aufreißen und Wegklicken eines Fensters zu beantworten.
+
+### Was sich geändert hat
+
+**Die Simulation liefert die Fläche mit (D-049).** `CoverageSourceView` trägt
+jetzt `area: CoverageArea` — den Kachelbereich, den dieser Radius wirklich
+versorgt. Der Renderer zeichnet das und leitet nichts nach. Neu in
+`buildings/coverage.ts`: `coverageArea`, `coverageAreaAround`, `coversTile`.
+
+**Der Radius erscheint beim Überfahren.** Ohne Auswahl zeigt das Gebäude unter
+dem Zeiger seinen Wirkungsbereich samt Legende; das Gebäudefenster bleibt zu.
+Die **Auswahl behält Vorrang** — sonst wischte jeder Mausweg über die Stadt die
+bewusst geöffnete Ansicht weg —, und während einer Platzierung gehört die Fläche
+dem Ghost. Gesucht wird mit **derselben** Abfrage wie beim Klick
+(`pickBuildingAt`), ergänzt um die Kachelbelegung, damit auch flache Bauten wie
+der Brunnen über ihre Grundfläche antworten. Ein eigener Suchweg hieße:
+Überfahren zeigt ein anderes Gebäude an, als der Klick auswählt.
+
+**Auch das Arbeitsgebiet ist ein Quadrat.** Der Betriebs-Planer (Sägewerk,
+Steinbruch, Farm) zeichnete Fläche und alle drei Ringe als Kreise, obwohl
+`previewOperation` jeden Knoten mit `chebyshev(mitte, knoten) > maxRadius`
+verwirft. Ein Brunnen mit Quadrat neben einem Sägewerk mit Kreis wären zwei
+Aussagen über dieselbe Metrik gewesen.
+
+### Architektur
+
+- `coverageArea(x, y, w, h, radius)` bildet die Mitte aus **derselben** Formel
+  wie `centerOf` und die Schranke aus derselben wie `chebyshev`. Die Testpflicht
+  ist die Deckungsgleichheit über ein volles Kachelfenster, nicht eine
+  Stichprobe; der alte Kreis läuft als Gegenprobe mit (er darf nie mehr zeigen
+  als die Regel deckt).
+- `addTerrainCoverageVisual` nimmt jetzt eine `CoverageArea` statt Mitte +
+  Radius — die Signatur macht es unmöglich, die Form erneut zu erraten. Das
+  Raster wird kachelweise abgetastet (bei großen Radien gedeckelt), der Außenring
+  läuft die vier Kanten kachelweise ab und folgt so der Geländekante.
+- Der Hover hängt an `hoverCoverageId`; `rebuildCoverageOverlay` löst
+  `selectedId ?? (Entwurf am Cursor ? undefined : hoverCoverageId)` auf — **eine**
+  Projektion für beide Wege, damit ein überfahrener Brunnen nicht anders aussieht
+  als ein angeklickter. `setSelected` räumt den Hover-Rest.
+- Keine Simulations-, Schema- oder Balancing-Änderung. **Save bleibt v29.**
+
+### Auswirkung
+
+Der gezeichnete Wirkungsbereich ist der tatsächliche. Wer Wohnhäuser an der
+Kante eines Brunnens ausrichtet, bekommt die Ecken jetzt mitgeliefert statt sie
+zu verschenken — bei der Feuerwache sind das 868 Kacheln. Und die Frage „wie weit
+reicht das?" kostet keine Fensteröffnung mehr.
+
+### Verifikation
+
+`npx tsc -b --force` · `npx eslint src tests` · `npx vitest run`
+(**71 Dateien / 586 Tests**, davon 4 neu in `tests/coverageArea.test.ts`) ·
+`npm run build` — alles grün. 3D-Screenshot-Smoke gegen `vite preview`
+(SwiftShader, Basis `/`) mit einem echten Spielstand aus 45 Brunnen:
+Überfahren → Legende „Versorgung: Wasser", **kein** Gebäudefenster → wegbewegen →
+Legende verschwindet → Klick → Fenster „Brunnen · Radius 9 Felder", dieselbe
+Legende → ESC → leer. **0 Konsolenfehler.** Die Aufnahmen zeigen die
+Quadratkanten, die dem Hügelrelief folgen.
+
+### Offen (nicht vortäuschen)
+
+- **Gefunden, nicht behoben:** Im Betriebs-Planer bietet `nodesInWorkArea` Knoten
+  aus `workAreaBounds` an (Footprint-Kante + Radius), `previewOperation` verwirft
+  aber alles mit `chebyshev(mitte, …) > maxRadius`. Das sind **120** Kacheln beim
+  Sägewerk, 128 beim Steinbruch, 171 bei der Farm — angeboten, aber ungültig. Das
+  ist eine Simulations-, keine Renderfrage, und eine Korrektur verschiebt die
+  Auswahlmenge (Balancing). Die Zeichnung folgt jetzt der **verbindlichen**
+  Prüfung (Chebyshev).
+- Ein Gebäude mit **mehreren** Radiusgruppen (Supermarkt: Nahrung *und*
+  Frischwasser) zeigt weiterhin nur die erste — `coverageOverlay` nimmt
+  `selSources[0]`. Unverändert gegenüber v1.27.
+- Der Hover greift nur bei geschlossener Auswahl und außerhalb einer
+  Platzierung — bewusst, nicht vergessen.
+- Weiterhin offen in G2: ⑥ Straßenbau als Plan→Vorschau→Bestätigen.
+
+### Dateien
+
+`src/game/buildings/coverage.ts` (`CoverageArea`, `coverageArea`,
+`coverageAreaAround`, `coversTile`, `CoverageSourceView.area`) ·
+`src/renderer/three/ThreeMapRenderer.ts` (`addTerrainCoverageVisual` auf Flächen
+umgestellt, `updateCoverageHover`, `hoverCoverageId`, Arbeitsgebiets-Overlay) ·
+`tests/coverageArea.test.ts` (neu).
+
+## v1.27 — Core Gameplay G2 ④: Verschieben ist ein Entwurf, kein toter Knopf (Save v29, D-048)
+
+> Auftrag: „weiter mit deiner nächsten empfehlung" — G2 ④ war nach ③ der nächste
+> Punkt der zwingenden Reihenfolge, und der einzige mit einer ausdrücklich in
+> v1.26 vermerkten Altlast.
+
+### Der Befund vor der Arbeit
+
+`ThreeMapRenderer.setMoving()` war ein **No-op**. Sein Kommentar verwies auf den
+2D-/Iso-Modus — „in 3D wechselt der Spieler zum Verschieben nach 2D/iso" —, den
+es seit Ausbaustufe 2.0 nicht mehr gibt. Die Folge war kein Schönheitsfehler:
+
+- **14 der 34 Gebäude tragen `canRelocate`** und zeigen im Gebäudefenster einen
+  „Versetzen"-Knopf: Rathaus (ab Minute eins, kostenlos), Bürgermeisterhaus,
+  **Sägewerk**, **Steinbruch**, **Farm**, Brunnen, Wasserpumpe, Wasserwerk,
+  Markt, Supermarkt, Feuerwache, Polizei, Krankenhaus, Handelsposten.
+- Der Knopf setzte `movingBuildingId`, das Banner erschien — und danach passierte
+  **nichts**. Kein Ghost, keine Ursprungsmarkierung, und der Kartenklick landete
+  im Auswahlpfad statt beim Umzug. `RendererCallbacks.onMove` wurde vom
+  3D-Renderer **an keiner Stelle** aufgerufen. Der einzige Ausweg war ESC.
+- Besonders schwer wiegt das seit A6/D-046: **Stein wächst nie nach**
+  (`regenerationMs: undefined`), der Steinbruch läuft planmäßig leer und **muss**
+  umziehen. Genau die Bewegung, die das Design verlangt, war nicht ausführbar.
+
+### Was sich geändert hat
+
+**Verschieben ist ein Entwurf.** Das Gebäude bleibt logisch und sichtbar an
+seinem Platz; nur der Ghost wandert. Der Ursprung bekommt eine eigene Markierung
+(Umriss der Grundfläche plus schlanke Säule, `moveOriginGroup`) — ohne sie
+verliert man beim Schwenken der Kamera den Bezug, weil das Gebäude ja noch
+dasteht. Abbruch per Rechtsklick oder ESC wirkt sich auf nichts aus. Der
+Bestätigungsklick löst **genau einen** Command aus (`moveBuilding`); das Gebäude
+behält Id, Ausbaustufe und laufenden Betrieb — kein Abriss + Neubau.
+
+**Ein Entwurf, eine Ghost-Strecke.** `placementDraft()` beantwortet „was hängt am
+Cursor" für beide Fälle, danach läuft alles durch dieselbe `updateGhostAt`.
+Sonst könnte das Versetzen eine Kachel anders beurteilen als das Bauen, obwohl
+beide Commands auf `validatePlacement` fußen (§2). Auch `isPlacing()` im
+Eingabepfad heißt jetzt „es hängt ein Entwurf am Cursor" — davon hängen
+Fadenkreuz, Ghost-Verfolgung und vor allem ab, dass der Linksklick absetzt.
+
+**Vorschau und Command teilen die Prüfung (D-048).** Der Umzug kennt Bedingungen,
+die `validatePlacement` gar nicht hat: Versetzbarkeit (`canRelocate` bzw. das
+Dev-Flag) und die Gebühr gegen das Budget. Deshalb ist der Prüfteil von
+`moveBuilding` als reine Funktion `evaluateMove` herausgezogen, und die neue
+Read-Projektion `moveDiagnostics` ruft **genau diese** auf. Zwei Wirkungen sind
+im Spiel direkt sichtbar:
+
+- Ein Umzug **um eine Kachel** ist gültig, weil `ignoreBuildingId` die eigene
+  Grundfläche ausblendet. Ohne ihn meldet dieselbe Kachel `occupied` — der Test
+  prüft beide Seiten gegeneinander.
+- Reicht das Geld für die Gebühr nicht, ist der Ghost **rot** statt grün.
+  Vorher wäre er grün gewesen und der Klick hätte einen Fehler-Toast erzeugt.
+
+**Die Gebühr steht vor dem Klick.** Das Banner nennt sie („Hier absetzen — das
+Versetzen kostet 3.000") und meldet das aktuelle Grundstück als solches („Das ist
+der aktuelle Standort — der Klick ändert nichts"). Die Warnstufe aus D-047 gilt
+unverändert weiter: wer ein `requiresRoad`-Gebäude vom Netz wegzieht, sieht den
+bernsteinfarbenen Ghost. Scheitert der Klick, **endet der Entwurf nicht** — das
+Gebäude bleibt am Cursor, damit direkt eine andere Kachel gewählt werden kann.
+
+### Architektur
+
+- `MoveBlocker = PlacementError | 'feature_disabled' | 'insufficient'` ist die
+  deklarierte Obermenge; `HoverInfo.error` führt sie, damit ein Banner beide
+  Welten über denselben `error.*`-Schlüssel beschriftet.
+- `MoveDiagnostics` erweitert `PlacementDiagnostics` um `relocationCost`,
+  `unchanged` und `rotation` und **überschreibt allein das Urteil**. Untergrund,
+  Anschlusskacheln und Standortbonus kommen unverändert aus der Bauprojektion —
+  kein zweiter Diagnosepfad.
+- `costLabel` liegt jetzt als `src/components/common/costLabel.ts` gemeinsam
+  vor (bisher Kopie im Straßenplaner); das Verschiebe-Banner braucht dieselbe
+  Darstellung, und eine zweite Kopie wäre auseinandergelaufen. Die abweichende
+  Variante im Gebäudefenster bleibt bewusst unangetastet.
+- Keine Simulations-, Schema- oder Balancing-Änderung. **Save bleibt v29.**
+
+### Auswirkung
+
+Der „Versetzen"-Knopf funktioniert — für alle 14 Gebäude. Ein zu eng gesetzter
+Steinbruch, eine Farm auf dem falschen Feld oder ein Rathaus am falschen Ufer
+sind keine dauerhaften Fehlentscheidungen mehr. Für Gebäude ohne `canRelocate`
+ändert sich nichts (abreißen und neu bauen); die Vorschau sagt das jetzt
+allerdings deutlich, statt still zu bleiben.
+
+### Verifikation
+
+`npx tsc -b --force` · `npx eslint src tests` · `npx vitest run`
+(**70 Dateien / 582 Tests**, davon 10 neu in `tests/movePreview.test.ts`) ·
+`npm run build` — alles grün. 3D-Screenshot-Smoke gegen `vite preview`
+(SwiftShader, Basis `/`): Gründung → Rathaus wählen → „Versetzen" → Ghost folgt
+dem Cursor, Ursprung markiert, Banner `banner-ok` „Rathaus: Hier absetzen." →
+Bestätigungsklick → Toast „Gebäude versetzt.", Entwurf beendet, Rathaus im
+Spielstand von **(241,251) auf (252,247)**, **0 Konsolenfehler**.
+
+### Offen (nicht vortäuschen)
+
+- Der Ghost eines ausgebauten Gebäudes zeigt das **Stufe-0-Modell**
+  (`buildingModel(def.id, 0)`) — die Stufe wandert korrekt mit, nur die Vorschau
+  zeigt sie nicht.
+- Kein Drag-and-Drop: der Umzug ist Klick → Klick, kein Ziehen.
+- Der „Versetzen"-Knopf liegt zwei Klicks tief (Gebäudefenster → „Mehr Details" →
+  Verwaltung). Bewusst nicht mit umgebaut — das gehört in einen Sheet-Pass.
+- Weiterhin offen in G2: ⑤ Radien-Overlays, ⑥ Straßenbau als
+  Plan→Vorschau→Bestätigen.
+
+### Dateien
+
+`src/game/commands/controller.ts` (`evaluateMove`, `moveDiagnostics`,
+`MoveBlocker`, `MoveDiagnostics`, `moveBuilding` umgebaut) ·
+`src/renderer/three/ThreeMapRenderer.ts` (`setMoving`, `placementDraft`,
+`rebuildMoveOrigin`, `moveOriginGroup`, Eingabepfad) ·
+`src/renderer/IMapRenderer.ts` (`HoverInfo.error`, `HoverInfo.move`) ·
+`src/components/MapView.tsx` (Banner, Erfolgstoast) ·
+`src/components/common/costLabel.ts` (neu) ·
+`src/components/operations/SmartRoadPlannerHud.tsx` (nutzt den geteilten Helfer) ·
+`src/i18n/de.json` · `tests/movePreview.test.ts` (neu).
+
+**Assets:** keine.
+
 ## v1.26 — Core Gameplay G2 ③: Der Ghost zeigt den Anschlusspunkt (Save v29, D-047)
 
 > Auftrag: „weiter mit deiner empfehlung" — nach dem Sichern von v1.12–v1.25 der

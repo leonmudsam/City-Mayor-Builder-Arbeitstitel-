@@ -4,6 +4,7 @@ import type {
   ActivityQuality,
   ActivityRewardTier,
   ActivityVehicleDef,
+  BuildingDef,
   BuildingUpgradeDef,
   DriveVehicle,
 } from '../config/types.ts';
@@ -17,7 +18,7 @@ import {
   rewardTierFor,
   type TradeContractOffer,
 } from '../simulation/activities.ts';
-import type { ActiveBuildingOperation, ActivityPlanningSelection, BuildingWorkerState, GameState, InventoryTransfer, RegionId, ResourceId, ResourceNodeType, TerrainType } from '../types.ts';
+import type { ActiveBuildingOperation, ActivityPlanningSelection, BuildingWorkerState, GameState, InventoryTransfer, RegionId, ResourceId, ResourceNodeType, RoadVariant, TerrainType } from '../types.ts';
 import { recomputeDerived, type Derived } from '../simulation/derived.ts';
 import { advance, moveInPerMin } from '../simulation/tick.ts';
 import { updateQuests, objectiveTarget, questFocus, type QuestFocus } from '../simulation/quests.ts';
@@ -30,11 +31,13 @@ import {
   type WaterfrontPlacementPreview,
 } from '../buildings/placement.ts';
 import { locationBonusPct } from '../buildings/location.ts';
+import { foundationPlanForSurface, type FoundationPlan } from '../buildings/foundation.ts';
 import { centerOf, demolishRefund, effectiveBuildCost, isFirstBuildDiscounted } from '../buildings/effects.ts';
 import { buildLimitAt, countOf, nextLimitLevel } from '../buildings/limits.ts';
 import { coverageOverlay, type CoverageOverlay } from '../buildings/coverage.ts';
 import { buildingDiagnostics, primaryMarker, type Diagnosis } from '../buildings/diagnostics.ts';
 import { canAfford, grantGold, grantResources, spendCost, spendGold } from '../economy/economyService.ts';
+import { depositStock, reconcileStock, stockAt, withdrawStock } from '../economy/stockLedger.ts';
 import { computeIncome, type IncomeBreakdown } from '../economy/income.ts';
 import { addXp, FREE_EXPANSION_LEVEL } from '../progression/levels.ts';
 import {
@@ -69,6 +72,7 @@ import { regionPreview, type RegionPreview } from '../regions/regionPreview.ts';
 import { gameClock, type GameClock } from '../time/gameTime.ts';
 import { analyseRoadPath, type RoadPlanPreview } from '../roads/roadPlanning.ts';
 import { routeRoadWaypoints } from '../roads/roadRouting.ts';
+import { buildRoadHeightProfile } from '../roads/roadProfile.ts';
 import {
   cargoPlanFor,
   evaluateCargoRoute,
@@ -80,6 +84,13 @@ import {
   type InfrastructureEvaluation,
   type InfrastructureWarning,
 } from '../activities/logistics.ts';
+import {
+  buildTransportOrder,
+  DEFAULT_TRANSPORT_MODE,
+  modeRewardFactor,
+  type TransportMode,
+  type TransportOrder,
+} from '../activities/transportOrder.ts';
 import { newId } from '../engine/rng.ts';
 import {
   availableWorkNodes,
@@ -290,7 +301,42 @@ export interface PlacementDiagnostics {
   waterfront?: WaterfrontPlacementPreview;
   /** Standort-/Regionsbonus in Prozentpunkten auf die Produktion (kann negativ sein). */
   locationBonusPct: number;
+  /** Geländekategorie, Fundamentform, Mehrkosten und zusätzliche Bauzeit. */
+  foundation: FoundationPlan;
   buildCost: Partial<Record<ResourceId, number>>;
+}
+
+/**
+ * Warum ein Versetzen scheitert. Echte Obermenge von `PlacementError`: beim
+ * Versetzen gelten **zusätzliche** Bedingungen, die `validatePlacement` gar nicht
+ * kennt (darf dieses Gebäude überhaupt umziehen, reicht das Budget für die
+ * Gebühr). Die Vorschau muss sie mit derselben Deutlichkeit zeigen wie einen
+ * belegten Untergrund — sonst ist der Ghost grün und der Klick lehnt ab.
+ */
+export type MoveBlocker = PlacementError | 'feature_disabled' | 'insufficient';
+
+/**
+ * Vorschau für das Versetzen (§ Core Gameplay G2 ④). Dieselbe Projektion wie
+ * `PlacementDiagnostics`, ergänzt um das, was nur beim Umzug gilt.
+ */
+export interface MoveDiagnostics extends Omit<PlacementDiagnostics, 'reason'> {
+  reason?: MoveBlocker;
+  /** Gebühr, die der Bestätigungsklick abbuchen würde (fehlt = kostenlos). */
+  relocationCost?: Partial<Record<ResourceId, number>>;
+  /** Ziel = aktueller Standort: erlaubt, aber folgenlos und gebührenfrei. */
+  unchanged: boolean;
+  /** Ausrichtung, die der Command wirklich setzen würde (Wasserfront-Snap). */
+  rotation: BuildingRotation;
+}
+
+/** Ergebnis der EINEN Verschiebe-Prüfung (siehe `evaluateMove`). */
+interface MoveCheck {
+  def: BuildingDef;
+  building: GameState['buildings'][string];
+  rotation: BuildingRotation;
+  unchanged: boolean;
+  fee?: Partial<Record<ResourceId, number>>;
+  blocker?: MoveBlocker;
 }
 
 /** Read-only route-planning snapshot for the UI. No RNG or save mutation. */
@@ -300,10 +346,37 @@ export interface ActivityRoutePlan {
   targetBuildingIds: string[];
 }
 
+/**
+ * Ein wählbarer Ladeort mit seinem ECHTEN Bestand (§ P4 / §8). `sufficient`
+ * beantwortet die eigentliche Spielerfrage — reicht das, was hier liegt, für die
+ * geplanten Ziele? — statt sie aus zwei Zahlen selbst rechnen zu lassen.
+ */
+export interface ActivitySupplyOption {
+  buildingId: string;
+  defId: string;
+  x: number;
+  y: number;
+  /** Transportierte Ressource; fehlt bei Aufträgen ohne Ladung. */
+  resource?: ResourceId;
+  /** Bestand DIESES Lagers (aus dem Bestandsregister, keine zweite Zählung). */
+  stored: number;
+  /** Fassungsvermögen dieses Lagers für die Ressource. */
+  capacity: number;
+  /** Für die geplanten Ziele benötigte Menge. */
+  needed: number;
+  sufficient: boolean;
+}
+
 /** Optionaler, vollständig validierter Plan für eine Fahrmission. */
 export interface ActivityStartPlan {
   vehicle?: DriveVehicle;
   roadPath?: { x: number; y: number }[];
+  /**
+   * § P2 (D-050): gewählte Ausführungsart. Fehlt sie, gilt `auto` — der Spieler
+   * hat sich dann nicht fürs Selbstfahren entschieden, und Bequemlichkeit ist
+   * der Standard (D-039).
+   */
+  mode?: TransportMode;
 }
 
 /** Gebündeltes, RNG-neutrales Read-Model für die Planungsoberfläche. */
@@ -420,6 +493,10 @@ export class GameController {
     // Laufzeit-Index einmal aus den Gebäude-Footprints aufbauen.
     rebuildOccupancyIndex(state, config);
     this.derived = recomputeDerived(state, config);
+    // § P4: Ein geladener Save (oder ein Alt-Save vor v32) bringt einen Pool ohne
+    // verorteten Bestand mit. Ohne diesen Abgleich läse die UI im ersten Frame
+    // überall „0 im Lager", obwohl die Stadt voll ist.
+    reconcileStock(state, config, this.derived);
     updateQuests(state, config);
   }
 
@@ -444,6 +521,11 @@ export class GameController {
   }
 
   private notify(event: GameEvent): void {
+    // § P4: Bestandsregister abgleichen, BEVOR die UI liest. Der Pool wird an 31
+    // Stellen in 8 Modulen verändert — ein Register, das jede davon selbst pflegen
+    // müsste, driftet beim ersten vergessenen Aufruf. Hier kommt jede Änderung
+    // vorbei, also kann der Abgleich nicht übersehen werden.
+    reconcileStock(this.state, this.config, this.derived);
     this.version += 1;
     for (const listener of this.listeners) listener(event);
   }
@@ -541,13 +623,21 @@ export class GameController {
     // discount for core economy buildings (§ faster early game). Lifetime count
     // gates the discount so demolish/rebuild can't farm it. Straßen kosten in
     // manchen Regionen mehr (§ Welt 2.0: Gebirge) — der Faktor greift genau hier.
-    const cost = this.getBuildCost(defId, x, y);
+    const placementSurface = samplePlacementSurface(this.state, x, y, def.size.w, def.size.h);
+    const foundation = def.category === 'roads'
+      ? undefined
+      : foundationPlanForSurface(placementSurface, def.size.w, def.size.h);
+    const roadPoint = def.category === 'roads'
+      ? buildRoadHeightProfile(this.state, [{ x, y }]).points[0]
+      : undefined;
+    const cost = this.getBuildCost(defId, x, y, roadPoint?.variant);
     const spend = spendCost(this.state, cost, `build_${defId}`);
     if (!spend.ok) return fail('insufficient');
 
     const id = newId(this.state, 'b');
     const now = this.state.meta.lastSimTime;
-    const instant = def.constructionSec <= 0;
+    const constructionSec = def.constructionSec + (foundation?.extraConstructionSec ?? 0);
+    const instant = constructionSec <= 0;
     this.state.buildings[id] = {
       id,
       defId,
@@ -555,10 +645,21 @@ export class GameController {
       y,
       upgradeLevel: 0,
       status: instant ? 'active' : 'constructing',
-      ...(instant ? {} : { constructionEndsAt: now + def.constructionSec * 1000 }),
+      ...(instant ? {} : { constructionEndsAt: now + constructionSec * 1000 }),
       // Cosmetic facing only (§ Gebäude-Rotation) — omit entirely for 0° so saves
       // stay minimal; footprint/placement were already validated above unrotated.
       ...(effectiveRotation ? { rotation: effectiveRotation } : {}),
+      ...(roadPoint ? {
+        roadEngineering: {
+          variant: defId === 'road_elevated' ? 'viaduct' : roadPoint.variant,
+          terrainHeight: roadPoint.terrainHeight,
+          roadHeight: defId === 'road_elevated' ? roadPoint.terrainHeight + 0.62 : roadPoint.roadHeight,
+          gradePercent: roadPoint.gradePercent,
+          clearance: defId === 'road_elevated' ? 0.62 : roadPoint.clearance,
+          routeId: newId(this.state, 'road'),
+          routeIndex: 0,
+        },
+      } : {}),
     };
     occupyTiles(this.state, x, y, def.size.w, def.size.h, id);
     this.state.stats.built[defId] = (this.state.stats.built[defId] ?? 0) + 1;
@@ -731,22 +832,22 @@ export class GameController {
   }
 
   /**
-   * Relocate an existing building. Two paths lead here (§2/§5):
-   *  - the global `moveBuildings` dev flag (off in MVP 1), which lets *anything*
-   *    move for free, and
-   *  - a per-building `canRelocate` flag (town hall, mayor house), which lets a
-   *    non-demolishable special be repositioned via its sheet, charging the
-   *    optional `relocationCost`.
-   * Placement rules are always re-validated against the target.
+   * Die EINE Verschiebe-Prüfung — Grundlage von `moveBuilding` **und**
+   * `moveDiagnostics` (§ G2 ④). Getrennte Prüfungen für Vorschau und Ausführung
+   * wären genau der Fehler, den D-042/D-047 beschreiben: der Ghost könnte grün
+   * zeigen, was der Klick danach ablehnt. Rein lesend — bucht nichts ab.
+   *
+   * Zwei Wege führen zum Umzug (§2/§5): das globale `moveBuildings`-Dev-Flag
+   * (aus im MVP, bewegt dann *alles* kostenlos) und das gebäudeeigene
+   * `canRelocate` (Rathaus, Sägewerk, Steinbruch …), das über das Gebäudefenster
+   * gegen `relocationCost` versetzt. Die Platzierungsregeln gelten immer neu.
    */
-  moveBuilding(buildingId: string, x: number, y: number): CommandResult {
-    const b = this.state.buildings[buildingId];
-    if (!b) return fail('not_found');
-    const def = this.config.buildings.get(b.defId);
-    if (!def) return fail('not_found');
+  private evaluateMove(buildingId: string, x: number, y: number): MoveCheck | undefined {
+    const building = this.state.buildings[buildingId];
+    const def = building ? this.config.buildings.get(building.defId) : undefined;
+    if (!building || !def) return undefined;
     const viaFeature = this.config.features.moveBuildings;
-    if (!viaFeature && def.canRelocate !== true) return fail('feature_disabled');
-    if (b.x === x && b.y === y) return ok;
+    const current = building.rotation ?? 0;
     const waterfront = waterfrontPlacementPreview(
       this.state,
       this.config,
@@ -754,24 +855,44 @@ export class GameController {
       def,
       x,
       y,
-      b.rotation ?? 0,
+      current,
       buildingId,
     );
-    const effectiveRotation = waterfront?.valid ? waterfront.suggestedRotation : (b.rotation ?? 0);
+    const rotation = waterfront?.valid ? waterfront.suggestedRotation : current;
+    const base: MoveCheck = {
+      def,
+      building,
+      rotation,
+      unchanged: building.x === x && building.y === y,
+    };
+    if (!viaFeature && def.canRelocate !== true) return { ...base, blocker: 'feature_disabled' };
+    if (base.unchanged) return base;
     const placementError = waterfront?.reason ?? validatePlacement(this.state, this.config, this.derived, def, x, y, {
       ignoreBuildingId: buildingId,
-      ...(def.waterfront ? { rotation: effectiveRotation } : {}),
+      ...(def.waterfront ? { rotation } : {}),
     });
-    if (placementError) return fail(placementError);
-    // Relocation fee (only on the canRelocate path — the dev flag stays free).
-    if (!viaFeature && def.relocationCost) {
-      const spend = spendCost(this.state, def.relocationCost, `relocate_${def.id}`);
+    if (placementError) return { ...base, blocker: placementError };
+    // Umzugsgebühr — nur auf dem `canRelocate`-Weg; das Dev-Flag bleibt gratis.
+    const fee = !viaFeature ? def.relocationCost : undefined;
+    if (fee && !canAfford(this.state, fee)) return { ...base, fee, blocker: 'insufficient' };
+    return { ...base, ...(fee ? { fee } : {}) };
+  }
+
+  /** Relocate an existing building — Prüfung siehe `evaluateMove`. */
+  moveBuilding(buildingId: string, x: number, y: number): CommandResult {
+    const check = this.evaluateMove(buildingId, x, y);
+    if (!check) return fail('not_found');
+    if (check.blocker) return fail(check.blocker);
+    if (check.unchanged) return ok;
+    const { building: b, def, rotation } = check;
+    if (check.fee) {
+      const spend = spendCost(this.state, check.fee, `relocate_${def.id}`);
       if (!spend.ok) return fail('insufficient');
     }
     clearTiles(this.state, b.x, b.y, def.size.w, def.size.h, buildingId);
     b.x = x;
     b.y = y;
-    if (effectiveRotation) b.rotation = effectiveRotation;
+    if (rotation) b.rotation = rotation;
     else delete b.rotation;
     occupyTiles(this.state, x, y, def.size.w, def.size.h, buildingId);
     this.afterStructuralChange();
@@ -1318,6 +1439,24 @@ export class GameController {
    * `activityRouteSource`, aber als Gebäude-Id. `'town_hall'` als Fallback-Label.
    */
   private activitySourceBuildingId(def: ActivityDef): string {
+    // § P4 (§8): Die WAHL des Spielers gewinnt — sie ist der ganze Punkt der
+    // Übung. Vorher entschied hier stumm die alphabetische Gebäude-Id; ein
+    // Spieler, der „ich lade im großen Lager im Norden" dachte, lud faktisch
+    // woanders. Reihenfolge: laufende Mission → Planungssnapshot → das Lager mit
+    // dem meisten Vorrat → alter Anker-Fallback.
+    const active = this.state.activities.active;
+    if (active?.defId === def.id && active.sourceBuildingId && this.state.buildings[active.sourceBuildingId]) {
+      return active.sourceBuildingId;
+    }
+    const selection = this.state.activities.selection;
+    if (selection?.defId === def.id && selection.sourceBuildingId && this.state.buildings[selection.sourceBuildingId]) {
+      return selection.sourceBuildingId;
+    }
+    // Ein Stadtlager mit ausreichendem Vorrat ist die sinnvollste Vorauswahl —
+    // aber nur, wenn es eines gibt. Für Aufträge, deren Quellen gar keine Lager
+    // sind (Farm, Pumpwerk, Feuerwache), bleibt der alte Anker unverändert.
+    const best = this.activitySupplyOptions(def).find((option) => option.sufficient);
+    if (best) return best.buildingId;
     if (def.requiresAnyBuilding) {
       const source = Object.values(this.state.buildings)
         .filter((building) => building.status === 'active' && def.requiresAnyBuilding!.includes(building.defId))
@@ -1326,6 +1465,87 @@ export class GameController {
     }
     const townHall = Object.values(this.state.buildings).find((building) => building.defId === 'town_hall');
     return townHall?.id ?? 'town_hall';
+  }
+
+  /**
+   * § P4 (§8) — die wählbaren Ladeorte eines Auftrags MIT ihrem echten Bestand.
+   *
+   * Das ist der Unterschied zwischen „Lagerhaus Nord" als Beschriftung und als
+   * Entscheidung: erst wenn die Liste sagt, wie viel dort wirklich liegt und ob
+   * es für die geplanten Ziele reicht, ist die Wahl eine Logistikentscheidung.
+   * Bestand kommt aus dem Bestandsregister — es gibt keine zweite Zählung.
+   *
+   * Sortiert nach „reicht der Vorrat" und dann nach Menge; die erste Zeile ist
+   * damit die Vorauswahl, die `activitySourceBuildingId` ohne Spielerwahl nimmt.
+   */
+  private activitySupplyOptions(def: ActivityDef, targetCount?: number): ActivitySupplyOption[] {
+    const model = resolveCargoModel(def);
+    const allowed = new Set(def.requiresAnyBuilding ?? []);
+    const needed = model ? model.perTarget * (targetCount ?? this.getActivityDeliveryTargets(def.id).length) : 0;
+    const options: ActivitySupplyOption[] = [];
+    for (const site of this.derived.storageSites) {
+      const building = this.state.buildings[site.buildingId];
+      if (!building) continue;
+      // Nennt der Auftrag Quellgebäude, bleibt es dabei — ein Lieferauftrag ab
+      // Farm lädt nicht plötzlich im Wasserwerk.
+      if (allowed.size > 0 && !allowed.has(building.defId)) continue;
+      if (model && (site.caps[model.resource] ?? 0) <= 0) continue;
+      const stored = model ? stockAt(this.state, site.buildingId, model.resource) : 0;
+      options.push({
+        buildingId: site.buildingId,
+        defId: site.defId,
+        x: site.cx,
+        y: site.cy,
+        ...(model ? { resource: model.resource } : {}),
+        stored,
+        capacity: model ? site.caps[model.resource] ?? 0 : 0,
+        needed,
+        sufficient: !model || stored >= needed,
+      });
+    }
+    options.sort(
+      (a, b) =>
+        Number(b.sufficient) - Number(a.sufficient) ||
+        b.stored - a.stored ||
+        a.buildingId.localeCompare(b.buildingId),
+    );
+    return options;
+  }
+
+  /**
+   * Wählbare Ladeorte samt Bestand (§8). Read-Projektion, mutiert nichts.
+   * Leere Liste = dieser Auftrag lädt nichts (Inspektion/Entscheidung) oder es
+   * gibt kein passendes Lager — beides zeigt die UI, statt eines zu erfinden.
+   */
+  getActivitySupplyOptions(defId: string, targetCount?: number): ActivitySupplyOption[] {
+    const def = this.config.activities.activities.find((activity) => activity.id === defId);
+    if (!def) return [];
+    return this.activitySupplyOptions(def, targetCount);
+  }
+
+  /** Das aktuell gewählte (oder vorausgewählte) Ladelager eines Auftrags. */
+  getActivitySourceBuildingId(defId: string): string | undefined {
+    const def = this.config.activities.activities.find((activity) => activity.id === defId);
+    if (!def) return undefined;
+    return this.activitySourceBuildingId(def);
+  }
+
+  /**
+   * § P4: Ladeort wählen. Wirkt auf den eingefrorenen Planungssnapshot, also
+   * VOR dem Start — nach dem Start ist der Ort festgeschrieben, sonst wäre die
+   * Ware am billigsten Lager nachträglich umbuchbar (dieselbe Logik wie bei der
+   * Ausführungsart, D-050).
+   */
+  setActivitySource(defId: string, buildingId: string): CommandResult {
+    if (this.state.activities.active) return fail('invalid');
+    const selection = this.state.activities.selection;
+    if (!selection || selection.defId !== defId) return fail('invalid');
+    const allowed = this.getActivitySupplyOptions(defId).some((option) => option.buildingId === buildingId);
+    if (!allowed) return fail('invalid');
+    if (selection.sourceBuildingId === buildingId) return ok;
+    selection.sourceBuildingId = buildingId;
+    this.notify({ type: 'change' });
+    return ok;
   }
 
   /**
@@ -1456,6 +1676,78 @@ export class GameController {
       },
       complete: analysis !== undefined && (cargoRoute?.cargoValid ?? true),
     };
+  }
+
+  /**
+   * § P2 (D-050): Der geplante Auftrag als EIN Objekt — Start, Ladung, Fahrzeug,
+   * Stopps, Ziele, Dringlichkeit und Ausführungsart. UI und Renderer lesen ab
+   * hier dieselbe Struktur, statt sich ihre Sicht aus fünf Teilabfragen
+   * zusammenzusetzen; genau daraus entstehen sonst zwei Beschreibungen derselben
+   * Tour (Fortsetzung D-042/D-047/D-048/D-049).
+   *
+   * Reine Projektion: Der Auftrag wird aus derselben `getActivityRoutePreview`
+   * abgeleitet, die auch die Vorschau zeichnet — hier entsteht keine zweite
+   * Wegberechnung und keine zweite Mengenrechnung.
+   */
+  getTransportOrder(
+    defId: string,
+    candidateTargetIds: string[],
+    roadPath: readonly { x: number; y: number }[],
+    options?: { vehicle?: DriveVehicle; mode?: TransportMode },
+  ): TransportOrder | undefined {
+    const def = this.config.activities.activities.find((activity) => activity.id === defId);
+    if (!def) return undefined;
+    const preview = this.getActivityRoutePreview(defId, candidateTargetIds, roadPath, options?.vehicle);
+    if (!preview) return undefined;
+    const start = this.activitySourceBuildingId(def);
+    return buildTransportOrder({
+      defId,
+      ...(start ? { start } : {}),
+      ...(options?.vehicle ? { vehicle: options.vehicle } : {}),
+      targets: candidateTargetIds,
+      // Nur eine Fahrmission kennt überhaupt eine Ausführungsart (§ startActivity).
+      ...(def.drive && options?.mode ? { mode: options.mode } : {}),
+      ...(preview.cargoPlan ? { cargoPlan: preview.cargoPlan } : {}),
+      ...(preview.cargoRoute ? { cargoRoute: preview.cargoRoute } : {}),
+    });
+  }
+
+  /**
+   * Der Auftrag der LAUFENDEN Mission (oder `undefined`). Liest die
+   * festgeschriebene Ausführungsart aus dem State — nicht aus der UI, damit
+   * Anzeige und Auszahlung nicht auseinanderlaufen können.
+   */
+  getActiveTransportOrder(): TransportOrder | undefined {
+    const active = this.state.activities.active;
+    if (!active) return undefined;
+    const targetIds = active.targets.map((target) => target.buildingId);
+    const path = active.plannedRoadPath;
+    if (!path) {
+      const def = this.config.activities.activities.find((activity) => activity.id === active.defId);
+      const start = def ? this.activitySourceBuildingId(def) : undefined;
+      return buildTransportOrder({
+        defId: active.defId,
+        ...(start ? { start } : {}),
+        ...(active.vehicle ? { vehicle: active.vehicle } : {}),
+        targets: targetIds,
+        mode: active.mode ?? DEFAULT_TRANSPORT_MODE,
+      });
+    }
+    return this.getTransportOrder(active.defId, targetIds, path, {
+      ...(active.vehicle ? { vehicle: active.vehicle } : {}),
+      mode: active.mode ?? DEFAULT_TRANSPORT_MODE,
+    });
+  }
+
+  /**
+   * Die festgeschriebene Ausführungsart der laufenden Mission. Renderer und
+   * HUD-Widget fragen genau hier — `auto` heißt: der Missionswagen fährt selbst;
+   * `manual` heißt: er wartet auf den Spieler.
+   */
+  getActiveTransportMode(): TransportMode | undefined {
+    const active = this.state.activities.active;
+    if (!active) return undefined;
+    return active.mode ?? DEFAULT_TRANSPORT_MODE;
   }
 
   /**
@@ -1663,6 +1955,9 @@ export class GameController {
     active.targets = plannedTargetIds.map((id) => current.get(id)!);
     if (selectedVehicle) active.vehicle = selectedVehicle;
     if (plan?.roadPath) active.plannedRoadPath = plan.roadPath.map((point) => ({ ...point }));
+    // `active.mode` bleibt bewusst UNBERÜHRT: Route und Fahrzeug darf der Spieler
+    // unterwegs ändern, die Ausführungsart nicht (§ P2 — sonst wäre der Aufschlag
+    // nachträglich zuschaltbar, nachdem die Stadt die halbe Tour gefahren ist).
     this.notify({ type: 'change' });
     return ok;
   }
@@ -1718,17 +2013,55 @@ export class GameController {
     // entnommen und gehalten. Reicht der Vorrat nicht, startet die Mission gar
     // nicht (fair statt Abbruch auf halber Strecke, §18). Jede Auslieferung zieht
     // später aus dieser Reserve; ein Abbruch gibt den Rest zurück.
+    //
+    // § P4 (§8): Geladen wird AN EINEM ORT. Vorher entnahm `spendCost` aus dem
+    // Stadtkonto — dadurch war es gleichgültig, welches Lager der Spieler
+    // anfuhr, und „Ich fahre zuerst zum großen Lager im Norden" blieb folgenlos.
+    // Jetzt entscheidet der Bestand DIESES Lagers, ob die Mission startet.
     const reserved = this.activityReservation(def, targets.length);
+    const sourceBuildingId = this.activitySourceBuildingId(def);
+    // Nur ein echtes Stadtlager hat einen eigenen Bestand. Farm, Sägewerk,
+    // Pumpwerk und Feuerwache sind Abholpunkte OHNE Lagerwirkung — dort ist die
+    // Ware weiterhin die Bilanz der Stadt. Diese Unterscheidung wird nicht
+    // verwischt: sonst zeigte die UI einen Bestand, den es nicht gibt.
+    const loadsFromStore = this.derived.storageSites.some((site) => site.buildingId === sourceBuildingId);
     if (reserved) {
-      const spent = spendCost(this.state, reserved, `activity_reserve_${def.id}`);
-      if (!spent.ok) return fail('insufficient');
+      if (loadsFromStore) {
+        const taken: Partial<Record<ResourceId, number>> = {};
+        let shortfall = false;
+        for (const [res, amount] of Object.entries(reserved)) {
+          const resource = res as ResourceId;
+          const want = amount ?? 0;
+          if (want <= 0) continue;
+          const got = withdrawStock(this.state, this.derived, sourceBuildingId, resource, want);
+          taken[resource] = got;
+          if (got + 1e-6 < want) shortfall = true;
+        }
+        if (shortfall) {
+          // Nichts halb entnehmen: alles zurück an denselben Ort, kein Start.
+          for (const [res, amount] of Object.entries(taken)) {
+            if ((amount ?? 0) > 0)
+              depositStock(this.state, this.derived, sourceBuildingId, res as ResourceId, amount ?? 0);
+          }
+          return fail('insufficient');
+        }
+      } else {
+        const spent = spendCost(this.state, reserved, `activity_reserve_${def.id}`);
+        if (!spent.ok) return fail('insufficient');
+      }
     }
     this.state.activities.active = {
       defId,
       startedAt: now,
       targets,
       ...(reserved ? { reserved } : {}),
+      ...(reserved && loadsFromStore ? { sourceBuildingId } : {}),
       ...(selectedVehicle ? { vehicle: selectedVehicle } : {}),
+      // § P2 (D-050): Die Ausführungsart wird beim Start FESTGESCHRIEBEN. Sie
+      // mitten in der Fahrt umzuschalten hieße, den Prämienaufschlag nach der
+      // bequemen Hälfte nachträglich zu kaufen. Selbstfahren gibt es nur, wo
+      // auch wirklich gefahren wird (`def.drive`).
+      mode: def.drive ? plan?.mode ?? DEFAULT_TRANSPORT_MODE : DEFAULT_TRANSPORT_MODE,
       ...(plan?.roadPath ? { plannedRoadPath: plan.roadPath.map((point) => ({ ...point })) } : {}),
       ...(def.timeLimitSec !== undefined ? { expiresAt: now + def.timeLimitSec * 1000 } : {}),
     };
@@ -1845,11 +2178,16 @@ export class GameController {
       const quality = resolveQuality(def, active.startedAt, now);
       const scale = QUALITY_SCALE[quality];
       const result = this.buildActivityRunResult(def, active, now);
+      // § P2 (D-050): Wer selbst gefahren ist, bekommt den konfigurierten
+      // Aufschlag — der einzige mechanische Unterschied der beiden Modi. Er
+      // multipliziert die Note, ersetzt sie nicht: eine schlechte selbst
+      // gefahrene Tour bleibt schlechter als eine gute automatische.
+      const modeFactor = modeRewardFactor(active.mode ?? DEFAULT_TRANSPORT_MODE, this.config.activities.manualDriveBonusFactor);
       delete this.state.activities.active;
       this.payoutActivity(
         def,
-        Math.round(tier.money * scale.money),
-        Math.round(tier.xp * scale.xp),
+        Math.round(tier.money * scale.money * modeFactor),
+        Math.round(tier.xp * scale.xp * modeFactor),
         tier,
         true,
         quality,
@@ -1871,7 +2209,22 @@ export class GameController {
     const active = this.state.activities.active;
     if (!active) return fail('invalid');
     if (active.reserved) {
-      grantResources(this.state, active.reserved, this.derived.storageCaps, `activity_refund_${active.defId}`);
+      // § P4: Zurück an DEN Ort, an dem geladen wurde — die Ware fährt zum Lager
+      // zurück, sie erscheint nicht im Stadtkonto. Existiert das Lager nicht mehr
+      // (abgerissen), bleibt der alte Weg über die Bilanz; sonst ginge die Ladung
+      // eines abgebrochenen Auftrags verloren.
+      const source = active.sourceBuildingId;
+      const rest: Partial<Record<ResourceId, number>> = {};
+      for (const [res, amount] of Object.entries(active.reserved)) {
+        const resource = res as ResourceId;
+        const want = amount ?? 0;
+        if (want <= 0) continue;
+        const put = source ? depositStock(this.state, this.derived, source, resource, want) : 0;
+        if (put < want) rest[resource] = want - put;
+      }
+      if (Object.keys(rest).length > 0) {
+        grantResources(this.state, rest, this.derived.storageCaps, `activity_refund_${active.defId}`);
+      }
     }
     delete this.state.activities.active;
     this.notify({ type: 'change' });
@@ -2129,18 +2482,50 @@ export class GameController {
     );
     const reason = waterfront ? waterfront.reason : baseReason;
     const roadTiles = connectedRoadTiles(this.derived, def, x, y);
+    const surface = samplePlacementSurface(this.state, x, y, def.size.w, def.size.h);
     return {
       valid: waterfront ? waterfront.valid : reason === undefined,
       ...(reason ? { reason } : {}),
       terrain: worldTerrainAt(this.state, x, y),
       regionId: regionIdAt(x, y),
-      surface: samplePlacementSurface(this.state, x, y, def.size.w, def.size.h),
+      surface,
       roadAccess: roadTiles.length > 0,
       roadTiles,
       requiresRoad: def.requiresRoad === true || def.infrastructureModes?.includes('road') === true,
       ...(waterfront ? { waterfront } : {}),
       locationBonusPct: Math.round(locationBonusPct(this.state, def, x, y)),
+      foundation: foundationPlanForSurface(surface, def.size.w, def.size.h),
       buildCost: this.getBuildCost(defId, x, y),
+    };
+  }
+
+  /**
+   * Verschiebe-Vorschau (§ G2 ④). Baut auf `placementDiagnostics` auf — die
+   * Vorschau für Untergrund, Straßenanschluss und Standortbonus ist beim
+   * Versetzen dieselbe wie beim Bauen — und **überschreibt das Urteil** mit dem
+   * Ergebnis von `evaluateMove`, das auch der Command benutzt. Der Ghost kann
+   * damit nicht grün sein, wo `moveBuilding` ablehnt.
+   *
+   * Wichtig ist das `ignoreBuildingId`: ohne es meldet die eigene Grundfläche
+   * `occupied`, und ein Umzug um eine Kachel sähe verboten aus, obwohl er erlaubt ist.
+   */
+  moveDiagnostics(buildingId: string, x: number, y: number): MoveDiagnostics | undefined {
+    const check = this.evaluateMove(buildingId, x, y);
+    if (!check) return undefined;
+    const base = this.placementDiagnostics(check.def.id, x, y, buildingId, check.rotation);
+    if (!base) return undefined;
+    // `reason` der Bauprüfung wird bewusst verworfen: beim Versetzen urteilt
+    // allein `evaluateMove` (es kennt zusätzlich Versetzbarkeit und Gebühr, und
+    // blendet die eigene Grundfläche aus, die hier sonst als `occupied` stünde).
+    const rest = { ...base };
+    delete rest.reason;
+    return {
+      ...rest,
+      valid: check.blocker === undefined,
+      ...(check.blocker ? { reason: check.blocker } : {}),
+      ...(check.fee ? { relocationCost: check.fee } : {}),
+      unchanged: check.unchanged,
+      rotation: check.rotation,
     };
   }
 
@@ -2160,7 +2545,14 @@ export class GameController {
       def?.category === 'roads'
         ? routeRoadWaypoints(this.state, this.config, this.derived, def, path)
         : path;
-    return analyseRoadPath(this.state, this.config, this.derived, routed, (x, y) => this.getBuildCost(defId, x, y), defId);
+    return analyseRoadPath(
+      this.state,
+      this.config,
+      this.derived,
+      routed,
+      (x, y, variant) => this.getBuildCost(defId, x, y, variant),
+      defId,
+    );
   }
 
   /**
@@ -2178,33 +2570,84 @@ export class GameController {
     const def = this.config.buildings.get(defId);
     if (!def || def.category !== 'roads') return { ok: false, error: 'not_found' };
     const preview = this.roadPathPreview(waypoints, defId);
-    if (preview.tiles.length === 0) return { ok: false, error: 'invalid' };
+    if (waypoints.length < 2 || preview.tiles.length < 2) return { ok: false, error: 'invalid' };
     if (!preview.valid) {
       const firstBlocked = preview.tiles.find((tile) => tile.status === 'blocked');
-      return { ok: false, error: firstBlocked?.reason ?? 'terrain' };
+      return { ok: false, error: firstBlocked?.reason ?? (preview.profileError ? 'terrain' : 'invalid') };
     }
-    if (!this.canAffordCost(preview.totalCost)) return { ok: false, error: 'insufficient' };
+    const spend = spendCost(this.state, preview.totalCost, `build_${defId}_path`);
+    if (!spend.ok) return { ok: false, error: 'insufficient' };
+
+    // Ein echter Bulk-Commit: Vorschau und Abbuchung wurden einmal geprüft;
+    // danach entstehen alle Abschnitte ohne teure Derived-/Quest-Neuberechnung
+    // zwischen den Kacheln. Damit bleibt der Pfad alles-oder-nichts und lange
+    // Serpentinen erzeugen genau eine Zustandsbenachrichtigung.
+    const now = this.state.meta.lastSimTime;
+    const instant = def.constructionSec <= 0;
+    const routeId = newId(this.state, 'road');
     let built = 0;
-    for (const tile of preview.tiles) {
+    let earnedXp = 0;
+    for (let index = 0; index < preview.tiles.length; index++) {
+      const tile = preview.tiles[index]!;
       if (tile.status === 'exists') continue;
-      const result = this.placeBuilding(defId, tile.x, tile.y);
-      if (!result.ok) return { ok: false, error: result.error }; // nach Vorvalidierung nicht erwartet
+      const id = newId(this.state, 'b');
+      this.state.buildings[id] = {
+        id,
+        defId,
+        x: tile.x,
+        y: tile.y,
+        upgradeLevel: 0,
+        status: instant ? 'active' : 'constructing',
+        ...(instant ? {} : { constructionEndsAt: now + def.constructionSec * 1000 }),
+        roadEngineering: {
+          variant: tile.variant,
+          terrainHeight: tile.terrainHeight,
+          roadHeight: tile.roadHeight,
+          gradePercent: tile.gradePercent,
+          clearance: tile.clearance,
+          routeId,
+          routeIndex: index,
+        },
+      };
+      occupyTiles(this.state, tile.x, tile.y, def.size.w, def.size.h, id);
+      this.state.stats.built[defId] = (this.state.stats.built[defId] ?? 0) + 1;
+      if (instant) earnedXp += def.xpReward;
       built += 1;
     }
+    if (earnedXp > 0) addXp(this.state, this.config, this.derived, earnedXp);
+    this.afterStructuralChange();
     return { ok: true, built };
   }
 
-  getBuildCost(defId: string, x?: number, y?: number): Partial<Record<ResourceId, number>> {
+  getBuildCost(
+    defId: string,
+    x?: number,
+    y?: number,
+    roadVariant?: RoadVariant,
+  ): Partial<Record<ResourceId, number>> {
     const def = this.config.buildings.get(defId);
     if (!def) return {};
     let cost = effectiveBuildCost(def, countOf(this.state, defId), this.state.stats.built[defId] ?? 0);
+    if (def.category !== 'roads' && x !== undefined && y !== undefined) {
+      const surface = samplePlacementSurface(this.state, x, y, def.size.w, def.size.h);
+      const foundationCost = foundationPlanForSurface(surface, def.size.w, def.size.h).extraCost;
+      if (Object.keys(foundationCost).length > 0) {
+        cost = { ...cost };
+        for (const [res, amount] of Object.entries(foundationCost)) {
+          cost[res as ResourceId] = (cost[res as ResourceId] ?? 0) + (amount ?? 0);
+        }
+      }
+    }
     // Regions-Straßenkosten-Faktor (§ Welt 2.0): nur für Straßen und nur, wenn
     // eine Zielkachel bekannt ist (Menü ohne Ort zeigt den Basispreis). Der Ghost
     // reicht die Hover-Kachel durch, damit der gezeigte Preis dem gezahlten gleicht.
     if (def.category === 'roads' && x !== undefined && y !== undefined) {
-      const factor = regionRoadCostFactorAt(this.config, x, y);
-      if (factor !== 1 && cost.money !== undefined) {
-        cost = { ...cost, money: Math.round(cost.money * factor) };
+      const variantPremium = roadVariant ? def.road?.variantCostPerTile?.[roadVariant] : undefined;
+      if (variantPremium) {
+        cost = { ...cost };
+        for (const [res, amount] of Object.entries(variantPremium)) {
+          cost[res as ResourceId] = (cost[res as ResourceId] ?? 0) + (amount ?? 0);
+        }
       }
       // Pfeiler-/Deck-Aufschlag (§ Infrastruktur 2.0 / I1): eine Höhenstraßen-
       // Bauklasse zahlt über tatsächlich überbrückten Wasser-/Klippenkacheln
@@ -2221,6 +2664,10 @@ export class GameController {
             cost[res as ResourceId] = (cost[res as ResourceId] ?? 0) + (amount ?? 0);
           }
         }
+      }
+      const factor = regionRoadCostFactorAt(this.config, x, y);
+      if (factor !== 1 && cost.money !== undefined) {
+        cost = { ...cost, money: Math.round(cost.money * factor) };
       }
     }
     return cost;
@@ -2239,7 +2686,11 @@ export class GameController {
 
   /** Building def-ids unlocked at a given level (for the level-up announcement). */
   unlocksAtLevel(level: number): string[] {
-    return this.config.levels.find((l) => l.level === level)?.unlocks ?? [];
+    // `road_elevated` bleibt in Config/Unlock-Menge nur für alte API-Aufrufe
+    // baubar, darf Spielern aber nie als zweites Straßenwerkzeug angekündigt
+    // werden. Der Baushop filtert dieselbe Legacy-Definition ebenfalls aus.
+    return (this.config.levels.find((l) => l.level === level)?.unlocks ?? [])
+      .filter((id) => id !== 'road_elevated');
   }
 
   /** Whether the next copy is the free/discounted first build (build-menu badge). */
@@ -2757,7 +3208,7 @@ export class GameController {
 
   /** Netzwerkweite Aufschlüsselung je Ressource (§7.2). */
   getInventoryNetworkOverview(): Record<ResourceId, ResourceNetworkStat> {
-    return inventoryNetworkOverview(this.state);
+    return inventoryNetworkOverview(this.state, this.config);
   }
 
   /** Interpolierte Fahrzeugpositionen laufender Transporte (additiver Renderer-Layer). */

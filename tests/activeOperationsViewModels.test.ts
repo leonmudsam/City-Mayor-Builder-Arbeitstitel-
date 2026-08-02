@@ -3,6 +3,7 @@ import {
   buildBuildingOperationView,
   buildResourceNetworkView,
   buildSmartRoadPlanView,
+  getSmartRoadPlanPreview,
   buildTransportPlannerView,
   buildWorkAreaPlannerView,
   defaultWorkAreaSelection,
@@ -129,10 +130,19 @@ describe('Active Operations Visual ViewModels', () => {
         const [x, y] = key.split(',').map(Number);
         return { x: x!, y: y! };
       });
-    const view = buildSmartRoadPlanView(controller, existing);
+    const preview = getSmartRoadPlanPreview(controller, existing, 'road');
+    expect(getSmartRoadPlanPreview(controller, existing, 'road')).toBe(preview);
+    const view = buildSmartRoadPlanView(controller, existing, 'road', preview);
     const roadsAfter = Object.values(controller.state.buildings).filter((building) => building.defId === 'road').length;
 
     expect(view.tiles).toHaveLength(existing.length);
+    expect(view.lengthMeters).toBe(preview.profile.lengthMeters);
+    expect(view.elevationDeltaMeters).toBe(preview.profile.elevationDeltaMeters);
+    expect(view.maxGradePercent).toBe(preview.profile.maxGradePercent);
+    expect(view.averageGradePercent).toBe(preview.profile.averageGradePercent);
+    expect(view.dominantVariant).toBe(preview.profile.dominantVariant);
+    expect(view.costs).toEqual(preview.totalCost);
+    expect(view.tiles.every((tile) => Number.isFinite(tile.roadHeight) && Number.isFinite(tile.gradePercent))).toBe(true);
     expect(roadsAfter).toBe(roadsBefore);
   });
 });

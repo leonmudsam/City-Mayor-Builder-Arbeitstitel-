@@ -67,7 +67,12 @@ export function BuildMenu() {
   const [inspectedId, setInspectedId] = useState<string>();
   const level = game.state.level.current;
 
-  const candidates = game.config.buildingList.filter((building) => building.buildable !== false);
+  // `road_elevated` bleibt ausschließlich als Legacy-Definition für alte Saves
+  // und automatisierte Kompatibilitätstests erhalten. Spielerseitig existiert
+  // genau ein Straßenwerkzeug; seine Bauart wird aus dem Terrain abgeleitet.
+  const candidates = game.config.buildingList.filter(
+    (building) => building.buildable !== false && building.id !== 'road_elevated',
+  );
   const nonEmpty = new Set(candidates.map((building) => building.category));
   const tabs = CATEGORY_ORDER.filter((candidate) => nonEmpty.has(candidate));
   const primaryTabs = PRIMARY_CATEGORIES.filter((candidate) => nonEmpty.has(candidate));

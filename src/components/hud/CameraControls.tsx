@@ -110,9 +110,15 @@ export function DayNightControl() {
   // Renderer-`timeOfDay` folgt der Ingame-Uhrzeit (cycle aus, die Uhr treibt ihn).
   // Bei Pause steht die Uhr → steht die Sonne. Schritt je Ingame-Minute (winzig bei
   // 1440-Minuten-Tag → optisch glatt); kein eigener Timer.
+  //
+  // § Prototyp-Zeitsystem: Im Modus `day_only` bleibt die WELT hell, während die
+  // UHR normal weiterläuft — die Kopplung entfällt, `gameClock` nicht. Alles, was
+  // an der Zeit hängt (Bau, Betriebe, Transport, Missionen), bleibt unberührt.
+  const visualTimeMode = env.visualTimeMode;
   useEffect(() => {
+    if (visualTimeMode !== 'dynamic') return;
     setEnvironmentSettings({ timeOfDay: gameClock.timeOfDay, cycle: false });
-  }, [gameClock.timeOfDay]);
+  }, [gameClock.timeOfDay, visualTimeMode]);
   const WeatherIcon = env.weather === 'rain' ? CloudRain : env.weather === 'fog' ? CloudFog : CloudSun;
   const weatherLabel =
     env.weather === 'rain' ? t('ui.weather.rain') : env.weather === 'fog' ? t('ui.weather.fog') : t('ui.weather.clear');

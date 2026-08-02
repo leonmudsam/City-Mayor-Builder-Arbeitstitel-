@@ -16,7 +16,7 @@
 // spec instead of a bare name+motif list. See docs/3D_WORLD_ASSETS.md for the
 // narrative style guide and docs/3D_MODEL_MANIFEST.md for the short naming index.
 
-import type { TerrainType } from '../game/types.ts';
+import type { RoadVariant, TerrainType } from '../game/types.ts';
 import type { BuildingSizeClass } from '../game/config/types.ts';
 
 // ---- accepted model names (consumed by ThreeMapRenderer) --------------------
@@ -39,6 +39,17 @@ export const MOUNTAIN_FEATURE_MODELS = [
   'rock_large',
   'mountain_peak',
 ] as const;
+
+/** Modulare Near-LOD-Kits der automatisch ermittelten Straßenvarianten. */
+export const ROAD_VARIANT_MODELS: Record<RoadVariant, readonly string[]> = {
+  flat: ['road_flat'],
+  slope: ['road_slope', 'road_flat'],
+  pass: ['road_hairpin_curve', 'road_slope'],
+  support: ['road_support'],
+  viaduct: ['road_viaduct', 'road_support'],
+  bridge: ['road_bridge', 'road_viaduct'],
+  coast: ['road_coast', 'road_support'],
+};
 
 /** Vegetation props (models/props/nature/), culled off the city footprint. */
 export const PINE_TREE_MODELS = ['pine_tree', 'tree_pine', 'tree'] as const;
@@ -255,25 +266,27 @@ export const MODEL_FOLDER_DOCS: ModelFolderDoc[] = [
   {
     key: 'roads',
     title: 'Straßen',
-    loader: '',
-    intro: '',
-    rows: [],
-    deprecated:
-      '**Straßen laden seit v0.44 nie mehr ein `.glb`** (§ Straßen als Textur). Die Mask-getriebene ' +
-      'Straßengeometrie (gerade/Kurve/T/Kreuzung/Ende, Kreisverkehr, Bergstraße, Steg/Brücke) ist jetzt ' +
-      'texturbasiert — siehe `docs/ROAD_TEXTURES.md` und `src/assets/roadTextureManifest.ts` für die ' +
-      'aktuelle Drop-in-Spezifikation (`src/assets/textures/roads/…`).',
+    loader: 'roadModel',
+    intro:
+      'Die prozedurale, durchgehende Fahrbahn bleibt nahtloser Fallback. Diese ' +
+      'Modelle ergänzen automatisch gewählte Varianten als instanzierte Near-LOD-Kits.',
+    rows: [
+      { purpose: 'Ebene Straße', names: ['road_flat'], note: 'instanziertes Detailkit' },
+      { purpose: 'Hangstraße', names: ['road_slope'], note: 'instanziertes Detailkit' },
+      { purpose: 'Stützstraße', names: ['road_support'], note: 'Stützmauer/Bankett' },
+      { purpose: 'Viadukt', names: ['road_viaduct'], note: 'Deck-/Bogendetail; Pfeiler bleiben profilgesteuert' },
+      { purpose: 'Haarnadelkurve', names: ['road_hairpin_curve'], note: 'nur an automatisch ermittelten Passkehren' },
+      { purpose: 'Küstenstraße', names: ['road_coast'], note: 'Seemauer-/Uferdetail' },
+    ],
   },
   {
     key: 'bridges',
     title: 'Brücken',
-    loader: '',
-    intro: '',
-    rows: [],
-    deprecated:
-      '**Brücken laden seit v0.44 nie mehr ein `.glb`** (§ Straßen als Textur). Eine Straße über Wasser ' +
-      'wird jetzt als texturierter Steg (schmale Spannweite) oder Brücke (breite Spannweite) gerendert — ' +
-      'siehe `docs/ROAD_TEXTURES.md` und `src/assets/roadTextureManifest.ts`.',
+    loader: 'roadModel',
+    intro:
+      'Modulares Brückendetail über dem kanonischen Deck. Fehlt das Modell, baut der Renderer ' +
+      'Deck, Geländer und tiefenabhängige Pfeiler vollständig prozedural.',
+    rows: [{ purpose: 'Automatische Wasserbrücke', names: ['road_bridge'], note: 'instanziertes Near-LOD-Kit' }],
   },
   {
     key: 'props',
@@ -830,20 +843,37 @@ export const FOLDER_PROMPTS: FolderPrompts[] = [
     key: 'roads',
     title: 'Straßen',
     intro:
-      '**Straßen laden seit v0.44 nie mehr ein `.glb`** (§ Straßen als Textur). Die Mask-getriebene ' +
-      'Straßengeometrie (gerade/Kurve/T/Kreuzung/Ende, Kreisverkehr, Bergstraße, Steg/Brücke) ist jetzt ' +
-      'texturbasiert — siehe `docs/ROAD_TEXTURES.md` und `src/assets/roadTextureManifest.ts` für die ' +
-      'aktuelle Drop-in-Spezifikation (`src/assets/textures/roads/…`).',
-    groups: [],
+      'Modulare Details für das automatische Straßensystem. Die Modelle überlagern die nahtlose ' +
+      'prozedurale Fahrbahn und müssen deshalb kachelbar, flach und aus einem Mesh bestehen.',
+    groups: [
+      {
+        title: 'Aktiv genutzt',
+        note: 'Near-LOD, pro Variante instanziert; Pivot unten-mittig, Front +Z.',
+        entries: [
+          { name: 'road_flat', footprint: '1×1', sizeClass: 'terrain_tile', placeOn: 'ebene Straße', instancing: true, status: 'live', motif: 'a seamless flat stylized road detail tile with warm asphalt and stone shoulders' },
+          { name: 'road_slope', footprint: '1×1', sizeClass: 'terrain_tile', placeOn: 'sanfter Hang', instancing: true, status: 'live', motif: 'a sloped road detail tile with compacted embankment edges' },
+          { name: 'road_support', footprint: '1×1', sizeClass: 'terrain_tile', placeOn: 'Hang/Stützung', instancing: true, status: 'live', motif: 'a road edge kit with a warm stone retaining wall and buttresses' },
+          { name: 'road_viaduct', footprint: '1×1', sizeClass: 'bridge', placeOn: 'Schlucht/Klippe', instancing: true, status: 'live', motif: 'a modular stone viaduct deck detail with a shallow arch silhouette' },
+          { name: 'road_hairpin_curve', footprint: '1×1', sizeClass: 'terrain_tile', placeOn: 'Pass-Kehre', instancing: true, status: 'live', motif: 'a compact U-shaped mountain hairpin road detail with inner retaining wall' },
+          { name: 'road_coast', footprint: '1×1', sizeClass: 'terrain_tile', placeOn: 'Küste/Ufer', instancing: true, status: 'live', motif: 'a coastal road detail tile with a low seawall and drainage edge' },
+        ],
+      },
+    ],
   },
   {
     key: 'bridges',
     title: 'Brücken',
     intro:
-      '**Brücken laden seit v0.44 nie mehr ein `.glb`** (§ Straßen als Textur). Eine Straße über Wasser ' +
-      'wird jetzt als texturierter Steg (schmale Spannweite) oder Brücke (breite Spannweite) gerendert — ' +
-      'siehe `docs/ROAD_TEXTURES.md` und `src/assets/roadTextureManifest.ts`.',
-    groups: [],
+      'Modulares Near-LOD über der profilgesteuerten Brückengeometrie; Pfeilerhöhe kommt immer aus dem Spiel.',
+    groups: [
+      {
+        title: 'Aktiv genutzt',
+        note: 'Ein Mesh, instanzierbar; keine festen Pfeiler bis zum Boden einmodellieren.',
+        entries: [
+          { name: 'road_bridge', footprint: '1×1', sizeClass: 'bridge', placeOn: 'Wasser/Fluss', instancing: true, status: 'live', motif: 'a modular stylized bridge deck detail with stone parapets and warm road surface, no fixed ground-height piers' },
+        ],
+      },
+    ],
   },
   {
     key: 'props',

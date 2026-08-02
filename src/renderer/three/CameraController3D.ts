@@ -15,8 +15,11 @@ import {
   type CameraPreset,
 } from './CameraConfig.ts';
 import { DEFAULT_CAMERA_SETTINGS, type CameraSettings } from './cameraSettings.ts';
+import { terrainHeightAt, WATER_LEVEL } from './terrainHeight.ts';
 
 const clamp = (v: number, lo: number, hi: number): number => (v < lo ? lo : v > hi ? hi : v);
+const focusSurfaceHeightAt = (x: number, z: number): number =>
+  Math.max(WATER_LEVEL, terrainHeightAt(x, z));
 
 /** A plain camera pose the renderer can consume without any three types. */
 export interface CameraPose {
@@ -34,6 +37,7 @@ export class CameraController3D {
 
   // Current (rendered) state.
   private targetX: number;
+  private targetY: number;
   private targetZ: number;
   private dist: number;
   private yaw: number;
@@ -41,6 +45,7 @@ export class CameraController3D {
 
   // Goal state — the current state eases toward these each frame.
   private gTargetX: number;
+  private gTargetY: number;
   private gTargetZ: number;
   private gDist: number;
   private gYaw: number;
@@ -57,6 +62,7 @@ export class CameraController3D {
     const th = startRegionConfig.townHall;
     this.targetX = this.gTargetX = th.x + 2.5;
     this.targetZ = this.gTargetZ = th.y + 2.5;
+    this.targetY = this.gTargetY = focusSurfaceHeightAt(this.targetX, this.targetZ);
     this.dist = this.gDist = CAMERA_DEFAULTS.dist;
     this.yaw = this.gYaw = CAMERA_DEFAULTS.yaw;
     this.pitch = this.gPitch = CAMERA_DEFAULTS.pitch;
@@ -142,11 +148,16 @@ export class CameraController3D {
 
   // ---- focus / presets ------------------------------------------------------
 
-  focusGround(x: number, z: number, dist?: number): void {
+  focusGround(x: number, z: number, dist?: number, targetY?: number): void {
+    // A programmatic focus replaces an unfinished drag. Otherwise the next
+    // inertia frame would move the fresh target and clamp an explicit bridge/
+    // building height back onto the terrain surface.
+    this.velX = this.velZ = 0;
     this.gTargetX = x;
     this.gTargetZ = z;
     if (dist !== undefined) this.gDist = clamp(dist, this.bounds.minDist, this.bounds.maxDist);
     this.clampTarget();
+    if (targetY !== undefined) this.gTargetY = targetY;
   }
 
   focusCity(): void {
@@ -174,7 +185,18 @@ export class CameraController3D {
    * die Fahrtrichtung; die Kamera sitzt dahinter (yaw+π) und blickt nach vorn.
    * `snapYaw` überspringt das Yaw-Easing für hartes Andocken beim Einsteigen.
    */
-  setChase(targetX: number, targetZ: number, heading: number, dist: number, pitch: number, snapYaw = false): void {
+  setChase(
+    targetX: number,
+    targetZ: number,
+    heading: number,
+    dist: number,
+    pitch: number,
+    snapYaw = false,
+    targetY?: number,
+  ): void {
+    // Chase owns the target while driving. Residual map-drag inertia must not
+    // move it away from the vehicle or overwrite an explicit road-deck height.
+    this.velX = this.velZ = 0;
     this.gTargetX = targetX;
     this.gTargetZ = targetZ;
     this.gDist = clamp(dist, this.bounds.minDist, this.bounds.maxDist);
@@ -188,6 +210,7 @@ export class CameraController3D {
     while (d < -Math.PI) d += 2 * Math.PI;
     this.gYaw += d;
     this.clampTarget();
+    if (targetY !== undefined) this.gTargetY = targetY;
     if (snapYaw) {
       this.yaw = this.gYaw;
       this.pitch = this.gPitch;
@@ -211,6 +234,7 @@ export class CameraController3D {
 
     if (!this.settings().smooth) {
       this.targetX = this.gTargetX;
+      this.targetY = this.gTargetY;
       this.targetZ = this.gTargetZ;
       this.dist = this.gDist;
       this.yaw = this.gYaw;
@@ -220,6 +244,7 @@ export class CameraController3D {
     const eTarget = 1 - Math.exp(-dt * 16);
     const eOrbit = 1 - Math.exp(-dt * 13);
     this.targetX += (this.gTargetX - this.targetX) * eTarget;
+    this.targetY += (this.gTargetY - this.targetY) * eTarget;
     this.targetZ += (this.gTargetZ - this.targetZ) * eTarget;
     this.dist += (this.gDist - this.dist) * eOrbit;
     this.yaw += (this.gYaw - this.yaw) * eOrbit;
@@ -229,6 +254,7 @@ export class CameraController3D {
   /** Snap current state to goals (used once on init). */
   snap(): void {
     this.targetX = this.gTargetX;
+    this.targetY = this.gTargetY;
     this.targetZ = this.gTargetZ;
     this.dist = this.gDist;
     this.yaw = this.gYaw;
@@ -243,10 +269,10 @@ export class CameraController3D {
     const height = Math.sin(this.pitch) * this.dist;
     return {
       posX: this.targetX + Math.sin(this.yaw) * horiz,
-      posY: height,
+      posY: this.targetY + height,
       posZ: this.targetZ + Math.cos(this.yaw) * horiz,
       targetX: this.targetX,
-      targetY: 0,
+      targetY: this.targetY,
       targetZ: this.targetZ,
     };
   }
@@ -261,8 +287,15 @@ export class CameraController3D {
     return this.dist;
   }
   /** Goal snapshot — handy for tests/telemetry. */
-  goals(): { targetX: number; targetZ: number; dist: number; yaw: number; pitch: number } {
-    return { targetX: this.gTargetX, targetZ: this.gTargetZ, dist: this.gDist, yaw: this.gYaw, pitch: this.gPitch };
+  goals(): { targetX: number; targetY: number; targetZ: number; dist: number; yaw: number; pitch: number } {
+    return {
+      targetX: this.gTargetX,
+      targetY: this.gTargetY,
+      targetZ: this.gTargetZ,
+      dist: this.gDist,
+      yaw: this.gYaw,
+      pitch: this.gPitch,
+    };
   }
 
   // § D-045: Seit die ganze Insel geladen und gezeigt wird, gibt es keine
@@ -270,5 +303,6 @@ export class CameraController3D {
   private clampTarget(): void {
     this.gTargetX = clamp(this.gTargetX, this.bounds.minX, this.bounds.maxX);
     this.gTargetZ = clamp(this.gTargetZ, this.bounds.minZ, this.bounds.maxZ);
+    this.gTargetY = focusSurfaceHeightAt(this.gTargetX, this.gTargetZ);
   }
 }

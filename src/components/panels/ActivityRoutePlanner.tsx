@@ -4,7 +4,10 @@ import {
   Check,
   ChevronDown,
   CircleDollarSign,
+  Bot,
   Filter,
+  Gamepad2,
+  Gauge,
   HelpCircle,
   PackageCheck,
   Play,
@@ -18,15 +21,18 @@ import { uiImage, vehicleImage } from '../../assets/registry.ts';
 import type { InfrastructureWarning } from '../../game/activities/logistics.ts';
 import type { ActivityBoardEntry, GameController } from '../../game/commands/controller.ts';
 import type { ActivityCategory, ActivityDef, DriveVehicle } from '../../game/config/types.ts';
+import { modeRewardFactor, type TransportMode } from '../../game/activities/transportOrder.ts';
 import { regionIdAt } from '../../game/config/startRegion.config.ts';
+import { TILE_METERS } from '../../renderer/worldProjection.ts';
 import type { BuildingInstance } from '../../game/types.ts';
 import { formatMoney, t } from '../../i18n/index.ts';
 import { playFeedback } from '../../services/feedback.ts';
 import { useGame, useUiStore } from '../../state/store.ts';
 import '../../styles/citywork-smart.css';
 import { CitizenPortrait } from '../art/index.ts';
-import { ManualRouteMap, type CityworkMapPoint } from '../citywork/ManualRouteMap.tsx';
+import { ManualRouteMap, type CityworkMapPoint, type DriveReadout } from '../citywork/ManualRouteMap.tsx';
 import { RouteSummary } from '../citywork/RouteSummary.tsx';
+import { SupplyPicker } from '../citywork/SupplyPicker.tsx';
 import {
   createSmartRouteSuggestion,
   type SmartRouteSuggestion,
@@ -95,6 +101,17 @@ export function ActivityRoutePlanner({ defId }: { defId: string }) {
   const [roadPath, setRoadPath] = useState<{ x: number; y: number }[]>(() =>
     active?.plannedRoadPath?.map((point) => ({ ...point })) ?? (anchors ? [{ ...anchors.source }] : []),
   );
+  // § P2 (D-050): Ausführungsart des Auftrags. Nicht zu verwechseln mit
+  // `manualMode` weiter unten — das ist das Zeichnen des Weges, dies hier die
+  // Frage, WER den Auftrag fährt. Läuft die Mission schon, ist die Wahl
+  // gefallen und wird nur noch angezeigt.
+  const [executionMode, setExecutionMode] = useState<TransportMode>(active?.mode ?? 'auto');
+  // Sitzt der Spieler gerade in dieser Karte am Steuer? Eine laufende
+  // Manuell-Mission darf beim erneuten Öffnen des Planers weiterfahren.
+  const [driving, setDriving] = useState(active?.mode === 'manual');
+  // Gedrosselte Fahrdaten fürs HUD (≈4×/s) — die Fahrt selbst läuft an React
+  // vorbei, sonst wäre jedes Bild ein Re-Render (CLAUDE.md §6).
+  const [driveReadout, setDriveReadout] = useState<DriveReadout>();
   const [fitNonce, setFitNonce] = useState(0);
   const [boardFilter, setBoardFilter] = useState<BoardFilter>('all');
   const [showJobs, setShowJobs] = useState(false);
@@ -102,9 +119,21 @@ export function ActivityRoutePlanner({ defId }: { defId: string }) {
   const [manualMode, setManualMode] = useState(false);
   const initializedPlanKey = useRef('');
 
+  // § P4 (§8): Der Ladeort ist eine ECHTE Wahl mit echten Beständen — nicht mehr
+  // das erste Gebäude nach Id-Sortierung. `supplyOptions` ist leer, wo es nichts
+  // zu wählen gibt (Auftrag ohne Ladung oder ohne Lager als Quelle); dann bleibt
+  // die Oberfläche unverändert, statt eine Wahl vorzutäuschen.
+  const supplyOptions = useMemo(
+    () => game.getActivitySupplyOptions(defId, targetIds.length),
+    [game, game.version, defId, targetKey],
+  );
+  const sourceBuildingId = useMemo(
+    () => game.getActivitySourceBuildingId(defId),
+    [game, game.version, defId],
+  );
   const source = useMemo(
-    () => sourcePoint(game, def, context?.sourceBuildingIds[0]),
-    [game, game.version, def, context?.sourceBuildingIds],
+    () => sourcePoint(game, def, sourceBuildingId ?? context?.sourceBuildingIds[0]),
+    [game, game.version, def, sourceBuildingId, context?.sourceBuildingIds],
   );
   const targets = useMemo(
     () => targetIds.map((id) => buildingPoint(game, id)).filter((point): point is RoutePoint => point !== undefined),
@@ -157,6 +186,10 @@ export function ActivityRoutePlanner({ defId }: { defId: string }) {
     const onKey = (event: KeyboardEvent) => {
       const target = event.target as HTMLElement | null;
       if (target?.tagName === 'INPUT' || target?.tagName === 'TEXTAREA' || target?.isContentEditable) return;
+      // § P2: Am Steuer gehören die Tasten der Fahrt. ESC/Q steigen dort aus —
+      // sie dürfen nicht zugleich den Planer schließen, und R/F würden dem
+      // Fahrenden die Route unter dem Fahrzeug wegziehen.
+      if (driving) return;
       if (event.key === 'Escape') {
         event.preventDefault();
         if (showJobs) setShowJobs(false);
@@ -175,7 +208,7 @@ export function ActivityRoutePlanner({ defId }: { defId: string }) {
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [closePlanner, pushToast, showAdjustments, showJobs, smartSuggestion]);
+  }, [closePlanner, driving, pushToast, showAdjustments, showJobs, smartSuggestion]);
 
   const selectedVehicleDef = context?.vehicles.find((vehicle) => vehicle.id === selectedVehicle);
   const preview = useMemo(
@@ -273,12 +306,19 @@ export function ActivityRoutePlanner({ defId }: { defId: string }) {
     );
   }
 
+  // Der Aufschlag kommt aus DERSELBEN Funktion, die ihn später auszahlt
+  // (`modeRewardFactor`) — die angezeigte Prämie ist die gezahlte Prämie.
+  const rewardFactor = modeRewardFactor(executionMode, game.config.activities.manualDriveBonusFactor);
+  const bonusPercent = Math.round(
+    (modeRewardFactor('manual', game.config.activities.manualDriveBonusFactor) - 1) * 100,
+  );
+
   const startRoute = () => {
     if (!routeComplete || !preview) {
       pushToast('Die automatische Route braucht noch einen verbundenen Straßenabschnitt.', 'error');
       return;
     }
-    const plan = { vehicle: selectedVehicle, roadPath };
+    const plan = { vehicle: selectedVehicle, roadPath, mode: executionMode };
     const result = active
       ? game.setActiveActivityRoute(preview.orderedTargetIds, plan)
       : game.startActivity(def.id, preview.orderedTargetIds, plan);
@@ -286,8 +326,16 @@ export function ActivityRoutePlanner({ defId }: { defId: string }) {
       pushToast(t(`error.${result.error}`), 'error');
       return;
     }
-    closePlanner();
     playFeedback('activity_start');
+    // § P2 (D-050): „Selbst fahren" findet in DIESER Karte statt — der Planer
+    // bleibt offen und wird zur Fahransicht. Kein Wechsel in die 3D-Welt und
+    // kein zweiter Renderer (ausdrückliche Vorgabe des Auftrags).
+    if (executionMode === 'manual') {
+      setDriving(true);
+      pushToast('Du sitzt am Steuer – W/A/S/D oder Pfeiltasten, Q zum Aussteigen.', 'success');
+      return;
+    }
+    closePlanner();
     pushToast('Mission gestartet – dein Fahrzeug übernimmt ab hier.', 'success');
     requestAnimationFrame(() => setMissionFollow(true));
   };
@@ -364,15 +412,41 @@ export function ActivityRoutePlanner({ defId }: { defId: string }) {
               roadPath={roadPath}
               analysis={preview?.analysis}
               referenceSegments={referenceAnalysis?.segments}
+              {...(smartSuggestion && !sameRoadPath(smartSuggestion.roadPath, roadPath)
+                ? { referencePath: smartSuggestion.roadPath }
+                : {})}
               visitOrder={preview?.orderedTargetIds ?? []}
               {...(preview?.cargoRoute ? { cargoStops: preview.cargoRoute.stops } : {})}
               fitNonce={fitNonce}
-              editEnabled={manualMode}
+              {...(selectedVehicleDef ? { vehicleSpeedKph: selectedVehicleDef.speedKph } : {})}
+              {...(preview?.cargoPlan && preview.cargoPlan.capacity > 0
+                ? { loadRatio: Math.min(1, preview.cargoPlan.totalRequired / preview.cargoPlan.capacity) }
+                : {})}
+              editEnabled={manualMode && !driving}
+              driving={driving}
+              onDriveReadout={setDriveReadout}
+              onArrive={(buildingId) => {
+                // Der Command entscheidet, ob der Stopp zählt — die Karte meldet
+                // nur die Ankunft. Ist der Auftrag danach fertig, endet die Fahrt.
+                const result = game.progressActivity(buildingId);
+                if (!result.ok) return;
+                playFeedback('activity_start');
+                if (!game.state.activities.active) {
+                  setDriving(false);
+                  pushToast('Auftrag abgeschlossen – gute Fahrt war das.', 'success');
+                }
+              }}
+              onExitDrive={() => {
+                setDriving(false);
+                pushToast('Ausgestiegen. Über „Selbst fahren" geht es weiter.', 'info');
+              }}
               onPathChange={setRoadPath}
               onInvalid={() => pushToast('Nutze einen direkt angrenzenden Straßenabschnitt.', 'info')}
             />
-            <RouteSummary preview={preview} roadPath={roadPath} targetsTotal={targetIds.length} />
-            {manualMode && (
+            {driving
+              ? <DriveHud readout={driveReadout} targetsTotal={targetIds.length} />
+              : <RouteSummary preview={preview} roadPath={roadPath} targetsTotal={targetIds.length} />}
+            {manualMode && !driving && (
               <div className="citywork-smart-editing">
                 <SlidersHorizontal size={15} />
                 Manuelle Feinplanung aktiv
@@ -407,13 +481,46 @@ export function ActivityRoutePlanner({ defId }: { defId: string }) {
               </div>
             )}
 
+            {def.drive && (
+              <div className="citywork-mode-choice" role="group" aria-label="Ausführungsart">
+                {(
+                  [
+                    {
+                      mode: 'auto' as const,
+                      icon: <Bot size={20} />,
+                      title: 'Fahren lassen',
+                      hint: 'Die Stadt fährt die Strecke selbst ab.',
+                    },
+                    {
+                      mode: 'manual' as const,
+                      icon: <Gamepad2 size={20} />,
+                      title: 'Selbst fahren',
+                      hint: `WASD / Pfeiltasten · +${bonusPercent} % Prämie`,
+                    },
+                  ] satisfies { mode: TransportMode; icon: JSX.Element; title: string; hint: string }[]
+                ).map((option) => (
+                  <button
+                    key={option.mode}
+                    className={executionMode === option.mode ? 'active' : ''}
+                    disabled={active !== undefined}
+                    aria-pressed={executionMode === option.mode}
+                    onClick={() => setExecutionMode(option.mode)}
+                  >
+                    {option.icon}
+                    <strong>{option.title}</strong>
+                    <small>{option.hint}</small>
+                  </button>
+                ))}
+              </div>
+            )}
+
             <div className="citywork-smart-reward">
-              <span><CircleDollarSign size={15} /> {formatMoney(context.reward.money)}</span>
-              <span>{context.reward.xp} XP</span>
+              <span><CircleDollarSign size={15} /> {formatMoney(Math.round(context.reward.money * rewardFactor))}</span>
+              <span>{Math.round(context.reward.xp * rewardFactor)} XP</span>
             </div>
 
             <button className="citywork-smart-start" disabled={!routeComplete} onClick={startRoute}>
-              <Play size={17} /> Route starten
+              <Play size={17} /> {executionMode === 'manual' ? 'Einsteigen und losfahren' : 'Route starten'}
             </button>
           </section>
 
@@ -426,6 +533,25 @@ export function ActivityRoutePlanner({ defId }: { defId: string }) {
             Plan anpassen
             <ChevronDown size={16} />
           </button>
+
+          <SupplyPicker
+            options={supplyOptions}
+            selectedId={sourceBuildingId}
+            locked={Boolean(active)}
+            nameOf={(option) => {
+              const definition = game.config.buildings.get(option.defId);
+              return definition ? t(definition.nameKey) : option.defId;
+            }}
+            distanceOf={(option) => {
+              const first = targets[0];
+              return first ? Math.hypot(option.x - first.x, option.y - first.y) * TILE_METERS : undefined;
+            }}
+            onSelect={(buildingId) => {
+              const result = game.setActivitySource(defId, buildingId);
+              if (!result.ok) pushToast('Dieser Ladeort ist für den Auftrag nicht wählbar.');
+              else setFitNonce((value) => value + 1);
+            }}
+          />
 
           {showAdjustments && (
             <div className="citywork-smart-adjustments">
@@ -537,6 +663,50 @@ function MissionCard({
       <CitizenPortrait role={entry.def.sender} seed={entry.def.id} size={34} />
     </button>
   );
+}
+
+const TURN_LABELS: Record<NonNullable<DriveReadout['turn']>, string> = {
+  straight: 'geradeaus',
+  left: 'links abbiegen',
+  right: 'rechts abbiegen',
+  around: 'wenden',
+};
+
+/**
+ * § 10 des Auftrags: „Unten, während Fahrt: Ladung, Ziele, Zeit, Entfernung,
+ * Status." Alle Werte kommen gedrosselt aus der Fahrschleife — die Anzeige
+ * rechnet nichts nach, sonst gäbe es zwei Wahrheiten über dieselbe Fahrt.
+ */
+function DriveHud({ readout, targetsTotal }: { readout: DriveReadout | undefined; targetsTotal: number }) {
+  const done = targetsTotal - (readout?.remaining ?? targetsTotal);
+  return (
+    <div className="citywork-drive-hud">
+      <span className="citywork-drive-speed">
+        <Gauge size={16} />
+        <b>{Math.round(readout?.speedKph ?? 0)}</b> km/h
+      </span>
+      <span>
+        <small>Nächstes Ziel</small>
+        <b>{readout?.targetLabel ?? '—'}</b>
+        {readout?.targetMeters !== undefined && <em>{Math.round(readout.targetMeters)} m Luftlinie</em>}
+      </span>
+      <span>
+        <small>Nächste Anweisung</small>
+        <b>{readout?.turn ? TURN_LABELS[readout.turn] : 'der Straße folgen'}</b>
+        {readout?.turnMeters !== undefined && readout.turn && <em>in {Math.round(readout.turnMeters)} m</em>}
+      </span>
+      <span>
+        <small>Ziele</small>
+        <b>{Math.max(0, done)} / {targetsTotal}</b>
+        <em>erledigt</em>
+      </span>
+    </div>
+  );
+}
+
+/** Zwei Wege sind gleich, wenn sie Kachel für Kachel übereinstimmen. */
+function sameRoadPath(a: readonly { x: number; y: number }[], b: readonly { x: number; y: number }[]): boolean {
+  return a.length === b.length && a.every((point, index) => point.x === b[index]?.x && point.y === b[index]?.y);
 }
 
 function buildingPoint(game: GameController, id?: string): RoutePoint | undefined {

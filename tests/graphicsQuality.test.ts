@@ -70,13 +70,12 @@ describe('Grafik-Qualitätsprofile (§ Säule B)', () => {
     }
   });
 
-  it('überspringt den Impostor-Tier, wenn das Profil keine Impostoren nutzt (Ultra)', () => {
+  it('nutzt auch auf Ultra Fernwald-HLOD für die vollständige Inselansicht', () => {
     const ultra = graphicsProfile('ultra');
-    expect(ultra.impostorsEnabled).toBe(false);
+    expect(ultra.impostorsEnabled).toBe(true);
     const [, mid] = ultra.lodDistances;
-    // Zwischen mid und Sichtgrenze bleibt es reduzierte Geometrie (Tier 1), nie Impostor.
-    expect(vegetationLodTier(mid + 5, ultra)).toBe(1);
-    expect([...Array(60).keys()].map((d) => vegetationLodTier(d * 5, ultra))).not.toContain(2);
+    expect(vegetationLodTier(mid + 5, ultra)).toBe(2);
+    expect(ultra.vegetationViewDistance).toBeGreaterThanOrEqual(600);
   });
 
   it('schaltet Vegetationsschatten erst ab Mittel ein und deckelt sie', () => {

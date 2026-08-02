@@ -1,5 +1,304 @@
 # Handoff-Log
 
+## 2026-08-02 — Stadtarbeit P4: Bestandsregister je Lager (v1.34, Save v32, D-052)
+
+**Auftrag:** §8 des Stadtarbeit-Overhauls („Keine globale magische Ressource.
+Jedes Lager hat eigene Bestände") — zugleich Phase 4 des Folgeauftrags
+„Stadtarbeit Overhaul 2.0".
+
+**Befund, der den Entwurf getragen hat.** 34 Gebäudetypen: **3** aktive Betriebe
+mit lokalem Lager, **7** Gebäude mit `storage`-Wirkung, **keine Überschneidung**.
+Deshalb konnte dieselbe Map (`operations.inventories`) beide Bedeutungen
+eindeutig halten — es gibt **kein drittes Lagermodell**. Der Test prüft die
+Überschneidungsfreiheit als Erstes; kippt sie, kippt das Modell.
+
+**Zweiter Befund.** `state.resources` wird an **31 Stellen in 8 Modulen**
+verändert. Ein Register, das an jeder davon mitgebucht werden müsste, driftet
+beim ersten vergessenen Aufruf — deshalb gleicht `GameController.notify` an einer
+Stelle ab, und nur ortsgenaue Vorgänge (Laden/Zurückgeben) buchen direkt.
+
+**Regression gefunden und behoben:** `inventoryNetworkOverview` zählte die neuen
+Stadtlager-Einträge als „lokal gebunden" und wies die Ware der Stadt damit
+doppelt aus (120 statt 60 im Test). Die Übersicht überspringt Stadtlager jetzt
+ausdrücklich.
+
+**Verifikation:** `tsc` · `eslint` · **724 Tests** (87 Dateien) · `npm run build`
+— alles grün.
+
+**Für den nächsten Durchgang zuerst:** **D-053** in `DECISIONS.md`. Der
+Folgeauftrag verlangt eine isometrische Weltkamera und die Route als
+Fahraufzeichnung; das kehrt D-050/D-051 um und braucht eine ausdrückliche
+Rücknahme, bevor Code entsteht. Nicht in der UI vortäuschen: Gebäude-Interaktion
+auf der Karte, Nachladen unterwegs, freie Stoppreihenfolge, Verkehrsrückkopplung.
+
+## 2026-08-01 — Stadtarbeit-Overhaul P3: Karte aus der Welt + Straßenfahren (v1.33, Save v31)
+
+**Auftrag:** „Stadtarbeit Overhaul — aktives Logistiksystem + 2D-Kartenansicht
+aus der 3D-Welt", §§1–13 mit vier Mockups. Umgesetzt sind **§3/§4/§5** (Karte
+aus der echten Welt, visuell aufgewertet, Infrastruktur hervorgehoben), **§6**
+(einfacheres Fahren), **§12** (Leistung/LOD) und **§13** (Doku), dazu der
+Fahr-Status aus §10. **Offen und in der UI nicht vorgetäuscht:** §7 erweiterte
+Routenplanung, §8 Lagerbestände je Gebäude, §9 Verkehrsrückkopplung, §10
+Gesamtlayout, §11 zusätzliche Entscheidungsachsen.
+
+**Was der Bestand wirklich hergab.** Der Auftrag nannte die 2D-Ansicht „eine
+vereinfachte Platzhalterkarte". Das stimmte für den Eindruck, nicht für die
+Daten: Terrain, Regionen, Straßen und Gebäude kamen bereits aus dem echten
+Spielstand. Gefehlt hat alles, woran man eine Landschaft **erkennt** — Höhe,
+Bewuchs, Küstenform. Wieder die Lehre, erst den Arbeitsbaum zu prüfen: Die Arbeit
+lag nicht darin, echte Daten zu beschaffen, sondern die vorhandenen sichtbar zu
+machen.
+
+**Die Regel dahinter (D-051).** Es gibt jetzt genau eine Leseinstanz für
+Draufsicht-Weltdaten: `src/renderer/worldProjection.ts`, frei von `three`,
+`react` und Canvas. Sie liefert Kachelabtastung, Hangschattierung, Kachelfarbe,
+die Regel für gesperrtes Land und die Vegetation — Letztere über
+`collectRegionNature`, **dieselbe** Funktion, aus der die 3D-Welt wächst.
+`tests/worldProjection.test.ts` vergleicht das Instanz für Instanz. Wer die Karte
+um eine Weltinformation erweitert, ergänzt sie dort; ein zweites Grid-Lesen ist
+der erste Schritt zu einer zweiten Welt (D-042). Verbindlich:
+`docs/agents/CITYWORK_MAP_PIPELINE.md`.
+
+**Fahren ersetzt, nicht ergänzt.** Die Arcade-Lenkung (freie Position, freier
+Winkel, weiche Rückführung auf die Fahrbahn) ist weg. Das Fahrzeug sitzt jetzt
+immer auf einer Kante zwischen zwei Straßenkacheln (`{from, to, t, speed}`),
+Position und Blickwinkel werden daraus abgeleitet. W gibt Gas, S bremst und
+fährt rückwärts, A/D wählen an der Kreuzung. Damit erledigt sich die frühere
+Frage „hart blockieren oder weich zurückziehen?" ersatzlos. D-050 gilt
+unverändert: `game/activities/driving.ts` bleibt die **einzige** Fahrphysik, der
+3D-Renderer ruft dieselbe Funktion.
+
+**Zwei Befunde, die Konstanten bzw. Code geändert haben.**
+1. *Die Insel hat keinen Gewässergrund.* Tiefste Stelle **5,06 m**, 94 % der
+   Wasserkacheln bei 2–3 m. Die zunächst geschätzte 7-m-Tiefenrampe hätte das
+   Meer als eine einzige Fläche ohne Uferbank gezeichnet.
+2. *Ein erreichter Stopp warf das Fahrzeug an den Start zurück.* `anchors` stand
+   als Objekt im Abhängigkeitsarray der Fahrschleife — ein `useMemo` über
+   `game.version`, also neue Identität bei **jedem** Command. Jetzt steht dort
+   der Startpunkt als Wert. Gefunden hat das der Smoke im laufenden Spiel; ein
+   Test, der nie ankommt, sieht es nie.
+
+**Für die nächste Sitzung.** Der nächste Schritt ist **P4: Lagerbestände je
+Gebäude** — die einzige echte Simulationsarbeit im Auftrag und Voraussetzung für
+das Nachlade-Panel des Mockups. Lokale Inventare existieren bereits im
+Betriebssystem (`operations/**`, Save v17+): **zusammenführen, kein drittes
+Lagermodell** (§2/§8). Braucht eine Save-Migration (dann v31→v32).
+
+## 2026-08-01 — World Visual Overhaul (v1.32, Save v31)
+
+**Ausgangslage:** Das v0.72-Inselbake und der v0.70-Splat-Renderer lieferten
+eine stabile Welt, banden aber global fast alle Terrain-Layer, überblendeten
+Biomgrenzen nur kachelnah und besaßen weder echtes Natur-/Gebäude-HLOD noch eine
+profilierte Post-Kette. Gebäude-GLBs wurden mit einem globalen Materialeingriff
+stilisiert; charakteristische Außenbereiche fehlten. Wasser, Kamera und
+Beleuchtung funktionierten, erreichten die verbindlichen Mockups aber noch
+nicht als zusammenhängendes Bild.
+
+**Terrain, Natur und Wasser.** Terrain-Chunks leiten ihr tatsächliches
+Layer-Set aus Höhe, Küste und Regionsprofil ab. Klippen und Berge teilen ihren
+Sampler; Normal-, Rauheits- und AO-Details werden nur dort gebunden, wo sie
+wirken. Gewichtete 5×5-Abfragen erzeugen breite Biom- und Uferübergänge. Bäume
+bleiben im Nahbereich instanziert, erhalten gemeinsamen Shaderwind und gehen in
+der Ferne in instanzierte Chunk-Cluster über. Offene Wiesen bleiben frei von
+zufälligen Dekofelsen. Das Wasser kombiniert drei Wellen, Tiefenfarbe, Strömung,
+Schaum, analytisches Fresnel und ein nur küstennah transparentes Uferband; ein
+zweiter Spiegelungsrender wurde bewusst vermieden.
+
+**Gebäude als Teil der Welt.** Ein Audit aller 54 GLBs ergab rund 81 MB, etwa
+1,20 Mio. Dreiecke, überwiegend 2048²-Texturen und keine authored LODs. Die
+Laufzeit verwendet deshalb pro Instanz geklonte Materialhüllen mit
+rollenabhängiger Farb-/PBR-Harmonisierung, schützt Glas/Emissive und lässt
+Normalmaps intakt. Rathaus, Sägewerk, Farmen, Lager/Depot, Steinbruch,
+Wasserwerk und Industrie/Energie erhalten deterministische, rotations- und
+upgradefähige instanzierte Außenbereiche. Rollenbasierte, räumlich gechunkte
+Instanz-HLODs ersetzen die teuren Vollmodelle in der Fernsicht; Nahsicht,
+Auswahl und Picking bleiben detailreich. Rebuilds geben Instanzbuffer frei, und
+Material-/Instanzfarben werden nicht doppelt multipliziert.
+
+**Post, Himmel und Kamera.** Der Renderer besitzt jetzt Qualitätsprofile für
+Direktrendering beziehungsweise Render → SSAO → optionales HDR-Bloom → optional
+sehr subtilen DOF → SMAA → Output. Tonemapping erfolgt genau einmal. Schatten
+und Wolken skalieren über dieselbe Qualitätsstufe; `SkyEnvironment` bleibt
+alleinige Licht-/Nebelautorität. Die Orbitkamera führt eine geglättete Terrain-,
+Wasser- oder Fahrbahn-Zielhöhe und rahmt ausgewählte Gebäude näher. Der
+Schattenfokus folgt exakt diesem Kameraziel; die Composer-Telemetrie zählt alle
+Pässe, und Qualitätswechsel entsorgen auch die zusätzlichen SSAO-Ressourcen.
+Simulation, Save und DOM-HUD bleiben davon getrennt.
+
+**Verifikation:** TypeScript, vollständiges ESLint (0 Fehler, keine Warnungen),
+**86 Testdateien / 697 Tests** und der Produktions-Build sind
+grün; Preview HTTP 200. Mangels Browserinstanz (`agent.browsers.list() = []`)
+ist der vorgeschriebene interaktive 3D-Screenshot-Smoke blockiert. Es gibt daher
+keine vorgetäuschte visuelle Shader-Freigabe. `rustc`/`cargo` fehlen für den
+nativen Tauri-Build. Save bleibt **v31**; es gibt keine Migration.
+
+**Bewusst offen:** echte Billboards und Crossfades, offline komprimierte und
+vereinfachte GLBs (Draco/Meshopt/KTX2, Cache-Eviction, authored LOD),
+GPU-/Speicher-/LOD-Telemetrie samt Zielhardwareprofil, Terrain-Geometrie-LOD,
+Straßen-Chunking und interaktive visuelle Validierung beziehungsweise Feintuning
+der neuen World-Space-/triplanaren Terrain-Details. Diese Punkte werden nicht
+als erledigt dargestellt.
+
+## 2026-08-01 — Eine Straße, jedes Gelände (v1.31, Save v31)
+
+**Ausgangslage:** Der Straßenbau besaß bereits Vorschau, Dijkstra-Routing,
+`roadNetwork`, eine separat wählbare `road_elevated` und prozedurale
+Straßenbänder. Er besaß aber kein gemeinsames Längsprofil: Platzierung prüfte
+lokale Kachelsteigung, der Renderer legte die Straße auf `terrainHeightAt`,
+Brücken und Stützen hatten feste Höhen, Fahrzeuge lasen wieder den Boden. Auf
+Hängen entstanden Rasterknicke statt Passstraßen. Gebäude durften einen
+Footprint-Hang teilweise ausgleichen, zeigten dafür aber einen vollflächigen
+grauen Sockel.
+
+**Ein sichtbares Werkzeug, ein Graph.** Im Baukatalog bleibt nur `road`.
+`road_elevated` wird dort explizit ausgefiltert; Definition und Stufe-2-Unlock
+bleiben ausschließlich für alte Saves/API-Kompatibilität erhalten. Die automatische
+Straße wählt `flat`, `slope`, `pass`, `support`, `viaduct`, `bridge` oder
+`coast`; alle Varianten bleiben gewöhnliche 1×1-Straßeninstanzen im bestehenden
+4-Nachbar-`roadNetwork` (D-036).
+
+**Kanonisches Profil und echte Serpentinen.** `game/roads/roadProfile.ts`
+berechnet aus `samplePlacementSurface` Fahrbahnhöhe, Freistand, Länge,
+Höhendifferenz und Steigung. Endpunkte müssen tragfähige Landanker sein, und
+8 % ist eine harte Profilgrenze. `roadRouting.ts` ermittelt aus der notwendigen
+Rampenlänge deterministische, abwechselnde Kehren, verschiebt sie auf passierbare
+Anker und akzeptiert nur einen lückenlosen, selbstkreuzungsfreien Kandidaten.
+Der Regressionsfall auf der echten Insel von `(275,105)` nach `(275,119)` wird
+von 14 Kacheln Luftlinie auf mehr als 40 Kacheln mit mindestens vier Kehren
+verlängert und bleibt bei höchstens 8 %. Reicht der Korridor nicht, blockiert die
+Vorschau ehrlich.
+
+**Eine Auswertung bis zum Klick.** `RoadPlanPreview` trägt Profil, Variantenzahl,
+Deckhöhe, Steigung und Freistand je Kachel sowie alle Ressourcen. Der neue
+Straßenplaner zeichnet dasselbe Höhenprofil und zeigt Länge, Höhendifferenz,
+Maximal-/Durchschnittssteigung, Variante und Geld/Holz/Stein. Der Command nutzt
+genau diese Vorschau, bucht einmal und schreibt den Pfad in einem Bulk-Commit;
+lange Serpentinen erzeugen nur eine Derived-/Quest-Neuberechnung und eine
+`change`-Benachrichtigung.
+
+**Save v31.** Neue Straßen speichern das eingefrorene Engineering je Kachel:
+`variant`, `terrainHeight`, `roadHeight`, `gradePercent`, `clearance`, `routeId`
+und `routeIndex`. Ein später verzweigtes Netz könnte die ursprüngliche Trasse
+sonst nicht eindeutig wiederherstellen. Migration `v30→v31` hebt nur die
+Version an; das Feld ist optional, alte Straßen bleiben gültig und nutzen den
+Legacy-Fallback. Keine Welt-, Regions- oder Koordinatenänderung. Die
+Stadtarbeit-Erweiterung aus v1.30 bleibt vollständig erhalten.
+
+**Fundamente statt Platzhalter.** `buildings/foundation.ts` liefert für
+`BUILDABLE_FLAT`, `BUILDABLE_SLOPE`, `BUILDABLE_TERRACE`, `WATER_EDGE` und
+`CLIFF` einen gemeinsamen `FoundationPlan`. Platzierungsdiagnose und Command
+verwenden exakt dessen Mehrkosten und zusätzliche Bauzeit; Ghost und fertiges
+Gebäude verwenden exakt dessen Geometrie. Sichtbar sind Natursteinkranz,
+talwärtige Mauer, gestufte Terrasse, Pfähle oder befestigte Klippenwand mit
+Strebepfeilern — kein grauer Vollblock. D-043 bleibt unberührt: Das gebackene
+Höhenfeld wird nicht geschrieben.
+
+**Renderer/Assets.** Persistierte Deckhöhen treiben das durchgehende
+Straßenband, Brücken, profilhohe instanzierte Pfeiler und alle Fahrzeuge über
+`roadSurfaceHeightAt`. Die zuvor deaktivierte Straßen-GLB-Pipeline ist gezielt
+für sieben instanzierte Near-LOD-Kits reaktiviert: `road_flat.glb`,
+`road_slope.glb`, `road_support.glb`, `road_viaduct.glb`, `road_bridge.glb`,
+`road_hairpin_curve.glb`, `road_coast.glb`. Manifest, Registry, generierte
+READMEs und Prompts sind synchron; die prozedurale Fahrbahn bleibt vollständiger
+Fallback.
+
+**Verifikation dieses Übergabepunkts:** `npx tsc -b --force`, `npx eslint src
+tests`, die vollständige Vitest-Suite (**78 Testdateien / 638 Tests**) und `npm
+run build` sind grün; der Produktions-Preview antwortet mit HTTP 200. Der
+verbindliche interaktive 3D-Screenshot-Smoke bleibt mangels bereitgestellter
+Browserinstanz technisch blockiert (`agent.browsers.list() = []`). Es wird keine
+visuelle Freigabe vorgetäuscht. Der native Windows-Tauri-Build kann mangels
+installiertem `rustc`/`cargo` nicht gestartet werden.
+
+**Bewusst offen:** kein Tunnel, keine manuelle Höhen-/Pfeiler-/Brückenwahl,
+keine frei ziehbaren Kurvengriffe, keine Schiffsdurchfahrts- oder
+Maximalspannweitenregel und keine Lane-/Kreuzungsbelegung. Stützen und GLB-Kits
+sind instanziert, Details werden ab Distanz 150 gecullt; das durchgehende
+Bodennetz wird bei jeder Straßenänderung dennoch als **globaler Mesh** neu
+gebaut. Nächster Performance-Schritt ist Straßen-Chunking mit Fern-LOD, nicht
+ein zweiter Renderer oder Graph.
+
+## 2026-08-01 — G2 ⑤ Wirkungsradien: die Form war falsch (v1.28, Save v29, D-049)
+
+**Ausgangslage:** „weiter mit deiner nächsten empfehlung" nach v1.27. ⑤ war der
+nächste Punkt der zwingenden G2-Reihenfolge.
+
+**Wieder galt: erst den Code, dann die Aufgabenliste.** Das Terrainfolgen, das
+der Plan verlangt, war seit Langem umgesetzt (`addTerrainCoverageVisual` liest
+pro Stützpunkt `terrainHeightAt`). Falsch war die **Form**: die Reichweite ist
+`chebyshev(...) <= radius`, also ein achsenparalleles Quadrat; übergeben wurde
+nur `radius`, der Renderer riet euklidisch und zeichnete den eingeschriebenen
+Kreis. Gemessen über alle Radiusgebäude blieben **19–30 % der versorgten
+Kacheln unsichtbar** — Brunnen r9: 108 von 361, Feuerwache Stufe 3: 868 von
+4.096. Der Fehler war **einseitig**: nie zu viel versprochen, immer zu wenig
+gezeigt, deshalb unauffällig für jeden, der nur „stimmt der Radius?" prüft.
+Zweiter offener Punkt: es gab **keinen Hover** — der Radius erschien nur nach
+einem Klick, und ein Klick öffnet das Gebäudefenster.
+
+**Umbau.** `CoverageSourceView.area` trägt die Fläche aus der Simulation
+(`coverageArea`/`coverageAreaAround`/`coversTile`); `addTerrainCoverageVisual`
+nimmt eine `CoverageArea` statt Mitte + Radius — die Signatur macht das erneute
+Raten unmöglich. Hover über `hoverCoverageId`, aufgelöst als
+`selectedId ?? (Entwurf ? undefined : hoverCoverageId)`; gesucht wird mit
+derselben Abfrage wie beim Klick (`pickBuildingAt` + Kachelbelegung für flache
+Bauten). Das Arbeitsgebiets-Overlay der Betriebe ist ebenfalls quadratisch.
+
+**D-049: Die Simulation liefert die FORM mit, nicht nur den Parameter.** Ein
+Radius ohne seine Metrik ist keine gemeinsame Quelle. Testpflicht ist die
+Deckungsgleichheit über ein volles Kachelfenster, plus der alte Kreis als
+Gegenprobe (er darf nie mehr zeigen als die Regel deckt).
+
+**Verifikation.** tsc/eslint/71 Dateien · 586 Tests/build grün. 3D-Smoke mit
+einem echten Spielstand aus 45 Brunnen: Hover → Legende ohne Gebäudefenster →
+wegbewegen → leer → Klick → „Brunnen · Radius 9 Felder" → ESC → leer,
+0 Konsolenfehler; die Aufnahmen zeigen die Quadratkanten über dem Hügelrelief.
+
+**Gefunden, nicht behoben (Sim, nicht Render):** `nodesInWorkArea` bietet Knoten
+aus `workAreaBounds` an (Footprint-Kante + Radius), `previewOperation` verwirft
+aber alles mit `chebyshev(mitte, …) > maxRadius` — 120 Kacheln beim Sägewerk,
+128 beim Steinbruch, 171 bei der Farm. Eine Korrektur verschiebt die
+Auswahlmenge und gehört ins Balancing, nicht in einen Render-Pass.
+
+**Nächster Punkt:** ⑥ Straßenbau als Plan → Vorschau → Bestätigen → Command.
+
+## 2026-08-01 — G2 ④ Verschieben als Entwurf (v1.27, Save v29, D-048)
+
+**Ausgangslage:** „weiter mit deiner nächsten empfehlung" nach v1.26. ④ war der
+nächste Punkt der zwingenden G2-Reihenfolge und der einzige mit einer in v1.26
+ausdrücklich vermerkten Altlast.
+
+**Der Befund war größer als die Altlast.** `setMoving()` war ein No-op mit einem
+Kommentar auf den 2D-/Iso-Modus (seit Ausbaustufe 2.0 entfernt). Gemessen:
+**14 der 34 Gebäude tragen `canRelocate`** und zeigen einen „Versetzen"-Knopf —
+Rathaus (ab L1, kostenlos), Bürgermeisterhaus, Sägewerk, Steinbruch, Farm,
+Brunnen, Wasserpumpe, Wasserwerk, Markt, Supermarkt, Feuerwache, Polizei,
+Krankenhaus, Handelsposten. Der Knopf setzte `movingBuildingId`, das Banner
+erschien, danach passierte nichts: `RendererCallbacks.onMove` wurde vom
+3D-Renderer an **keiner** Stelle aufgerufen. Ausweg nur ESC. Seit A6/D-046 wiegt
+das doppelt — Stein wächst nie nach, der Steinbruch **muss** umziehen.
+
+**Umbau.** `placementDraft()` als EINE Ghost-Strecke für Bauen und Versetzen;
+`isPlacing()` heißt jetzt „es hängt ein Entwurf am Cursor"; `moveOriginGroup`
+markiert den Ursprung; der Bestätigungsklick ist genau ein `moveBuilding`.
+**D-048:** Der Prüfteil des Commands ist als reine `evaluateMove` herausgezogen,
+`moveDiagnostics` ruft genau diese — sonst zeigt der Ghost Grün, wo der Command
+mit `feature_disabled`/`insufficient` ablehnt (`validatePlacement` kennt weder
+`canRelocate` noch Gebühr noch Budget). `MoveBlocker` ist die deklarierte
+Obermenge von `PlacementError`. `costLabel` liegt jetzt geteilt unter
+`components/common/` (bisher Kopie im Straßenplaner).
+
+**Verifikation.** `tsc`, `eslint`, **70 Dateien / 582 Tests** (10 neu), `npm run
+build` grün. 3D-Smoke gegen `vite preview` (SwiftShader): Gründung → Rathaus →
+„Versetzen" → Ghost folgt, Ursprung markiert, `banner-ok` „Rathaus: Hier
+absetzen." → Klick → Toast „Gebäude versetzt.", Entwurf beendet, Rathaus im
+Spielstand von **(241,251) auf (252,247)**, **0 Konsolenfehler**.
+
+**Für die nächste Runde:** ⑤ Radien-Overlays terrainfolgend
+(`getCoverageOverlay`), danach ⑥ Straßenbau als Plan→Vorschau→Bestätigen.
+Kleinigkeiten aus dieser Runde bewusst offen gelassen: Ghost zeigt das
+Stufe-0-Modell, kein Drag-and-Drop, „Versetzen" liegt zwei Klicks tief
+(gehört in einen Sheet-Pass, nicht in G2).
+
 ## 2026-08-01 — G2 ③ Platzierungs-Ghost mit Anschlusspunkt (v1.26, Save v29, D-047)
 
 **Ausgangslage:** v1.12–v1.25 waren inzwischen als `64fca3c` gesichert (vorher lagen

@@ -1,4 +1,32 @@
-# Terrain Visual Audit — Overhaul 6.1
+# Terrain Visual Audit — World-Visual-Overhaul v1.32
+
+Stand: v1.32. Dieser Abschnitt beschreibt den aktuell aktiven Terrainpfad. Der
+Audit zu Overhaul 6.1 bleibt darunter als historische Entscheidungsgrundlage
+erhalten.
+
+## Aktueller Status v1.32
+
+- Aktiv gebundene Basen sind `grass_meadow_cartoon`,
+  `forest_floor_cartoon`, `fertile_valley_ground`, `coast_sand_cartoon`,
+  `mountain_cliff_cartoon`, `mountain_strata` und `mountain_snow`.
+- `dry_steppe` und `desert_sand_red` bleiben optionale Drop-in-Basen, sind im
+  aktuellen Weltprofil aber nicht aktiv. `swamp_mud` wird ausschließlich im
+  Lagoon-Profil verwendet.
+- Klippe und normales Gebirge verwenden beide `mountain_cliff_cartoon`. Die
+  Bindung wird dedupliziert; derselbe Bildinhalt belegt innerhalb eines Chunks
+  nicht zwei getrennte Sampler.
+- Detailmaps werden selektiv statt flächendeckend gebunden: Gras erhält eine
+  Normalmap, Wald eine AO-Map und Fels eine Normal- sowie Roughnessmap.
+- Jeder Terrain-Chunk bindet nur die für seine tatsächlich vorkommenden
+  Schichten relevanten Farb- und Detailsampler. Die Materialmatrix ist deshalb
+  ein Katalog möglicher Schichten, kein fixes Samplerpaket je Draw-Call.
+- Biom- und Ufergewichte werden über ein weiches `5×5`-Umfeld geglättet. Das
+  entfernt harte Kachelkanten, ohne Regionen oder gebackene Uferdaten neu zu
+  interpretieren.
+- v1.32 ist rein visuell. Save-Schema, Terrainbake, Freischaltungen,
+  Ressourcen, Bauprüfungen und sonstige Gameplaylogik bleiben unverändert.
+
+## Historischer Audit — Overhaul 6.1
 
 Stand: v0.73. Verbindliche Referenzen sind die vier vom Auftrag bereitgestellten
 Screenshots sowie die stilisierten Insel- und Gebirgsbeispiele. Das Ziel ist ein
