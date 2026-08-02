@@ -138,6 +138,11 @@ import {
 import { getCameraSettings } from './cameraSettings.ts';
 import { getEnvironmentSettings } from './environmentSettings.ts';
 import { sunElevation } from './environment.ts';
+import {
+  advanceLockedRegionFade,
+  patchLockedRegionTint,
+  setLockedRegions,
+} from './lockedRegionMask.ts';
 import { getGraphicsProfile, subscribeGraphicsSettings } from './graphicsSettings.ts';
 import { scaledBudget, type GraphicsProfile } from './graphicsQuality.ts';
 import { setPerfStats } from './perfStats.ts';
@@ -158,8 +163,6 @@ import { oceanDepthGrid, shoreTypeGrid, waterfrontBuildableGrid } from './worldM
 import { effectiveEffects } from '../../game/buildings/effects.ts';
 import { coverageArea, coverageAreaAround, type CoverageArea } from '../../game/buildings/coverage.ts';
 import {
-  LOCKED_DARKENING,
-  LOCKED_DESATURATION,
   LOCKED_VEGETATION_DENSITY,
 } from '../worldProjection.ts';
 import {
@@ -2081,13 +2084,16 @@ export class ThreeMapRenderer implements IMapRenderer {
    */
   private buildGroundChunks(regions: { id: number; status: string }[]): void {
     if (!this.groundChunkGroup.parent) this.scene.add(this.groundChunkGroup);
-    const status = new Map<number, string>();
-    for (const r of regions) status.set(r.id, r.status);
-    // Ozean (Region 0) gilt als "frei" — offenes Meer wird nie gedimmt.
-    const lockedAt = (tx: number, ty: number): boolean => {
-      const id = regionIdAt(tx, ty);
-      return !this.worldReveal.revealLockedRegionsVisually && id !== 0 && status.get(id) !== 'unlocked';
-    };
+    // § D-056 (v1.36): Die Sperre steckt jetzt in der WELTMASKE, nicht mehr in
+    // der Vertexfarbe. Zwei Folgen, die hier sichtbar werden: Der Boden wird
+    // beim Freischalten NICHT mehr neu gebaut (die Geometrie kennt den
+    // Sperrzustand gar nicht), und die weiche Aufblende kostet 64 Byte statt
+    // eines halben Inselneuaufbaus. Ozean (Region 0) gilt als frei.
+    setLockedRegions(
+      this.worldReveal.revealLockedRegionsVisually
+        ? []
+        : regions.filter((r) => r.status !== 'unlocked').map((r) => r.id),
+    );
 
     const chunksPerAxis = Math.ceil(WORLD_TILES / GROUND_CHUNK);
     for (let cy = 0; cy < chunksPerAxis; cy++) {
@@ -2101,10 +2107,9 @@ export class ThreeMapRenderer implements IMapRenderer {
         for (let ty = cy * GROUND_CHUNK; ty < y1; ty++) {
           for (let tx = cx * GROUND_CHUNK; tx < x1; tx++) touching.add(regionIdAt(tx, ty));
         }
-        const sig = `reveal:${this.worldReveal.revealLockedRegionsVisually ? 1 : 0}|${[...touching]
-          .sort((a, b) => a - b)
-          .map((id) => `${id}:${id === 0 ? 'u' : status.get(id) ?? '?'}`)
-          .join(',')}`;
+        // Die Signatur trägt seit v1.36 KEINEN Sperrzustand mehr — Freischalten
+        // verändert die Bodengeometrie nicht, nur die Maske.
+        const sig = `geo-v1:${[...touching].sort((a, b) => a - b).join(',')}`;
         const cached = this.groundChunks.get(key);
         if (cached && cached.sig === sig) continue;
         if (cached) {
@@ -2112,7 +2117,7 @@ export class ThreeMapRenderer implements IMapRenderer {
           cached.mesh.geometry.dispose();
           (cached.mesh.material as Material).dispose();
         }
-        const mesh = this.buildGroundChunk(cx * GROUND_CHUNK, cy * GROUND_CHUNK, lockedAt);
+        const mesh = this.buildGroundChunk(cx * GROUND_CHUNK, cy * GROUND_CHUNK);
         this.groundChunkGroup.add(mesh);
         this.groundChunks.set(key, { mesh, sig });
       }
@@ -2120,7 +2125,7 @@ export class ThreeMapRenderer implements IMapRenderer {
   }
 
   /** Baut EIN Boden-Chunk-Mesh (`GROUND_CHUNK`² Kacheln ab (minX,minY)). */
-  private buildGroundChunk(minX: number, minY: number, lockedAt: (tx: number, ty: number) => boolean): Mesh {
+  private buildGroundChunk(minX: number, minY: number): Mesh {
     const W = Math.min(GROUND_CHUNK, WORLD_TILES - minX);
     const H = Math.min(GROUND_CHUNK, WORLD_TILES - minY);
     const nx0 = W + 1;
@@ -2146,7 +2151,6 @@ export class ThreeMapRenderer implements IMapRenderer {
     const dryTint = new Color(0xbca363);
     const coastTint = new Color(0xaeb9aa);
     const alpineTint = new Color(0xc8cec9);
-    const lockedGrey = new Color();
     const state = this.controller.state;
     const smoothBiomeAt = (vx: number, vy: number): [number, number, number] => {
       let forestWeight = 0;
@@ -2206,7 +2210,6 @@ export class ThreeMapRenderer implements IMapRenderer {
         let g = 0;
         let b = 0;
         let cnt = 0;
-        let lock = 0;
         for (const [tx, ty] of [
           [vx - 1, vy - 1],
           [vx, vy - 1],
@@ -2220,7 +2223,6 @@ export class ThreeMapRenderer implements IMapRenderer {
           g += tmp.g;
           b += tmp.b;
           cnt++;
-          if (lockedAt(tx, ty)) lock++;
         }
         if (cnt === 0) {
           tmp.set(TERRAIN_COLORS.water);
@@ -2265,24 +2267,13 @@ export class ThreeMapRenderer implements IMapRenderer {
           Math.cos(vx * 0.043 + vy * 0.029) * 0.018,
           macroVariation + (hash01(`${vx},${vy}`) - 0.5) * 0.024,
         );
-        // § Welt lädt vollständig (v1.24): Gesperrtes Land wird ENTSÄTTIGT,
-        // nicht mehr verdeckt. Die frühere Wolkenwand hat die halbe Insel
-        // unsichtbar gemacht; jetzt bleibt die Geografie vollständig lesbar und
-        // signalisiert allein über die Farbe „gehört dir noch nicht".
-        //
-        // Bewusst weich über `lock / cnt` (vier Kachelproben je Ecke): die
-        // Grenze folgt damit der organischen Regionskontur statt einer
-        // Kachelkante — dieselbe Eigenschaft, die schon die alte Dimmung hatte.
-        const lockAmount = lock / cnt;
-        if (lockAmount > 0) {
-          const luminance = out.r * 0.299 + out.g * 0.587 + out.b * 0.114;
-          lockedGrey.setRGB(luminance, luminance, luminance);
-          out.lerp(lockedGrey, LOCKED_DESATURATION * lockAmount);
-          // Ein Hauch kühler und dunkler trennt es zusätzlich vom eigenen Land,
-          // ohne die Höhenstaffelung oder die Biome zu verschlucken.
-          out.multiplyScalar(1 - LOCKED_DARKENING * lockAmount);
-          out.b = Math.min(1, out.b * (1 + 0.05 * lockAmount));
-        }
+        // § D-056 (v1.36): Die Entsättigung gesperrten Landes stand FRÜHER
+        // hier — und genau das war der Fehler. Der Splat-Shader mischt danach
+        // volle Fototexturen über die Vertexfarbe (bis 44 %) und hebt die
+        // Sättigung um Faktor 1,1 an; im Spiel blieb davon fast nichts übrig.
+        // Sie läuft jetzt am ENDE des Fragment-Shaders über die Weltmaske
+        // (`lockedRegionMask.ts`) und erfasst dort zugleich Vegetation,
+        // Modelle und Wasser, die hier nie erreichbar waren.
         cornerColors[o] = out.r;
         cornerColors[o + 1] = out.g;
         cornerColors[o + 2] = out.b;
@@ -2745,6 +2736,12 @@ export class ThreeMapRenderer implements IMapRenderer {
         );
       }
     };
+    // § D-056 — REIHENFOLGE IST PFLICHT. `mat.onBeforeCompile` oben ERSETZT den
+    // Hook, es ergänzt ihn nicht. Ein Sperr-Patch vor dieser Zeile wäre still
+    // verschwunden: Der Code stünde da, im Bild bliebe alles bunt — genau der
+    // Fehler, mit dem v1.35 ausgeliefert wurde. Vier Proben, weil die
+    // Regionsgrenze hier über eine riesige Fläche läuft.
+    patchLockedRegionTint(mat, { taps: 4, cacheKey: 'ground' });
     mat.needsUpdate = true;
   }
 
@@ -2919,6 +2916,7 @@ export class ThreeMapRenderer implements IMapRenderer {
     // der Übersicht verborgen, während der helle Untergrund am Strand durchscheint.
     sea.renderOrder = -1;
     this.oceanGroup.add(sea);
+    patchLockedRegionTint(mat, { taps: 4, cacheKey: 'water' });
     this.waterMat = mat;
 
     this.buildCoastFoam();
@@ -2986,6 +2984,7 @@ export class ThreeMapRenderer implements IMapRenderer {
            diffuseColor.a *= bank * (0.28 + flow * 0.72);`,
         );
     };
+    patchLockedRegionTint(mat, { cacheKey: 'river' });
     const flow = new Mesh(geo, mat);
     flow.renderOrder = 2;
     this.oceanGroup.add(flow);
@@ -3048,6 +3047,7 @@ export class ThreeMapRenderer implements IMapRenderer {
       depthWrite: false,
       side: DoubleSide,
     });
+    patchLockedRegionTint(shoalMat, { cacheKey: 'shoal' });
     const shoal = new Mesh(shoalGeo, shoalMat);
     shoal.renderOrder = 1;
 
@@ -3060,6 +3060,7 @@ export class ThreeMapRenderer implements IMapRenderer {
       depthWrite: false,
       side: DoubleSide,
     });
+    patchLockedRegionTint(foamMat, { cacheKey: 'foam' });
     const foam = new Mesh(foamGeo, foamMat);
     foam.renderOrder = 2;
     this.oceanGroup.add(shoal, foam);
@@ -4831,6 +4832,9 @@ export class ThreeMapRenderer implements IMapRenderer {
       const geo = gm.geometry.clone();
       geo.applyMatrix4(gm.matrixWorld); // bake the fit transform into the geometry
       const mat = gm.material as Material;
+      // § D-056: JEDES instanzierte Modell liest die Sperrmaske. Bewusst
+      // hier und nicht an den Aufrufstellen — sonst muss man daran denken.
+      patchLockedRegionTint(mat, { cacheKey: 'model' });
       if (this.destroyed || stale()) {
         geo.dispose();
         return;
@@ -6309,6 +6313,11 @@ export class ThreeMapRenderer implements IMapRenderer {
     this.updateNightLighting();
     this.waterTime.value += dt;
     updateNatureWind(this.waterTime.value);
+    // § D-045/D-056: Der graue Schleier einer freigeschalteten Region blendet
+    // weich aus. Bewusst in ECHTZEIT (`dt`, nicht `simDt`) — die Feier gehört
+    // dem Spieler und soll bei Pause nicht einfrieren. Kostet 64 Byte je Frame,
+    // und nur solange sich etwas bewegt.
+    advanceLockedRegionFade(dt);
     if (this.waterMat && this.env) {
       this.waterMat.color.copy(this.env.waterColor);
       this.waterReflection.value.copy(this.env.horizonColor);

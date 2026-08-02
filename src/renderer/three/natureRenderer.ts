@@ -30,6 +30,7 @@ import {
 } from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { spatialPropChunks } from './vegetationBudget.ts';
+import { patchLockedRegionTint } from './lockedRegionMask.ts';
 import type { NatureInstance, NaturePlacement } from './natureDistribution.ts';
 import type { NatureKind } from './natureZones.ts';
 import { terrainHeightAt, terrainMinHeightAround } from './terrainHeight.ts';
@@ -212,14 +213,27 @@ function addShaderWind(material: MeshLambertMaterial): void {
   material.customProgramCacheKey = () => 'city-mayor-nature-wind-v1';
 }
 
+// § D-056: Die Sperrmaske hängt am ORT, nicht am Material — deshalb reicht
+// EIN gepatchtes Material für freigeschaltetes UND gesperrtes Land. Die zwei
+// Vegetationsaufbauten aus D-045 bleiben davon unberührt; sie existieren wegen
+// der Neuaufbau-Kosten, nicht wegen der Farbe.
+//
+// Reihenfolge ist Pflicht: `addShaderWind` SETZT `onBeforeCompile`, der
+// Sperr-Patch KETTET sich daran. Andersherum überschriebe der Wind die Sperre
+// und gesperrte Bäume blieben bunt — genau der Fehlertyp, der v1.35 nicht
+// aufgefallen ist.
 function materialFor(wind: boolean): MeshLambertMaterial {
   if (!wind) {
-    sharedStaticMaterial ??= createNatureMaterial();
+    if (!sharedStaticMaterial) {
+      sharedStaticMaterial = createNatureMaterial();
+      patchLockedRegionTint(sharedStaticMaterial, { cacheKey: 'nature-static' });
+    }
     return sharedStaticMaterial;
   }
   if (!sharedWindMaterial) {
     sharedWindMaterial = createNatureMaterial();
     addShaderWind(sharedWindMaterial);
+    patchLockedRegionTint(sharedWindMaterial, { cacheKey: 'nature-wind' });
   }
   return sharedWindMaterial;
 }

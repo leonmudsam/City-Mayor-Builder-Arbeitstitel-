@@ -62,7 +62,30 @@ der Cloud-Umgebung** (kein Rust/Windows) — dort nur den Browser-Pfad verifizie
 (gitignored). GitHub Pages ist abgeschaltet — kein Deploy-Workflow wieder einführen.
 `archive/legacy-2d/` = archivierte 2D-/Iso-Reste (nicht reaktivieren).
 
-## Status: v1.35 — DIE ROUTE WIRD GEFAHREN + STEIN-EINSTIEG (Save v32) — AKTUELL
+## Status: v1.36 — DIE SPERRE IST EIN ORT (Save v32, D-056 verschärft) — AKTUELL
+Spieltestbefund: „Props in nicht freigeschalteten Sektoren sind immer noch voll
+Farbe." Zu Recht — die Entsättigung stand **nur in der Vertexfarbe des Bodens**,
+und der Splat-Shader mischte danach Fototexturen (bis 44 %) darüber und hob die
+Sättigung um Faktor 1,1 wieder an; Vegetation, Modelle, Landmarken, Flussband,
+Küstenschaum und Wasser wurden **nie** behandelt.
+**Zwingend: Die Sperre hängt am ORT, nicht am Objekt.**
+`src/renderer/three/lockedRegionMask.ts` hält zwei winzige Texturen — eine
+512²-Regionskarte (aus dem Bake, ändert sich nie) und eine 64×1-Tabelle „wie
+stark ist Region N gesperrt". `patchLockedRegionTint(material)` lässt jedes
+Material die Maske im Fragment-Shader lesen und **ganz am Ende** graden (nach
+Splat, nach Tonemapping). Wer die Grauschaltung pro Objektgruppe einbaut, muss
+sie bei jeder neuen Gruppe erneut einbauen — und wird sie vergessen; genau das
+ist zwischen v1.24 und v1.35 passiert. Weil die Maske positionsbasiert ist,
+genügt **ein geteiltes Material** für freies und gesperrtes Land.
+**REIHENFOLGE IST PFLICHT:** `material.onBeforeCompile = …` **ersetzt** den Hook.
+Der Sperr-Patch läuft deshalb NACH dem Splat-Shader (Boden) und NACH
+`addShaderWind` (Vegetation) — davor verschwindet er still, der Code steht da und
+das Bild bleibt bunt. Nebengewinn: Freischalten baut den Boden nicht mehr neu,
+die weiche Aufblende kostet 64 Byte je Frame (Echtzeit, friert bei Pause nicht
+ein). Gemessen im Spiel: Chroma frei **49** gegen gesperrt **8/21**. Keine Save-,
+Sim- oder Balancing-Änderung, **v32**.
+
+## Status: v1.35 — DIE ROUTE WIRD GEFAHREN + STEIN-EINSTIEG (Save v32)
 Drei Aufträge, keine Schemaänderung. **(1) Stadtarbeit 2.0 Phasen 1+3 (D-054):**
 Der Planer schlägt nichts mehr vor — keine Zielreihenfolge, kein Weg, kein
 „Optimieren", kein Zeichenwerkzeug; der Knopf nimmt den **Auftrag** an. Der echte

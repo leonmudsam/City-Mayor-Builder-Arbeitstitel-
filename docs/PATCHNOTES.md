@@ -1,5 +1,65 @@
 # Patch Notes
 
+## v1.36 — DIE SPERRE IST EIN ORT: gesperrtes Land wird wirklich grau (Save bleibt v32)
+
+**Was war.** v1.35 hat die Entsättigung gesperrter Regionen verstärkt (0,7 →
+0,85) — im Spiel blieb die Insel trotzdem bunt. Der Spieltest hat es gemeldet,
+kein Test hat es gefunden.
+
+**Warum.** Die Entsättigung stand ausschließlich in der **Vertexfarbe des
+Bodens**, und zwei Dinge haben sie danach wieder aufgehoben: Der Splat-Shader
+mischt Fototexturen mit bis zu 44 % darüber und hebt anschließend die Sättigung
+um Faktor 1,1 an. Alles, was nicht Boden ist, wurde ohnehin nie behandelt —
+Vegetationsmasse, Hero-`.glb`, Landmarken, Flussband, Küstenschaum, Wasser.
+
+**Architektur (D-056 verschärft): Die Sperre hängt am ORT, nicht am Objekt.**
+Neues Modul `src/renderer/three/lockedRegionMask.ts` beschreibt die Welt über
+zwei winzige Texturen — eine 512²-Regionskarte (aus dem Bake abgeleitet, ändert
+sich **nie**) und eine 64×1-Tabelle „wie stark ist Region N gesperrt". Jedes
+Material, das durch `patchLockedRegionTint` läuft, liest sie im Fragment-Shader
+und gradet **ganz am Ende** — nach Splat, nach Tonemapping, nach jeder
+Sättigungsanhebung.
+
+Der Gewinn ist nicht die Farbe, sondern die Unvergesslichkeit: Wer die
+Grauschaltung pro Objektgruppe einbaut, muss sie bei jeder neuen Objektgruppe
+erneut einbauen und wird sie vergessen — genau das ist zwischen v1.24 und v1.35
+passiert. Weil die Maske positionsbasiert ist, genügt **ein** geteiltes Material
+für freigeschaltetes und gesperrtes Land; ein neuer Prop-Typ ist automatisch
+korrekt.
+
+**Reihenfolge ist Pflicht, und sie ist der eigentliche Fallstrick.**
+`material.onBeforeCompile = …` **ersetzt** den Hook, es ergänzt ihn nicht. Der
+Sperr-Patch muss deshalb nach dem Splat-Shader (Boden) und nach
+`addShaderWind` (Vegetation) laufen. Die erste Fassung dieses Patches stand
+davor — der Code war vorhanden, das Bild blieb bunt. Derselbe Fehlertyp wie in
+v1.35, diesmal im Kommentar festgehalten.
+
+**Nebengewinn:** Das Freischalten baut den Boden **nicht mehr neu** (die
+Geometrie kennt den Sperrzustand gar nicht), und die weiche Aufblende (D-045)
+kostet 64 Byte je Frame statt eines halben Inselneuaufbaus. Sie läuft in
+Echtzeit, nicht in Simulationszeit — die Feier friert bei Pause nicht ein.
+
+**Gemessen im laufenden Spiel** (Screenshot-Smoke, ganze Insel im Bild),
+mittlere Buntheit (Chroma) auf Landpunkten:
+
+| Ort | RGB | Chroma |
+|---|---|---:|
+| Gründerland (frei) | 121, 144, 95 | **49** |
+| Gesperrt Nordwest | 104, 109, 112 | **8** |
+| Gesperrt Ost | 98, 115, 119 | **21** |
+
+**Lehre, die dazugehört (Fortsetzung D-042):** Die erste automatische Bewertung
+meldete „keine Entsättigung", obwohl das Bild eindeutig war — ihre Messfenster
+lagen im Ozean und auf einem See. Eine Messung beweist nur, was sie misst; wer
+ihr gegen den Augenschein glaubt, repariert das Falsche.
+
+**Dateien:** `src/renderer/three/lockedRegionMask.ts` (neu),
+`ThreeMapRenderer.ts` (Boden, Wasser, Flussband, Küstensaum, Instanzmodelle,
+Aufblende), `natureRenderer.ts` (Vegetationsmaterialien).
+**Keine Save-, Sim- oder Balancing-Änderung — v32.**
+
+---
+
 ## v1.35 — Stadtarbeit 2.0 (Phasen 1+3), Stein-Einstieg und klar gesperrte Regionen (Save bleibt v32)
 
 Drei Aufträge an einem Strang: die Stadtarbeit hört auf, dem Spieler die Lösung
