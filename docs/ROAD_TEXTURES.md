@@ -1,11 +1,11 @@
-# Straßen-Texturen — Textur statt 3D-Modell (v0.44)
+# Straßen-Texturen — nahtlose Fahrbahn und Detailkits
 
 > **Auto-generiert** aus `src/assets/roadTextureManifest.ts`. Nicht von Hand editieren.
 > Neue Texturen dazunehmen: Eintrag dort ergänzen, dann
 > `WRITE_ROAD_DOCS=1 npx vitest run tests/roadTextures.test.ts` (schreibt diese Datei neu).
 > Der Test schlägt fehl, sobald die Doku veraltet ist.
 
-Ersetzt die 3D-Straßen-/Brücken-Modelle durch texturierte, flach ins Terrain integrierte Fahrbahnflächen. **Drop-in:** `.png`/`.webp`/`.jpg` in den unten angegebenen Ordner unter `src/assets/textures/roads/…` legen, Dateiname exakt wie hier — greift automatisch, kein weiterer Code nötig.
+Die Texturen kleiden die nahtlose, profilgesteuerte Fahrbahn ein. **Drop-in:** `.png`/`.webp`/`.jpg` unter `src/assets/textures/roads/…`; optionale Varianten-GLBs liegen getrennt unter `src/assets/models/roads` und `models/bridges`.
 
 ## Fahrbahn-Oberflächen
 
@@ -69,12 +69,12 @@ Seamless tileable stylized road-surface texture for a premium low-poly city-buil
 
 **Spec:** Ordner `textures/roads/crossings/` · 1024×1024 · nahtlos kachelbar · Stil: painterly, rustikal · Palette: warmes Holzbraun · Einsatz: Steg für Wasserüberquerungen mit Spannweite = 1 Kachel (schmal, ohne Pfeiler) · Material: organisch, sichtbare Bohlenfugen · Verwendung: ersetzt die Flächenfarbe der schmalen Steg-Deck-Box in buildBridgeDeck (Steg-Variante, ohne Pfeiler) · Maps: Normal ✓ · Roughness ✓ · AO – · Height – · Detailstufe: nah · Priorität: **Empfohlen**
 
-## Konzept: Textur statt 3D-Modell
+## Konzept: nahtlose Textur plus instanziertes Detailkit
 
-Straßen laden nie mehr ein `.glb` (der alte Drop-in-Pfad über `roadModel`/`bridgeModel` wurde aus `ThreeMapRenderer.ts` entfernt). Stattdessen bleibt die vorhandene, Mask-getriebene Geometrie aus `buildRoadTile`/`buildBridgeDeck` (Kern + Arme + Randstreifen, flach nahe `y≈0` ins Höhenfeld integriert) bestehen — sie bekommt nur echte Texturen statt Flächenfarben, sobald eine Datei hier abgelegt wird:
+Die durchgehende, profilgesteuerte Fahrbahn bleibt prozedural und texturbasiert. Optional ergänzt `roadModel` die automatisch gewählte Variante mit einem instanzierten Single-Mesh-Near-LOD aus `models/roads` oder `models/bridges`; fehlt es, bleibt die Straße vollständig sichtbar. Dadurch entstehen weder GLB-Kachelnähte noch ein Crash bei fehlenden Assets:
 
 - **Form** ergibt sich direkt aus den gesetzten Nachbar-Mask-Bits (ein Box-Arm pro Bit in `buildRoadTile`) — kein separates Shape-Lookup mehr nötig.
 - **Kreisverkehr** ist keine neue Instanz, sondern dieselbe 4-Wege-Form (`mask === 15`) mit einer runden statt eckigen Kern-Geometrie + `road_roundabout`.
-- **Bergstraße/Pass** ist eine reine Textur-Umschaltung, sobald die Kachel auf `terrainAt==="mountain"` liegt — kein eigener Straßentyp.
+- **Bergstraße/Pass** folgt dem kanonischen Längsprofil (maximal 8 %) und den automatisch gerouteten Kehren — kein eigener auswählbarer Straßentyp.
 - **Brücke vs. Steg** unterscheidet sich an der gemessenen Wasser-Spannweite (1 Kachel → Steg, mehrere → Brücke) — ebenfalls keine neue Sim-Instanz.
 - **Randübergang** zu Gras/Erde nutzt die bereits dokumentierte `terrain_road_edge.png` (siehe `docs/TERRAIN_TEXTURES.md`, Kategorie „Wege") — hier bewusst nicht dupliziert.

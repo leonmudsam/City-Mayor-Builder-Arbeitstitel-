@@ -265,7 +265,180 @@ Renderer liest dieselben Werte. Verbindlich vor Gelände-/Platzierungsarbeit:
 `docs/agents/MAP_FLATTENING_AND_BUILDABILITY_PLAN.md`. Offen (nicht vortäuschen):
 echtes Mesh-Einebnen unter dem Footprint, Pfahl-/Steglogik für Wassergebäude.
 
-## Status: G2 ④ — VERSCHIEBEN IST EIN ENTWURF (v1.27, Save v29, D-048) — AKTUELL
+## Status: STADTARBEIT P4 — JEDE WARE LIEGT AN EINEM ORT (v1.34, Save v32, D-052) — AKTUELL
+§8 des Auftrags („Keine globale magische Ressource. Jedes Lager hat eigene
+Bestände") ist umgesetzt; zugleich **Phase 4** des Folgeauftrags „Stadtarbeit
+Overhaul 2.0". **Invariante:** `state.resources[r] === Σ Bestand aller
+Stadtlager[r]` (Geld ausgenommen). `state.resources` bleibt die **Bilanzsumme**,
+die Baukosten/Verbrauch/Quests/Balancing unverändert lesen —
+`src/game/economy/stockLedger.ts` sagt zusätzlich, **wo** die Ware liegt.
+**Kein drittes Lagermodell (§2/§8):** dasselbe `BuildingInventory`, dieselbe Map
+wie die Betriebslager aus Save v17. Möglich durch eine Messung: von 34
+Gebäudetypen haben **3** ein Betriebslager (Sägewerk/Steinbruch/Farm), **7** eine
+`storage`-Wirkung (Rathaus, Distriktzentrum, Lagerhaus, Wasserwerk, Markt,
+Anleger, Flusshafen) — und **keines beides**; `tests/stockLedger.test.ts` prüft
+das zuerst.
+**Zwingend (D-052).** (1) **Die Ableitung gibt die ORTE heraus, nicht nur die
+Summe** — `Derived.storageSites` entsteht in derselben Schleife über denselben
+`case 'storage'` wie `storageCaps` (Fortsetzung D-042/D-049). (2) **Der Abgleich
+läuft an EINER Stelle**: `state.resources` wird an 31 Stellen in 8 Modulen
+verändert, deshalb reconciliert `GameController.notify` (und der Konstruktor beim
+Laden) — ortsgenaue Vorgänge gehen über `withdrawStock`/`depositStock`.
+**Spielbar:** Der Ladeort ist eine Wahl mit Folgen (Entnahme und Rückgabe treffen
+genau dieses Lager; zu wenig Vorrat ⇒ kein Start). Vorher entschied stumm die
+alphabetische Gebäude-Id. Volle Ladung = 72 % Tempo (`loadedTileSpeed`).
+**Ehrliche Grenze (nicht vortäuschen):** Nur `storage`-Gebäude haben einen
+eigenen Bestand — **Farm, Sägewerk, Pumpwerk, Feuerwache sind Abholpunkte ohne
+Lager**; dort bleibt die Ware die Bilanz der Stadt. Save **v32** (Migration
+`v31→v32`, Alt-Saves behalten alles).
+**ZUERST ENTSCHEIDEN — D-053:** Der Folgeauftrag verlangt eine **isometrische
+Weltkamera statt der 2D-Karte** und die Route als **Aufzeichnung der gefahrenen
+Strecke**. Das **kehrt D-050/D-051 um** (beide fielen auf ausdrückliche
+Rückfrage) und ist deshalb vorgelegt, nicht still umgesetzt. §11 des neuen
+Auftrags verlangt weiterhin keinen zweiten Renderer — Empfehlung: Kamera-Modus
+des bestehenden `ThreeMapRenderer`. Offen und nicht vortäuschen:
+Gebäude-Interaktion auf der Karte, Nachladen unterwegs, freie Stoppreihenfolge,
+Verkehrsrückkopplung, Häfen als Netzknoten.
+
+## Status: STADTARBEIT P3 — DIE LOGISTIKKARTE IST DIE WELT (v1.33, Save v31, D-051)
+Auftrag „Stadtarbeit Overhaul — aktives Logistiksystem + 2D-Kartenansicht aus der
+3D-Welt" (§§1–13, vier Mockups). **Umgesetzt: §3/§4 (Karte aus der echten Welt),
+§5 (Infrastruktur), §6 (einfacheres Fahren), §12 (LOD/Leistung), §13 (Doku) und
+der Fahr-Status aus §10. §7/§8/§9/§10-Layout sind offen und dürfen in der UI
+nicht vorgetäuscht werden.** Verbindlich vor Kartenarbeit:
+`docs/agents/CITYWORK_MAP_PIPELINE.md`.
+**Befund, der den Auftrag präzisiert:** Die 2D-Ansicht war **nie** eine
+Fake-Karte — Terrain, Regionen, Straßen und Gebäude kamen schon vorher aus dem
+echten Spielstand. Gefehlt hat alles, woran man eine Landschaft **erkennt**:
+Höhe, Bewuchs, Küstenform. Erst den Arbeitsbaum prüfen, dann die Aufgabenliste.
+**Zwingend (D-051): Die Draufsicht hat KEINE eigenen Weltdaten.** Genau eine
+Leseinstanz — `src/renderer/worldProjection.ts`, frei von `three`/`react`/Canvas
+— liefert Kachelabtastung, Hangschattierung, Kachelfarbe, die Regel für
+gesperrtes Land und die Vegetation über **`collectRegionNature`**, dieselbe
+Funktion, aus der die 3D-Welt wächst (D-042/D-044). `tests/worldProjection.test.ts`
+vergleicht das über ein Weltraster und Instanz für Instanz. Wer die Karte um eine
+Weltinformation erweitert, ergänzt sie **dort**; ein zweites Grid-Lesen ist der
+erste Schritt zu einer zweiten Welt. Abgeleitet statt erfunden gilt auch für die
+Beschriftung: Straßenklasse aus `roadEngineering.variant`, Infrastruktur-Marker
+aus den Config-Wirkungen (`storage`/`logistics`/`waterfront`/`operation`) — eine
+Straßen**hierarchie** existiert im Spiel nicht und wird nicht vorgetäuscht.
+**Teure Ebenen hängen am Freischaltzustand, nie an der Belegung** (D-045): Props
+unter Gebäuden werden beim Zeichnen verdeckt, nicht aus der Verteilung entfernt.
+**Fahren ersetzt, nicht ergänzt (D-050 gilt weiter):** Das Fahrzeug sitzt immer
+auf einer Kante zwischen zwei Straßenkacheln (`{from, to, t, speed}`), Pose wird
+**abgeleitet** (`drivePose`); W Gas, S Bremse/Rückwärts, A/D Abzweigung, sonst
+folgt es der Straße. Die frühere Frage „hart blockieren oder weich zurückziehen?"
+entfällt ersatzlos. Tempo aus `speedKph` des Fahrzeugs.
+**Zwei Messbefunde:** (1) Die Insel hat **keinen Gewässergrund** — tiefste Stelle
+5,06 m, 94 % der Wasserkacheln bei 2–3 m; die geschätzte 7-m-Tiefenrampe hätte
+das Meer flächig gemacht. (2) `anchors` im Abhängigkeitsarray der Fahrschleife
+(ein `useMemo` über `game.version`) warf das Fahrzeug bei **jedem** erreichten
+Stopp an den Start zurück — dort steht jetzt der Startpunkt als **Wert**.
+Gefunden hat das der Smoke im laufenden Spiel, kein Test.
+Keine Save-/Sim-/Balancing-Änderung, **v31**. Nächster Schritt: **P4
+Lagerbestände je Gebäude** (die einzige echte Simulationsarbeit; lokale Inventare
+gibt es schon in `operations/**` — zusammenführen, kein drittes Lagermodell,
+Migration v31→v32).
+
+## Status: STADTARBEIT P2 — SELBST FAHREN IN DER 2D-KARTE (v1.30, Save v30, D-050)
+Nutzerentscheid zum D-039-Konflikt: **D-039 bleibt bestehen**, die Automatik
+bleibt der Standard — Fahren wird eine **Variante**. Und: gefahren wird in der
+**bestehenden 2D-Stadtarbeitskarte** (dort, wo die Route mit der Maus gezogen
+wird), **nicht in der 3D-Welt**; kein zweiter Renderer, keine Rückkehr zu einem
+alten 2D-Spielmodus. `TransportMode = 'auto' | 'manual'` liegt auf
+`ActiveActivity` (**Save v30**, additiv, `v29→v30`); die Wahl fällt beim Start
+und ist danach **unveränderlich** (`setActiveActivityRoute` rührt sie nicht an —
+sonst wäre der Aufschlag nach der bequemen Hälfte nachkaufbar). Bei `manual`
+steht der Missionswagen still, statt die Tour selbst zu Ende zu fahren.
+Aufschlag +20 % aus `activitiesConfig.manualDriveBonusFactor`; der **angezeigte**
+Wert kommt aus derselben `modeRewardFactor`, die auszahlt (D-048).
+**Zwingend (D-050): EIN Auftragsmodell und EINE Fahrphysik.**
+`activities/transportOrder.ts` hält `{start, cargo, vehicle, stops, targets,
+priority, mode}` und ist eine reine **Projektion** der bestehenden
+`CargoRouteEvaluation` — es rechnet keine Menge und keinen Weg nach (§2/§8).
+`activities/driving.ts` trägt den Fahrschritt als reine Funktion; **3D-Renderer
+und 2D-Karte rufen dieselbe** `stepDrive`/`reachedTarget` — hätte die Karte ihre
+eigene Physik bekommen, gäbe es zwei Reichweitenregeln und zwei Balancings. Die
+Fahrt läuft im vorhandenen Canvas über eine rAF-Schleife an React vorbei (§6);
+Straßen/Zeichenfunktion/Rückrufe kommen über `liveRef`, weil sie bei **jedem**
+Command die Identität wechseln — im Abhängigkeitsarray würde ein erreichter Stopp
+die Fahrt an den Start zurückwerfen.
+**Befund:** `enterDrive` war im laufenden Spiel **gar nicht erreichbar** (einziger
+Aufrufer: das nirgends gemountete `CityWorkPanel`). Der 3D-Fahrmodus ist jetzt
+nicht mehr verdrahtet; sein Code bleibt vorerst stehen und teilt die neue Physik.
+Offen (nicht vortäuschen): `priority` ist deklarierter Vertrag **ohne Wirkung**
+(nicht persistiert, nicht in der UI) · **P3** Lagerbestände je Gebäude (einzige
+echte Simulationsarbeit, mit Migration — ohne sie ist das Nachlade-Panel eine
+Attrappe) · **P4** Stoppliste + „Ziel außerhalb Reichweite" · **P5** UI nach
+Mockup · **P6** Verkehrsrückkopplung · **P7** Fähren.
+
+## Status: Stadtarbeit-Overhaul Phase 1 + „immer Tag" (v1.29, Save v29)
+Auftrag „Stadtarbeit Overhaul / Manuelle Logistik & Verkehrssystem" mit Mockup,
+Phasenplan 1–7. **Umgesetzt: Phase 1 (Bestandsaufnahme) + Punkt 11 (Zeitsystem).
+Phasen 2–7 sind offen und dürfen in der UI nicht vorgetäuscht werden.**
+Verbindlich vor jeder Stadtarbeit-Änderung: `docs/agents/CITYWORK_OVERHAUL_AUDIT.md`.
+**Immer Tag:** `EnvironmentSettings.visualTimeMode: 'day_only' | 'dynamic'`
+(Standard `day_only`, `DAY_ONLY_TIME_OF_DAY = 0.36`). **Durchgesetzt in
+`sanitize`, also am Wert selbst** — `SkyEnvironment`, Laternen-Glows und
+Sonnen-Grading lesen `timeOfDay` direkt; ein Filter nur beim Schreiber hätte
+einen alten `localStorage`-Eintrag die Welt in der Nacht gehalten (erledigt
+zugleich die Migration). Die Sonnenkopplung aus D-038 läuft nur noch bei
+`dynamic`. **Die Uhr ist unberührt** — `gameTime.ts` bleibt die eine
+Simulationsuhr, Tag/Uhrzeit/Jahreszeit und alle zeitabhängigen Systeme laufen
+weiter; `tests/visualTimeMode.test.ts` prüft genau diese Trennung. Kein Save-Feld
+(`cmb.environment` ist eigenständig), **v29**.
+**Messung, die den Auftrag verschiebt:** Das manuelle **WASD-Fahren existiert
+bereits vollständig** (`enterDrive`/`updateDrive`: Arcade-Dynamik, Pfeiltasten,
+Q/ESC, Verfolgerkamera, Straßenbindung) — Akzeptanzkriterien 1–3 sind erfüllt,
+das Problem ist die Erreichbarkeit (**8 von 28** Aktivitäten tragen `drive`, fünf
+Schritte bis zum Lenkrad). Das „Excel"-Gefühl kommt aus dem Planer: 2.125 Zeilen
+Stadtarbeit-UI, davon **1.346 (63 %) reine Planung** gegen 46 Zeilen Fahr-HUD.
+Verkehr existiert mit den vier Mockup-Stufen, aber `congestionScore` kommt aus
+der **Anrainerdichte**, nicht aus Fahrzeugen (fehlt: die Rückkopplung).
+**Schwerster Befund — Simulation, nicht UI:** Stadtarbeit kennt **keine
+Lagerbestände je Gebäude** (globaler Pool), das Nachlade-Panel des Mockups zeigt
+aber drei verschiedene Bestände; darauf gebaut wäre die Wahl des Lagers eine
+Attrappe. Lokale Inventare existieren bereits im Betriebssystem — zusammenführen,
+**kein drittes Lagermodell** (§2/§8).
+**Zwei benannte Konflikte:** (1) Manuelles Fahren widerspricht **D-039 Active
+Simplicity** („automatisiert wird Ausführung, nie Wahl"; löst A5/D-032 als
+Bedienkonzept ab). Wird der Auftrag umgesetzt, **muss D-039 ausdrücklich geändert
+werden** — Vorschlag: Fahren als *Wahl* (selbst fahren mit Bonus oder fahren
+lassen). (2) Das Mockup zeigt „2D ANSICHT"; der 2D-/Iso-Renderer bleibt entfernt,
+gemeint ist eine **Planungsansicht** im Three-Renderer.
+
+## Status: G2 ⑤ — DER WIRKUNGSRADIUS IST EIN QUADRAT (v1.28, Save v29, D-049)
+Terrainfolgend war das Overlay längst — falsch war die **Form**. Die Reichweite
+ist `chebyshev(...) <= radius`, also ein achsenparalleles **Quadrat**; übergeben
+wurde nur `radius`, der Renderer riet euklidisch und zeichnete den
+eingeschriebenen **Kreis**. Gemessen über alle Radiusgebäude blieben **19–30 %
+der wirklich versorgten Kacheln unsichtbar** (Brunnen r9: 108 von 361 · Markt
+r14: 168 von 784 · Krankenhaus r18: 360 von 1.369 · Feuerwache Stufe 3 r32: 868
+von 4.096). Der Fehler war **einseitig** — nie zu viel versprochen, immer zu
+wenig gezeigt —, deshalb unauffällig für jeden, der nur „stimmt der Radius?"
+prüft: wer seine Wohnhäuser an der gezeichneten Kante ausrichtet, verschenkt ein
+Fünftel bis knapp ein Drittel jeder Versorgungsanlage.
+**Zwingend (D-049): Wo eine Regel über eine Fläche entscheidet, gibt die
+Simulation die FLÄCHE heraus, nicht bloß die Zahl, aus der sie folgt.**
+`CoverageSourceView.area` trägt sie (`coverageArea`/`coverageAreaAround`/
+`coversTile`), und `addTerrainCoverageVisual` nimmt eine `CoverageArea` statt
+Mitte + Radius — die Signatur macht das erneute Raten unmöglich. Ein Parameter
+ohne seine Metrik ist keine gemeinsame Quelle, sondern eine Einladung zum
+zweiten Modell (Fortsetzung D-042/D-047/D-048). Testpflicht ist die
+Deckungsgleichheit über ein **volles Kachelfenster**, plus der alte Kreis als
+Gegenprobe. Zweiter Teil: **der Radius erscheint beim Überfahren** (vorher nur
+nach einem Klick, und ein Klick öffnet das Gebäudefenster); die Auswahl behält
+Vorrang, während einer Platzierung gehört die Fläche dem Ghost, und gesucht wird
+mit **derselben** Abfrage wie beim Klick (`pickBuildingAt` + Kachelbelegung für
+flache Bauten). Das Arbeitsgebiets-Overlay der Betriebe ist aus demselben Grund
+ebenfalls quadratisch. Keine Save-/Sim-/Balancing-Änderung, **v29**. Offen (nicht
+vortäuschen): mehrere Radiusgruppen je Gebäude zeigen weiter nur die erste;
+**gefunden, nicht behoben (Sim, nicht Render):** `nodesInWorkArea` bietet Knoten
+aus `workAreaBounds` an, `previewOperation` verwirft aber alles jenseits von
+`chebyshev(mitte, …) > maxRadius` — 120 Kacheln beim Sägewerk, 128 beim
+Steinbruch, 171 bei der Farm. Danach ⑥ Straßenbau als Plan→Vorschau→Bestätigen.
+
+## Status: G2 ④ — VERSCHIEBEN IST EIN ENTWURF (v1.27, Save v29, D-048)
 `ThreeMapRenderer.setMoving()` war ein **No-op** mit einem Kommentar auf den seit
 Ausbaustufe 2.0 entfernten 2D-/Iso-Modus. Dahinter stand kein Schönheitsfehler:
 **14 von 34 Gebäuden tragen `canRelocate`** und zeigen einen „Versetzen"-Knopf
@@ -292,7 +465,8 @@ ist die Deckungsgleichheit über einen **Kachelstreifen**, nicht der Einzelfall.
 Die Warnstufe aus D-047 gilt weiter (Umzug vom Netz weg → bernstein). Keine Save-/
 Sim-Änderung, **v29**. Offen (nicht vortäuschen): Ghost zeigt das **Stufe-0-Modell**,
 kein Drag-and-Drop, „Versetzen" liegt zwei Klicks tief (Sheet-Pass, nicht G2).
-Danach ⑤ Radien-Overlays, ⑥ Straßenbau als Plan→Vorschau→Bestätigen.
+⑤ Radien-Overlays ist mit v1.28 erledigt (siehe oben); danach ⑥ Straßenbau als
+Plan→Vorschau→Bestätigen.
 
 ## Status: G2 ③ — DER GHOST ZEIGT DEN ANSCHLUSSPUNKT (v1.26, Save v29, D-047)
 Die Platzierungsvorschau beantwortet zwei Fragen statt einer: „darf hier gebaut

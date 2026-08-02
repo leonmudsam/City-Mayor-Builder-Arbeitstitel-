@@ -18,12 +18,61 @@ export type CoverageGroup =
   | { kind: 'need'; need: NeedId }
   | { kind: 'hazard'; hazard: 'fire' };
 
+/**
+ * Der Kachelbereich, den ein Radius WIRKLICH versorgt — in Kachel-Indizes,
+ * beide Grenzen einschließlich.
+ *
+ * Die Reichweitenprüfung ist `chebyshev(...) <= radius`, und das ist ein
+ * **achsenparalleles Quadrat**, kein Kreis. Wer die Fläche zeichnet, muss
+ * dieselbe Form zeichnen: ein eingeschriebener Kreis verschweigt je nach
+ * Footprint 19–30 % der versorgten Kacheln (gemessen über alle Radiusgebäude).
+ * Deshalb liefert die Simulation die Ausdehnung mit — der Renderer leitet sie
+ * nicht zum zweiten Mal ab (§ D-042/D-047).
+ */
+export interface CoverageArea {
+  minX: number;
+  minY: number;
+  maxX: number;
+  maxY: number;
+}
+
+/**
+ * Ausdehnung eines Radius um ein Footprint-Rechteck. Bewusst aus **derselben**
+ * Mitte wie `centerOf` und derselben Schranke wie `chebyshev` gebildet:
+ * `coversTile` und `chebyshev(...) <= radius` müssen deckungsgleich bleiben
+ * (`tests/coverageArea.test.ts` prüft das über ein volles Kachelfenster).
+ */
+export function coverageArea(x: number, y: number, w: number, h: number, radius: number): CoverageArea {
+  const { cx, cy } = { cx: x + (w - 1) / 2, cy: y + (h - 1) / 2 };
+  return coverageAreaAround(cx, cy, radius);
+}
+
+/**
+ * Dieselbe Ausdehnung, wenn die Mitte schon vorliegt (Arbeitsgebiete geben ihr
+ * Zentrum als `centerOf`-Wert weiter, nicht ihren Footprint).
+ */
+export function coverageAreaAround(cx: number, cy: number, radius: number): CoverageArea {
+  return {
+    minX: Math.ceil(cx - radius),
+    minY: Math.ceil(cy - radius),
+    maxX: Math.floor(cx + radius),
+    maxY: Math.floor(cy + radius),
+  };
+}
+
+/** Liegt eine Kachel im versorgten Bereich? */
+export function coversTile(area: CoverageArea, x: number, y: number): boolean {
+  return x >= area.minX && x <= area.maxX && y >= area.minY && y <= area.maxY;
+}
+
 export interface CoverageSourceView {
   x: number;
   y: number;
   w: number;
   h: number;
   radius: number;
+  /** Versorgter Kachelbereich — die zu zeichnende Form, nicht ein Kreis. */
+  area: CoverageArea;
   /** The building the player clicked (highlighted differently). */
   selected: boolean;
 }
@@ -119,7 +168,15 @@ export function coverageOverlay(state: GameState, config: GameConfig, derived: D
     for (const s of sourcesOf(def, b.upgradeLevel)) {
       if (!sameGroup(s.group, group)) continue;
       const { cx, cy } = centerOf(def, b);
-      sources.push({ x: b.x, y: b.y, w: def.size.w, h: def.size.h, radius: s.radius, selected: b.id === selectedId });
+      sources.push({
+        x: b.x,
+        y: b.y,
+        w: def.size.w,
+        h: def.size.h,
+        radius: s.radius,
+        area: coverageArea(b.x, b.y, def.size.w, def.size.h, s.radius),
+        selected: b.id === selectedId,
+      });
       sourceCenters.push({ cx, cy, radius: s.radius });
     }
   }

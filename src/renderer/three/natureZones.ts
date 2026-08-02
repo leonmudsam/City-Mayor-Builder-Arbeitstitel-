@@ -255,7 +255,8 @@ export const NATURE_SPAWN_RULES: Record<NatureZone, ZoneRules> = {
     // ein Waldkern trägt mit 0,62 Kiefern das Zwölffache.
     sapling: rule(0.03, 0.6, [0.65, 0.85]),
     bush: rule(0.115, 0.5, [0.8, 1.3]),
-    rock: rule(0.022, 0.55, [0.7, 1.2]),
+    // Offene Bauwiesen bleiben frei von zufälligen Felsen. Stein sitzt in den
+    // eigenen Waldsaum-, Küsten- und Hochlandzonen, wo er Landschaft erklärt.
     flower: rule(0.19, 0.4, [0.8, 1.4]),
     fieldRow: rule(0.22, 0.6, [0.85, 1.2], ['fertile']),
     microGrass: rule(0.32, 0.25, [0.8, 1.3]),

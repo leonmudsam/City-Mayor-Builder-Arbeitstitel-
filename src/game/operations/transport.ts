@@ -23,6 +23,7 @@ import { newId } from '../engine/rng.ts';
 import { analyseActivityRouteFrom, buildingCenter } from '../activities/routeAnalysis.ts';
 import { vehicleCapacity } from '../activities/logistics.ts';
 import { ensureOperationsState, getInventory, inventoryAmount, inventoryFree } from './operations.ts';
+import { isCityStorageBuilding } from '../economy/stockLedger.ts';
 
 /** Untergrenze der reinen Fahrdauer, damit auch kurze Strecken kurz „fahren". */
 const MIN_TRAVEL_MS = 1_500;
@@ -403,7 +404,10 @@ export interface ResourceNetworkStat {
  * reserviert · unterwegs. Macht sichtbar, dass lokal geerntete Ware erst nach
  * dem Transport global nutzbar ist — nichts wird vorgetäuscht.
  */
-export function inventoryNetworkOverview(state: GameState): Record<ResourceId, ResourceNetworkStat> {
+export function inventoryNetworkOverview(
+  state: GameState,
+  config: GameConfig,
+): Record<ResourceId, ResourceNetworkStat> {
   const resources = Object.keys(state.resources) as ResourceId[];
   const stats = {} as Record<ResourceId, ResourceNetworkStat>;
   for (const r of resources) {
@@ -411,7 +415,12 @@ export function inventoryNetworkOverview(state: GameState): Record<ResourceId, R
   }
   const ops = state.operations;
   if (ops) {
-    for (const inv of Object.values(ops.inventories)) {
+    for (const [buildingId, inv] of Object.entries(ops.inventories)) {
+      // § P4: Seit dem Bestandsregister hält dieselbe Map auch den VERORTETEN
+      // Bestand der Stadtlager. Der steckt bereits in `global` — würde er hier
+      // erneut als „lokal gebunden" gezählt, wiese die Übersicht die Ware der
+      // Stadt doppelt aus. Lokal ist nur, was ein Betrieb noch nicht abgegeben hat.
+      if (isCityStorageBuilding(state, config, buildingId)) continue;
       for (const [res, amount] of Object.entries(inv.items)) {
         const r = res as ResourceId;
         if (!stats[r]) continue;

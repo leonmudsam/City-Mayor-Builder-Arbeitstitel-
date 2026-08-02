@@ -2,7 +2,146 @@
 > Auftrag genau einmal, nach Thema (Straßen, Stadtarbeit, Betriebe, Bauen/Kamera,
 > Welt/Grafik, Häfen …). Diese Datei hier bleibt die auftrags-/phasenbezogene Detailsicht.
 
-# Offene Aufgaben nach v0.82
+# Offene Aufgaben nach v1.34
+
+## 🔴 ZUERST: Entscheidung D-053 — 2D-Karte oder isometrische Weltkamera?
+
+Der Folgeauftrag „Stadtarbeit Overhaul 2.0" verlangt (§2/§4/§14):
+- die Stadtarbeitsansicht als **isometrische Kamera auf die echte 3D-Welt**,
+  nicht als gezeichnete 2D-Karte,
+- die Route als **Aufzeichnung der gefahrenen Strecke**, nicht als vorher
+  gezeichneter Weg,
+- die Ausführung anschließend **in der 3D-Welt**.
+
+Das **kehrt D-050 und D-051 um** — beide fielen auf ausdrückliche Rückfrage
+(„das selbstfahren findet … nur im stadtarbeit 2d modus … statt"). Deshalb ist
+es vorgelegt und nicht still umgesetzt. `§11` des neuen Auftrags verlangt
+weiterhin **keinen zweiten Renderer**; die Empfehlung ist ein Kamera-Modus des
+bestehenden `ThreeMapRenderer`. **Vor Umsetzung D-050/D-051 ausdrücklich
+zurücknehmen.**
+
+Reihenfolge des Folgeauftrags (§14): 1 Automatik entfernen · 2 Weltkamera ·
+3 freie Routenaufzeichnung · **4 lokale Lagerbestände (✅ v1.34)** ·
+5 Fahrzeuge/Logistik · 6 3D-Ausführung · 7 UI nach Mockups.
+
+## 🟢 Erledigt mit v1.34 (Save v32, D-052)
+
+- ✅ **§8 Lagerbestände je Gebäude.** `economy/stockLedger.ts`, Invariante
+  `resources === Σ Stadtlager`, kein drittes Lagermodell (derselbe
+  `BuildingInventory`, dieselbe Map wie Betriebslager v17).
+- ✅ **Ladeort als Entscheidung.** `getActivitySupplyOptions` (Bestand,
+  Kapazität, Bedarf, „reicht das?"), `setActivitySource`, `SupplyPicker`.
+  Entnahme/Rückgabe ortsgenau; zu wenig Vorrat ⇒ Mission startet nicht.
+- ✅ **Beladung beeinflusst das Fahren.** `loadedTileSpeed` (volle Ladung = 72 %
+  Tempo), dieselbe Funktion für alle Ansichten.
+- ✅ Migration `v31→v32`; Alt-Saves behalten alles, Verortung beim ersten Abgleich.
+
+**Ehrliche Grenze:** Farm, Sägewerk, Pumpwerk, Feuerwache haben **keine**
+`storage`-Wirkung und damit keinen eigenen Bestand — dort bleibt die Ware die
+Bilanz der Stadt. Wer das ändert, ändert `storageCaps` und damit Balancing.
+
+## Offene Aufgaben nach v1.33
+
+## 🟠 Stadtarbeit-Overhaul (Auftrag §§1–13, v1.33, Save v31 unverändert)
+
+Verbindlich vor jeder Änderung an der Karte: `CITYWORK_MAP_PIPELINE.md` (D-051).
+Vor jeder Änderung an der Fahrt: D-050 — es gibt **eine** Fahrphysik.
+
+**Erledigt (v1.33):**
+- ✅ **§3/§4 Karte aus der echten Welt:** Höhenrelief, Wassertiefe, Klippen-/
+  Strandküste, Vegetation aus `collectRegionNature` — eine Leseinstanz
+  (`renderer/worldProjection.ts`), testgesichert Instanz für Instanz.
+- ✅ **§5 Infrastruktur hervorgehoben:** Marker für Lager, Logistikzentren,
+  Häfen und aktive Betriebe (config-getrieben, keine Id-Listen); Brücken/
+  Viadukte aus `roadEngineering.variant`; alternative Route blau gestrichelt;
+  gefahrene Strecke als Spur.
+- ✅ **§6 Fahren vereinfacht:** straßengebunden statt Arcade-Lenkung; W/S Gas
+  und Bremse, A/D Abzweigung an der Kreuzung, Tempo aus `speedKph`.
+- ✅ **§12 Leistung/LOD:** Weltbild als ein `drawImage`, Vegetation in Chunks,
+  Naturgruppen nach Zoom gestaffelt, gedeckelte Straßenbreiten.
+- ✅ **§13 Doku:** PROJECT_STATE, HANDOFF_LOG, PATCHNOTES, CLAUDE.md, D-051,
+  neues Pipeline-Dokument.
+- ✅ **Fahr-Status (Teil von §10):** Tempo, nächstes Ziel mit Entfernung,
+  Abbiegeanweisung, erledigte Ziele.
+
+**Offen — bewusst nicht vorgetäuscht:**
+- ❌ **§8 Lagerbestände je Gebäude (= P4, NÄCHSTER SCHRITT).** Stadtarbeit
+  rechnet mit einem globalen Pool. Das Nachlade-Panel des Mockups zeigt drei
+  verschiedene Bestände — darauf gebaut wäre die Wahl des Lagers eine Attrappe.
+  Lokale Inventare existieren im Betriebssystem (`operations/**`, Save v17+):
+  **zusammenführen, kein drittes Lagermodell** (§2/§8). Braucht Migration v31→v32.
+- ❌ **§9 Verkehrsrückkopplung.** Die vier Laststufen existieren, aber
+  `congestionScore` kommt aus der Anrainerdichte, nicht aus gefahrenen Routen.
+- ❌ **§7 Erweiterte Routenplanung.** Reihenfolge ändern, Zwischenlager
+  hinzufügen, Nachladen planen; `TransportPriority` ist weiterhin deklarierter
+  Vertrag **ohne Wirkung** (nicht persistiert, nicht in der UI).
+- ❌ **§10 Gesamtlayout nach Mockup.** Nur der Fahr-Status ist umgesetzt; die
+  Aufteilung LINKS/MITTE/RECHTS/UNTEN steht aus.
+- ❌ **§5 Fähren/Häfen als Netzknoten.** Hafenmarker ja, Schiffsroute nein.
+- ❌ **Echte Gebäudesilhouetten** in der Karte (heute Footprint + Kategorie).
+- ❌ **„Ziel außerhalb Reichweite"** samt Richtungspfeil und Entfernung.
+
+# Offene Aufgaben nach v1.32
+
+## 🟡 World Visual Overhaul (v1.32, Save v31 unverändert)
+
+Der Ausbau bleibt vollständig renderer-/assetseitig und führt weder ein neues
+Weltsystem noch eine Save-Migration ein. Das persistierte Schema bleibt bei
+**v31**.
+
+**Erledigt:**
+- ✅ **Terrain:** per-Chunk-Sampler, PBR-Detailauflösung und weiche Übergänge
+  zwischen den bestehenden Terrain-/Biomprofilen.
+- ✅ **Wasser:** analytische Wasseroberfläche mit blickwinkelabhängigem Fresnel.
+- ✅ **Natur:** Nature-HLOD und Shader-Wind innerhalb des bestehenden
+  Instancing-/Culling-Pfads.
+- ✅ **Gebäudeintegration:** datengetriebene Building Appearance sowie
+  Umgebungsinstancing und HLOD ohne zweites Gebäudesystem.
+- ✅ **Postprocessing-Qualitätsprofile:** gestufter Direkt-/Composer-Pfad für
+  Low bis Ultra mit AO, SMAA, HDR-selektivem Bloom und optionalem, sehr
+  dezentem DOF.
+
+**Weiter offen — bewusst nicht vorgetäuscht:**
+- ❌ **Browser-3D-Screenshot-Smoke:** derzeit keine verfügbare Browserinstanz;
+  die verbindliche visuelle Prüfung steht deshalb noch aus.
+- ❌ **Shader-Visual-QA:** Terrain, Wasser, Wind, HLOD-Übergänge und
+  Postprocessing müssen interaktiv auf Artefakte und Lesbarkeit geprüft werden.
+- ❌ **GLB-Offlineoptimierung:** Draco/Meshopt, KTX2, Cache-Eviction und
+  authored LODs sind noch nicht als belastbare Asset-Pipeline umgesetzt.
+- ❌ **Echte Billboards/Crossfade:** HLOD reduziert Geometrie, besitzt aber noch
+  keine authored Fern-Billboards mit weichem Crossfade.
+- ❌ **Messbarkeit:** GPU-, Speicher- und LOD-Telemetrie sowie reproduzierbare
+  Messungen auf benannter Windows-Zielhardware fehlen.
+- ❌ **Globale Geometrie-LODs:** Straßenmesh und Terrain benötigen noch
+  Chunk-/Fern-LOD statt globaler beziehungsweise gleich detaillierter Geometrie.
+- ❌ **Terrain-Detail-Visual-QA:** Die neue kamerastabile World-Space-/
+  triplanare Normal- und Rauheitsprojektion ist implementiert, benötigt aber
+  noch interaktive Sichtprüfung und Feintuning auf realen Kamerawinkeln.
+
+## ✅ ERLEDIGT: Straßen-, Höhen- und Terrain-Overhaul (v1.31, Save v31)
+
+- **Eine sichtbare Straße:** `road` wählt automatisch Ebene, Hang, Pass,
+  Stützung, Viadukt, Brücke oder Küste. `road_elevated` bleibt nur als interne
+  Legacy-Definition für alte Saves; kein zweiter Straßengraph.
+- **Kanonisches, persistiertes Profil:** Landanker, Länge, Höhendifferenz,
+  Deckhöhe, Freistand und Maximal-/Durchschnittssteigung kommen aus
+  `roadProfile.ts`. 8 % ist ein Baulimit; zu kurze Höhenwege werden durch
+  deterministische Kehren verlängert oder ehrlich blockiert. Neue Abschnitte
+  speichern `roadEngineering`; Migration `v30→v31` ist additiv.
+- **Plan → Vorschau → Bestätigen → Command:** vollständiges Höhenprofil,
+  Varianten und Ressourcen; einmalige Abbuchung und echter Bulk-Commit mit einer
+  Zustandsbenachrichtigung.
+- **Fundamente:** Ein `FoundationPlan` trägt Terrain-Kategorie, Konstruktion,
+  Stütztiefe, Kosten und Bauzeit durch Diagnose, Command, Ghost und Renderer.
+  Stützmauern, Terrassen, Pfähle und Klippenanker ersetzen den grauen Vollblock;
+  das gebackene Terrain bleibt unverändert.
+- **Darstellung:** gespeicherte Deckhöhe für Straße, Brücke, Stützen und
+  Fahrzeuge; sieben aktive GLB-Nahdetailkits mit prozeduralem Fallback.
+
+**Weiter offen:** Tunnel, manuelle Höhen-/Pfeiler-/Brückenwahl, frei ziehbare
+Kurvengriffe, Schiffsdurchfahrt/Maximalspannweiten, Lane-/Kreuzungsbelegung und
+Straßen-Chunking/Fern-LOD. Der Bodennetz-Mesh wird bei jeder Straßenänderung noch
+global neu aufgebaut.
 
 ## ✅ ERLEDIGT: Map Flattening + Buildability Overhaul (v1.11, Save v25, D-040)
 
@@ -13,12 +152,9 @@ vollständig; Kennzahlen und Begründungen in
 
 **Daraus offen geblieben (bewusst, nicht vorgetäuscht):**
 - **Echtes Einebnen des Terrain-Meshes unter dem Footprint** (§4.1). Umgesetzt ist
-  die ebenfalls von §4.1 genannte Sockel-/Stützmauer-Variante. Eine echte
-  Geländemutation braucht eine Pad-Überlagerung, die Simulation **und**
-  Renderer-Höhenfeld gemeinsam lesen, plus Chunk-Neuaufbau bei jeder Platzierung.
-- **Pfahl-/Steglogik für Gebäude, die wirklich ins Wasser ragen** (§4.4).
-  `dock_small`/`river_port` nutzen weiter den vorhandenen Waterfront-Footprint
-  mit Tiefenprüfung; echte Pfähle sind Renderer-Arbeit.
+  seit v1.31 der kanonische Fundamentplan mit Stützmauer, Terrasse, Pfählen und
+  Klippenankern. Eine echte Geländemutation bleibt gemäß D-043 bewusst aus; sie
+  bräuchte eine gemeinsame Pad-Überlagerung plus Terrain-Chunk-Neuaufbau.
 - **5×5-Footprints** bleiben mit 30,9 % der Ankerkacheln der schwierigste Fall.
 
 > **Danach geht es mit den zurückgestellten Active-Simplicity-Phasen AS-3…AS-9
@@ -88,9 +224,9 @@ vollständig; Kennzahlen und Begründungen in
 > auf der Spielwelt nicht weiter." Master-Spec: `INFRASTRUCTURE_2_PLAN.md`.
 > Architekturentscheid: **D-036**.
 
-**Warum P0:** Nach der dritten Verdichtung (D-035) blockieren Höhen/Wasser die
-Expansion — Straßen können heute nur ebenes Land bebauen. Höhenstraßen/Brücken sind
-der Unblocker.
+**Stand v1.31:** Höhen und Wasser blockieren die Expansion nicht mehr pauschal.
+Die eine öffentliche Straße erzeugt Pass, Stützung, Viadukt oder Brücke
+automatisch; I3–I5 bleiben davon unabhängig.
 
 **Phasen (Reihenfolge = Umsetzung):**
 - ✅ **I1 Höhenstraßen & automatische Brücken** (v0.84): Straßen-Bauklasse
@@ -103,8 +239,12 @@ der Unblocker.
     Instanz). Zusätzlich **Steinbruch auf Fels bebaubar** (additiv
     `BuildingDef.buildsOnRock?: { maxSlope? }`, flache Felsschelfe; kein neues
     Platzierungssystem). Tests: `tests/quarryRock.test.ts`.
-  - ⏳ Offen (I1-Verfeinerung, nicht vortäuschen): steinerne Prachtbrücken, echte
-    Pfeilertiefe bis zum Wasserboden, Rampenlängen.
+  - ✅ **v1.31 konsolidiert I1:** `road_elevated` ist nur noch Legacy; `road`
+    wählt sieben Varianten automatisch. Persistierte Deckhöhe, profilhohe
+    instanzierte Pfeiler bis zum tatsächlichen Boden, Wasser-Landanker,
+    Variantenkosten, Rampenprofile und sieben aktive GLB-Kits ersetzen die feste
+    Höhenstraße. Offen bleiben Tunnel, manuelle Höhe, Schiffsdurchfahrt und
+    strukturelle Maximalspannweiten.
 - ✅ **I2 Saubere Straßenstruktur** (v0.86): terrainbewusster Router
   `src/game/roads/roadRouting.ts` (gewichtetes deterministisches Dijkstra) verbindet
   **Kontrollpunkte** lückenlos über bebaubares Gelände (Bodenstraße meidet Wasser/
@@ -116,6 +256,10 @@ der Unblocker.
   - ⏳ Offen (I2-Verfeinerung, nicht vortäuschen): frei ziehbare Kontrollpunkt-Griffe,
     Live-Vorschau vom letzten Punkt zum Mauszeiger als Renderer-Layer, Kurven-/
     Diagonal-Snapping.
+  - ✅ **v1.31 erweitert I2:** max. 8-%-Längsprofil, automatische Serpentinen,
+    automatische Varianten, vollständige Profil-/Ressourcenvorschau und echter
+    Bulk-Commit mit einer Zustandsbenachrichtigung. Der bestehende
+    4-Nachbar-`roadNetwork` bleibt die einzige Navigation.
 - 🟡 **I3 Küste/Ufer + Anleger als Netzknoten** (Straße↔Anleger↔Schiff):
   - ✅ **Netzknoten-Modell** (v0.96): `networkSegments.ts` zerlegt das **bestehende**
     `roadNetwork` in Teilnetze und benennt das Stadtnetz (`city`/`local`, deterministisch,
@@ -205,8 +349,8 @@ Dev-Szenarien und vollständiger Handoff. Save bleibt v19.
 - Handkarren als datengetriebene, Controller-validierte Transportmethode,
 - physische Zwischenlager/Bestände und freie Zielkapazität je Gebäude,
 - optionale Nachfüllquellen samt Umweg/Ladezeit,
-- atomarer Straßenpfad-Command, Alternativroute, Kontrollpunkte, Steigung,
-  Viadukt und Abrissdiagnose,
+- frei wählbare Alternativroute und Abrissdiagnose; atomarer Straßenpfad,
+  Kontrollpunkte, Steigung und Viadukt sind seit v1.31 erledigt,
 - wirtschaftliche Pfeilerhöhe/-kosten und Rampenlänge für Waterfront,
 - Rechteck-/Polygon-Auswahl erst nach passendem UI-Entwurfsvertrag,
 - Fäll-/Trag-Animationsclips und echtes Baum-Mesh-Raycast.
@@ -368,8 +512,26 @@ Dateistellen: `CORE_GAMEPLAY_OVERHAUL_AUDIT.md`.
    Grundfläche). 10 Tests (`movePreview.test.ts`). Keine Save-/Sim-Änderung.
    Offen: Ghost zeigt das Stufe-0-Modell, kein Drag-and-Drop, Knopf liegt zwei
    Klicks tief (gehört in einen Sheet-Pass).
-5. Wirkungsradien terrainfolgend projizieren (`getCoverageOverlay`).
-6. Straßenbau als Planen → Vorschau → Bestätigen → Command.
+5. ✅ **erledigt (v1.28, Save v29, D-049).** Terrainfolgend war es längst; falsch
+   war die **Form**. Reichweite ist `chebyshev(...) <= radius` — ein Quadrat —,
+   der Renderer bekam nur `radius`, riet euklidisch und zeichnete einen
+   eingeschriebenen Kreis: **19–30 % der versorgten Kacheln blieben unsichtbar**
+   (Brunnen r9: 108 von 361; Feuerwache r32: 868 von 4.096), einseitig zu wenig.
+   **D-049:** Die Simulation liefert die Fläche mit (`CoverageSourceView.area`,
+   `coverageArea`/`coverageAreaAround`/`coversTile`); der Renderer leitet nichts
+   nach. Dazu neu: Radius **bei Hover** (Auswahl behält Vorrang, Ghost geht vor),
+   gesucht mit derselben Abfrage wie beim Klick. Arbeitsgebiets-Overlay ebenfalls
+   auf Quadrate. 4 Tests (`coverageArea.test.ts`). Keine Save-/Sim-Änderung.
+   Offen: mehrere Radiusgruppen je Gebäude zeigen weiter nur die erste;
+   `nodesInWorkArea` bietet 120–171 Kacheln an, die `previewOperation` verwirft
+   (Sim-Frage, Balancing — bewusst nicht mit umgebaut).
+6. ✅ **ERLEDIGT (v1.31, Save v31).** Ein sichtbares Straßenwerkzeug;
+   `RoadPlanPreview` trägt das kanonische Höhenprofil, automatische Varianten
+   und vollständige Ressourcen. Maximal 8 %, automatische Serpentinen oder
+   ehrliche Blockade. `buildRoadPath` bucht einmal, persistiert das Engineering
+   und schreibt den ganzen Pfad in einem Bulk-Commit mit genau einer
+   Zustandsbenachrichtigung. 34 gezielte Straßen-/Fundament-/Assettests.
+   Offen: manuelle Höhe/Kurvengriffe, Tunnel und globaler Mesh-Rebuild.
 
 **Nach Schritt 1 erneut prüfen:** Die abgelehnten Anleger-Plätze (§14) sind
 sehr wahrscheinlich eine Folge des Picking-Fehlers — Land-/Wasser-Footprint,
@@ -425,8 +587,9 @@ v15→v16. Lieferketten (§7) und aktive Minispiele (§8) folgen danach.
 - Getrennte Landmassen erst durch echte Fähren-/Schifffahrtsprogression
   erschließen. Hafen- und Wasserwegkandidaten sind vorhanden;
   `TODO(CLAUDE_LOGIC)`.
-- Brücken, Viadukte und Tunnel als Erweiterung des bestehenden Straßensystems
-  implementieren: Kosten, Freigaben, Rampen, Pfeiler, Portale und Navigation.
+- ✅ Brücken und Viadukte sind seit v1.31 automatische Varianten mit Kosten,
+  Rampenprofil, Pfeilern und gemeinsamer Navigation. Offen: Tunnel/Portale,
+  manuelle Höhenwahl, Schiffsdurchfahrt und strukturelle Maximalspannweiten.
 - Weitere PBR-Kanäle nur nach Texturspeicher-/Zielhardwaremessung aktivieren;
   die 6.1-Kernsets für Granit, Wiese, Wald und Ufer sind vorhanden.
 - Auf Windows-Zielhardware Vollinsel-FPS, Draw-Calls, Texturspeicher und den
@@ -489,7 +652,9 @@ v15→v16. Lieferketten (§7) und aktive Minispiele (§8) folgen danach.
 
 ## P1 — weitere echte Simulationsdaten
 
-- Steigung/Höhenprofil aus Terrain-/Straßenprojektion.
+- ✅ Steigung/Höhenprofil ist seit v1.31 kanonisch und je neuer Straßenkachel
+  persistiert. Offen ist die Nutzung in Stadtarbeit-, Zustand- und
+  Verkehrsbewertung.
 - Straßenqualität/-zustand, Sperrungen und dynamischer Verkehr.
 - Fahrzeugzustand, Kraftstoff und Schäden als zusammenhängende Phase.
 - `rewardMultiplier` erst nach Wirtschaftstest an Auszahlung koppeln.
@@ -501,8 +666,10 @@ v15→v16. Lieferketten (§7) und aktive Minispiele (§8) folgen danach.
 - ✅ Echter GLB-Ghost für Platzieren (v1.26) **und Verschieben** (v1.27); beide
   lesen `placementDiagnostics`/`moveDiagnostics`. Rest: Ghost zeigt das
   Stufe-0-Modell statt der tatsächlichen Ausbaustufe.
-- Wirkungsradien auf Gelände projizieren; `getCoverageOverlay` nutzen.
-- Straßenbau vollständig als Planen → Vorschau → Bestätigen → Command.
+- ✅ Wirkungsradien nutzen seit v1.28 `getCoverageOverlay` und die kanonische
+  quadratische Fläche.
+- ✅ Straßenbau ist seit v1.31 vollständig Planen → Vorschau → Bestätigen →
+  Command, einschließlich Höhenprofil, Varianten und Bulk-Commit.
 - Lane-/Kreuzungsbelegung und Kollisionsvermeidung.
 - Spielerisches Wetter nur mit klarer Simulationsentscheidung; v0.62-Presets
   bleiben rein visuell.

@@ -6,6 +6,7 @@ import type {
   QuestId,
   ResourceId,
   ResourceNodeType,
+  RoadVariant,
   TerrainType,
   DriveVehicle,
 } from '../types.ts';
@@ -147,6 +148,12 @@ export interface RoadClassDef {
    * Pfeiler/Deck. Wird ZUSÄTZLICH zur normalen Kachel-Baukostenbasis berechnet.
    */
   bridgeCostPerTile?: Partial<Record<ResourceId, number>>;
+  /**
+   * Automatischer Variantenaufschlag der EINEN Straße. Die Grundkosten bleiben
+   * auf dem BuildingDef; nur das aus Gelände/Höhenprofil abgeleitete Bauwerk
+   * (Pass, Stützmauer, Viadukt, Brücke, Küste) kommt hier hinzu.
+   */
+  variantCostPerTile?: Partial<Record<RoadVariant, Partial<Record<ResourceId, number>>>>;
 }
 
 /** Zweigeteilte Hafenfläche; das Gebäudemodell zeigt bei 0° mit +Z zum Land. */
@@ -630,6 +637,13 @@ export interface ActivitiesConfig {
   tradeRotationSec: number;
   /** Offers shown per rotation window. */
   tradeOffersPerRotation: number;
+  /**
+   * § P2 (D-050): Prämienaufschlag, wenn der Spieler den Auftrag SELBST fährt
+   * (`TransportMode = 'manual'`). Der einzige mechanische Unterschied zwischen
+   * den beiden Ausführungsarten — und bewusst Config statt Literal, damit das
+   * Verhältnis „Bequemlichkeit gegen Kontrolle" balancierbar bleibt. ≥ 1.
+   */
+  manualDriveBonusFactor: number;
 }
 
 // ---- World ----------------------------------------------------------------

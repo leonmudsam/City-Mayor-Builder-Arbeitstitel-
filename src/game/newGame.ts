@@ -4,6 +4,15 @@ import type { GameState } from './types.ts';
 import { allRegionIds, createRegionStub } from './map/world.ts';
 
 /**
+ * v31 (Straßen-, Höhen- und Terrain-Overhaul): additive, eingefrorene
+ * `BuildingInstance.roadEngineering`-Metadaten für automatisch gewählte
+ * Straßenvarianten und Deckhöhen. Alte Straßen bleiben ohne Feld gültig und
+ * werden zur Laufzeit kompatibel projiziert; Migration v30→v31 ist verlustfrei.
+ * v30 (§ Stadtarbeit-Overhaul P2, D-050): additive Ausführungsart
+ * `ActiveActivity.mode` (`auto` = die Stadt fährt, `manual` = der Spieler fährt).
+ * Alte Saves bleiben ladbar; ein v29-Stand ohne das Feld verhält sich exakt wie
+ * bisher (`auto`). Keine Welt-, Balancing- oder Koordinatenänderung —
+ * Migration `v29→v30` ändert nur die Versionsnummer.
  * v27 (§ Welt-Feinschliff 12.2, Spieltest 30.07.2026): FREIE GRÜNDUNG + NEUE
  * SEGMENTIERUNG. Ein neues Spiel startet OHNE Rathaus, ohne Distrikt und ohne
  * Startstraßen — der Spieler wählt den Gründungsplatz selbst (`foundCity`).
@@ -53,7 +62,7 @@ import { allRegionIds, createRegionStub } from './map/world.ts';
  * v12 (§ Stadtarbeit 2D): laufende Fahrmissionen speichern Fahrzeugklasse und
  * manuell gezeichnete Straßenkette.
  */
-export const SCHEMA_VERSION = 29;
+export const SCHEMA_VERSION = 32;
 
 export function createNewGame(config: GameConfig, cityName: string, now: number): GameState {
   const state: GameState = {

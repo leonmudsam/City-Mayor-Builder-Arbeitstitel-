@@ -1,5 +1,5 @@
-import { Car, ClipboardList, Gift, MapPin, PackageCheck, Route, Search, Timer } from 'lucide-react';
-import { getMapApi, useGame, useUiStore } from '../../state/store.ts';
+import { Bot, Car, ClipboardList, Gift, MapPin, PackageCheck, Route, Search, Timer } from 'lucide-react';
+import { useGame, useUiStore } from '../../state/store.ts';
 import { formatDuration, formatMoney, t } from '../../i18n/index.ts';
 import { playFeedback } from '../../services/feedback.ts';
 import { CitizenPortrait } from '../art/index.ts';
@@ -115,17 +115,22 @@ export function CityWorkPanel() {
                 <button className="btn-secondary btn-tiny" disabled={driveActive} onClick={() => openActivityPlanner(featured.id)}>
                   <Route size={13} /> {t('ui.route.title')}
                 </button>
-                <button
-                  className="btn-primary btn-tiny work-drive"
-                  disabled={driveActive}
-                  onClick={() => {
-                    const api = getMapApi();
-                    if (api?.canDrive() && api.enterDrive()) playFeedback('activity_start');
-                    else pushToast(t('ui.drive.unavailable'), 'error');
-                  }}
-                >
-                  <Car size={13} /> {driveActive ? t('ui.drive.driving') : t('ui.drive.start')}
-                </button>
+                {/* § P2 (D-050): Das Lenkrad erscheint nur, wo der Spieler beim
+                    Start „Selbst fahren" gewählt hat, und führt in die
+                    2D-Stadtarbeitskarte — dort wird gefahren, nicht in der Welt. */}
+                {game.getActiveTransportMode() === 'manual' ? (
+                  <button
+                    className="btn-primary btn-tiny work-drive"
+                    onClick={() => {
+                      playFeedback('activity_start');
+                      openActivityPlanner(featured.id);
+                    }}
+                  >
+                    <Car size={13} /> {t('ui.drive.start')}
+                  </button>
+                ) : (
+                  <span className="work-drive-auto"><Bot size={13} /> Die Stadt fährt</span>
+                )}
               </div>
             ) : (
               <p className="muted work-hint">{t('ui.activity.click_targets')}</p>

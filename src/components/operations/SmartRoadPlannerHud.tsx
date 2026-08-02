@@ -1,41 +1,82 @@
-import { AlertTriangle, Check, Coins, CornerDownLeft, GitBranch, MapPin, Route, Trash2, Undo2 } from 'lucide-react';
+import { AlertTriangle, Check, CornerDownLeft, MapPin, Route, Trash2, Undo2 } from 'lucide-react';
 import { useEffect, useMemo } from 'react';
+import type { ResourceId, RoadVariant } from '../../game/types.ts';
 import { formatMoney, t } from '../../i18n/index.ts';
 import { useGame, useUiStore } from '../../state/store.ts';
 import { DataMetric, StatusChip } from '../common/GamePanel.tsx';
-import { costLabel } from '../common/costLabel.ts';
-import { buildSmartRoadPlanView } from './adapters.ts';
+import { ResourceIcon } from '../common/icons.tsx';
+import { buildSmartRoadPlanView, getSmartRoadPlanPreview } from './adapters.ts';
 
 const int = (value: number): string => Math.round(value).toLocaleString('de-DE');
+const pct = (value: number): string => `${value.toLocaleString('de-DE', { maximumFractionDigits: 1 })} %`;
+const VARIANT_LABEL: Record<RoadVariant, string> = {
+  flat: 'Landstraße',
+  slope: 'Hangstraße',
+  pass: 'Passstraße',
+  support: 'Stützstraße',
+  viaduct: 'Viadukt',
+  bridge: 'Brücke',
+  coast: 'Küstenstraße',
+};
+
+function HeightProfile({ points }: { points: readonly { terrainHeight: number; roadHeight: number }[] }) {
+  if (points.length < 2) return <div className="smart-road-profile-empty">Start und Ziel setzen</div>;
+  const values = points.flatMap((point) => [point.terrainHeight, point.roadHeight]);
+  const min = Math.min(...values);
+  const max = Math.max(...values);
+  const range = Math.max(0.25, max - min);
+  const polyline = (field: 'terrainHeight' | 'roadHeight') => points.map((point, index) => {
+    const x = (index / Math.max(1, points.length - 1)) * 240;
+    const y = 58 - ((point[field] - min) / range) * 48;
+    return `${x.toFixed(1)},${y.toFixed(1)}`;
+  }).join(' ');
+  return (
+    <svg className="smart-road-profile" viewBox="0 0 240 64" role="img" aria-label="Höhenprofil von Gelände und Fahrbahn">
+      <defs>
+        <linearGradient id="road-profile-fill" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0" stopColor="#69df8e" stopOpacity=".3" />
+          <stop offset="1" stopColor="#69df8e" stopOpacity="0" />
+        </linearGradient>
+      </defs>
+      <polyline className="terrain-line" points={polyline('terrainHeight')} />
+      <polyline className="road-line" points={polyline('roadHeight')} />
+    </svg>
+  );
+}
 
 export function SmartRoadPlannerHud() {
   const game = useGame();
-  const { roadPlanPath, setRoadPlanPath, clearRoadPlan, stopPlacing, pushToast, placingDefId } = useUiStore();
-  // Aktiver Straßentyp (Bodenstraße oder Höhenstraße/Brücke). Fällt für alles
-  // Nicht-Straßen-Artige auf 'road' zurück, ist aber nur aktiv, wenn eine Straße
-  // platziert wird (§ Infrastruktur 2.0 / I1).
-  const roadDefId = placingDefId && game.config.buildings.get(placingDefId)?.category === 'roads' ? placingDefId : 'road';
-  const roadName = t(game.config.buildings.get(roadDefId)?.nameKey ?? 'building.road');
-  const view = useMemo(() => buildSmartRoadPlanView(game, roadPlanPath, roadDefId), [game, game.version, roadPlanPath, roadDefId]);
-  const raw = useMemo(() => game.roadPathPreview(roadPlanPath, roadDefId), [game, game.version, roadPlanPath, roadDefId]);
+  const { roadPlanPath, setRoadPlanPath, clearRoadPlan, stopPlacing, pushToast } = useUiStore();
+  // Spielerisch gibt es genau eine Straße. `road_elevated` bleibt nur als
+  // Legacy-Save-Definition erhalten und ist niemals ein Werkzeug im Planner.
+  const roadDefId = 'road';
+  const raw = useMemo(
+    () => getSmartRoadPlanPreview(game, roadPlanPath, roadDefId),
+    [game, game.version, roadPlanPath],
+  );
+  const view = useMemo(
+    () => buildSmartRoadPlanView(game, roadPlanPath, roadDefId, raw),
+    [game, roadPlanPath, raw],
+  );
   const affordable = game.canAffordCost(raw.totalCost);
-  // Welche Ressourcen fehlen konkret? (§18.3: der Grund muss sichtbar sein — nicht
-  // nur „Stadtbudget", denn Höhenstraßen kosten auch Holz.)
   const missing = Object.entries(raw.totalCost)
-    .map(([res, need]) => ({ res, need: need ?? 0, have: game.state.resources[res as keyof typeof game.state.resources] ?? 0 }))
-    .filter((m) => m.have < m.need);
+    .map(([res, need]) => ({
+      res: res as ResourceId,
+      need: need ?? 0,
+      have: game.state.resources[res as ResourceId] ?? 0,
+    }))
+    .filter((item) => item.have < item.need);
+  const variants = (Object.entries(view.variantCounts) as [RoadVariant, number][])
+    .filter(([, count]) => count > 0);
 
   const confirm = () => {
     if (!view.valid || !affordable) return;
-    // Atomarer Bau (§ Infrastruktur 2.0 / I2): der Controller routet die
-    // Kontrollpunkte, prüft den GANZEN Pfad + Gesamtpreis und baut alles oder
-    // nichts — kein halbfertiger Stummel mehr bei einem blockierten Segment.
     const result = game.buildRoadPath(roadPlanPath, roadDefId);
     if (!result.ok) {
-      pushToast(`${roadName}-Bau nicht möglich: ${t(`error.${result.error}`)}`, 'error');
+      pushToast(`Straßenbau nicht möglich: ${t(`error.${result.error}`)}`, 'error');
       return;
     }
-    pushToast(`${result.built} ${roadName}-Segmente gebaut.`, 'success');
+    pushToast(`${result.built} Straßenabschnitte gebaut.`, 'success');
     clearRoadPlan();
   };
 
@@ -53,74 +94,81 @@ export function SmartRoadPlannerHud() {
   });
 
   return (
-    <section className="smart-road-planner" onClick={(event) => event.stopPropagation()}>
+    <section className="smart-road-planner smart-road-overhaul" onClick={(event) => event.stopPropagation()}>
       <header>
-        <span className="smart-road-icon"><Route size={20} /></span>
+        <span className="smart-road-icon"><Route size={22} /></span>
         <div>
-          <small>Smart Planning</small>
-          <h3>{roadName}</h3>
+          <small>Automatische Geländeanpassung</small>
+          <h3>Straße platzieren</h3>
         </div>
-        <StatusChip tone={view.valid ? 'good' : view.blockedCount > 0 ? 'danger' : 'info'}>
-          {view.valid ? 'Baubar' : roadPlanPath.length < 2 ? 'Start und Ziel setzen' : 'Prüfung nötig'}
+        <StatusChip tone={view.valid ? 'good' : view.blockedCount > 0 || view.profileError === 'invalid_anchor' ? 'danger' : 'info'}>
+          {view.valid ? 'Straße ist platzierbar' : roadPlanPath.length < 2 ? 'Start und Ziel setzen' : 'Trasse anpassen'}
         </StatusChip>
+        <button type="button" className="icon-button" onClick={stopPlacing} title="Straßenplanung schließen">
+          <CornerDownLeft size={18} />
+        </button>
       </header>
 
-      <div className="smart-road-anchors">
-        <span className="anchor-start"><MapPin size={15} /><small>Start</small><b>{view.start ? `${view.start.x}, ${view.start.y}` : 'Karte anklicken'}</b></span>
-        <i />
-        <span className="anchor-end"><MapPin size={15} /><small>Ziel</small><b>{view.end ? `${view.end.x}, ${view.end.y}` : 'Pfad ziehen'}</b></span>
-      </div>
+      <div className="smart-road-workspace">
+        <aside className="smart-road-guide">
+          <strong>Eine Straße – alle Varianten</strong>
+          <p>Zeichne die Verbindung. Steigung, Kehren, Stützmauern, Viadukte und Brücken entstehen automatisch.</p>
+          <ol>
+            <li><b>1</b> Startpunkt anklicken</li>
+            <li><b>2</b> Ziehen oder Ziel anklicken</li>
+            <li><b>3</b> Vorschau prüfen und bauen</li>
+          </ol>
+          <div className="smart-road-variant-list">
+            {variants.map(([variant, count]) => (
+              <span key={variant} className={`variant-${variant}`}><i />{VARIANT_LABEL[variant]} <b>{count}</b></span>
+            ))}
+          </div>
+        </aside>
 
-      <div className="smart-road-metrics">
-        <DataMetric label="Neue Segmente" value={view.lengthTiles} />
-        <DataMetric label="Kosten" value={costLabel(view.costs)} icon={<Coins size={15} />} tone={affordable ? 'neutral' : 'danger'} />
-        <DataMetric label="Brücken" value={view.bridgeCount} tone={view.bridgeCount > 0 ? 'info' : 'neutral'} />
-        <DataMetric label="Konflikte" value={view.blockedCount} tone={view.blockedCount > 0 ? 'danger' : 'good'} />
-      </div>
+        <div className="smart-road-profile-card">
+          <div className="smart-road-anchors">
+            <span className="anchor-start"><MapPin size={15} /><small>Startpunkt</small><b>{view.start ? `${view.start.x}, ${view.start.y}` : 'Karte anklicken'}</b></span>
+            <i />
+            <span className="anchor-end"><MapPin size={15} /><small>Endpunkt</small><b>{view.end ? `${view.end.x}, ${view.end.y}` : 'Ziel setzen'}</b></span>
+          </div>
+          <HeightProfile points={view.tiles} />
+          <div className="smart-road-profile-legend"><span className="terrain">Gelände</span><span className="road">Fahrbahn ≤ 8 %</span></div>
+        </div>
 
-      <div className="smart-road-legend" aria-hidden>
-        <span><i className="dot dot-ok" /> Baubar</span>
-        <span><i className="dot dot-bridge" /> Brücke (teuer)</span>
-        <span><i className="dot dot-blocked" /> Blockiert</span>
+        <aside className="smart-road-analysis">
+          <h4>Vorschau – {VARIANT_LABEL[view.dominantVariant]}</h4>
+          <div className="smart-road-metrics">
+            <DataMetric label="Länge" value={`${int(view.lengthMeters)} m`} />
+            <DataMetric label="Höhendifferenz" value={`${view.elevationDeltaMeters >= 0 ? '+' : ''}${int(view.elevationDeltaMeters)} m`} />
+            <DataMetric label="Max. Steigung" value={pct(view.maxGradePercent)} tone={view.maxGradePercent <= 8 ? 'good' : 'danger'} />
+            <DataMetric label="Ø Steigung" value={pct(view.averageGradePercent)} />
+          </div>
+          <div className="smart-road-costs">
+            <strong>Benötigt</strong>
+            {Object.entries(view.costs).length === 0 && <span>Noch keine Baukosten</span>}
+            {Object.entries(view.costs).map(([resource, amount]) => (
+              <span key={resource}><ResourceIcon id={resource as ResourceId} size={15} />{t(`resource.${resource}`)} <b>{int(amount ?? 0)}</b></span>
+            ))}
+          </div>
+        </aside>
       </div>
 
       {view.warnings.map((item) => (
-        <p className={`inline-warning tone-${item.tone}`} key={item.code}>
-          <AlertTriangle size={13} /> {item.label}
-        </p>
+        <p className={`inline-warning tone-${item.tone}`} key={item.code}><AlertTriangle size={13} /> {item.label}</p>
       ))}
       {!affordable && missing.length > 0 && roadPlanPath.length > 0 && (
-        <p className="inline-warning tone-danger">
-          <AlertTriangle size={13} /> Nicht genug Material:{' '}
-          {missing.map((m) => `${t(`resource.${m.res}`)} ${int(m.have)}/${int(m.need)}`).join(', ')}
-        </p>
+        <p className="inline-warning tone-danger"><AlertTriangle size={13} /> Nicht genug Material: {missing.map((item) => `${t(`resource.${item.res}`)} ${int(item.have)}/${int(item.need)}`).join(', ')}</p>
       )}
 
       <div className="smart-road-actions">
-        <button
-          type="button"
-          className="secondary-action"
-          disabled={roadPlanPath.length === 0}
-          onClick={() => setRoadPlanPath(roadPlanPath.slice(0, -1))}
-        >
-          <Undo2 size={15} /> Letztes Segment
-        </button>
-        <button
-          type="button"
-          className="secondary-action"
-          disabled
-          title="Eine alternative Routenberechnung existiert noch nicht im Controller."
-        >
-          <GitBranch size={15} /> Alternative Route
+        <button type="button" className="secondary-action" disabled={roadPlanPath.length === 0} onClick={() => setRoadPlanPath(roadPlanPath.slice(0, -1))}>
+          <Undo2 size={15} /> Letzten Punkt lösen
         </button>
         <button type="button" className="secondary-action" onClick={clearRoadPlan} disabled={roadPlanPath.length === 0}>
-          <Trash2 size={15} /> Leeren
+          <Trash2 size={15} /> Verwerfen
         </button>
         <button type="button" className="primary-action" onClick={confirm} disabled={!view.valid || !affordable}>
-          <Check size={16} /> Für {formatMoney(view.cost)} bauen
-        </button>
-        <button type="button" className="icon-button" onClick={stopPlacing} title="Straßenplanung schließen">
-          <CornerDownLeft size={17} />
+          <Check size={17} /> Für {formatMoney(view.cost)} bestätigen
         </button>
       </div>
     </section>

@@ -27,6 +27,31 @@ export type DistrictId = string;
 export type QuestId = string;
 export type MayorActionId = string;
 export type TerrainType = 'grass' | 'forest' | 'water' | 'river' | 'mountain' | 'sand' | 'fertile';
+/** Automatisch gewählte konstruktive Ausprägung eines Straßenabschnitts. */
+export type RoadVariant =
+  | 'flat'
+  | 'slope'
+  | 'pass'
+  | 'support'
+  | 'viaduct'
+  | 'bridge'
+  | 'coast';
+
+/**
+ * Eingefrorenes Ergebnis der Straßenplanung (Schema v31). Die Werte gehören zum
+ * Gebäudezustand, weil ein verzweigtes Netz das ursprüngliche Längsprofil später
+ * nicht eindeutig rekonstruieren kann. Renderer/Fahrzeuge lesen ausschließlich
+ * diese Projektion; alte Straßen ohne Metadaten erhalten einen Fallback.
+ */
+export interface RoadEngineeringState {
+  variant: RoadVariant;
+  terrainHeight: number;
+  roadHeight: number;
+  gradePercent: number;
+  clearance: number;
+  routeId: string;
+  routeIndex: number;
+}
 export type DriveVehicle =
   | 'handcart'
   | 'van'
@@ -42,6 +67,35 @@ export type DriveVehicle =
   | 'cargo_plane'
   /** Frachtkahn für persistente Schiffsrouten (§ Infrastruktur 2.0 / I4). */
   | 'cargo_barge';
+
+/**
+ * Wer den Auftrag AUSFÜHRT (§ Stadtarbeit-Overhaul P2, D-050). Genau hier hängt
+ * die Vereinbarkeit mit D-039 (Active Simplicity): Automatisiert wird weiterhin
+ * die Ausführung — aber OB automatisiert wird, ist eine bewusste Wahl des
+ * Spielers je Auftrag und damit selbst keine Ausführung.
+ *
+ * `auto`   — die Stadt fährt die berechnete Strecke selbst ab (bequem, kein Bonus).
+ * `manual` — der Spieler steuert das Fahrzeug (Kontrolle, Bonus auf die Prämie).
+ *
+ * Die Vokabelliste liegt als `TRANSPORT_MODES` in `activities/transportOrder.ts`
+ * (D-046: von der UI beschriftete Zustandsmengen sind aufzählbar).
+ */
+export type TransportMode = 'auto' | 'manual';
+
+/**
+ * Dringlichkeit eines Auftrags (§9 des Auftrags). Kanonischer Vertrag des
+ * Auftragsmodells; **heute ohne Wirkung** und deshalb bewusst NICHT persistiert
+ * und nicht in der UI sichtbar — die Reihung mehrerer gleichzeitiger Aufträge
+ * entsteht erst mit P4. Es wird nichts vorgetäuscht.
+ */
+export type TransportPriority = 'low' | 'normal' | 'high';
+
+/**
+ * Was an einem Stopp geschieht (§5 des Auftrags: Laden/Entladen/Nachladen/Warten).
+ * `wait` ist der einzige Wert, den die Planung nicht selbst ableiten kann — er
+ * entsteht erst, wenn der Spieler in P4 einen Haltepunkt setzt.
+ */
+export type TransportStopAction = 'load' | 'unload' | 'reload' | 'wait';
 
 export type BuildingStatus = 'constructing' | 'active' | 'paused';
 
@@ -74,6 +128,8 @@ export interface BuildingInstance {
    * validity and gameplay are entirely unaffected. Undefined ≙ 0.
    */
   rotation?: 0 | 90 | 180 | 270;
+  /** Nur für gebaute Straßen; seit Save v31 additiv und optional. */
+  roadEngineering?: RoadEngineeringState;
 }
 
 /**
@@ -193,6 +249,14 @@ export interface ActiveActivity {
   expiresAt?: number;
   /** In der Planung gewählte, für diesen Auftrag validierte Fahrzeugklasse. */
   vehicle?: DriveVehicle;
+  /**
+   * § P2 (D-050): In der Planung gewählte Ausführungsart. Fehlt das Feld
+   * (Alt-Save vor v30 oder Nicht-Fahrmission), gilt `auto` — der bisherige,
+   * automatisch fahrende Missionswagen. Genau ein Modus ist aktiv: bei `manual`
+   * fährt der Wagen NICHT von selbst weiter, sonst erledigte er die Mission,
+   * während der Spieler noch am Lenkrad sitzt.
+   */
+  mode?: TransportMode;
   /** Exakte, orthogonal zusammenhängende Straßenkette der manuellen Planung. */
   plannedRoadPath?: { x: number; y: number }[];
   /**
@@ -203,6 +267,15 @@ export interface ActiveActivity {
    * Pfad: `costPerTarget` wird pro Ziel direkt aus dem Pool entnommen.
    */
   reserved?: Partial<Record<ResourceId, number>>;
+  /**
+   * § P4 (Save v32): Das Lager, an dem die Ladung WIRKLICH aufgenommen wurde.
+   * Vorher wählte die Simulation stumm das erste Gebäude nach Id-Sortierung und
+   * entnahm aus dem globalen Pool — die Wahl eines Lagers wäre damit folgenlos
+   * geblieben. Jetzt ist sie folgenreich: Entnahme und Rückgabe treffen genau
+   * diesen Ort, und seine Lage bestimmt den Weg. Fehlt das Feld (Alt-Save vor
+   * v32), gilt der frühere Anker-Fallback.
+   */
+  sourceBuildingId?: BuildingInstanceId;
   targets: { buildingId: BuildingInstanceId; done: boolean }[];
 }
 

@@ -1,4 +1,41 @@
-# Terrain Material Matrix 6.1
+# Terrain Material Matrix — World-Visual-Overhaul v1.32
+
+Stand: v1.32. Die folgende kompakte Matrix ist für den aktiven Renderer
+verbindlich. Die frühere Matrix 6.1 bleibt weiter unten als historische
+Planungs- und Auditgrundlage erhalten.
+
+## Aktive Materialmatrix v1.32
+
+| Einsatz | Basis | Status in v1.32 | Selektive Details |
+|---|---|---|---|
+| Wiese/Gras | `grass_meadow_cartoon` | aktiv | Gras-Normalmap |
+| Wald | `forest_floor_cartoon` | aktiv | Wald-AO |
+| Fruchtbares Tal | `fertile_valley_ground` | aktiv | keine zusätzliche Detailmap gebunden |
+| Trockene Ebene | `dry_steppe`, `desert_sand_red` | optional, aktuell nicht aktiv | keine |
+| Lagoon | `swamp_mud` | aktiv, ausschließlich im Lagoon-Profil | keine |
+| Küste/Ufer | `coast_sand_cartoon` | aktiv | keine zusätzliche Detailmap gebunden |
+| Klippe und Gebirge | `mountain_cliff_cartoon` | aktiv und für beide Schichten dedupliziert | Fels-Normalmap, Fels-Roughnessmap |
+| Gebirgsschichten | `mountain_strata` | aktiv | verwendet die gemeinsamen Felsdetails |
+| Gipfel/Schnee | `mountain_snow` | aktiv | keine zusätzliche Detailmap gebunden |
+
+## Verbindliche Shader- und Bindungsregeln v1.32
+
+- Ein Chunk bindet ausschließlich Sampler für Basen und Detailmaps, die in
+  diesem Chunk tatsächlich Gewicht besitzen. Optionale oder lokal nicht
+  vorkommende Schichten verbrauchen keinen Samplerplatz.
+- Identische Texturquellen werden vor der Bindung dedupliziert. Insbesondere
+  teilen Klippen- und Mountain-Anteil `mountain_cliff_cartoon` sowie die
+  gemeinsamen Felsdetails.
+- Gras-Normal, Wald-AO sowie Fels-Normal und Fels-Roughness sind die einzigen
+  selektiven Detailbindungen des aktuellen Profils. Fehlende Details werden
+  nicht durch neutrale Pflichtsampler ersetzt.
+- Biom- und Uferübergänge verwenden weiche Gewichtungen aus einem `5×5`-Umfeld.
+  Die Glättung betrifft nur die Darstellung; die gebackenen Biom-, Regions- und
+  Uferdaten bleiben die Quelle der Klassifikation.
+- Die Matrix ändert weder Save-Schema noch Gameplay, Freischaltungen,
+  Bauprüfungen oder Ressourcenwirkung.
+
+## Historische Materialmatrix 6.1
 
 Alle Farbtexturen sind 2048×2048, kachelbar und über
 `terrainTextureUrl()` drop-in-fähig. Fehlt eine Datei, bleibt die

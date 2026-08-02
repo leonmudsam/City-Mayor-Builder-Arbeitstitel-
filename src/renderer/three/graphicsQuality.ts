@@ -66,9 +66,9 @@ export const GRAPHICS_PROFILES: Record<GraphicsQualityLevel, GraphicsProfile> = 
   low: {
     level: 'low',
     densityMultiplier: 0.5,
-    vegetationViewDistance: 95,
+    vegetationViewDistance: 160,
     nearDetailDistance: 60,
-    lodDistances: [40, 75, 95],
+    lodDistances: [40, 85, 160],
     vegetationShadows: false,
     shadowInstanceBudget: 0,
     smallPropCullDistance: 45,
@@ -79,9 +79,9 @@ export const GRAPHICS_PROFILES: Record<GraphicsQualityLevel, GraphicsProfile> = 
   medium: {
     level: 'medium',
     densityMultiplier: 0.75,
-    vegetationViewDistance: 135,
+    vegetationViewDistance: 260,
     nearDetailDistance: 90,
-    lodDistances: [55, 105, 135],
+    lodDistances: [55, 125, 260],
     vegetationShadows: true,
     shadowInstanceBudget: 260,
     smallPropCullDistance: 70,
@@ -92,9 +92,9 @@ export const GRAPHICS_PROFILES: Record<GraphicsQualityLevel, GraphicsProfile> = 
   high: {
     level: 'high',
     densityMultiplier: 1,
-    vegetationViewDistance: 185,
+    vegetationViewDistance: 420,
     nearDetailDistance: 120,
-    lodDistances: [75, 140, 185],
+    lodDistances: [75, 165, 420],
     vegetationShadows: true,
     shadowInstanceBudget: 620,
     smallPropCullDistance: 100,
@@ -105,15 +105,15 @@ export const GRAPHICS_PROFILES: Record<GraphicsQualityLevel, GraphicsProfile> = 
   ultra: {
     level: 'ultra',
     densityMultiplier: 1.3,
-    vegetationViewDistance: 260,
+    vegetationViewDistance: 620,
     nearDetailDistance: 165,
-    lodDistances: [100, 190, 260],
+    lodDistances: [100, 230, 620],
     vegetationShadows: true,
     shadowInstanceBudget: 1200,
     smallPropCullDistance: 150,
     animalBudget: 20,
     pixelRatioCap: 2,
-    impostorsEnabled: false, // Ultra zeigt echte Geometrie bis zur Sichtgrenze.
+    impostorsEnabled: true,
   },
 };
 

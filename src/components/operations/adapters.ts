@@ -1,4 +1,5 @@
 import type { GameController } from '../../game/commands/controller.ts';
+import type { RoadPlanPreview } from '../../game/roads/roadPlanning.ts';
 import { effectiveEffects } from '../../game/buildings/effects.ts';
 import { BAKED_REGIONS, regionIdAt } from '../../game/config/startRegion.config.ts';
 import type { BuildingWorkerStatus, DriveVehicle, ResourceId } from '../../game/types.ts';
@@ -507,8 +508,9 @@ export function buildSmartRoadPlanView(
   game: GameController,
   path: readonly { x: number; y: number }[],
   roadDefId: string = 'road',
+  preparedPreview?: RoadPlanPreview,
 ): SmartRoadPlanView {
-  const preview = game.roadPathPreview([...path], roadDefId);
+  const preview = preparedPreview ?? getSmartRoadPlanPreview(game, path, roadDefId);
   const first = path[0];
   const last = path[path.length - 1];
   const tiles = preview.tiles.map((tile, index) => ({
@@ -520,6 +522,11 @@ export function buildSmartRoadPlanView(
         : index === preview.tiles.length - 1
           ? ('end' as const)
           : tile.status,
+    variant: tile.variant,
+    terrainHeight: tile.terrainHeight,
+    roadHeight: tile.roadHeight,
+    gradePercent: tile.gradePercent,
+    clearance: tile.clearance,
     ...(tile.reason ? { reason: t(`error.${tile.reason}`) } : {}),
   }));
   const money = preview.totalCost.money ?? 0;
@@ -539,20 +546,70 @@ export function buildSmartRoadPlanView(
       tone: 'info',
     });
   }
+  if (preview.profileError === 'invalid_anchor') {
+    warnings.push({
+      code: 'road.grade',
+      label: 'Die Landanker oder die verfügbare Streckenlänge erlauben noch kein sicheres 8-%-Profil.',
+      tone: 'danger',
+    });
+  }
   return {
     ...(first ? { start: { ...first, label: 'Startpunkt' } } : {}),
     ...(last ? { end: { ...last, label: 'Zielpunkt' } } : {}),
     controlPoints: [],
     tiles,
     lengthTiles: preview.buildTiles,
+    lengthMeters: preview.profile.lengthMeters,
+    elevationDeltaMeters: preview.profile.elevationDeltaMeters,
+    maxGradePercent: preview.profile.maxGradePercent,
+    averageGradePercent: preview.profile.averageGradePercent,
+    dominantVariant: preview.profile.dominantVariant,
+    variantCounts: preview.profile.variantCounts,
     cost: money,
     costs: preview.totalCost,
     bridgeCount,
     // Höhenstraßen-Landkacheln (Viadukt/Rampe auf Land): alle neu gebauten Kacheln
     // einer querenden Bauklasse abzüglich der echten Wasser-/Klippen-Brückenkacheln.
-    elevatedCount: game.config.buildings.get(roadDefId)?.road ? Math.max(0, preview.buildTiles - bridgeCount) : 0,
+    elevatedCount: preview.tiles.filter((tile) =>
+      tile.variant === 'support' || tile.variant === 'viaduct' || tile.variant === 'bridge',
+    ).length,
     blockedCount: preview.blocked,
+    ...(preview.profileError ? { profileError: preview.profileError } : {}),
     warnings,
     valid: path.length > 1 && preview.valid,
   };
+}
+
+interface SmartRoadPreviewCacheEntry {
+  version: number;
+  roadDefId: string;
+  pathKey: string;
+  preview: RoadPlanPreview;
+}
+
+const smartRoadPreviewCache = new WeakMap<GameController, SmartRoadPreviewCacheEntry>();
+
+/**
+ * Ein gemeinsamer, rein lesender Preview-Snapshot für HUD und 3D-Overlay.
+ * Während eines Pointer-Schritts läuft damit nur ein Routing-/Profilpass,
+ * obwohl React und die imperative Renderer-Subscription getrennte Leser sind.
+ */
+export function getSmartRoadPlanPreview(
+  game: GameController,
+  path: readonly { x: number; y: number }[],
+  roadDefId: string = 'road',
+): RoadPlanPreview {
+  const pathKey = path.map((point) => `${Math.round(point.x)},${Math.round(point.y)}`).join(';');
+  const cached = smartRoadPreviewCache.get(game);
+  if (
+    cached &&
+    cached.version === game.version &&
+    cached.roadDefId === roadDefId &&
+    cached.pathKey === pathKey
+  ) {
+    return cached.preview;
+  }
+  const preview = game.roadPathPreview([...path], roadDefId);
+  smartRoadPreviewCache.set(game, { version: game.version, roadDefId, pathKey, preview });
+  return preview;
 }

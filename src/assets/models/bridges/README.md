@@ -5,6 +5,12 @@
 > `WRITE_MODEL_DOCS=1 npx vitest run tests/modelReadmes.test.ts` (schreibt diese Dateien neu).
 > Der Test schlägt fehl, sobald eine README veraltet ist.
 
-Ordner: `src/assets/models/bridges/` (historisch — kein aktiver Drop-in-Ziel mehr)
+Ordner: `src/assets/models/bridges/`  ·  Loader: `roadModel()`  ·  Schlüssel = Dateiname (rekursiv).
 
-**Brücken laden seit v0.44 nie mehr ein `.glb`** (§ Straßen als Textur). Eine Straße über Wasser wird jetzt als texturierter Steg (schmale Spannweite) oder Brücke (breite Spannweite) gerendert — siehe `docs/ROAD_TEXTURES.md` und `src/assets/roadTextureManifest.ts`.
+Modulares Brückendetail über dem kanonischen Deck. Fehlt das Modell, baut der Renderer Deck, Geländer und tiefenabhängige Pfeiler vollständig prozedural.
+
+| Zweck | Akzeptierte Dateinamen (Priorität →) | Hinweis |
+|---|---|---|
+| Automatische Wasserbrücke | `road_bridge.glb` | instanziertes Near-LOD-Kit |
+
+Fehlt ein Modell, greift der prozedurale Fallback — das Spiel bricht nie. Die volle Spezifikation (Footprint, Höhe, Pivot, Platzierung, Biom, Budget) für diese UND alle geplanten Modelle dieses Ordners steht in `PROMPTS.md` daneben.

@@ -4,6 +4,7 @@ import { startRegionConfig, worldOverviewCenter } from '../src/game/config/start
 import { CAMERA_LIMITS, worldCameraBounds } from '../src/renderer/three/CameraConfig.ts';
 import { DEFAULT_CAMERA_SETTINGS, type CameraSettings } from '../src/renderer/three/cameraSettings.ts';
 import { deriveClickAction, deriveDragMode } from '../src/renderer/three/cameraInputMapping.ts';
+import { terrainHeightAt, WATER_LEVEL } from '../src/renderer/three/terrainHeight.ts';
 
 const LMB = 0;
 const MMB = 1;
@@ -161,6 +162,24 @@ describe('CameraController3D presets & focus', () => {
     expect(p.posY).toBeGreaterThan(0); // camera above the ground
     expect(Number.isFinite(p.posX) && Number.isFinite(p.posZ)).toBe(true);
   });
+
+  it('richtet den Fokus auf die echte Geländehöhe statt pauschal auf Meereshöhe', () => {
+    const cam = new CameraController3D(worldCameraBounds(), settings({ smooth: false }));
+    const x = startRegionConfig.townHall.x + 2.5;
+    const z = startRegionConfig.townHall.y + 2.5;
+    cam.focusGround(x, z, 34);
+    cam.update(1);
+    expect(cam.pose().targetY).toBeCloseTo(terrainHeightAt(x, z), 5);
+    expect(cam.pose().posY).toBeGreaterThan(cam.pose().targetY);
+  });
+
+  it('fällt beim Fokus über Wasser nie unter die sichtbare Wasseroberfläche', () => {
+    const cam = new CameraController3D(worldCameraBounds(), settings({ smooth: false }));
+    cam.focusGround(2, 2, 10);
+    cam.update(1);
+    expect(cam.pose().targetY).toBeGreaterThanOrEqual(WATER_LEVEL);
+    expect(cam.pose().posY).toBeGreaterThan(WATER_LEVEL);
+  });
 });
 
 describe('CameraController3D chase (§ A6 Fahrmodus)', () => {
@@ -185,6 +204,29 @@ describe('CameraController3D chase (§ A6 Fahrmodus)', () => {
     cam.setChase(100, 100, 0.2, 7.5, 0.5);
     const after = cam.goals();
     expect(Math.abs(after.yaw - before.yaw)).toBeLessThan(0.5);
+  });
+
+  it('folgt der übergebenen Fahrbahnhöhe auf Brücken und Viadukten', () => {
+    const cam = new CameraController3D(worldCameraBounds(), settings({ smooth: false }));
+    cam.setChase(100, 100, 0, 7.5, 0.5, true, 14);
+    cam.update(0.1);
+    expect(cam.pose().targetY).toBeCloseTo(14, 6);
+    expect(cam.pose().posY).toBeGreaterThan(14);
+  });
+
+  it('verwirft Pan-Nachlauf, bevor eine explizite Fahrbahnhöhe gesetzt wird', () => {
+    const cam = new CameraController3D(worldCameraBounds(), settings({ smooth: true }));
+    cam.beginPan();
+    cam.panScreen(40, -25);
+    cam.endPan();
+
+    cam.setChase(100, 100, 0, 7.5, 0.5, true, 14);
+    cam.update(0.1);
+
+    const goal = cam.goals();
+    expect(goal.targetX).toBeCloseTo(100, 6);
+    expect(goal.targetZ).toBeCloseTo(100, 6);
+    expect(goal.targetY).toBeCloseTo(14, 6);
   });
 });
 

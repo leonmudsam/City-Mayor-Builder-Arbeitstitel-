@@ -1,12 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import { newController, nearTownHall, paintTerrain, setLevel } from './helpers.ts';
 
-// § Infrastruktur 2.0 / I1 (D-036): die Höhenstraße `road_elevated` ist eine
-// Straßen-Bauklasse, die Wasser/Fluss (Brücke) und Klippen (Viadukt) überwindet —
-// über denselben roadNetwork/validatePlacement/analyseRoadPath, KEIN zweites
-// Verkehrssystem. Diese Suite prüft genau die Trennlinie: Bodenstraße bleibt auf
-// Wasser gesperrt, die Höhenstraße überbrückt es, und der Preis enthält den
-// Pfeiler-Aufschlag.
+// `road_elevated` bleibt ausschließlich save-/API-kompatibel. Spieler bauen die
+// eine automatische Straße; Wasser darf nur zwischen tragfähigen Landankern
+// liegen. Beide Definitionen teilen weiterhin denselben Straßengraphen.
 describe('Höhenstraße / Brücke (Infrastruktur 2.0 / I1)', () => {
   const at = (dx: number, dy: number) => nearTownHall(dx, dy);
 
@@ -18,7 +15,7 @@ describe('Höhenstraße / Brücke (Infrastruktur 2.0 / I1)', () => {
     return controller;
   }
 
-  it('Bodenstraße bleibt auf Wasser gesperrt (Regressionsschutz)', () => {
+  it('blockiert Wasser als Start-/Endanker der automatischen Straße', () => {
     const controller = elevatedReady();
     // Wasser direkt neben eine Start-Straße (bei y+5, dx 0..4) malen.
     paintTerrain(controller, [[at(5, 5).x, at(5, 5).y]], 'water');

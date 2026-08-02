@@ -264,6 +264,11 @@ export interface SmartRoadPlanTileView {
   x: number;
   y: number;
   status: 'start' | 'end' | 'ok' | 'bridge' | 'elevated' | 'exists' | 'blocked';
+  variant: import('../../game/types.ts').RoadVariant;
+  terrainHeight: number;
+  roadHeight: number;
+  gradePercent: number;
+  clearance: number;
   reason?: string;
 }
 
@@ -273,6 +278,12 @@ export interface SmartRoadPlanView {
   controlPoints: RoadControlPointView[];
   tiles: SmartRoadPlanTileView[];
   lengthTiles: number;
+  lengthMeters: number;
+  elevationDeltaMeters: number;
+  maxGradePercent: number;
+  averageGradePercent: number;
+  dominantVariant: import('../../game/types.ts').RoadVariant;
+  variantCounts: Record<import('../../game/types.ts').RoadVariant, number>;
   /** Geld-Anteil der Gesamtkosten (Metrik-Ton/Button-Kurzform). */
   cost: number;
   /** Vollständige Materialkosten inkl. Holz o. Ä. (§18.3 „gezeigter = gezahlter Preis"). */
@@ -280,6 +291,7 @@ export interface SmartRoadPlanView {
   bridgeCount: number;
   elevatedCount: number;
   blockedCount: number;
+  profileError?: 'insufficient_length' | 'invalid_anchor';
   warnings: VisualWarning[];
   valid: boolean;
 }

@@ -592,4 +592,7 @@ export const activitiesConfig: ActivitiesConfig = {
   ],
   tradeRotationSec: 30 * 60,
   tradeOffersPerRotation: 3,
+  // § P2 (D-050): Selbstfahren zahlt 20 % mehr. Bewusst spürbar, aber kein
+  // Zwang — wer die Stadt fahren lässt, verliert nichts, er gewinnt nur weniger.
+  manualDriveBonusFactor: 1.2,
 };

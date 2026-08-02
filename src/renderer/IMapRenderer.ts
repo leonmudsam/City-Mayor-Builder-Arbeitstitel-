@@ -5,6 +5,7 @@
 // über `RendererCallbacks` zurück.
 
 import type { BuildingRotation, WaterfrontPlacementPreview } from '../game/buildings/placement.ts';
+import type { FoundationPlan } from '../game/buildings/foundation.ts';
 import type { MoveBlocker } from '../game/commands/controller.ts';
 import type { RegionId, ResourceId } from '../game/types.ts';
 import type { CameraPreset } from './three/CameraConfig.ts';
@@ -26,6 +27,7 @@ export interface HoverInfo {
    * Hinweis die einzige Warnung, die der Spieler vor dem Klick bekommt.
    */
   roadWarning: boolean;
+  foundation: FoundationPlan;
   rotation?: BuildingRotation;
   waterfront?: WaterfrontPlacementPreview;
   /**
@@ -62,6 +64,11 @@ export interface RoadPlanOverlayTile {
   x: number;
   y: number;
   status: 'start' | 'end' | 'ok' | 'bridge' | 'elevated' | 'exists' | 'blocked';
+  variant: import('../game/types.ts').RoadVariant;
+  terrainHeight: number;
+  roadHeight: number;
+  gradePercent: number;
+  clearance: number;
 }
 
 /** Renderer-owned camera state exposed as plain numbers for lightweight HUDs. */

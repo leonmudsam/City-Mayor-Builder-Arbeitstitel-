@@ -1,6 +1,7 @@
-import { Camera, CameraOff, Flag, Map, Route, Timer, Truck, X } from 'lucide-react';
+import { Bot, Camera, CameraOff, Flag, Gamepad2, Map, Route, Timer, Truck, X } from 'lucide-react';
 import { vehicleImage } from '../../assets/registry.ts';
 import { formatDuration, t } from '../../i18n/index.ts';
+import { playFeedback } from '../../services/feedback.ts';
 import { useGame, useUiStore } from '../../state/store.ts';
 
 export function ActivityExecutionWidget() {
@@ -16,6 +17,7 @@ export function ActivityExecutionWidget() {
     (candidate) => candidate.id === (active.vehicle ?? definition.vehicle),
   );
   const image = vehicle ? vehicleImage(vehicle.imageKey) : undefined;
+  const mode = game.getActiveTransportMode();
   const done = active.targets.filter((target) => target.done).length;
   const next = active.targets.find((target) => !target.done);
   const nextBuilding = next && game.state.buildings[next.buildingId];
@@ -38,9 +40,26 @@ export function ActivityExecutionWidget() {
           <span><Flag size={12} /> {done} / {active.targets.length}</span>
           {remaining !== undefined && <span><Timer size={12} /> {formatDuration(remaining)}</span>}
           <span>{vehicle ? t(vehicle.nameKey) : t('ui.route.vehicle.van')}</span>
+          {/* § P2 (D-050): Die beim Start festgeschriebene Ausführungsart bleibt
+              sichtbar — sonst rätselt der Spieler, warum sich das Fahrzeug
+              bewegt (oder eben nicht). */}
+          <span>{mode === 'manual' ? <><Gamepad2 size={12} /> Du fährst</> : <><Bot size={12} /> Die Stadt fährt</>}</span>
         </div>
       </div>
       <div className="citywork-execution-actions">
+        {/* § P2 (D-050): DER Einstieg ans Lenkrad — und er führt in die
+            2D-Stadtarbeitskarte, nicht in die 3D-Welt. Wer mit Q/ESC aussteigt,
+            kommt hier wieder hinein. */}
+        {mode === 'manual' && (
+          <button
+            onClick={() => {
+              playFeedback('activity_start');
+              openPlanner(active.defId);
+            }}
+          >
+            <Gamepad2 size={15} /> {t('ui.drive.start')}
+          </button>
+        )}
         <button
           className={missionFollow ? 'active' : ''}
           onClick={() => {

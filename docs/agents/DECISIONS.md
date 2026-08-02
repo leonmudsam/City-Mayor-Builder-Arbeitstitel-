@@ -1,5 +1,195 @@
 # Entscheidungen
 
+## D-052 — Jede Ware liegt an einem Ort (Bestandsregister)
+
+**Datum:** 01.08.2026 · **Status:** aktiv · **Version:** v1.34 (**Save v32**)
+**Erfüllt:** Auftrag „Stadtarbeit Overhaul" §8 („Keine globale magische Ressource.
+Jedes Lager hat eigene Bestände") = **Phase 4** des Folgeauftrags.
+
+**Entscheidung.** `state.resources` bleibt die **Bilanzsumme** der Stadt, die die
+gesamte Wirtschaft liest (Baukosten, Verbrauch, Quests, Balancing). Zusätzlich
+gilt ab jetzt die Invariante
+
+    state.resources[r] === Σ Bestand aller Stadtlager[r]        (r ≠ money)
+
+Das Register liegt in `src/game/economy/stockLedger.ts` und benutzt **denselben**
+`BuildingInventory`-Typ und **dieselbe** Map (`operations.inventories`) wie die
+lokalen Betriebslager aus Save v17 — es gibt **kein drittes Lagermodell** (§2/§8).
+
+**Was die Messung erlaubt hat.** 34 Gebäudetypen: **3 aktive Betriebe** mit
+lokalem Lager (Sägewerk, Steinbruch, Farm), **7 Stadtlager** mit `storage`-Wirkung
+(Rathaus, Distriktzentrum, Lagerhaus, Wasserwerk, Markt, Anleger, Flusshafen) und
+**keine Überschneidung**. Genau diese Trennung macht eine Map für beides eindeutig;
+ein Gebäude mit beidem hielte zwei Bedeutungen im selben Eintrag.
+`tests/stockLedger.test.ts` prüft die Überschneidungsfreiheit zuerst — kippt sie,
+kippt das Modell.
+
+**Zwei Regeln, die daraus folgen.**
+1. **Die Ableitung gibt die ORTE heraus, nicht nur die Summe.**
+   `Derived.storageSites` entsteht in **derselben Schleife** über denselben
+   `case 'storage'`, aus der `storageCaps` entsteht. Eine getrennt gepflegte
+   Ortsliste könnte vom Deckel abweichen; ein Test hält beide zusammen
+   (Fortsetzung D-042/D-049).
+2. **Der Abgleich läuft an EINER Stelle.** `state.resources` wird an 31 Stellen in
+   8 Modulen verändert. Ein Register, das jede davon selbst mitpflegen müsste,
+   driftet beim ersten vergessenen Aufruf — deshalb gleicht `GameController.notify`
+   ab (und der Konstruktor beim Laden). Ortsgenaue Vorgänge gehen über
+   `withdrawStock`/`depositStock` und bleiben trotzdem exakt.
+
+**Was das im Spiel ändert.** Der Ladeort eines Auftrags ist eine **Wahl mit
+Folgen**: entnommen wird an genau diesem Lager, ein Abbruch gibt die Ladung genau
+dorthin zurück, und reicht der Vorrat nicht, startet die Mission nicht. Vorher
+entschied stumm die alphabetische Gebäude-Id, und die Ware kam aus dem Stadtkonto
+— „ich lade im großen Lager im Norden" war folgenlos.
+
+**Ehrliche Grenze (nicht vortäuschen).** Nur ein Gebäude mit `storage`-Wirkung hat
+einen eigenen Bestand. **Farm, Sägewerk, Pumpwerk und Feuerwache sind Abholpunkte
+OHNE Lager** — dort bleibt die Ware die Bilanz der Stadt, und die UI zeigt für sie
+keine Bestandswahl. Wer das ändern will, gibt diesen Gebäuden eine `storage`-Wirkung
+in der Config; das verändert `storageCaps` und damit das Balancing — eine bewusste
+Entscheidung, kein Nebeneffekt.
+
+---
+
+## D-053 — Widerspruch angezeigt: 2D-Karte gegen isometrische Weltkamera
+
+**Datum:** 01.08.2026 · **Status:** **offen — Entscheidung des Nutzers nötig**
+
+**Sachverhalt.** Der Folgeauftrag „Stadtarbeit Overhaul 2.0" verlangt in §2/§14
+ausdrücklich: *„Nicht: eigene 2D Karte zeichnen. Sondern: 3D Welt →
+orthografische/isometrische Stadtarbeit-Kamera → spezielle Overlays"*, und §4:
+*„Die Route wird NICHT gezeichnet. Die Route wird gefahren."*
+
+Das **kehrt zwei dokumentierte Nutzerentscheidungen um**:
+- **D-050:** „das selbstfahren findet nicht in der echten welt statt, sondern nur
+  im stadtarbeit 2d modus und auch nur 2d!"
+- **D-051:** die 2D-Karte als Projektion derselben Weltdaten (`worldProjection.ts`).
+
+**Warum das nicht still umgesetzt wird.** Beide Entscheidungen fielen auf
+ausdrückliche Rückfrage und sind der Grund für die heutige Architektur (eine
+Fahrphysik, eine Leseinstanz, kein zweiter Renderer). Der neue Auftrag verlangt
+weiterhin **keinen zweiten Renderer** (§11) — eine isometrische Kamera auf den
+vorhandenen Three-Renderer ist damit vereinbar. Umzukehren sind zwei andere Dinge:
+der **Ort** des Fahrens (2D-Canvas → 3D-Weltkamera) und der **Zeitpunkt** der
+Routenentstehung (vorher zeichnen → beim Fahren aufzeichnen).
+
+**Empfehlung.** Als Kamera-Modus des bestehenden `ThreeMapRenderer` umsetzen (kein
+neuer Renderer, §11 bleibt gewahrt); `worldProjection.ts` bleibt für Minimap und
+Overlays bestehen. Vor Beginn ist D-050/D-051 ausdrücklich zurückzunehmen — sonst
+widersprechen Code und Entscheidungslage einander.
+
+---
+
+## D-051 — Die Logistikkarte IST die Welt, nur anders dargestellt
+
+**Datum:** 01.08.2026 · **Status:** aktiv · **Version:** v1.33 (Save v31 unverändert)
+**Setzt fort:** D-042 (eine Instanz), D-044 (Naturverteilung), D-045 (gesperrtes Land),
+D-050 (eine Fahrphysik).
+
+**Entscheidung.** Die 2D-Stadtarbeitskarte hat **keine eigenen Weltdaten**. Jede
+Kachel, jede Höhe, jede Küstenlinie und jeder Baum stammt aus derselben Quelle,
+aus der auch der 3D-Renderer seine Welt baut. Die Leseinstanz dafür ist
+`src/renderer/worldProjection.ts` — ein Modul ohne `three`, ohne `react`, ohne
+Canvas, das nur Zahlen und Farben liefert. Wer die Draufsicht um eine
+Weltinformation erweitert, ergänzt sie **dort** und liest nicht direkt aus einem
+Grid nach.
+
+**Warum das eine Regel und keine Stilfrage ist.** Der Auftrag verbot
+ausdrücklich eine „vereinfachte neue Fake-Karte". Das ist prüfbar formulierbar,
+und genau so ist es getestet: `tests/worldProjection.test.ts` vergleicht die
+Kachelabtastung über ein Weltraster gegen `bakedSurfaceAt`/`terrainAt`/
+`terrainHeightAt` und die Vegetation **Instanz für Instanz** gegen
+`collectRegionNature`. Eine Karte, die ihre eigene Verteilung nachbaut, läuft
+irgendwann auseinander — der Spieler sieht dann in der Planung einen Wald, wo in
+der Welt keiner steht. Auch die Regel für gesperrtes Land (Entsättigung,
+Abdunklung, halbe Vegetationsdichte) liegt jetzt **einmal** in der Projektion
+statt zweimal.
+
+**Was daraus folgt.**
+- **Gezeichnet wird abgeleitet, nicht erfunden.** Straßenklasse kommt aus
+  `roadEngineering.variant`, Infrastruktur-Marker aus den Config-Wirkungen
+  (`storage`/`logistics`/`waterfront`/`operation`) — keine Id-Listen, die beim
+  nächsten neuen Gebäude veralten. Eine Straßen**hierarchie** (Haupt-/Nebenstraße)
+  existiert im Spiel nicht und wird deshalb auch nicht vorgetäuscht; die
+  Strichstärke folgt der echten Verkehrslast.
+- **Teure Ebenen hängen am Freischaltzustand, nie an der Belegung.** Weltbild und
+  Vegetation werden einmal gebacken. Hingen sie an den Gebäuden, würde jeder
+  Bauklick die halbe Insel neu berechnen (D-045). Props unter Gebäuden werden
+  beim Zeichnen verdeckt statt aus der Verteilung entfernt — sichtbar identisch,
+  aber zwischenspeicherbar.
+- **Konstanten gehören gemessen, nicht geschätzt.** Die Wassertiefen-Rampe stand
+  zuerst bei 7 m. Die Insel hat gar keinen Gewässergrund: tiefste Stelle
+  **5,06 m**, 94 % aller Wasserkacheln zwischen 2 und 3 m. Mit dem geschätzten
+  Wert wäre das Meer eine einzige Fläche ohne Uferbank gewesen.
+
+## D-050 — Die Ausführungsart ist eine WAHL, und die Fahrt gehört der 2D-Karte
+
+**Datum:** 01.08.2026 · **Status:** aktiv · **Version:** v1.30 (Save v30)
+**Ergänzt** D-039 (Active Simplicity), hebt sie **nicht** auf — Nutzerentscheid.
+
+**Entscheidung.** Ein Transportauftrag trägt eine `TransportMode`:
+`auto` (die Stadt fährt die Strecke selbst ab, bequem, reguläre Prämie) oder
+`manual` (der Spieler steuert, Kontrolle, konfigurierter Aufschlag). Genau **ein**
+Modus ist wirksam, die Wahl fällt beim Start und ist danach unveränderlich.
+**Das manuelle Fahren findet in der 2D-Stadtarbeitskarte statt** — derselben
+Karte, in der die Route mit der Maus gezeichnet wird. Kein zweiter Renderer,
+keine Rückkehr zu einem alten 2D-Spielmodus, kein Fahren in der 3D-Welt.
+
+**Warum D-039 dabei gültig bleibt.** D-039 automatisiert **Ausführung**, nie
+**Wahl**. Fahren als Pflicht wäre wiederholte Ausführung und stünde im
+Widerspruch dazu. Fahren als *Angebot* ist das Gegenteil: Der Spieler entscheidet
+je Auftrag, ob er die Ausführung abgibt. Die Automatik bleibt vollständig
+erhalten und ist der Standard (`DEFAULT_TRANSPORT_MODE = 'auto'`).
+
+**Warum eine gemeinsame Fahrphysik.** Das Fahren existierte als private Methode
+im Three-Renderer. Es in der 2D-Karte nachzubauen hätte ein **zweites
+Fahrmodell** ergeben (§2/§8) — zwei Reichweitenregeln, zwei Straßenbindungen,
+zwei Balancings. Der Fahrschritt liegt deshalb als reine Funktion in
+`game/activities/driving.ts`; beide Ansichten rufen `stepDrive`/`reachedTarget`.
+
+**Folgen.**
+- `activities/transportOrder.ts` ist das **eine** Auftragsmodell
+  (`{start, cargo, vehicle, stops, targets, priority, mode}`) und eine reine
+  **Projektion** der bestehenden `CargoRouteEvaluation` — es rechnet keine Menge
+  und keinen Weg selbst nach.
+- `priority` ist deklarierter Vertrag **ohne Wirkung**: nicht persistiert, nicht
+  in der UI. Wirksam wird sie erst mit P4. Nichts vortäuschen.
+- Wer die Fahrdynamik ändert, ändert sie für **beide** Ansichten. Ein Test, der
+  nur eine Ansicht prüft, misst das Falsche (Fortsetzung D-042).
+- Der angezeigte Prämienwert stammt aus **derselben** Funktion, die ihn auszahlt
+  (`modeRewardFactor`) — gezeigter = gezahlter Bonus (Fortsetzung D-048).
+
+## D-049 — Die Simulation liefert die FORM mit, nicht nur den Parameter
+
+**Datum:** 01.08.2026 · **Status:** aktiv · **Version:** v1.28 (Save v29)
+
+**Entscheidung.** Wo eine Regel über eine **Fläche** entscheidet, gibt die
+Simulation die Fläche selbst heraus — nicht bloß die Zahl, aus der sie folgt.
+Erster Fall: `CoverageSourceView.area` (`CoverageArea` aus
+`buildings/coverage.ts`); der Renderer zeichnet, was dort steht, und leitet
+nichts nach.
+
+**Warum.** Die Reichweite ist `chebyshev(...) <= radius` — ein achsenparalleles
+**Quadrat**. Übergeben wurde bisher nur `radius`, und der Renderer musste die
+Metrik raten: er nahm die euklidische an und zeichnete einen eingeschriebenen
+Kreis. Gemessen über alle Radiusgebäude blieben damit **19–30 % der wirklich
+versorgten Kacheln unsichtbar** (Brunnen r9: 108 von 361; Feuerwache r32: 868 von
+4.096). Der Fehler war einseitig — nie zu viel versprochen, immer zu wenig
+gezeigt —, also unsichtbar für jeden, der nur „stimmt der Radius?" prüft. Ein
+Parameter ohne seine Metrik ist keine gemeinsame Quelle, sondern eine Einladung
+zum zweiten Modell (Fortsetzung von D-042/D-047/D-048).
+
+**Folgen.**
+- `coverageArea`/`coverageAreaAround`/`coversTile` sind die einzige Ausdehnungs-
+  quelle; Ghost, Auswahl-Overlay und Arbeitsgebiet rufen dieselbe Funktion.
+- Testpflicht ist die **Deckungsgleichheit über ein volles Kachelfenster**
+  (`coversTile(area, …) === (chebyshev(…) <= radius)` für jede Kachel), nicht ein
+  Stichprobenvergleich. Zusätzlich wird der alte Kreis als Gegenprobe geführt:
+  er darf nie mehr zeigen als die Regel deckt.
+- Gilt für jede künftige Flächenregel: Arbeitsgebiete, Logistik-Zuschlag,
+  Ambiente, `locationBonus`. Wer einen neuen Radius einführt, exportiert seine
+  Fläche mit.
+
 ## D-048 — Vorschau und Command teilen sich die Prüfung, nicht nur die Regel
 
 **Datum:** 01.08.2026 · **Status:** aktiv · **Version:** v1.27 (Save v29)

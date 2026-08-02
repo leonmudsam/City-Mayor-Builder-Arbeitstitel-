@@ -560,6 +560,46 @@ const migrateV28ToV29: Migration = (raw) => {
 };
 
 /**
+ * v29 → v30: § Stadtarbeit-Overhaul P2 (D-050) — die Ausführungsart wird zur
+ * Wahl. Rein additiv: `activities.active.mode` ist optional, und sein Fehlen
+ * bedeutet `auto` — also exakt den bisherigen, automatisch fahrenden
+ * Missionswagen. Eine beim Laden laufende Mission wird deshalb NICHT umgestellt;
+ * sie fährt zu Ende wie vor dem Update. Kein Weltumbau, kein Datenverlust.
+ */
+const migrateV29ToV30: Migration = (raw) => {
+  raw.schemaVersion = 30;
+  return raw;
+};
+
+/**
+ * v30 → v31: Straßen-Engineering wird beim Neubau optional gespeichert. Alte
+ * Abschnitte bleiben unverändert und nutzen den deterministischen Legacy-
+ * Fallback; daher genügt die lineare Versionsanhebung ohne Datenverlust.
+ */
+const migrateV30ToV31: Migration = (raw) => {
+  raw.schemaVersion = 31;
+  return raw;
+};
+
+/**
+ * v31 → v32: Das Bestandsregister (§ Stadtarbeit P4) weitet die BEDEUTUNG von
+ * `operations.inventories` aus — bisher hielt die Map ausschließlich lokale
+ * Betriebslager (Sägewerk/Steinbruch/Farm), jetzt zusätzlich den verorteten
+ * Bestand der Stadtlager (Rathaus, Lagerhaus, Markt …). Die Struktur ist
+ * unverändert (`BuildingInventory`), deshalb ist hier nichts umzuschreiben.
+ *
+ * Verteilt wird beim ersten Abgleich: `reconcileStock` findet einen Pool ohne
+ * verorteten Bestand vor und füllt die Lager nach freiem Platz. Genau dieselbe
+ * Rechnung läuft in jedem späteren Frame — der Ladepfad bekommt also KEINE
+ * eigene Sonderbehandlung, die man getrennt pflegen müsste. Alte Spielstände
+ * behalten Ressourcen, Gebäude und laufende Missionen vollständig.
+ */
+const migrateV31ToV32: Migration = (raw) => {
+  raw.schemaVersion = 32;
+  return raw;
+};
+
+/**
  * Migration chain: migrations[n] upgrades a save from schemaVersion n to n+1.
  * Beginnt bei v10 (Insel-Basis).
  */
@@ -583,6 +623,9 @@ const migrations: Record<number, Migration> = {
   26: migrateV26ToV27,
   27: migrateV27ToV28,
   28: migrateV28ToV29,
+  29: migrateV29ToV30,
+  30: migrateV30ToV31,
+  31: migrateV31ToV32,
 };
 
 export class SaveValidationError extends Error {}

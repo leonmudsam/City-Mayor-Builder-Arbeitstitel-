@@ -109,9 +109,9 @@ export interface InfrastructureNetworkOverview {
   roadTiles: number;
   waterNodes: number;
   waterEdges: number;
-  /** Kacheln normaler Bodenstraßen (§I5). */
+  /** Terrainnahe Kacheln der einen Straße: Land, Hang, Pass und Küste (§I5). */
   groundRoadTiles: number;
-  /** Kacheln von Höhenstraßen/Brücken/Viadukten (`BuildingDef.road`-Klasse, I1). */
+  /** Konstruktive Höhenabschnitte: Stützstraße, Viadukt und Brücke (I1). */
   elevatedRoadTiles: number;
   /** Gebaute Anleger/Häfen (waterfront), unabhängig vom Anschlusszustand. */
   harbors: number;
@@ -132,8 +132,14 @@ export function infrastructureNetworkOverview(
   for (const building of Object.values(state.buildings)) {
     const def = config.buildings.get(building.defId);
     if (def?.category === 'roads') {
-      // Straßenkacheln nach Bauklasse trennen: `road` = Höhenstraße/Brücke (I1).
-      if (def.road) elevatedRoadTiles++;
+      // Save-v31-Neubauten tragen ihre automatisch gewählte Konstruktion. Alte
+      // Saves bleiben eindeutig: nur die historische `road_elevated`-Definition
+      // zählt ohne Metadaten als Höhenstraße.
+      const variant = building.roadEngineering?.variant;
+      const elevated = variant
+        ? variant === 'support' || variant === 'viaduct' || variant === 'bridge'
+        : building.defId === 'road_elevated';
+      if (elevated) elevatedRoadTiles++;
       else groundRoadTiles++;
       continue;
     }

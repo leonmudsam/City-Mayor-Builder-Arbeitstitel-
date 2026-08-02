@@ -165,6 +165,10 @@ const BUILDING_MODELS = keyedExt(
 const TERRAIN_MODELS = keyedExt(
   import.meta.glob('./models/terrain/**/*.glb', { eager: true, query: '?url', import: 'default' }) as UrlMap,
 );
+const ROAD_MODELS = {
+  ...keyedExt(import.meta.glob('./models/roads/**/*.glb', { eager: true, query: '?url', import: 'default' }) as UrlMap),
+  ...keyedExt(import.meta.glob('./models/bridges/**/*.glb', { eager: true, query: '?url', import: 'default' }) as UrlMap),
+};
 const VEHICLE_MODELS = keyedExt(
   import.meta.glob('./models/vehicles/**/*.glb', { eager: true, query: '?url', import: 'default' }) as UrlMap,
 );
@@ -210,6 +214,10 @@ export function buildingModel(id: string | undefined, stage = 0): string | undef
 /** 3D terrain model for a terrain type, e.g. `grass`, `water`, `mountain`. */
 export function terrainModel(name: string): string | undefined {
   return TERRAIN_MODELS[name];
+}
+/** Modulares Straßen-/Brücken-Near-LOD; die prozedurale Fahrbahn ist Fallback. */
+export function roadModel(name: string): string | undefined {
+  return ROAD_MODELS[name];
 }
 /** 3D vehicle model, e.g. `car`, `car_small`, `van_service`, `truck_delivery`. */
 export function vehicleModel(name: string): string | undefined {

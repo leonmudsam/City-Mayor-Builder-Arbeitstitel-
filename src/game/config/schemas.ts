@@ -50,6 +50,10 @@ export const buildingDefSchema = z.object({
     crossesCliff: z.boolean().optional(),
     maxSlope: z.number().positive().optional(),
     bridgeCostPerTile: z.record(resourceId, z.number().nonnegative()).optional(),
+    variantCostPerTile: z.record(
+      z.enum(['flat', 'slope', 'pass', 'support', 'viaduct', 'bridge', 'coast']),
+      z.record(resourceId, z.number().nonnegative()),
+    ).optional(),
   }).optional(),
   // Bau auf Fels/Gebirge (§ Steinbruch) — flache Felsschelfe statt Klippenwände.
   buildsOnRock: z.object({ maxSlope: z.number().positive().optional() }).optional(),
@@ -290,6 +294,9 @@ export const activitiesConfigSchema = z.object({
   tradeContracts: z.array(tradeContractTemplateSchema),
   tradeRotationSec: z.number().positive(),
   tradeOffersPerRotation: z.number().int().positive(),
+  // § P2: Aufschlag fürs Selbstfahren. `min(1)` schließt aus, dass eine
+  // Fehlkonfiguration die manuelle Fahrt zur Bestrafung macht.
+  manualDriveBonusFactor: z.number().min(1),
 });
 
 export const mayorActionDefSchema = z.object({
@@ -352,6 +359,15 @@ export const saveGameSchema = z.object({
       targetUpgradeLevel: z.number().int().nonnegative().optional(),
       constructionEndsAt: z.number().optional(),
       rotation: z.union([z.literal(0), z.literal(90), z.literal(180), z.literal(270)]).optional(),
+      roadEngineering: z.object({
+        variant: z.enum(['flat', 'slope', 'pass', 'support', 'viaduct', 'bridge', 'coast']),
+        terrainHeight: z.number(),
+        roadHeight: z.number(),
+        gradePercent: z.number(),
+        clearance: z.number(),
+        routeId: z.string(),
+        routeIndex: z.number().int().nonnegative(),
+      }).optional(),
     }),
   ),
   citizens: z.object({
@@ -388,11 +404,16 @@ export const saveGameSchema = z.object({
         startedAt: z.number(),
         expiresAt: z.number().optional(),
         vehicle: driveVehicle.optional(),
+        // § P2 (Save v30): gewählte Ausführungsart. Optional/additiv — fehlt sie
+        // (Save ≤ v29), gilt `auto`, also exakt das bisherige Verhalten.
+        mode: z.enum(['auto', 'manual']).optional(),
         plannedRoadPath: z
           .array(z.object({ x: z.number().int(), y: z.number().int() }))
           .min(2)
           .optional(),
         reserved: z.record(resourceId, z.number().nonnegative()).optional(),
+        // § P4 (Save v32): Lager, an dem wirklich geladen wurde. Optional/additiv.
+        sourceBuildingId: z.string().optional(),
         targets: z.array(z.object({ buildingId: z.string(), done: z.boolean() })),
       })
       .optional(),

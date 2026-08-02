@@ -1,8 +1,250 @@
-# Projektstand — v1.27
+# Projektstand — v1.34
 
-Stand: 1. August 2026
+Stand: 2. August 2026
 
-## G2 ④ — Verschieben ist ein Entwurf (v1.27, Save v29, D-048) — AKTUELL
+## Stadtarbeit P4 — Jedes Lager hat seinen eigenen Bestand (v1.34, Save v32, D-052) — AKTUELL
+
+§8 des Auftrags („Keine globale magische Ressource. Jedes Lager hat eigene
+Bestände") ist umgesetzt — zugleich **Phase 4** des Folgeauftrags
+„Stadtarbeit Overhaul 2.0".
+
+**Invariante:** `state.resources[r] === Σ Bestand aller Stadtlager[r]` (Geld
+ausgenommen). `state.resources` bleibt die Bilanzsumme, die Baukosten, Verbrauch,
+Quests und Balancing unverändert lesen; `src/game/economy/stockLedger.ts` sagt
+zusätzlich, **wo** die Ware liegt.
+
+**Kein drittes Lagermodell (§2/§8).** Das Register benutzt denselben
+`BuildingInventory`-Typ und dieselbe Map wie die lokalen Betriebslager aus Save
+v17. Möglich durch eine Messung: von 34 Gebäudetypen haben **3** ein
+Betriebslager (Sägewerk, Steinbruch, Farm), **7** eine `storage`-Wirkung
+(Rathaus, Distriktzentrum, Lagerhaus, Wasserwerk, Markt, Anleger, Flusshafen) —
+und **keines beides**. `tests/stockLedger.test.ts` prüft das zuerst.
+
+**Zwei Regeln (D-052).** (1) Die Ableitung gibt die **Orte** heraus, nicht nur
+die Summe: `Derived.storageSites` entsteht in derselben Schleife wie
+`storageCaps` (Fortsetzung D-042/D-049). (2) Der Abgleich läuft an **einer**
+Stelle — `state.resources` wird an 31 Stellen in 8 Modulen verändert, deshalb
+reconciliert `GameController.notify` (und der Konstruktor beim Laden), statt 31
+Buchungsstellen zu pflegen.
+
+**Spielbar geworden:** Der Ladeort ist eine Wahl mit Folgen — entnommen wird an
+genau diesem Lager, ein Abbruch gibt die Ladung dorthin zurück, und reicht der
+Vorrat nicht, startet die Mission nicht. Vorher entschied stumm die alphabetische
+Gebäude-Id. `SupplyPicker` zeigt Bestand, Kapazität, Entfernung und „reicht das?".
+Ein volles Fahrzeug fährt noch 72 % seines Tempos (`loadedTileSpeed`).
+
+**Ehrliche Grenze (nicht vortäuschen):** Nur Gebäude mit `storage`-Wirkung haben
+einen eigenen Bestand. **Farm, Sägewerk, Pumpwerk und Feuerwache sind
+Abholpunkte ohne Lager** — dort bleibt die Ware die Bilanz der Stadt, und die UI
+zeigt für sie keine Bestandswahl.
+
+**Offen zur Entscheidung (D-053):** Der Folgeauftrag verlangt eine
+**isometrische Weltkamera statt der 2D-Karte** und die Route als **Aufzeichnung
+der gefahrenen Strecke**. Das kehrt D-050/D-051 um und ist deshalb vorgelegt,
+nicht still umgesetzt.
+
+## Stadtarbeit-Overhaul P3 — Karte aus der Welt, Fahren auf der Straße (v1.33, Save v31)
+
+Die 2D-Stadtarbeitskarte zeigt die **echte Insel**: Höhenrelief aus denselben
+Höhen wie der 3D-Renderer, dieselbe Vegetation aus derselben Verteilungsinstanz,
+Wassertiefe, Klippen- und Strandküste, Brücken und Viadukte, Marker für Lager,
+Logistikzentren, Häfen und aktive Betriebe. **Kein zweiter Renderer** — es gibt
+genau eine Leseinstanz für Draufsicht-Weltdaten (`src/renderer/worldProjection.ts`,
+frei von `three`/`react`/Canvas), und `tests/worldProjection.test.ts` vergleicht
+ihre Ausgabe gegen die Bake-Grids und die Vegetation Instanz für Instanz gegen
+`collectRegionNature`. Entscheid **D-051**, Pipeline:
+`docs/agents/CITYWORK_MAP_PIPELINE.md`.
+
+**Fahren ist straßengebunden.** Die frühere Arcade-Lenkung ist ersetzt: Das
+Fahrzeug sitzt immer auf einer Kante zwischen zwei Straßenkacheln; W gibt Gas,
+S bremst und fährt rückwärts, A/D wählen an der Kreuzung die Abzweigung,
+dazwischen folgt es der Straße von selbst. Die Höchstgeschwindigkeit kommt aus
+`speedKph` des gewählten Fahrzeugs. D-050 gilt unverändert —
+`game/activities/driving.ts` bleibt die **einzige** Fahrphysik für beide
+Ansichten. Ein Fahr-Status unten in der Karte zeigt Tempo, nächstes Ziel mit
+Entfernung, die nächste Abbiegeanweisung und die erledigten Ziele; die gefahrene
+Strecke bleibt als Spur sichtbar.
+
+Keine Save-, Simulations- oder Balancing-Änderung (**v31**).
+
+**Offen aus dem Auftrag — in der UI nicht vorgetäuscht:** Lagerbestände je
+Gebäude (§8, nächster Schritt P4, braucht Migration), Verkehrsrückkopplung aus
+gefahrenen Routen (§9), Fähren/Häfen als Netzknoten, erweiterte Routenplanung
+(§7), Gesamtlayout nach Mockup (§10), echte Gebäudesilhouetten in der Karte.
+
+## World Visual Overhaul (v1.32, Save weiterhin v31)
+
+Die gebackene Insel, ihre 40 Gameplayregionen und sämtliche Simulationsdaten
+bleiben unverändert. Der bestehende Three-Renderer erzeugt nun aus denselben
+Höhen-, Biom-, Küsten- und Regionsmasken eine deutlich stärker gegliederte,
+malerische Welt: Terrain-Chunks binden nur noch die tatsächlich benötigten
+Splat-Layer, teilen Klippen- und Bergtexturen und verwenden selektiv Normal-,
+Rauheits- und AO-Details. Gewichtete 5×5-Nachbarschaften verbreitern Biom- und
+Küstenübergänge, ohne das Inselbake oder die Baubarkeit anzufassen.
+
+**Natur und Wasser:** Die bestehenden Instanzen bleiben die Nahdarstellung.
+Entfernter Wald wird pro Chunk als instanzierte Cluster-HLOD zusammengefasst;
+Baumwind läuft über ein gemeinsames Shader-Uniform statt über Objektupdates.
+Zonenfarben unterscheiden Wald, Wiese, Hochland, Küste und Feuchtgebiet, und
+zufällige Wiesenfelsen wurden entfernt. Das Ozeanmaterial verbindet
+Tiefenfarben, drei Wellen, Fluss-/Strömungsdetails, Uferschaum und analytisches
+Fresnel. Transparenz gilt nur im flachen Uferband und wird in der Tiefe wieder
+blickdicht, damit der endliche Meeresboden verborgen bleibt. Es gibt dafür
+keinen zweiten Reflection-Render.
+
+**Gebäude:** Alle 54 vorhandenen Gebäude-GLBs wurden separat technisch geprüft.
+Der Renderer färbt nun geklonte Materialhüllen rollenabhängig, ohne gemeinsame
+Cache-Quellen zu mutieren oder Normalmaps durch pauschales Flat Shading zu
+entwerten. Rathaus, Sägewerk, Landwirtschaft, Lager/Depot, Steinbruch,
+Wasserwerk und Energie-/Produktionsbauten erhalten deterministische, rotierte
+und nach Prop-Art räumlich instanzierte Umgebungsdetails. In der Fernsicht
+ersetzen räumlich gechunkte, rollenbasierte HLOD-Silhouetten die teuren
+Vollmodelle; Auswahl und Nahsicht bleiben detailliert. HLOD-Picking,
+GPU-Buffer-Freigabe und Instanzfarben sind dabei explizit abgesichert. Fehlende
+Drop-ins fallen weiterhin prozedural zurück.
+
+**Bild und Kamera:** Qualitätsprofile schalten eine geordnete Post-Kette aus
+SSAO, optional sehr zurückhaltendem HDR-Bloom, SMAA, optionalem subtilen DOF und
+genau einem Output-/ACES-Schritt. Niedrige Qualität rendert direkt; Schatten,
+Wolken und Passkosten skalieren mit dem Profil. Die Kamera verfolgt jetzt die
+echte Zielhöhe von Terrain, Wasser und Fahrbahn und fokussiert ausgewählte
+Gebäude näher, ohne die dynamische Stadtübersicht zu verlieren. Der
+Schattenfokus folgt demselben Kameraziel. HUD und Simulation bleiben außerhalb
+der Post-Kette beziehungsweise des Renderers.
+
+**Performance und ehrliche Grenzen:** Terrain-/Natur-/Hero-Chunking, Frustum-
+Culling, Instancing, Natur-HLOD, Gebäude-HLOD und profilierte Posteffekte sind
+aktiv. Noch offen sind echte Billboard-/Crossfade-LODs, offline optimierte
+Gebäude-Assets (Draco/Meshopt/KTX2, Cache-Eviction und authored LODs), ein
+GPU-/Speicher-/LOD-Telemetriepanel, Zielhardwaremessungen, Terrain-Geometrie-LOD
+und das Chunking des global neu aufgebauten Straßenmeshs. Die neuen
+kamerastabilen World-Space-/triplanaren Terrain-Details benötigen außerdem noch
+interaktive visuelle Prüfung und Feintuning.
+
+Verifikation: `npx tsc -b --force`, `npx eslint src tests` (0 Fehler, keine
+Warnungen), die vollständige Vitest-Suite (**86 Dateien / 697 Tests**) und
+`npm run build` sind grün. Der
+Produktions-Preview antwortet mit HTTP 200. Der verbindliche interaktive
+3D-Screenshot-Smoke bleibt mangels bereitgestellter Browserinstanz technisch
+blockiert (`agent.browsers.list() = []`); insbesondere wird keine Shader- oder
+Look-Freigabe behauptet. Der native Windows-Tauri-Build kann ohne installiertes
+`rustc`/`cargo` nicht gestartet werden. Das Save-Schema bleibt **v31**.
+
+## Straßen-, Höhen- und Terrain-Overhaul (v1.31, Save v31) — VORHERIGER STAND
+
+Spielerseitig existiert jetzt **genau eine Straße**. `road_elevated` bleibt als
+interne Legacy-Definition erhalten, damit bestehende Spielstände, API-Aufrufe
+und alte Gebäudeinstanzen weiter laden und rendern; im Baukatalog ist sie
+explizit ausgefiltert. Config und Stufe-2-Unlock bleiben ausschließlich für
+Save-/API-Kompatibilität bestehen. Die öffentliche
+`road` entscheidet aus Gelände und Längsprofil automatisch zwischen `flat`,
+`slope`, `pass`, `support`, `viaduct`, `bridge` und `coast`. Alle Varianten
+bleiben Kacheln desselben `roadNetwork` — kein zweiter Straßen- oder
+Verkehrsgraph (D-036).
+
+**Ein kanonisches Höhenprofil:** `src/game/roads/roadProfile.ts` liest dieselbe
+`samplePlacementSurface` wie die Platzierung und liefert Länge in Metern,
+Höhendifferenz, maximale und mittlere Steigung, Fahrbahnhöhe, Freistand und
+Variante je Kachel. Eine Kachel entspricht ungefähr vier Metern. Landanker und
+ein Profil mit höchstens **8 %** sind Teil der Baubarkeit, nicht bloß Anzeige.
+Ist die direkte Trasse zu kurz, erzeugt `roadRouting.ts` deterministisch
+abwechselnde Kehren und routet sie durch tragfähige Korridore; findet es keine
+zulässige Serpentine, bleibt die Vorschau ehrlich rot, statt eine zu steile
+Straße zu bauen. Bereits gebaute Anschlüsse frieren ihre Deckhöhe ein.
+
+**Vorschau = Command:** Der große Straßenplaner zeigt Start/Ziel, das echte
+Höhenprofil, Länge, Höhendifferenz, Maximal-/Durchschnittssteigung, dominante
+Variante und die vollständigen Geld-/Holz-/Steinkosten. Die Variantenaufschläge
+liegen in `RoadClassDef.variantCostPerTile`. `roadPathPreview` und
+`buildRoadPath` verwenden dasselbe `RoadPlanPreview`; der Command bucht einmal
+ab, schreibt den ganzen Pfad als Bulk-Commit und löst genau eine
+Derived-/Quest-Neuberechnung und eine Zustandsbenachrichtigung aus.
+
+**Save v31:** Jede neu gebaute Straßenkachel speichert optional
+`RoadEngineeringState { variant, terrainHeight, roadHeight, gradePercent,
+clearance, routeId, routeIndex }`. Das ist nötig, weil sich das ursprüngliche
+Längsprofil aus einem später verzweigten Netz nicht eindeutig rekonstruieren
+lässt. Migration `v30→v31` ist linear und verlustfrei: alte Straßen bleiben ohne
+Feld gültig und nutzen den deterministischen Legacy-Fallback. Welt, Regionen
+und Koordinaten ändern sich nicht. Die parallelen Stadtarbeit-Felder aus v1.30
+bleiben unverändert.
+
+**Gebäude folgen demselben Grundsatz:** `buildings/foundation.ts` klassifiziert
+den geprüften Footprint als `BUILDABLE_FLAT`, `BUILDABLE_SLOPE`,
+`BUILDABLE_TERRACE`, `WATER_EDGE` oder `CLIFF` und liefert einen
+`FoundationPlan` mit Bauart, Stütztiefe, Stufen, Mehrkosten und zusätzlicher
+Bauzeit. Diagnose, Kosten, Command, Ghost und fertiges Gebäude lesen diesen
+Plan. Flaches Gelände erhält nur einen dünnen Natursteinkranz; Hänge erhalten
+talwärtige Stützmauern oder Terrassen, Wasserränder Pfähle und Klippen
+befestigte Wände mit Strebepfeilern. Der alte sichtbare graue Vollblock ist
+entfernt. Das Insel-Höhenfeld bleibt gemäß D-043 unverändert; die Konstruktionen
+werden daraus abgeleitet, es gibt kein verstecktes Terraforming.
+
+**Renderer und Assets:** Die gespeicherte Deckhöhe treibt Vorschau,
+durchgehendes Fahrbahnband, Brückendeck, profilhohe instanzierte Stützen und
+alle Straßenfahrzeuge über denselben `roadSurfaceHeightAt`-Sampler. Sieben
+aktive GLB-Kits (`road_flat`, `road_slope`, `road_support`, `road_viaduct`,
+`road_bridge`, `road_hairpin_curve`, `road_coast`) ergänzen die nahtlose
+prozedurale Fahrbahn als instanzierte Nahdetails; fehlende Dateien fallen ohne
+Crash auf die prozedurale Darstellung zurück.
+
+**Bewusst offen, nicht vortäuschen:** Es gibt noch keinen Tunnel, keine manuelle
+Höhen-/Pfeiler-/Brückenwahl und keine frei ziehbaren Kurvengriffe. Schiffsdurchfahrt,
+strukturelle Maximalspannweiten sowie Lane-/Kreuzungsbelegung sind nicht Teil
+dieser Phase. Das durchgehende Bodennetz besteht zwar nur aus zwei gebündelten
+Meshes und die Stützen/GLB-Details sind instanziert beziehungsweise
+distanzgecullt, aber jede Netzänderung baut den **globalen Straßenmesh** neu;
+Straßen-Chunking und ein echtes Fern-LOD bleiben offen. Das Fundament verändert
+das Terrain nicht und erweitert die bestehenden Footprint-Toleranzen nur dort,
+wo der gemeinsame Plan eine tragfähige Konstruktion ausweist.
+
+Verifikation: `npx tsc -b --force`, `npx eslint src tests`, die vollständige
+Vitest-Suite (**78 Dateien / 638 Tests**) und `npm run build` sind grün. Der
+Produktions-Preview antwortet mit HTTP 200. Der verbindliche interaktive
+3D-Screenshot-Smoke bleibt mangels bereitgestellter Browserinstanz technisch
+blockiert (`agent.browsers.list() = []`); eine visuelle Freigabe wird nicht
+behauptet. Der native Windows-Tauri-Build kann auf diesem Rechner ohne
+installiertes `rustc`/`cargo` nicht gestartet werden.
+
+## G2 ⑤ — Der Wirkungsradius ist ein Quadrat (v1.28, Save v29, D-049)
+
+Terrainfolgend war das Overlay längst; falsch war die **Form**. Die Reichweite
+ist `chebyshev(...) <= radius` — ein achsenparalleles **Quadrat**. Übergeben
+wurde nur `radius`, also musste der Renderer die Metrik raten: er nahm die
+euklidische an und zeichnete den eingeschriebenen **Kreis**. Gemessen über alle
+Radiusgebäude blieben **19–30 % der wirklich versorgten Kacheln unsichtbar**
+(Brunnen r9: 108 von 361 · Markt r14: 168 von 784 · Krankenhaus r18: 360 von
+1.369 · Feuerwache Stufe 3 r32: 868 von 4.096). Der Fehler war **einseitig** —
+nie zu viel versprochen, immer zu wenig gezeigt —, deshalb unauffällig für
+jeden, der nur „stimmt der Radius?" prüft.
+
+**Zwingend (D-049): Wo eine Regel über eine Fläche entscheidet, gibt die
+Simulation die FLÄCHE heraus, nicht bloß die Zahl, aus der sie folgt.**
+`CoverageSourceView.area` trägt sie (`coverageArea`/`coverageAreaAround`/
+`coversTile` in `buildings/coverage.ts`), und `addTerrainCoverageVisual` nimmt
+eine `CoverageArea` statt Mitte + Radius — die Signatur macht das erneute Raten
+unmöglich. Testpflicht ist die Deckungsgleichheit über ein **volles
+Kachelfenster**, plus der alte Kreis als Gegenprobe (er darf nie mehr zeigen als
+die Regel deckt).
+
+Zweiter Teil: **der Radius erscheint beim Überfahren** — vorher nur nach einem
+Klick, und ein Klick öffnet das Gebäudefenster. Die Auswahl behält Vorrang
+(sonst wischte jeder Mausweg über die Stadt die geöffnete Ansicht weg), während
+einer Platzierung gehört die Fläche dem Ghost. Gesucht wird mit **derselben**
+Abfrage wie beim Klick (`pickBuildingAt`, ergänzt um die Kachelbelegung für
+flache Bauten wie den Brunnen) — ein eigener Suchweg hieße: Überfahren zeigt ein
+anderes Gebäude an, als der Klick auswählt. Das Arbeitsgebiets-Overlay der
+Betriebe ist aus demselben Grund ebenfalls quadratisch geworden.
+
+Keine Save-/Sim-/Balancing-Änderung, **v29**. Offen (nicht vortäuschen): ein
+Gebäude mit mehreren Radiusgruppen (Supermarkt: Nahrung *und* Frischwasser)
+zeigt weiter nur die erste. **Gefunden, nicht behoben (Sim, nicht Render):**
+`nodesInWorkArea` bietet Knoten aus `workAreaBounds` an, `previewOperation`
+verwirft aber alles jenseits von `chebyshev(mitte, …) > maxRadius` — 120 Kacheln
+beim Sägewerk, 128 beim Steinbruch, 171 bei der Farm. Der damals nächste Punkt
+⑥ Straßenbau als Plan→Vorschau→Bestätigen ist mit v1.31 erledigt (siehe oben).
+
+## G2 ④ — Verschieben ist ein Entwurf (v1.27, Save v29, D-048)
 
 `ThreeMapRenderer.setMoving()` war ein **No-op**, dessen Kommentar auf den
 2D-/Iso-Modus verwies — den es seit Ausbaustufe 2.0 nicht mehr gibt. Dahinter
@@ -711,9 +953,9 @@ Phase G2 beginnt zwingend mit dem Terrain-Picking (Audit §2.1).
 - Einziger Welt-Renderer: Three.js unter `src/renderer/three/`.
 - Reine Simulation/Config unter `src/game/`; UI kommuniziert über
   `GameController`-Snapshots, Read-Modelle und Commands.
-- Save-Schema **v15**; v14 wird wegen Maßstab, Wasserlinie und neuen
-  Koordinaten einmalig unter `cmb.save.backup.world-v14` gesichert. Neustarts
-  beginnen im zentralen Herzland.
+- Save-Schema **v31**; `v30→v31` ergänzt optional das eingefrorene
+  Straßen-Engineering. Alte Straßen bleiben ohne Metadaten gültig. Die früheren
+  Welt-Backup-/Neustartgrenzen der linearen Migrationskette bleiben erhalten.
 - Designsystem: maritime Navy/Gold-Tokens plus geordnete CSS-Schichten; das
   Stadtarbeit-Redesign liegt isoliert in `styles/citywork-v4.css`.
 
@@ -828,8 +1070,10 @@ Phase G2 beginnt zwingend mit dem Terrain-Picking (Audit §2.1).
   oder Ladegeschwindigkeit.
 - `InfrastructureWarning` besitzt keine `roadPoint`/`segmentId`; der Berater
   fokussiert deshalb die gesamte Tour.
-- Steigung, Straßenbelag/-zustand, Sperrungen, dynamischer Stau, Kraftstoff,
-  Fahrzeugschaden und spielerisches Wetter fehlen weiterhin als Game-Daten.
+- Straßensteigung und Fahrbahnhöhe sind seit v1.31 kanonische, persistierte
+  Game-Daten; Stadtarbeit und Verkehrswertung lesen sie noch nicht. Straßenbelag/
+  -zustand, Sperrungen, dynamischer Stau, Kraftstoff, Fahrzeugschaden und
+  spielerisches Wetter fehlen weiterhin als Game-Daten.
 - Zug/Flug bleiben `future:true`, bis Schiene/Flughafen vollständiges Gameplay
   und ggf. Migration besitzen.
 

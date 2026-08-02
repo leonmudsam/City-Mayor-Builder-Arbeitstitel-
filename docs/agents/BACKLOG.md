@@ -7,8 +7,9 @@
 > Detailquelle (OPEN_TASKS/PLAN-Doc) pflegen. Legende: ✅ fertig · 🟡 teilweise ·
 > ❌ offen · `[P0]` Auftrag aktiv · `[P1]` wichtig · `[P2]` später/drop-in.
 
-Stand: 23. Juli 2026 (nach v0.81). Fortschritt zuletzt: Sägewerk aktiv (A1–A4),
-Transport (A5), zentraler Start (S1/S2), Fog/Kamera (S3).
+Stand: 1. August 2026. Straßen-, Höhenprofil- und Fundamentstatus wurden gegen
+den produktiven Vertrag abgeglichen; die übrigen historischen Themen bleiben
+unverändert fortgeführt.
 
 ---
 
@@ -16,10 +17,16 @@ Transport (A5), zentraler Start (S1/S2), Fog/Kamera (S3).
 > Master-Spec: [`INFRASTRUCTURE_2_PLAN.md`](INFRASTRUCTURE_2_PLAN.md) · Entscheid: **D-036**.
 > **Vorgezogen auf ausdrücklichen Nutzerwunsch (24.07.2026):** entscheidender Punkt
 > zum Weiterspielen — die verdichtete Welt (D-035) blockiert Expansion über Höhen/Wasser.
-- 🟡 `[P0]` **I1 Höhenstraßen & automatische Brücken** (v0.84, in Arbeit): Straßen-Bauklasse
-  `RoadClassDef` (Wasser/Klippe/Steigung queren), Def `road_elevated`, Placement/Planung
-  je Straßentyp, Brückendeck+Pfeiler im Renderer. Additiv.
-- ❌ `[P0]` **I2 Saubere Straßenstruktur** (Snap/Kurven, grün/gelb/rot) → **erledigt zugleich R6**.
+- ✅ `[P0]` **I1 Eine automatische Straße für Höhe und Wasser:** Der Spieler baut
+  ausschließlich `road`; Profil und Terrain wählen `flat`/`slope`/`pass`/
+  `support`/`viaduct`/`bridge`/`coast`. `road_elevated` bleibt nur für alte Saves
+  und API-Kompatibilität ladbar. Deckhöhe, Brückendeck und instanzierte Stützen
+  lesen das eingefrorene `roadEngineering`.
+- 🟡 `[P0]` **I2 Saubere Straßenstruktur:** terrainbewusstes A→B-Routing,
+  automatische Kehren, 8-%-Profil, geglättete Kurven, farbige Höhenvorschau und
+  atomarer Bulk-Bau sind produktiv. Offen bleiben frei ziehbare
+  Kontrollpunkt-Griffe, eine echte Alternativroute und eine flüchtige
+  Cursor-Endpunktvorschau.
 - 🟡 `[P0]` **I3 Küste/Ufer + Anleger als Netzknoten**: ✅ Netzknoten-Modell (v0.96,
   `networkSegments.ts` + `harborNodes.ts` — Stadtnetz vs. lokales Netz, `linksToCityVia`);
   ❌ R9 adaptive Uferplattform (Renderer/Bake) offen.
@@ -61,24 +68,49 @@ Transport (A5), zentraler Start (S1/S2), Fog/Kamera (S3).
 ## 1. Straßen & Infrastruktur-Bau
 - ✅ Straßen platzieren (1×1, Baumenü), Straßengraph als Sim (`roadNetwork`,
   Anschlussprüfung, Routen, Verkehrsauslastung, regionale Kostenfaktoren).
-- ✅ Straßenplan-Vorschau als Modul (`roads/roadPlanning.ts`: Status/Kosten/Brücke
-  je Kachel) — genutzt in der Stadtarbeit-Routenplanung.
+- ✅ Straßenplan-Vorschau als kanonisches Modul (`roads/roadPlanning.ts`): Status,
+  automatische Variante, Terrain-/Deckhöhe, Steigung, Freiraum und echte Kosten
+  je Kachel plus gemeinsames `RoadHeightProfile` für HUD und Renderer.
 - ✅ Straßen-Redesign visuell (Gehweg, Laternen, Texturen, Brückenoberfläche).
-- 🟡 `[P1]` **Straßenbau als Plan→Vorschau→Bestätigen→Command** (§18.3, Kosten erst
-  beim Bestätigen). Vorschau existiert, Bau läuft noch kachelweise sofort.
-  (OPEN_TASKS „8.0 G2 Pkt 6".) **Hängt an Pkt 4.①.**
-- 🟡 `[P0]` **Höhenstraßen / Brücken spielbar bauen** (Infrastruktur 2.0 / I1, v0.84):
-  Straßen-Bauklasse `road_elevated` überwindet Wasser/Klippe/Steilhang; Deck+Pfeiler
-  automatisch aus dem Terrain. Master-Spec `INFRASTRUCTURE_2_PLAN.md`, D-036.
-- ❌ `[P1]` Viadukte/Tunnel/Portale + Durchfahrtshöhe/Schiffsklassen als weitere
-  Bauklassen/Profile (nach I1). (Terrain 6.1 / Häfen 7.0.)
-- 🟡 `[P0]` **Straßen-Bauklassen** (mehr als ein `road`-Typ) — mit Infrastruktur 2.0/I1
-  eingeführt (`RoadClassDef`). Weitere Stufen (Küstenstraße/Schnellstraße) additiv.
+- ✅ `[P1]` **Straßenbau als Plan→Vorschau→Bestätigen→Command** (§18.3):
+  `roadPathPreview` bleibt mutationsfrei; `buildRoadPath` prüft den Gesamtpfad,
+  bucht die exakt gezeigte Geld-/Materialsumme einmal ab und schreibt alle neuen
+  Abschnitte in einem Bulk-Commit mit genau einer Zustandsbenachrichtigung.
+- ✅ `[P0]` **Höhenstraßen / Brücken / Viadukte automatisch:** Das eine öffentliche
+  `road`-Werkzeug überwindet Wasser, Klippen und Höhenzüge über profilgesteuerte
+  Varianten. Unmögliche Landanker oder ein nicht auf ≤8 % verlängerbarer Pfad
+  bleiben ehrlich unbaubar.
+- ❌ `[P1]` Tunnel/Portale sowie spielmechanische Durchfahrtshöhen und
+  Schiffsklassen. Viadukte gehören nicht mehr zu diesem offenen Punkt.
+- ✅ `[P0]` **Eine Straße statt auswählbarer Bauklassen:** Varianten und ihre
+  Zuschläge sind datengetrieben, aber keine separaten Spielerwerkzeuge.
+  Schnellstraßen wären eine spätere Gameplay-Entscheidung, kein Teil des
+  automatischen Konstruktionsprofils.
 - ❌ `[P2]` Lane-/Kreuzungsbelegung & Kollisionsvermeidung.
-- ❌ `[P1]` Echte Straßendaten (nicht faken): Qualität/Zustand, Sperrungen,
-  dynamischer Verkehr, Steigung/Höhenprofil aus der Straßenprojektion.
+- 🟡 `[P1]` Echte Straßendaten (nicht faken): ✅ Steigung/Höhenprofil und
+  persistiertes Engineering; ❌ Qualität/Zustand, Sperrungen und dynamischer
+  Verkehr.
 
 ## 2. Stadtarbeit & aktive Aufgaben (Missionen)
+> Auftrag „Stadtarbeit Overhaul" §§1–13 läuft. Karte: `CITYWORK_MAP_PIPELINE.md`
+> (D-051). Fahrt: D-050 — es gibt **eine** Fahrphysik für 3D und 2D.
+- ✅ `[P0]` **P2 Ausführungsart als Wahl** (v1.30, Save v30, D-050): `auto`
+  (Stadt fährt) gegen `manual` (Spieler fährt, +20 %), beim Start festgeschrieben;
+  gefahren wird in der 2D-Stadtarbeitskarte, nie in der 3D-Welt.
+- ✅ `[P0]` **P3 Karte aus der echten Welt + Straßenfahren** (v1.33, Save v31,
+  D-051): Höhenrelief, Wassertiefe, Klippen-/Strandküste, Vegetation aus
+  `collectRegionNature`; Marker für Lager/Logistik/Hafen/Betrieb aus den
+  Config-Wirkungen; Brücken/Viadukte aus `roadEngineering.variant`; alternative
+  Route und gefahrene Spur; Fahren straßengebunden (W/S/A/D), Tempo aus
+  `speedKph`; Fahr-Status mit Abbiegehinweis. 38 Tests.
+- ❌ `[P0]` **P4 Lagerbestände je Gebäude** (= §8 des Auftrags, NÄCHSTER SCHRITT):
+  Stadtarbeit rechnet mit einem globalen Pool, das Nachlade-Panel des Mockups
+  zeigt drei Bestände. Lokale Inventare gibt es in `operations/**` —
+  **zusammenführen, kein drittes Lagermodell**. Migration v31→v32.
+- ❌ `[P1]` **§9 Verkehrsrückkopplung:** `congestionScore` kommt aus der
+  Anrainerdichte, nicht aus gefahrenen Routen.
+- ❌ `[P1]` **§10 Gesamtlayout nach Mockup** (LINKS/MITTE/RECHTS/UNTEN); bisher
+  nur der Fahr-Status unten.
 - ✅ Redesign 4.0: Route zeichnen/Pan/Zoom, Live-Tour, Cargo, Nachfüllstopps,
   Leerfahrt, Infrastrukturberater, Fahrzeugkarten, 9 Missionen + Entscheidungs-Events.
 - ✅ Neue Missionen sind **drop-in** (`activities.config.ts`) — Erweitern statt neu.
@@ -132,8 +164,16 @@ Transport (A5), zentraler Start (S1/S2), Fog/Kamera (S3).
   `evaluateMove` trägt Command **und** `moveDiagnostics` (D-048), damit der Ghost
   nicht grün ist, wo `feature_disabled`/`insufficient` ablehnt. 10 Tests.
   Keine Save-/Sim-Änderung. Offen: Stufe-0-Modell im Ghost, kein Drag-and-Drop.
-- ❌ `[P1]` ⑤ Wirkungsradien terrainfolgend (`getCoverageOverlay`).
-- ❌ `[P1]` ⑥ Straßenbau als Plan→Vorschau→Bestätigen (= Thema 1).
+- ✅ `[P1]` ⑤ Wirkungsradien — **erledigt (v1.28, D-049).** Terrainfolgend war
+  längst umgesetzt; falsch war die **Form**: Reichweite ist Chebyshev (Quadrat),
+  gezeichnet wurde ein eingeschriebener Kreis → 19–30 % der versorgten Kacheln
+  unsichtbar. Die Simulation liefert die Fläche jetzt mit
+  (`CoverageSourceView.area`). Zusätzlich: Radius bei Hover; Arbeitsgebiet
+  ebenfalls quadratisch. 4 Tests. Keine Save-/Sim-Änderung.
+  Offen (Sim, nicht Render): `nodesInWorkArea` bietet 120–171 Kacheln an, die
+  `previewOperation` per Chebyshev verwirft.
+- ✅ `[P1]` ⑥ Straßenbau als Plan→Vorschau→Bestätigen (= Thema 1): ein
+  mutationsfreier Preview-Vertrag und ein atomarer `buildRoadPath`-Bulk-Command.
 - ❌ `[P2]` G3–G8: Weltmaßstab-Klärung, Bevölkerungsmodell (Save-Migration),
   Lieferketten §7, aktive Minispiele §8.
 
@@ -170,6 +210,11 @@ Transport (A5), zentraler Start (S1/S2), Fog/Kamera (S3).
 > Das **System** ist da & datengetrieben (`def.size{w,h}` = Grundfläche;
 > `sizeClass`/`visual.heightClass` = Höhe; Auto-Fit auf Footprint × `visual.scale`;
 > `visual.rotationOffset`/`footprintVisualOffset`). Offen ist der **Review-Pass**:
+- ✅ Automatische Fundamente sind kanonisch: `foundationPlanForSurface` ordnet
+  `BUILDABLE_FLAT`/`BUILDABLE_SLOPE`/`BUILDABLE_TERRACE`/`WATER_EDGE`/`CLIFF`
+  einer Konstruktion zu und liefert dieselben Zusatzkosten und dieselbe Bauzeit
+  an Diagnose, Command, Ghost und Renderer. `validatePlacement` bleibt trotzdem
+  die alleinige Autorität dafür, ob ein Standort überhaupt zulässig ist.
 - ❌ `[P1]` **Proportionen vergleichen** — alle Gebäude gegeneinander (und gegen
   Mockups) prüfen: relative Grundfläche UND Höhe glaubwürdig? (Rathaus grand,
   Haus klein, Kraftwerk massiv). Tooling vorhanden: `modelThumbnail.ts` +

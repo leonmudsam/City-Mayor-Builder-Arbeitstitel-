@@ -155,6 +155,22 @@ export const buildingsConfig: BuildingDef[] = [
     cost: { money: 300 },
     constructionSec: 0,
     xpReward: 1,
+    // Der Spieler baut nur diese EINE Straße. Gelände, Wasser, Klippen und
+    // Längsprofil wählen automatisch die passende Konstruktion; die Aufschläge
+    // sind datengetrieben und werden in Vorschau und Command identisch genutzt.
+    road: {
+      crossesWater: true,
+      crossesCliff: true,
+      maxSlope: 5,
+      variantCostPerTile: {
+        slope: { money: 90 },
+        pass: { money: 220, stone: 1 },
+        support: { money: 650, stone: 5, wood: 1 },
+        viaduct: { money: 1_250, stone: 12, wood: 3 },
+        bridge: { money: 900, stone: 8, wood: 6 },
+        coast: { money: 320, stone: 3 },
+      },
+    },
     // Road maintenance: tiny per tile, but it scales with sprawl — a gentle
     // pressure toward compact layouts rather than endless empty avenues.
     effects: [{ type: 'upkeep', resource: 'money', perMinute: 8 }],
@@ -174,6 +190,8 @@ export const buildingsConfig: BuildingDef[] = [
     size: { w: 1, h: 1 },
     sizeClass: 'XS',
     requiresRoad: false,
+    // Save-/API-Kompatibilität für alte Höhenstraßen. Der Baushop filtert diese
+    // Legacy-Definition explizit; neue Spielertrassen verwenden nur `road`.
     unlockLevel: 2,
     // Holzbasiert (Sägewerk ab L2), damit die Höhenstraße die verdichtete Welt
     // WIRKLICH früh entsperrt — Stein käme erst mit dem Steinbruch (L4) und würde
