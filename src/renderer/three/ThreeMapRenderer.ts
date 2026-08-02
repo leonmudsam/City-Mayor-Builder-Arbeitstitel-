@@ -575,6 +575,7 @@ export class ThreeMapRenderer implements IMapRenderer {
    * colours blend the terrain types of the meeting tiles (locked sectors dimmed).
    * `computeVertexNormals` gives the slopes real shading. One draw call.
    */
+<<<<<<< Updated upstream
   private buildGroundMesh(tiles: { x: number; y: number; terrain: TerrainType; locked: boolean }[]): void {
     if (tiles.length === 0) return;
     const info = new Map<string, { terrain: TerrainType; locked: boolean }>();
@@ -595,6 +596,64 @@ export class ThreeMapRenderer implements IMapRenderer {
     const ny = H + 1;
     const positions = new Float32Array(nx * ny * 3);
     const colors = new Float32Array(nx * ny * 3);
+=======
+  private buildGroundChunks(regions: { id: number; status: string }[]): void {
+    if (!this.groundChunkGroup.parent) this.scene.add(this.groundChunkGroup);
+    // § D-056: Die Sperre steckt seit v1.36 in der Weltmaske, nicht mehr in der
+    // Vertexfarbe. Das hat zwei Folgen, die hier sichtbar werden: Der Boden
+    // wird beim Freischalten NICHT mehr neu gebaut (die Geometrie kennt den
+    // Sperrzustand gar nicht), und die weiche Aufblende kostet 64 Byte statt
+    // eines halben Inselneuaufbaus.
+    setLockedRegions(
+      this.worldReveal.revealLockedRegionsVisually
+        ? []
+        : regions.filter((r) => r.status !== 'unlocked').map((r) => r.id),
+    );
+
+    const chunksPerAxis = Math.ceil(WORLD_TILES / GROUND_CHUNK);
+    for (let cy = 0; cy < chunksPerAxis; cy++) {
+      for (let cx = 0; cx < chunksPerAxis; cx++) {
+        const key = `${cx},${cy}`;
+        // Sperr-Signatur: Status aller Regionen, die diesen Chunk berühren
+        // (organische Grenzen → per Kachel-Scan eingesammelt, ~2,3k Reads).
+        const touching = new Set<number>();
+        const x1 = Math.min(WORLD_TILES, cx * GROUND_CHUNK + GROUND_CHUNK);
+        const y1 = Math.min(WORLD_TILES, cy * GROUND_CHUNK + GROUND_CHUNK);
+        for (let ty = cy * GROUND_CHUNK; ty < y1; ty++) {
+          for (let tx = cx * GROUND_CHUNK; tx < x1; tx++) touching.add(regionIdAt(tx, ty));
+        }
+        const sig = `geo-v1:${[...touching].sort((a, b) => a - b).join(',')}`;
+        const cached = this.groundChunks.get(key);
+        if (cached && cached.sig === sig) continue;
+        if (cached) {
+          this.groundChunkGroup.remove(cached.mesh);
+          cached.mesh.geometry.dispose();
+          (cached.mesh.material as Material).dispose();
+        }
+        const mesh = this.buildGroundChunk(cx * GROUND_CHUNK, cy * GROUND_CHUNK);
+        this.groundChunkGroup.add(mesh);
+        this.groundChunks.set(key, { mesh, sig });
+      }
+    }
+  }
+
+  /** Baut EIN Boden-Chunk-Mesh (`GROUND_CHUNK`² Kacheln ab (minX,minY)). */
+  private buildGroundChunk(minX: number, minY: number): Mesh {
+    const W = Math.min(GROUND_CHUNK, WORLD_TILES - minX);
+    const H = Math.min(GROUND_CHUNK, WORLD_TILES - minY);
+    const nx0 = W + 1;
+    const ny0 = H + 1;
+    const cornerColors = new Float32Array(nx0 * ny0 * 3);
+    // Biom-Anteile je Eckpunkt (r=forest, g=fertile, b=sand) — das Splat-Shader
+    // liest sie als Vertex-Attribut, damit Waldboden/Ackerland/Küstensand
+    // genau dort erscheinen, wo das gebackene Grid sie hat (nicht nur höhenweise).
+    const cornerBiome = new Float32Array(nx0 * ny0 * 3);
+    // Rein visuelle Regionsprofile: r=Wüste, g=Sumpf, b=trockene Ebene,
+    // a=Küste; alpine Gewichtung liegt separat. Mehrere Nachbarsamples machen
+    // den Übergang organisch, ohne die technische Regionsgrenze zu verändern.
+    const cornerVisual = new Float32Array(nx0 * ny0 * 4);
+    const cornerAlpine = new Float32Array(nx0 * ny0);
+>>>>>>> Stashed changes
     const tmp = new Color();
     const out = new Color();
 
