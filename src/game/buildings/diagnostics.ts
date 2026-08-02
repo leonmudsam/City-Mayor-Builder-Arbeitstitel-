@@ -5,6 +5,7 @@ import { canAfford } from '../economy/economyService.ts';
 import { effectiveEffects } from './effects.ts';
 import { locationBonusPct } from './location.ts';
 import { buildingInfrastructureStatus } from '../infrastructure/buildingInfrastructure.ts';
+import { nodesInWorkArea } from '../operations/operations.ts';
 
 /**
  * A single legible statement about a building's current situation — the shared
@@ -22,6 +23,15 @@ export type DiagnosisCode =
   | 'paused'
   | 'storage_full'
   | 'no_movein'
+  /**
+   * § Frühspiel-Audit (02.08.2026): Ein aktiver Betrieb ohne einen einzigen
+   * Ressourcenknoten im Arbeitsgebiet. Gemessener Anlass: Die Startregion hat
+   * **null** fruchtbare Kacheln — eine dort gebaute Farm ist gültig platziert,
+   * arbeitet aber nie. Das war für den Spieler unsichtbar: das Gebäude stand,
+   * der Betrieb startete nicht, und nichts sagte warum. Wie bei D-047 ist das
+   * eine WARNUNG, keine Bauregel — sonst verbietet man das Vorbauen.
+   */
+  | 'no_resource_nodes'
   // Benefits (green/amber badge / positive line):
   | 'upgrade_ready'
   | 'location_bonus'
@@ -73,6 +83,16 @@ export function buildingDiagnostics(
     if (cap > 0 && cap !== Number.POSITIVE_INFINITY && state.resources[eff.resource] >= cap) {
       problem('storage_full', { resource: eff.resource });
       break;
+    }
+  }
+
+  // Ein aktiver Betrieb ohne Knoten im Arbeitsgebiet arbeitet nie. Gefragt wird
+  // über `nodesInWorkArea` — dieselbe Funktion, aus der der Betrieb seine
+  // Arbeiter schickt; eine zweite Zählung könnte anderes behaupten als die Sim.
+  if (def.operation && b.status === 'active') {
+    const now = state.meta.lastSimTime;
+    if (nodesInWorkArea(state, def, b, def.operation.maxRadius, now).length === 0) {
+      problem('no_resource_nodes', { resource: def.operation.resource });
     }
   }
 

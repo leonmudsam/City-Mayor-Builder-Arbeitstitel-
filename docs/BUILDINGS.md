@@ -28,6 +28,7 @@ Bauplots sind **fix über alle Stufen** und grundsätzlich quadratisch; Waterfro
 | Kleines Haus | `house_small` | Wohnen | M | 3×3 | L1 | 6 |
 | Wohnturm | `residential_tower` | Wohnen | L | 5×5 | L15 | 3 |
 | Sägewerk | `sawmill` | Produktion & Ressourcen | L | 4×4 | L2 | 3 |
+| Steingrube | `stone_pit` | Produktion & Ressourcen | M | 3×3 | L2 | 2 |
 | Steinbruch | `quarry` | Produktion & Ressourcen | L | 5×5 | L4 | 3 |
 | Bauernhof | `farm` | Produktion & Ressourcen | XL | 6×6 | L4 | 3 |
 | Brunnen | `well` | Versorgung & Dienste | XS | 1×1 | L3 | 2 |
@@ -145,6 +146,19 @@ Bauplots sind **fix über alle Stufen** und grundsätzlich quadratisch; Waterfro
 | 1 | Sägewerk | L2 | 11.000 Geld | +45 Holz/min · +600 Industrie/min · 4 Jobs |
 | 2 | Großsägewerk | L7 | 220.000 Geld · 160 Holz · 130 Stein | +100 Holz/min · +1.200 Industrie/min · 7 Jobs |
 | 3 | Holzkombinat | L12 | 1.800.000 Geld · 500 Holz · 450 Stein | +260 Holz/min · +2.900 Industrie/min · 13 Jobs |
+
+### Steingrube — `stone_pit`
+
+- **Größenklasse:** M (3×3) · **Footprint:** 3×3 (fix über alle Stufen)
+- **Asset-Budget:** 1 500–3 500 Tris, ≤ 512², 2 Materialien
+- **Ab Level:** 2 · **Stufen:** 2 · **Kategorie:** Produktion & Ressourcen
+- **Benötigte GLBs:** `stone_pit.glb` · `stone_pit_stage2.glb` · `stone_pit_construction.glb`
+- **Besonderheiten:** versetzbar
+
+| Stufe | Name | ab Level | Kosten | Kern-Wirkung |
+|---|---|---|---|---|
+| 1 | Steingrube | L2 | 9.000 Geld · 60 Holz | +13 Stein/min · +220 Industrie/min · 3 Jobs |
+| 2 | Sammelstelle | L5 | 46.000 Geld · 120 Holz | +26 Stein/min · +380 Industrie/min · 5 Jobs |
 
 ### Steinbruch — `quarry`
 
@@ -479,7 +493,7 @@ L15–L20 schalten kaum neue Gebäude frei, sondern gaten die Top-Stufen der Ket
 | Level | XP (kumuliert) | Schaltet frei | Belohnung |
 |---|---|---|---|
 | 1 | 0 | Straße, Kleines Haus | — |
-| 2 | 36 | Sägewerk, Höhenstraße | 13.000 Geld |
+| 2 | 36 | Sägewerk, Steingrube, Höhenstraße | 13.000 Geld |
 | 3 | 130 | Brunnen, Bürgermeisterhaus | 20.000 Geld · 10 Gold |
 | 4 | 310 | Bauernhof, Steinbruch | 30.000 Geld |
 | 5 | 620 | Markt, Handelskontor | 47.000 Geld · 15 Gold |

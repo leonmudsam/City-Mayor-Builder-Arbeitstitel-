@@ -134,6 +134,13 @@ import {
   type TransferTarget,
 } from '../operations/transport.ts';
 import {
+  applyFarmField,
+  clearFarmField as clearFarmFieldTiles,
+  farmFieldTiles,
+  planFarmField,
+  type FieldPlan,
+} from '../operations/farmFields.ts';
+import {
   buildingInfrastructureStatus,
   infrastructureNetworkOverview,
   type BuildingInfrastructureStatus,
@@ -201,6 +208,15 @@ const fail = (error: CommandError): CommandResult => ({ ok: false, error });
  * vollständig normal laufen.
  */
 const FOUNDING_PLACEHOLDER_ID = '__founding__';
+
+/**
+ * § Overhaul 2.0 (§4): Obergrenze der aufgezeichneten Fahrstrecke in Kacheln.
+ * Die Strecke liegt im Spielstand — wer eine Stunde im Kreis fährt, soll ihn
+ * nicht unbegrenzt wachsen lassen. Der Wert deckt eine Tour über die gesamte
+ * Insel mehrfach ab; wird er erreicht, endet die Aufzeichnung, die Fahrt läuft
+ * weiter. Abgeschnitten wird sichtbar am Ende, nicht heimlich ausgedünnt.
+ */
+const ACTIVITY_DRIVE_PATH_MAX = 4096;
 
 export type GameEvent =
   | { type: 'levelUp'; level: number }
@@ -1963,6 +1979,100 @@ export class GameController {
   }
 
   /**
+   * § Frühspiel-Audit (D-055): Vorschau eines Feldrechtecks. Reine Projektion —
+   * Vorschau und Command lesen dieselbe `planFarmField`, damit die Vorschau
+   * nichts grün zeigen kann, was der Command ablehnt (D-048).
+   */
+  getFarmFieldPlan(area: { x: number; y: number; w: number; h: number }): FieldPlan {
+    return planFarmField(this.state, this.config, area);
+  }
+
+  /**
+   * Legt ein Feld an. Ein Feld ist **kein Gebäude**, sondern eine bezahlte
+   * Geländeänderung: `isNodeTile` schließt Kacheln unter Gebäuden aus, ein
+   * Feldgebäude könnte also nie selbst der Knoten sein. Geschrieben wird in die
+   * bereits vorhandenen `world.terrainOverrides` — ab da liefert die normale
+   * Knotenableitung `crop`-Knoten. Kein zweites Produktionssystem, kein
+   * Schemabruch (`terrainOverrides` ist seit v10 im Save).
+   */
+  buildFarmField(area: { x: number; y: number; w: number; h: number }): CommandResult {
+    const plan = planFarmField(this.state, this.config, area);
+    if (plan.plantable === 0) return fail('invalid');
+    const spend = spendCost(this.state, { money: plan.cost }, 'farm_field');
+    if (!spend.ok) return fail('insufficient');
+    applyFarmField(this.state, plan);
+    // Terrain geändert → Knoten und abgeleitete Werte neu lesen.
+    this.afterStructuralChange();
+    return ok;
+  }
+
+  /** Nimmt Feldkacheln zurück. Kein Geld zurück — die Arbeit ist getan. */
+  clearFarmField(area: { x: number; y: number; w: number; h: number }): CommandResult {
+    if (clearFarmFieldTiles(this.state, area) === 0) return fail('invalid');
+    this.afterStructuralChange();
+    return ok;
+  }
+
+  /** Alle Feldkacheln der Stadt (Übersicht, Renderer). */
+  getFarmFieldTiles(): { x: number; y: number }[] {
+    return farmFieldTiles(this.state);
+  }
+
+  /**
+   * § Overhaul 2.0 (§4, D-054): **Die Route wird nicht gezeichnet, sie wird
+   * gefahren.** Die Fahransicht meldet die Kachel, auf der das Fahrzeug steht;
+   * hier wird daraus die Strecke des laufenden Auftrags — dasselbe Feld
+   * `plannedRoadPath`, das der Abschlussbericht ohnehin auswertet. Kein zweites
+   * Streckenfeld, keine Schemaänderung.
+   *
+   * Aufgezeichnet wird nur, was das Straßennetz auch hergibt (`roadNetwork` ist
+   * dieselbe Menge, aus der die Fahrt selbst ihre Befahrbarkeit zieht). Eine
+   * diagonal geschnittene Kurve meldet zwei Kacheln, die nicht aneinander
+   * grenzen; dann wird die dazwischenliegende **Straßen**kachel deterministisch
+   * ergänzt statt eine Lücke zu hinterlassen. Größere Sprünge gibt es nicht —
+   * sie werden verworfen, nicht interpoliert (nichts erfinden, §18).
+   */
+  recordActivityDrive(tiles: readonly { x: number; y: number }[]): CommandResult {
+    const active = this.state.activities.active;
+    if (!active) return fail('invalid');
+    const def = this.config.activities.activities.find((activity) => activity.id === active.defId);
+    if (!def?.drive) return fail('invalid');
+    const path = active.plannedRoadPath ?? [];
+    let appended = false;
+    for (const tile of tiles) {
+      if (path.length >= ACTIVITY_DRIVE_PATH_MAX) break;
+      const x = Math.round(tile.x);
+      const y = Math.round(tile.y);
+      if (!Number.isFinite(x) || !Number.isFinite(y)) continue;
+      if (!this.derived.roadNetwork.has(`${x},${y}`)) continue;
+      const last = path.at(-1);
+      if (last && last.x === x && last.y === y) continue; // Stehen ist kein Fahren
+      if (last) {
+        const stepX = Math.abs(last.x - x);
+        const stepY = Math.abs(last.y - y);
+        if (stepX + stepY > 1) {
+          if (stepX !== 1 || stepY !== 1) continue; // kein Sprung wird geraten
+          const corner = [
+            { x: last.x, y },
+            { x, y: last.y },
+          ].find((candidate) => this.derived.roadNetwork.has(`${candidate.x},${candidate.y}`));
+          if (!corner) continue;
+          path.push(corner);
+        }
+      }
+      path.push({ x, y });
+      appended = true;
+    }
+    if (!appended) return ok;
+    active.plannedRoadPath = path;
+    // Bewusst OHNE `notify`: die Aufzeichnung läuft mit der Bildrate. Ein
+    // Versionssprung je Kachel würde die gesamte Oberfläche mitziehen — genau
+    // der Re-Render, den die Fahrschleife vermeidet (CLAUDE.md §6). Sichtbar
+    // wird die Strecke über den nächsten regulären Command (Ankunft/Ausstieg).
+    return ok;
+  }
+
+  /**
    * Start a delivery/inspection run. The optional planned order is validated
    * against the same live candidates and lets the route-planning UI feed its
    * optimised stop order back through the normal command boundary.
@@ -2090,8 +2200,16 @@ export class GameController {
       deliveryTargetsTotal: active.targets.length,
       ...(active.vehicle ? { vehicle: active.vehicle } : {}),
     };
-    const path = active.plannedRoadPath;
-    if (!path) return result;
+    // § Overhaul 2.0 (§4): Wer selbst gefahren ist, hat seine Strecke
+    // aufgezeichnet (`plannedRoadPath`). Wer „fahren lassen" gewählt hat, hat
+    // keine — dann beschreibt der Bericht den Weg, den die Stadt tatsächlich
+    // nimmt: dieselbe kanonische Analyse, aus der der Missionswagen fährt. Ohne
+    // diesen Zweig verlöre der Auto-Modus seine Kennzahlen, seit die UI keine
+    // Route mehr mitschickt.
+    const path =
+      active.plannedRoadPath ??
+      this.analyseActivityRoute(def.id, targetIds)?.segments.flatMap((segment) => segment.path);
+    if (!path || path.length < 2) return result;
 
     const analysis = this.analyseManualActivityRoute(def.id, targetIds, path, active.vehicle);
     if (analysis) {
@@ -2147,12 +2265,13 @@ export class GameController {
     if (!active) return fail('invalid');
     const def = this.config.activities.activities.find((a) => a.id === active.defId);
     if (!def) return fail('not_found');
-    // Drive missions follow their planned, numbered stop order. Inspections
-    // remain free-form so the established click-any-marker interaction stays.
-    const target = def.drive
-      ? active.targets.find((candidate) => !candidate.done)
-      : active.targets.find((candidate) => candidate.buildingId === buildingId && !candidate.done);
-    if (target?.buildingId !== buildingId) return fail('invalid');
+    // § Overhaul 2.0 (§5, D-054): JEDES offene Ziel zählt, in der Reihenfolge, in
+    // der der Spieler es anfährt. Vorher galt für Fahrmissionen ausschließlich
+    // `targets.find(!done)` — wer als Zweites das nähere Haus ansteuerte, bekam
+    // `invalid`, und die Reihenfolge des Planers war damit Pflicht statt
+    // Vorschlag. Genau das ist die Automatik, die der Auftrag streicht.
+    const target = active.targets.find((candidate) => candidate.buildingId === buildingId && !candidate.done);
+    if (!target) return fail('invalid');
     if (def.costPerTarget) {
       if (active.reserved) {
         // §-Stadtarbeit-Logik 2.0 (L3): Ware wurde upfront an der Quelle
@@ -2169,6 +2288,16 @@ export class GameController {
       }
     }
     target.done = true;
+    // Die Liste IST die Reihenfolge — sie wird jetzt geschrieben, nicht gelesen.
+    // Der eben erledigte Stopp rückt ans Ende des erledigten Blocks; damit steht
+    // in `active.targets` hinterher die tatsächlich gefahrene Reihenfolge, und
+    // Abschlussbericht, Tourübersicht und Karte lesen weiterhin dasselbe Feld.
+    const position = active.targets.indexOf(target);
+    if (position >= 0) {
+      active.targets.splice(position, 1);
+      // Einfügepunkt = Anzahl der ÜBRIGEN erledigten Stopps (der eigene ist raus).
+      active.targets.splice(active.targets.filter((candidate) => candidate.done).length, 0, target);
+    }
     if (active.targets.every((t) => t.done)) {
       // Quality grade (§6): deliveries are scored Bronze/Silber/Gold on speed
       // against their time limit, inspections settle at silver. Missing the

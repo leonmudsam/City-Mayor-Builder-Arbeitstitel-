@@ -450,6 +450,60 @@ export const buildingsConfig: BuildingDef[] = [
   },
   // Steinbruch: 5×5-Abbaugelände (Bruchkante, Förderband, Halden).
   {
+    // § Frühspiel-Audit (02.08.2026): DIE EINSTIEGSQUELLE FÜR STEIN.
+    //
+    // Gemessener Befund: Die Startregion hat 46 Bergkacheln — der Steinbruch
+    // braucht `rock`-Knoten auf `mountain`, findet dort also höchstens ~18
+    // Knoten und läuft danach für immer leer (Fels wächst nicht nach). Ohne
+    // eigenes Bergterrain war Stein damit an eine Regionsfreischaltung geknüpft,
+    // während Lagerhaus (L6), Depot (L7) und Feuerwache (L8) ihn voraussetzen.
+    //
+    // Die Steingrube löst das nicht durch mehr Berge, sondern durch eine
+    // ZWEITE, schwächere Quelle ohne Terrainbindung: oberirdisches Lesegestein,
+    // von Hand gesammelt. Sie kostet Holz und Arbeit, aber KEINEN Stein — der
+    // Einstieg darf nie das voraussetzen, was er erst ermöglicht. Ihre Rate ist
+    // bewusst ein Drittel des Steinbruchs: sie hält die Stadt am Leben, ersetzt
+    // aber kein echtes Steinrevier (§7 Gameplay vor Bequemlichkeit).
+    id: 'stone_pit',
+    category: 'production',
+    nameKey: 'building.stone_pit',
+    size: { w: 3, h: 3 },
+    sizeClass: 'M',
+    requiresRoad: true,
+    unlockLevel: 2,
+    cost: { money: 9_000, wood: 60 },
+    firstBuildDiscount: 1,
+    constructionSec: 25,
+    xpReward: 12,
+    canRelocate: true,
+    relocationCost: { money: 3_000 },
+    effects: [
+      { type: 'produce', resource: 'stone', perMinute: 13 },
+      { type: 'jobs', amount: 3 },
+      { type: 'revenue', category: 'industrial', perMinute: 220 },
+      { type: 'upkeep', resource: 'money', perMinute: 140 },
+      { type: 'ambience', amount: -1, radius: 3 },
+    ],
+    // Eine Stufe: die Grube wächst zur Sammelstelle, endet aber bewusst weit
+    // unter dem Steinbruch — wer mehr Stein will, erschließt ein Bergrevier.
+    upgrades: [
+      {
+        cost: { money: 46_000, wood: 120 },
+        constructionSec: 90,
+        xpReward: 24,
+        unlockLevel: 5,
+        nameKey: 'building.stone_pit.2',
+        effects: [
+          { type: 'produce', resource: 'stone', perMinute: 26 },
+          { type: 'jobs', amount: 5 },
+          { type: 'revenue', category: 'industrial', perMinute: 380 },
+          { type: 'upkeep', resource: 'money', perMinute: 240 },
+          { type: 'ambience', amount: -1, radius: 3 },
+        ],
+      },
+    ],
+  },
+  {
     id: 'quarry',
     category: 'production',
     nameKey: 'building.quarry',

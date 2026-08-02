@@ -218,7 +218,7 @@ import type {
   WorkAreaOverlay,
   WorldRevealState,
 } from '../IMapRenderer.ts';
-import { t } from '../../i18n/index.ts';
+import { formatMoney, t } from '../../i18n/index.ts';
 
 const MAX_SMOKE = 40;
 const MAX_CARS = 10;
@@ -3334,7 +3334,14 @@ export class ThreeMapRenderer implements IMapRenderer {
     const levelLabel = def.unlockable
       ? t('ui.region.marker_level', { level: def.unlockLevel })
       : t('ui.region.marker_future');
-    const markerTexture = makeLockedRegionMarkerTexture(t(def.nameKey), levelLabel);
+    // § Gesperrte Regionen (02.08.2026): Der Marker trägt jetzt auch KOSTEN und
+    // BONUS. Vorher standen dort nur Name und Level — der Spieler musste den
+    // Dialog öffnen, um zu erfahren, was ihn die Region kostet und was sie
+    // bringt. Beides kommt aus derselben `regions.config`, aus der auch der
+    // Unlock-Command bezahlt; ein zweiter Zahlenweg entsteht nicht.
+    const costLabel = def.unlockCost > 0 ? formatMoney(def.unlockCost) : 'Kostenlos';
+    const bonusLabel = regionBonusLabel(def);
+    const markerTexture = makeLockedRegionMarkerTexture(t(def.nameKey), levelLabel, costLabel, bonusLabel);
     const iconTexture = makeLockedRegionIconTexture();
     const markerMat = new SpriteMaterial({
       map: iconTexture,
@@ -7261,7 +7268,37 @@ function makeLockedRegionIconTexture(): CanvasTexture {
   return texture;
 }
 
-function makeLockedRegionMarkerTexture(regionName: string, levelLabel: string): CanvasTexture {
+/**
+ * Kurzer Bonus-Hinweis einer Region aus ihren echten `productionModifiers`.
+ * Gezeigt wird der STÄRKSTE Vorteil — der Marker ist ein Wegweiser, keine
+ * Tabelle; die vollständige Liste steht im Regionsdialog. Ohne Modifikator
+ * bleibt der Hinweis leer, statt einen Vorteil zu erfinden (§18).
+ */
+function regionBonusLabel(def: { productionModifiers?: Partial<Record<string, number>> }): string {
+  const names: Record<string, string> = {
+    wood: 'Holz',
+    stone: 'Stein',
+    food: 'Nahrung',
+    freshwater: 'Wasser',
+  };
+  let bestKey: string | undefined;
+  let bestValue = 1;
+  for (const [key, value] of Object.entries(def.productionModifiers ?? {})) {
+    if ((value ?? 1) > bestValue) {
+      bestValue = value ?? 1;
+      bestKey = key;
+    }
+  }
+  if (!bestKey) return '';
+  return `${names[bestKey] ?? bestKey} +${Math.round((bestValue - 1) * 100)} %`;
+}
+
+function makeLockedRegionMarkerTexture(
+  regionName: string,
+  levelLabel: string,
+  costLabel: string,
+  bonusLabel: string,
+): CanvasTexture {
   const cv = document.createElement('canvas');
   cv.width = 768;
   cv.height = 288;
@@ -7312,18 +7349,29 @@ function makeLockedRegionMarkerTexture(regionName: string, levelLabel: string): 
     }
     ctx.fillStyle = '#f8f3df';
     ctx.textBaseline = 'middle';
-    ctx.fillText(label, 228, 112);
-    ctx.font = '700 35px Inter, Arial, sans-serif';
+    ctx.fillText(label, 228, 100);
+    ctx.font = '700 33px Inter, Arial, sans-serif';
     ctx.fillStyle = '#f2b43b';
-    ctx.fillText(levelLabel.toLocaleUpperCase('de-DE'), 228, 169);
+    ctx.fillText(levelLabel.toLocaleUpperCase('de-DE'), 228, 150);
+
+    // Kosten und Bonus: die zwei Angaben, wegen derer der Spieler sonst den
+    // Dialog öffnen musste. Der Bonus bleibt weg, wenn die Region keinen hat.
+    ctx.font = '700 30px Inter, Arial, sans-serif';
+    ctx.fillStyle = '#e8dfc4';
+    ctx.fillText(costLabel, 228, 192);
+    if (bonusLabel) {
+      const costWidth = ctx.measureText(costLabel).width;
+      ctx.fillStyle = '#8fd6a4';
+      ctx.fillText(`· ${bonusLabel}`, 228 + costWidth + 18, 192);
+    }
 
     // Goldene Statuslinie mit kleinem Diamant als visuelle Freischaltachse.
     ctx.fillStyle = 'rgba(255,255,255,.18)';
-    ctx.fillRect(228, 205, 472, 8);
+    ctx.fillRect(228, 218, 472, 7);
     ctx.fillStyle = '#d89b27';
-    ctx.fillRect(228, 205, 168, 8);
+    ctx.fillRect(228, 218, 168, 7);
     ctx.save();
-    ctx.translate(396, 209);
+    ctx.translate(396, 221);
     ctx.rotate(Math.PI / 4);
     ctx.fillRect(-8, -8, 16, 16);
     ctx.restore();

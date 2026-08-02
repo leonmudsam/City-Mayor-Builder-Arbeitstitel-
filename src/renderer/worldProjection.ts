@@ -233,14 +233,24 @@ const DEEP_WATER_M = 4;
 // für die Karte. Lägen die Werte zweimal vor, könnte dieselbe Region in der
 // Übersicht gesperrt und in der Welt frei wirken.
 /** Anteil, um den gesperrtes Land in Richtung Graustufe gezogen wird. */
-export const LOCKED_DESATURATION = 0.7;
+export const LOCKED_DESATURATION = 0.85;
 /** Zusätzliche Abdunklung gesperrten Landes. */
 export const LOCKED_DARKENING = 0.16;
 /**
- * Vegetationsdichte gesperrter Regionen. Ausdünnen statt verstecken: die
- * Landschaft bleibt lesbar, kostet aber nur einen Bruchteil der Instanzen.
+ * Vegetationsdichte gesperrter Regionen.
+ *
+ * **1 = volle Dichte** (Nutzerauftrag 02.08.2026): „keine Props ausblenden,
+ * keine Bäume ausblenden, keine Steine ausblenden … alles sichtbar, nur
+ * ausgegraut." Der frühere Wert 0,5 halbierte die Vegetation gesperrten Landes
+ * — sichtbar als kahler Streifen genau an der Regionsgrenze, und damit als
+ * „unvollständige Welt", die der Auftrag ausdrücklich ausschließt.
+ *
+ * Der Preis ist gemessen bezahlbar, weil gesperrte Vegetation an einem EIGENEN
+ * Schlüssel hängt (D-045) und **keine Schatten** wirft: sie wird nur beim
+ * Freischalten neu gebaut, nicht bei jedem Bauklick. Wer hier wieder ausdünnen
+ * will, dünnt zuerst die Qualitätsstufe aus — nicht eine einzelne Region.
  */
-export const LOCKED_VEGETATION_DENSITY = 0.5;
+export const LOCKED_VEGETATION_DENSITY = 1;
 
 /**
  * Farbe einer Kachel in der Draufsicht — abgeleitet aus Terrain, echter Höhe,
