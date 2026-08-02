@@ -140,6 +140,7 @@ export function ManualRouteMap({
   editEnabled = true,
   driving = false,
   onArrive,
+  onStorageReach,
   onRecordDrive,
   onExitDrive,
   onDriveReadout,
@@ -166,7 +167,7 @@ export function ManualRouteMap({
    * (`loadedTileSpeed`) — dieselbe Regel wie in der Sim, keine zweite Tabelle.
    */
   loadRatio?: number | undefined;
-  /** Standardmäßig bleibt die Smart-Route gesperrt; Zoomen und Verschieben funktionieren weiter. */
+  /** Ohne Bearbeitungsmodus bleibt die Route unangetastet; Zoomen und Verschieben funktionieren weiter. */
   editEnabled?: boolean;
   /**
    * § P2 (D-050): DIESE Karte ist die Fahransicht. Ist `driving` gesetzt, steuert
@@ -177,6 +178,8 @@ export function ManualRouteMap({
   driving?: boolean;
   /** Zielgebäude erreicht — der Aufrufer schließt den Stopp über den Command ab. */
   onArrive?(buildingId: string): void;
+  /** Wagen steht an einem Lager (oder an keinem mehr): Id oder . */
+  onStorageReach?(buildingId: string | undefined): void;
   /**
    * § Overhaul 2.0 (§4): Jede neu befahrene Kachel. Die Karte entscheidet nichts
    * über die Route — sie meldet, wo das Fahrzeug war; die Strecke entsteht im
@@ -293,6 +296,21 @@ export function ManualRouteMap({
       const label = targets.find((point) => point.id === target.buildingId)?.label ?? 'Ziel';
       return [{ buildingId: target.buildingId, label, x: building.x, y: building.y, size: definition.size }];
     });
+  /**
+   * § D-057: Lagerplätze, an denen nachgeladen werden kann. Bewusst dieselbe
+   * Ankunftsregel (`reachedTarget`) wie bei Lieferzielen — eine zweite
+   * Reichweitenregel wäre ein zweites Fahrmodell (D-050).
+   */
+  const storageStopsRef = useRef<
+    { buildingId: string; x: number; y: number; size: { w: number; h: number } }[]
+  >([]);
+  storageStopsRef.current = game.derived.storageSites.flatMap((site) => {
+    const building = game.state.buildings[site.buildingId];
+    const definition = building && game.config.buildings.get(building.defId);
+    if (!building || !definition) return [];
+    return [{ buildingId: site.buildingId, x: building.x, y: building.y, size: definition.size }];
+  });
+
   const traffic = useMemo(() => {
     const result = new Map<string, number>();
     for (const segment of referenceSegments ?? []) {
@@ -473,6 +491,7 @@ export function ManualRouteMap({
     zoom: view.zoom,
     maxSpeed: loadedTileSpeed(vehicleTileSpeed(vehicleSpeedKph ?? 0), loadRatio ?? 0),
     onArrive,
+    onStorageReach,
     onRecordDrive,
     onExitDrive,
     onDriveReadout,
@@ -485,6 +504,7 @@ export function ManualRouteMap({
     zoom: view.zoom,
     maxSpeed: loadedTileSpeed(vehicleTileSpeed(vehicleSpeedKph ?? 0), loadRatio ?? 0),
     onArrive,
+    onStorageReach,
     onRecordDrive,
     onExitDrive,
     onDriveReadout,
@@ -560,6 +580,8 @@ export function ManualRouteMap({
     let raf = 0;
     let last = performance.now();
     let lastReadout = 0;
+    /** Zuletzt gemeldetes Lager — nur der Wechsel geht an React (D-057). */
+    let lastStorageId: string | undefined;
     const frame = (now: number) => {
       raf = requestAnimationFrame(frame);
       // Ein Tabwechsel darf das Fahrzeug nicht quer über die Insel schleudern.
@@ -598,6 +620,14 @@ export function ManualRouteMap({
       const openTargets = arrivalTargetsRef.current;
       const reached = openTargets.find((candidate) => reachedTarget(pose, candidate, candidate.size));
       if (reached) live.onArrive?.(reached.buildingId);
+      // § D-057: Steht der Wagen an einem Lager, darf dort nachgeladen werden.
+      // Gemeldet wird nur der WECHSEL — 60 Meldungen je Sekunde durch React zu
+      // schicken wäre genau der Re-Render, den diese Schleife vermeidet.
+      const atStorage = storageStopsRef.current.find((site) => reachedTarget(pose, site, site.size));
+      if (atStorage?.buildingId !== lastStorageId) {
+        lastStorageId = atStorage?.buildingId;
+        live.onStorageReach?.(lastStorageId);
+      }
       // Fürs HUD bleibt das NÄCHSTGELEGENE offene Ziel die sinnvolle Auskunft.
       const openTarget = nearestTarget(pose, openTargets);
 
@@ -774,7 +804,7 @@ export function ManualRouteMap({
         <div className="citywork-v4-map-hint">
           {editEnabled
             ? <span>Auf Straße ziehen: Route korrigieren</span>
-            : <span>Smart-Route aktiv · Ziehen: Karte verschieben</span>}
+            : <span>Ziehen: Karte verschieben</span>}
           <span>Mausrad: Zoom</span>
         </div>
       )}

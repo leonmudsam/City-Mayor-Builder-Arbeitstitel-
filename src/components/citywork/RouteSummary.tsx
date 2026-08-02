@@ -1,5 +1,5 @@
 import { Clock3, Flag, PackageOpen, RotateCcw } from 'lucide-react';
-import type { ActivityRoutePreview } from '../../game/commands/controller.ts';
+import type { ActivityCargoStatus, ActivityRoutePreview } from '../../game/commands/controller.ts';
 import { formatDuration, t } from '../../i18n/index.ts';
 
 /**
@@ -12,16 +12,16 @@ export function RouteSummary({
   preview,
   roadPath,
   targetsTotal,
+  cargoStatus,
 }: {
   preview: ActivityRoutePreview | undefined;
   roadPath: { x: number; y: number }[];
   targetsTotal: number;
+  /** Laufender Auftrag: der WIRKLICHE Ladezustand des Wagens (D-057). */
+  cargoStatus?: ActivityCargoStatus | undefined;
 }) {
   const cargo = preview?.cargoPlan;
   const duration = preview?.infrastructure?.estimatedDurationMs ?? preview?.analysis?.estimatedDurationMs;
-  const reloads =
-    preview?.cargoRoute?.plannedResupplies ??
-    Math.max(0, (cargo?.loadsRequired ?? 1) - 1);
   const reached = preview?.progress.deliveryTargetsCompleted ?? preview?.orderedTargetIds.length ?? 0;
 
   return (
@@ -29,8 +29,26 @@ export function RouteSummary({
       <Metric
         icon={<PackageOpen size={17} />}
         label="Ladung"
-        value={cargo ? cargo.totalRequired.toLocaleString('de-DE') : 'Keine Fracht'}
-        hint={cargo ? t(`resource.${cargo.resource}`) : 'Einsatzauftrag'}
+        // § D-057: Läuft der Auftrag, zeigt die Anzeige, was WIRKLICH auf dem
+        // Wagen liegt — vorher stand hier der Gesamtbedarf der Tour, also eine
+        // Zahl, die den Wagen nie beschrieben hat.
+        value={
+          cargoStatus
+            ? `${Math.round(cargoStatus.onboard).toLocaleString('de-DE')}${cargoStatus.capacity > 0 ? ` / ${cargoStatus.capacity.toLocaleString('de-DE')}` : ''}`
+            : cargo
+              ? cargo.totalRequired.toLocaleString('de-DE')
+              : 'Keine Fracht'
+        }
+        hint={
+          cargoStatus
+            ? `${t(`resource.${cargoStatus.resource}`)} · ${cargoStatus.carriedLoads} von ${cargoStatus.openTargets} Stopps gedeckt`
+            : cargo
+              ? t(`resource.${cargo.resource}`)
+              : 'Einsatzauftrag'
+        }
+        {...(cargoStatus && cargoStatus.carriedLoads === 0 && cargoStatus.openTargets > 0
+          ? { tone: 'warn' as const }
+          : {})}
       />
       <Metric
         icon={<Flag size={17} />}
@@ -48,11 +66,36 @@ export function RouteSummary({
       <Metric
         icon={<RotateCcw size={17} />}
         label="Nachladen"
-        value={reloads === 0 ? 'Nein' : `${reloads}×`}
-        hint={reloads === 0 ? 'direkte Tour' : 'automatisch eingeplant'}
+        // Kein „automatisch eingeplant" mehr: Es wird nichts automatisch
+        // nachgeladen. Entweder passt die Tour auf den Wagen, oder der Spieler
+        // fährt ein Lager an (D-039: automatisiert wird Ausführung, nie Wahl).
+        value={
+          cargoStatus
+            ? cargoStatus.needsReload
+              ? `${Math.max(1, cargoStatus.openTargets - cargoStatus.carriedLoads)}×`
+              : 'Nein'
+            : reloadsPlanned(preview) === 0
+              ? 'Nein'
+              : `${reloadsPlanned(preview)}×`
+        }
+        hint={
+          cargoStatus
+            ? cargoStatus.needsReload
+              ? 'an einem Lager aufnehmen'
+              : 'Ladung reicht'
+            : reloadsPlanned(preview) === 0
+              ? 'direkte Tour'
+              : 'Traglast reicht nicht für alle Stopps'
+        }
+        {...(cargoStatus?.needsReload ? { tone: 'warn' as const } : {})}
       />
     </div>
   );
+}
+
+/** Vor dem Start: wie oft die geplante Tour die Traglast überschreitet. */
+function reloadsPlanned(preview: ActivityRoutePreview | undefined): number {
+  return preview?.cargoRoute?.plannedResupplies ?? Math.max(0, (preview?.cargoPlan?.loadsRequired ?? 1) - 1);
 }
 
 function Metric({

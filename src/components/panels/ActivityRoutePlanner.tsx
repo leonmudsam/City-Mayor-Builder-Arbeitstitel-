@@ -10,6 +10,7 @@ import {
   Gauge,
   HelpCircle,
   PackageCheck,
+  PackagePlus,
   Play,
   Route,
   SlidersHorizontal,
@@ -69,6 +70,12 @@ export function ActivityRoutePlanner({ defId }: { defId: string }) {
   const pushToast = useUiStore((state) => state.pushToast);
   const setMissionFollow = useUiStore((state) => state.setMissionFollow);
   const active = game.state.activities.active?.defId === defId ? game.state.activities.active : undefined;
+  // § D-057: Der WIRKLICHE Ladezustand des Wagens. Reine Projektion aus der
+  // Simulation — die Oberflaeche rechnet keine Menge nach (D-048).
+  const cargoStatus = useMemo(
+    () => (active ? game.getActivityCargoStatus() : undefined),
+    [game, game.version, active],
+  );
 
   // Der Controller friert den Auftrag einmalig ein. Die UI erzeugt keinen
   // eigenen Missionszustand und würfelt beim erneuten Öffnen nichts neu aus.
@@ -103,6 +110,12 @@ export function ActivityRoutePlanner({ defId }: { defId: string }) {
   // Sitzt der Spieler gerade in dieser Karte am Steuer? Eine laufende
   // Manuell-Mission darf beim erneuten Öffnen des Planers weiterfahren.
   const [driving, setDriving] = useState(active?.mode === 'manual');
+  /**
+   * § D-057: Lager, an dem der Wagen GERADE steht. Kommt aus der Fahrschleife
+   * (dieselbe Ankunftsregel wie bei Lieferzielen) — die Oberfläche misst keine
+   * eigene Entfernung, sonst gäbe es zwei Reichweitenbegriffe.
+   */
+  const [storageAtHand, setStorageAtHand] = useState<string | undefined>(undefined);
   // Gedrosselte Fahrdaten fürs HUD (≈4×/s) — die Fahrt selbst läuft an React
   // vorbei, sonst wäre jedes Bild ein Re-Render (CLAUDE.md §6).
   const [driveReadout, setDriveReadout] = useState<DriveReadout>();
@@ -384,6 +397,7 @@ export function ActivityRoutePlanner({ defId }: { defId: string }) {
                   pushToast('Auftrag abgeschlossen – gute Fahrt war das.', 'success');
                 }
               }}
+              onStorageReach={setStorageAtHand}
               onExitDrive={() => {
                 setDriving(false);
                 pushToast('Ausgestiegen. Über „Selbst fahren" geht es weiter.', 'info');
@@ -391,9 +405,31 @@ export function ActivityRoutePlanner({ defId }: { defId: string }) {
               onPathChange={setRoadPath}
               onInvalid={() => pushToast('Nutze einen direkt angrenzenden Straßenabschnitt.', 'info')}
             />
+            {driving && storageAtHand && cargoStatus && cargoStatus.missingLoads > 0 && (
+              <button
+                type="button"
+                className="citywork-reload-here"
+                onClick={() => {
+                  const result = game.reloadActivityCargo(storageAtHand);
+                  if (result.ok) {
+                    pushToast('Nachgeladen. Die Ware kommt aus genau diesem Lager.', 'success');
+                  } else {
+                    pushToast(
+                      result.error === 'insufficient'
+                        ? 'Dieses Lager führt zu wenig Ware für eine ganze Lieferung.'
+                        : t(`error.${result.error}`),
+                      'error',
+                    );
+                  }
+                }}
+              >
+                <PackagePlus size={16} /> Hier nachladen
+                <small>{game.state.buildings[storageAtHand] ? t(`building.${game.state.buildings[storageAtHand]!.defId}`) : 'Lager'}</small>
+              </button>
+            )}
             {driving
               ? <DriveHud readout={driveReadout} targetsTotal={targetIds.length} />
-              : <RouteSummary preview={preview} roadPath={roadPath} targetsTotal={targetIds.length} />}
+              : <RouteSummary preview={preview} roadPath={roadPath} targetsTotal={targetIds.length} cargoStatus={cargoStatus} />}
           </div>
         </main>
 

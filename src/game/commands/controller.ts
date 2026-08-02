@@ -238,6 +238,28 @@ export type GameEvent =
  * gibt (eine Inspektion hat keine Ladung) — die UI blendet sie dann aus, statt
  * einen Platzhalter wie „– %" anzuzeigen.
  */
+/**
+ * § D-057 — Ladezustand einer laufenden Fahrmission. Reine Projektion aus
+ * `ActiveActivity.reserved`, der Fahrzeugklasse und den offenen Zielen; hält
+ * keinen eigenen Zustand und wird nicht persistiert.
+ */
+export interface ActivityCargoStatus {
+  resource: ResourceId;
+  /** Einheiten an Bord. */
+  onboard: number;
+  /** Traglast der gewählten Fahrzeugklasse; 0 = keine Klasse gewählt. */
+  capacity: number;
+  /** Einheiten, die EIN Stopp verbraucht. */
+  perTarget: number;
+  openTargets: number;
+  /** Vollständige Lieferungen an Bord. */
+  carriedLoads: number;
+  /** Lieferungen, die jetzt noch aufgenommen werden können und gebraucht werden. */
+  missingLoads: number;
+  /** Traglast reicht nicht für alle offenen Stopps — unterwegs nachladen. */
+  needsReload: boolean;
+}
+
 export interface ActivityRunResult {
   elapsedMs: number;
   vehicle?: DriveVehicle;
@@ -2128,7 +2150,7 @@ export class GameController {
     // Stadtkonto — dadurch war es gleichgültig, welches Lager der Spieler
     // anfuhr, und „Ich fahre zuerst zum großen Lager im Norden" blieb folgenlos.
     // Jetzt entscheidet der Bestand DIESES Lagers, ob die Mission startet.
-    const reserved = this.activityReservation(def, targets.length);
+    const reserved = this.activityReservation(def, targets.length, selectedVehicle);
     const sourceBuildingId = this.activitySourceBuildingId(def);
     // Nur ein echtes Stadtlager hat einen eigenen Bestand. Farm, Sägewerk,
     // Pumpwerk und Feuerwache sind Abholpunkte OHNE Lagerwirkung — dort ist die
@@ -2246,13 +2268,135 @@ export class GameController {
    * `costPerTarget × Zielanzahl` je Ressource. `undefined`, wenn die Aktivität
    * nichts verbraucht (Feuerwehr/Polizei/Inspektion).
    */
-  private activityReservation(def: ActivityDef, targetCount: number): Partial<Record<ResourceId, number>> | undefined {
+  private activityReservation(
+    def: ActivityDef,
+    targetCount: number,
+    vehicle?: DriveVehicle,
+  ): Partial<Record<ResourceId, number>> | undefined {
     if (!def.costPerTarget) return undefined;
+    // § Stadtarbeit 2.0 (§7, D-057): Die Kapazität ist PHYSISCH, nicht kosmetisch.
+    // Vorher wurde immer `costPerTarget × Ziele` reserviert — der Wagen trug
+    // beliebig viel, `capacity` erschien nur in Warntexten, und „Nachladen" war
+    // eine Beschriftung ohne Vorgang. Jetzt passt auf den Wagen, was auf ihn
+    // passt; der Rest wird unterwegs geholt.
+    //
+    // Gerechnet wird in GANZEN Lieferungen, nicht in Einheiten: `progressActivity`
+    // verbraucht immer die volle `costPerTarget` eines Stopps. Eine halbe Ladung
+    // wäre eine Menge, die nie jemand abnehmen kann.
+    const perTarget = this.deliveryUnits(def);
+    const capacity = this.vehicleCapacity(vehicle);
+    const fit = perTarget > 0 && capacity > 0
+      ? Math.max(1, Math.min(targetCount, Math.floor(capacity / perTarget)))
+      : targetCount;
     const reserved: Partial<Record<ResourceId, number>> = {};
     for (const [res, amount] of Object.entries(def.costPerTarget)) {
-      if ((amount ?? 0) > 0) reserved[res as ResourceId] = (amount ?? 0) * targetCount;
+      if ((amount ?? 0) > 0) reserved[res as ResourceId] = (amount ?? 0) * fit;
     }
     return Object.keys(reserved).length > 0 ? reserved : undefined;
+  }
+
+  /**
+   * § D-057 — NACHLADEN UNTERWEGS. Nimmt an EINEM Lager so viel auf, wie noch
+   * gebraucht wird und noch auf den Wagen passt.
+   *
+   * Bewusst über `withdrawStock` (D-052): Der Bestand wird an genau diesem Ort
+   * kleiner. Ein Nachladen aus dem Stadtkonto hätte die Wahl des Lagers wieder
+   * folgenlos gemacht — und damit den einzigen Grund, überhaupt hinzufahren.
+   *
+   * Die Simulation prüft NICHT, ob der Wagen daneben steht: Reichweite ist eine
+   * Frage der Bedienung, und die UI bietet den Knopf nur am erreichten Lager an.
+   * Eine zweite Entfernungsregel hier wäre ein zweites Fahrmodell (§2/§8).
+   */
+  reloadActivityCargo(buildingId: string): CommandResult {
+    const active = this.state.activities.active;
+    if (!active) return fail('invalid');
+    const def = this.config.activities.activities.find((a) => a.id === active.defId);
+    if (!def?.costPerTarget) return fail('invalid');
+    if (!this.derived.storageSites.some((site) => site.buildingId === buildingId)) return fail('invalid');
+
+    const status = this.getActivityCargoStatus();
+    if (!status || status.missingLoads <= 0) return fail('invalid');
+
+    const reserved = (active.reserved ??= {});
+    const taken: Partial<Record<ResourceId, number>> = {};
+    let loaded = 0;
+    // Ganze Lieferungen, nie Bruchstücke: eine halbe Ladung nimmt niemand ab.
+    for (let load = 0; load < status.missingLoads; load++) {
+      const step: Partial<Record<ResourceId, number>> = {};
+      let complete = true;
+      for (const [res, amount] of Object.entries(def.costPerTarget)) {
+        const want = amount ?? 0;
+        if (want <= 0) continue;
+        const got = withdrawStock(this.state, this.derived, buildingId, res as ResourceId, want);
+        step[res as ResourceId] = got;
+        if (got + 1e-6 < want) complete = false;
+      }
+      if (!complete) {
+        // Nichts halb aufnehmen — zurück an denselben Ort.
+        for (const [res, amount] of Object.entries(step)) {
+          if ((amount ?? 0) > 0) depositStock(this.state, this.derived, buildingId, res as ResourceId, amount ?? 0);
+        }
+        break;
+      }
+      for (const [res, amount] of Object.entries(step)) {
+        const id = res as ResourceId;
+        reserved[id] = (reserved[id] ?? 0) + (amount ?? 0);
+        taken[id] = (taken[id] ?? 0) + (amount ?? 0);
+      }
+      loaded++;
+    }
+    if (loaded === 0) return fail('insufficient');
+    // Die Rückgabe eines Abbruchs gehört dorthin, wo die Ware zuletzt herkam.
+    active.sourceBuildingId = buildingId;
+    this.notify({ type: 'change' });
+    return ok;
+  }
+
+  /**
+   * Ladezustand des laufenden Auftrags — eine Projektion, keine zweite Rechnung.
+   * `missingLoads` beantwortet zugleich „passt noch was drauf?" und „wird noch
+   * etwas gebraucht?", damit UI und Command dieselbe Zahl benutzen (D-048).
+   */
+  getActivityCargoStatus(): ActivityCargoStatus | undefined {
+    const active = this.state.activities.active;
+    if (!active) return undefined;
+    const def = this.config.activities.activities.find((a) => a.id === active.defId);
+    if (!def?.costPerTarget) return undefined;
+    const perTarget = this.deliveryUnits(def);
+    if (perTarget <= 0) return undefined;
+    const capacity = this.vehicleCapacity(active.vehicle);
+    let onboard = 0;
+    for (const amount of Object.values(active.reserved ?? {})) onboard += amount ?? 0;
+    const openTargets = active.targets.filter((target) => !target.done).length;
+    const carriedLoads = Math.floor((onboard + 1e-6) / perTarget);
+    const fitsPerTrip = capacity > 0 ? Math.max(1, Math.floor(capacity / perTarget)) : openTargets;
+    const missingLoads = Math.max(0, Math.min(openTargets, fitsPerTrip) - carriedLoads);
+    return {
+      resource: (Object.keys(def.costPerTarget)[0] ?? 'wood') as ResourceId,
+      onboard,
+      capacity,
+      perTarget,
+      openTargets,
+      carriedLoads,
+      missingLoads,
+      // Reicht die Traglast nicht für alle offenen Stopps, MUSS unterwegs
+      // nachgeladen werden — das ist die ehrliche Antwort auf „Nachladen?".
+      needsReload: openTargets > fitsPerTrip,
+    };
+  }
+
+  /** Einheiten, die EIN Stopp verbraucht (Summe über alle Ressourcen). */
+  private deliveryUnits(def: ActivityDef): number {
+    if (!def.costPerTarget) return 0;
+    let sum = 0;
+    for (const amount of Object.values(def.costPerTarget)) sum += amount ?? 0;
+    return sum;
+  }
+
+  /** Traglast der gewählten Fahrzeugklasse; 0 = unbegrenzt (keine Wahl getroffen). */
+  private vehicleCapacity(vehicle?: DriveVehicle): number {
+    if (!vehicle) return 0;
+    return this.config.activities.vehicles.find((v) => v.id === vehicle)?.capacity ?? 0;
   }
 
   /**
@@ -2276,7 +2420,15 @@ export class GameController {
       if (active.reserved) {
         // §-Stadtarbeit-Logik 2.0 (L3): Ware wurde upfront an der Quelle
         // reserviert — die Auslieferung zieht aus dieser Reserve, nicht aus dem
-        // Pool. Die Reserve deckt jede Auslieferung exakt (bei Start gesichert).
+        // Pool.
+        //
+        // § D-057: Die Reserve deckt NICHT mehr zwangsläufig jeden Stopp — sie
+        // ist auf die Traglast begrenzt. Wer leer ankommt, liefert nicht; er
+        // fährt an ein Lager und lädt nach (`reloadActivityCargo`). Genau diese
+        // Bedingung macht die Ladeanzeige zu einer Aussage statt zu einer Zahl.
+        for (const [res, amount] of Object.entries(def.costPerTarget)) {
+          if ((active.reserved[res as ResourceId] ?? 0) + 1e-6 < (amount ?? 0)) return fail('no_cargo');
+        }
         for (const [res, amount] of Object.entries(def.costPerTarget)) {
           const id = res as ResourceId;
           active.reserved[id] = Math.max(0, (active.reserved[id] ?? 0) - (amount ?? 0));

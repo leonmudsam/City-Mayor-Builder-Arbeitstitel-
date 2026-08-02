@@ -739,3 +739,35 @@
   .citywork-v4-job-art { height: 86px; }
   .citywork-v4-vehicle { flex-basis: 180px; }
 }
+
+/* § D-057 — „Hier nachladen". Erscheint NUR, wenn der Wagen wirklich an einem
+   Lager steht und wirklich Ladung fehlt; deshalb darf er auffällig sein, ohne
+   zur Dauerdekoration zu werden. Bewusst über der Karte statt in der Seitenspalte:
+   Die Entscheidung fällt dort, wo der Wagen steht. */
+.citywork-reload-here {
+  position: absolute;
+  z-index: 5;
+  right: 14px;
+  bottom: 96px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 11px 15px;
+  color: #10210f;
+  border: none;
+  border-radius: 10px;
+  background: linear-gradient(180deg, #8ff0a4, #4fc76c);
+  box-shadow: 0 6px 18px rgba(0, 0, 0, .38);
+  font-size: 13.5px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.citywork-reload-here:hover {
+  filter: brightness(1.07);
+}
+.citywork-reload-here small {
+  padding-left: 8px;
+  border-left: 1px solid rgba(16, 33, 15, .28);
+  opacity: .78;
+  font-weight: 600;
+}
