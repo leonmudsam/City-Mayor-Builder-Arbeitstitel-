@@ -62,6 +62,48 @@ der Cloud-Umgebung** (kein Rust/Windows) — dort nur den Browser-Pfad verifizie
 (gitignored). GitHub Pages ist abgeschaltet — kein Deploy-Workflow wieder einführen.
 `archive/legacy-2d/` = archivierte 2D-/Iso-Reste (nicht reaktivieren).
 
+## Status: v1.35 — DIE ROUTE WIRD GEFAHREN + STEIN-EINSTIEG (Save v32) — AKTUELL
+Drei Aufträge, keine Schemaänderung. **(1) Stadtarbeit 2.0 Phasen 1+3 (D-054):**
+Der Planer schlägt nichts mehr vor — keine Zielreihenfolge, kein Weg, kein
+„Optimieren", kein Zeichenwerkzeug; der Knopf nimmt den **Auftrag** an. Der echte
+Riegel saß tiefer als die UI: `progressActivity` akzeptierte für Fahrmissionen
+ausschließlich `targets.find(!done)` — wer als Zweites das nähere Haus ansteuerte,
+bekam `invalid`. Jetzt zählt **jedes offene Ziel**, und `active.targets` wird beim
+Abschluss umsortiert, **protokolliert also die gefahrene Reihenfolge** (eine Liste,
+nicht zwei). Die Strecke schreibt `recordActivityDrive(tiles)` in **dasselbe**
+`plannedRoadPath`, das der Abschlussbericht ohnehin auswertet — kein zweites
+Streckenfeld, keine Migration; gelesen wird `derived.roadNetwork` (kein zweiter
+Verkehrsgraph), Diagonalen ergänzen deterministisch die Eckkachel, **größere
+Sprünge werden verworfen statt interpoliert**, und die Aufzeichnung läuft
+**ohne `notify`** (Bildrate). „Fahren lassen" bleibt — automatisiert wird die
+Ausführung, nie die Wahl (D-039). **Offen (D-053, nicht vortäuschen):**
+isometrische Weltkamera statt 2D-Karte, Gebäude-Interaktion auf der Karte,
+Nachladen unterwegs, 3D-Ausführung, UI nach den Mockups.
+**(2) Frühspiel-Einstieg (D-055):** Gemessen — die Startregion hat 46 Bergkacheln
+≈ 18 Felsknoten ≈ **3.312 Stein einmalig** (Fels wächst nie nach), Startvorrat
+Stein **0**, erste Steinkosten L6. Die vermutete Schleife „Stein für den
+Steinbruch" gibt es **nicht** (`quarry` kostet Geld+Holz) — der Riegel ist das
+**Terrain**. Neu: **`stone_pit`** (L2, `{9.000, Holz 60}`, 13 Stein/min, Ausbau 26)
+ohne Terrainbindung, bewusst ein Drittel des Steinbruchs.
+`tests/earlyGameProgression.test.ts` erzwingt die Regel über die **ganze** Config:
+jede Baukosten-Ressource bis L8 hat eine Quelle, die sie nicht selbst voraussetzt.
+**Die Farm bleibt der offene Punkt** — die Startregion hat **null** fruchtbare
+Kacheln, die Farm ist gültig platzierbar und arbeitet nie; bis das Feldsystem
+existiert, sagt die Diagnose `no_resource_nodes` es wenigstens (Warnstufe wie
+D-047, **keine** Bauregel). **Die Feld-Simulation steht**
+(`operations/farmFields.ts`): ein Feld ist **kein Gebäude**, sondern eine bezahlte
+`terrainOverrides`-Änderung — `isNodeTile` schließt Kacheln unter Gebäuden aus, ein
+Feldgebäude könnte also nie selbst der Knoten sein; ab da liefert die **normale**
+Knotenableitung `crop`-Knoten (kein zweites Produktionssystem, kein Schemabruch).
+**Offen und nicht vortäuschen: die Bedienung** („Felder verwalten" im Farm-Sheet,
+Rechteck + Vorschau) und die Darstellung im Renderer — ohne sie ist das System im
+Spiel nicht erreichbar. Details: `docs/agents/EARLY_GAME_AUDIT.md`.
+**(3) Gesperrte Regionen (D-056, schärft D-045):** volle Prop-Dichte
+(`LOCKED_VEGETATION_DENSITY` 0,5 → **1** — halbe Dichte erzeugte einen kahlen
+Streifen an der Regionsgrenze), Entsättigung 0,7 → **0,85**, und der Schlossmarker
+trägt **Name, Level, Kosten, Bonus** aus `regions.config` (Bonus bleibt leer, wenn
+die Region keinen hat). Rein visuell; `regionUnlockBlocker` unverändert.
+
 ## Status: Ausbaustufe 2.0 abgeschlossen (v0.50–v0.59)
 Gebäudesystem 2.0 + Welt 2.0 sind vollständig (A1–A10). **Nur noch der
 3D-Renderer** existiert (`src/renderer/three/`); der 2D-/Iso-Pixi-Renderer,

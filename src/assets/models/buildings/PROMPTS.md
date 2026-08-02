@@ -174,6 +174,25 @@ Low-poly stylized 3D city-builder game asset, colorful cartoon look, clean shape
 **Spec:** Größenklasse `L` — großes Gebäude (3 000–6 000 Tris, ≤ 1024², 2–3 Materialien) · Footprint 4×4 (fix über alle Stufen) · Pivot unten-mittig (X/Z zentriert, Unterkante Y = 0) · Front +Z (Eingang zur Straße) · Nodes: `chimney` (Rauch-Ursprung am Schornstein) · Stufe 3/3 — `sawmill_stage3.glb`
 > Baustelle (Bau *und* Upgrade): `sawmill_construction.glb`, sonst generisches Baustellen-Prop, sonst prozedurales Gerüst. Der Renderer skaliert jedes Modell automatisch auf den Footprint.
 
+### stone_pit — 2 Stufen
+
+#### `stone_pit.glb` — Stufe 1/2
+
+```text
+Low-poly stylized 3D city-builder game asset, colorful cartoon look, clean shapes, soft bevels, hand-painted feel, optimized for realtime rendering, embedded textures, no lights, no cameras, centered object, pivot at bottom center, +Y up, front facing +Z — a small open-air stone gathering pit on a 3×3 plot: a shallow scrape with loose surface rocks, a wheelbarrow, hand tools, sorted stone piles and a lean-to shelter
+```
+
+**Spec:** Größenklasse `M` — mittleres Gebäude (1 500–3 500 Tris, ≤ 512², 2 Materialien) · Footprint 3×3 (fix über alle Stufen) · Pivot unten-mittig (X/Z zentriert, Unterkante Y = 0) · Front +Z (Eingang zur Straße) · Stufe 1/2 — Basis `stone_pit.glb`
+
+#### `stone_pit_stage2.glb` — Stufe 2/2
+
+```text
+Low-poly stylized 3D city-builder game asset, colorful cartoon look, clean shapes, soft bevels, hand-painted feel, optimized for realtime rendering, embedded textures, no lights, no cameras, centered object, pivot at bottom center, +Y up, front facing +Z — a stone collection yard on the same 3×3 plot: a sorting table, a simple hand crane, stacked pallets of dressed stone and a short cart track
+```
+
+**Spec:** Größenklasse `M` — mittleres Gebäude (1 500–3 500 Tris, ≤ 512², 2 Materialien) · Footprint 3×3 (fix über alle Stufen) · Pivot unten-mittig (X/Z zentriert, Unterkante Y = 0) · Front +Z (Eingang zur Straße) · Stufe 2/2 — `stone_pit_stage2.glb`
+> Baustelle (Bau *und* Upgrade): `stone_pit_construction.glb`, sonst generisches Baustellen-Prop, sonst prozedurales Gerüst. Der Renderer skaliert jedes Modell automatisch auf den Footprint.
+
 ### quarry — 3 Stufen
 
 #### `quarry.glb` — Stufe 1/3

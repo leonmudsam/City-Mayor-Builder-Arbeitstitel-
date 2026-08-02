@@ -11,7 +11,7 @@ import type { LevelDef } from './types.ts';
 // buildings, quests and milestones are the real sources.
 export const levelsConfig: LevelDef[] = [
   { level: 1, xpRequired: 0, unlocks: ['road', 'house_small'], rewards: {} },
-  { level: 2, xpRequired: 36, unlocks: ['sawmill', 'road_elevated'], rewards: { money: 13_000 } },
+  { level: 2, xpRequired: 36, unlocks: ['sawmill', 'stone_pit', 'road_elevated'], rewards: { money: 13_000 } },
   { level: 3, xpRequired: 130, unlocks: ['well', 'mayor_house'], rewards: { money: 20_000, gold: 10 } },
   { level: 4, xpRequired: 310, unlocks: ['farm', 'quarry'], rewards: { money: 30_000 } },
   { level: 5, xpRequired: 620, unlocks: ['market', 'trading_post'], rewards: { money: 47_000, gold: 15 } },

@@ -96,7 +96,13 @@ describe('A6 Holztransport — Ziele nur Lager', () => {
     const rerouted = [...targets].reverse();
     expect(controller.setActiveActivityRoute(rerouted)).toEqual({ ok: true });
     expect(targetIds(controller)).toEqual(rerouted);
-    // Fahrmissionen übernehmen die nummerierte Reihenfolge aus der Planung.
+    // § Overhaul 2.0 (§5, D-054): Die Reihenfolge gehört dem Spieler. Wer das
+    // zweite Ziel zuerst anfährt, liefert dort — vorher gab das `invalid`, und
+    // die Liste des Planers war damit Pflicht. Danach steht die TATSÄCHLICH
+    // gefahrene Reihenfolge vorne in der Liste.
+    expect(controller.progressActivity(rerouted[1]!)).toEqual({ ok: true });
+    expect(targetIds(controller)[0]).toBe(rerouted[1]);
+    // Ein bereits erledigtes Ziel zählt nicht doppelt.
     expect(controller.progressActivity(rerouted[1]!)).toEqual({ ok: false, error: 'invalid' });
     for (const id of rerouted) controller.progressActivity(id);
     expect(controller.state.activities.active).toBeUndefined();

@@ -46,6 +46,12 @@ const DETAIL_SCALE = 15;
  * Teppich aus Mindestbreiten — die Übersicht zeigte dann alles außer der Insel.
  */
 const OVERVIEW_SCALE = 5;
+/**
+ * Sichtbare Fahrspur in Stützpunkten. Deckungsgleich gedeckelt mit der im
+ * Spielstand aufgezeichneten Strecke (`ACTIVITY_DRIVE_PATH_MAX`) — die Spur
+ * zeigt genau das, was auch gespeichert wird, und nicht mehr.
+ */
+const DRIVE_TRAIL_MAX = 4096;
 const BUILDINGS: Partial<Record<BuildingCategory, { wall: string; roof: string }>> = {
   residential: { wall: '#e3c68a', roof: '#9c4933' },
   economy: { wall: '#cf9755', roof: '#69452d' },
@@ -134,6 +140,7 @@ export function ManualRouteMap({
   editEnabled = true,
   driving = false,
   onArrive,
+  onRecordDrive,
   onExitDrive,
   onDriveReadout,
   onPathChange,
@@ -170,6 +177,12 @@ export function ManualRouteMap({
   driving?: boolean;
   /** Zielgebäude erreicht — der Aufrufer schließt den Stopp über den Command ab. */
   onArrive?(buildingId: string): void;
+  /**
+   * § Overhaul 2.0 (§4): Jede neu befahrene Kachel. Die Karte entscheidet nichts
+   * über die Route — sie meldet, wo das Fahrzeug war; die Strecke entsteht im
+   * Command (`recordActivityDrive`).
+   */
+  onRecordDrive?(tiles: { x: number; y: number }[]): void;
   /** Q/ESC: aussteigen. */
   onExitDrive?(): void;
   /** Gedrosselte Fahrdaten fürs HUD (≈4×/s, nicht je Bild). */
@@ -195,6 +208,11 @@ export function ManualRouteMap({
   const drivingRef = useRef(false);
   /** Bereits gefahrene Strecke (§5 „Handelswege"), gedeckelt. */
   const trailRef = useRef<{ x: number; y: number }[]>([]);
+  /**
+   * Zuletzt AN DEN COMMAND GEMELDETE Kachel. Ohne diesen Vergleich liefe je Bild
+   * ein Command — 60×/s dieselbe Kachel. Gemeldet wird nur der Wechsel.
+   */
+  const recordedTileRef = useRef<{ x: number; y: number }>({ x: Number.NaN, y: Number.NaN });
 
   const roadTiles = useMemo(() => {
     const roads = new Map<string, BuildingInstance>();
@@ -455,6 +473,7 @@ export function ManualRouteMap({
     zoom: view.zoom,
     maxSpeed: loadedTileSpeed(vehicleTileSpeed(vehicleSpeedKph ?? 0), loadRatio ?? 0),
     onArrive,
+    onRecordDrive,
     onExitDrive,
     onDriveReadout,
   });
@@ -466,6 +485,7 @@ export function ManualRouteMap({
     zoom: view.zoom,
     maxSpeed: loadedTileSpeed(vehicleTileSpeed(vehicleSpeedKph ?? 0), loadRatio ?? 0),
     onArrive,
+    onRecordDrive,
     onExitDrive,
     onDriveReadout,
   };
@@ -494,6 +514,7 @@ export function ManualRouteMap({
       driveRef.current = undefined;
       heldRef.current.clear();
       trailRef.current = [];
+      recordedTileRef.current = { x: Number.NaN, y: Number.NaN };
       // Beim Aussteigen die zuletzt gefahrene Ansicht in den React-Zustand
       // zurückschreiben, damit die Karte nicht zurückspringt.
       if (viewRef.current) setView(viewRef.current);
@@ -553,22 +574,32 @@ export function ManualRouteMap({
       const stepped = stepDrive(drive, input, dt, live.roadSet, live.maxSpeed);
       driveRef.current = stepped;
       const pose = drivePose(stepped);
-      // Gefahrene Strecke mitschreiben (grob, damit die Liste nicht wächst).
+      // Gefahrene Strecke mitschreiben — sichtbar (Spur) und verbindlich
+      // (Command). § Overhaul 2.0 (§4): DAS ist die Route des Auftrags.
       const lastTrail = trailRef.current.at(-1);
       if (!lastTrail || Math.hypot(pose.x - lastTrail.x, pose.y - lastTrail.y) > 0.6) {
-        trailRef.current.push({ x: pose.x, y: pose.y });
-        if (trailRef.current.length > 600) trailRef.current.shift();
+        if (trailRef.current.length < DRIVE_TRAIL_MAX) trailRef.current.push({ x: pose.x, y: pose.y });
+      }
+      const tileX = Math.floor(pose.x);
+      const tileY = Math.floor(pose.y);
+      if (tileX !== recordedTileRef.current.x || tileY !== recordedTileRef.current.y) {
+        recordedTileRef.current = { x: tileX, y: tileY };
+        live.onRecordDrive?.([{ x: tileX, y: tileY }]);
       }
       // Die Karte folgt dem Fahrzeug (Verfolgerblick von oben).
       currentView.centerX += (pose.x - currentView.centerX) * Math.min(1, dt * 6);
       currentView.centerY += (pose.y - currentView.centerY) * Math.min(1, dt * 6);
       live.drawScene(currentView, stepped);
 
-      // Nächstes offenes Ziel erreicht? Genau dieselbe Regel wie in 3D.
-      const openTarget = arrivalTargetsRef.current[0];
-      if (openTarget && reachedTarget(pose, openTarget, openTarget.size)) {
-        live.onArrive?.(openTarget.buildingId);
-      }
+      // § Overhaul 2.0 (§5): JEDES offene Ziel zählt — wer zuerst am näheren Haus
+      // vorbeikommt, liefert dort. Vorher galt nur `[0]`, die Reihenfolge des
+      // Planers. Die Ankunftsregel selbst (`reachedTarget`) bleibt dieselbe wie
+      // in 3D; nur die Auswahl ist jetzt frei.
+      const openTargets = arrivalTargetsRef.current;
+      const reached = openTargets.find((candidate) => reachedTarget(pose, candidate, candidate.size));
+      if (reached) live.onArrive?.(reached.buildingId);
+      // Fürs HUD bleibt das NÄCHSTGELEGENE offene Ziel die sinnvolle Auskunft.
+      const openTarget = nearestTarget(pose, openTargets);
 
       // HUD-Daten gedrosselt melden — 60×/s durch React zu schicken wäre genau
       // der Re-Render, den die Schleife vermeidet.
@@ -1106,6 +1137,30 @@ function drawTrail(
   });
   ctx.stroke();
   ctx.restore();
+}
+
+/**
+ * Nächstgelegenes offenes Ziel — die einzige Auskunft, die ohne feste
+ * Reihenfolge noch sinnvoll ist („welches Haus liegt gerade vor mir?").
+ * Gemessen wird zur Gebäudemitte, wie bei der Ankunftsprüfung.
+ */
+function nearestTarget<T extends { x: number; y: number; size: { w: number; h: number } }>(
+  pose: { x: number; y: number },
+  targets: readonly T[],
+): T | undefined {
+  let best: T | undefined;
+  let bestDistance = Number.POSITIVE_INFINITY;
+  for (const target of targets) {
+    const distance = Math.hypot(
+      target.x + target.size.w / 2 - pose.x,
+      target.y + target.size.h / 2 - pose.y,
+    );
+    if (distance < bestDistance) {
+      bestDistance = distance;
+      best = target;
+    }
+  }
+  return best;
 }
 
 function drawRoute(

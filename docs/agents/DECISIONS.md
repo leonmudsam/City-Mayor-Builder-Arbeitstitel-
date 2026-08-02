@@ -1,5 +1,106 @@
 # Entscheidungen
 
+## D-056 — Gesperrtes Land ist vollständig, nur farblos (schärft D-045)
+
+**Kontext.** Nutzerauftrag 02.08.2026 mit Mockup: „Alles sichtbar, nur
+ausgegraut." Ausdrücklich verboten: Nebel, Wolkenwand, vereinfachte Silhouette,
+versteckte Props. D-045 hatte das bereits im Grundsatz umgesetzt, wich aber an
+zwei messbaren Stellen ab.
+
+**Entscheidung.**
+1. **`LOCKED_VEGETATION_DENSITY` = 1** (vorher 0,5). Halbe Vegetation erzeugte
+   einen sichtbar kahlen Streifen genau an der Regionsgrenze — also exakt den
+   „unvollständigen" Eindruck, den der Auftrag ausschließt. Bezahlbar bleibt es,
+   weil gesperrte Vegetation an einem EIGENEN Schlüssel hängt (D-045) und keine
+   Schatten wirft: neu gebaut wird nur beim Freischalten, nie beim Bauklick.
+2. **`LOCKED_DESATURATION` = 0,85** (vorher 0,7) — „klar ausgegraut" im Sinne
+   des Mockups, in dem gesperrte Sektoren nahezu grau sind.
+3. **Der Schlossmarker trägt Name, Level, KOSTEN und BONUS.** Vorher standen
+   dort nur Name und Level; Kosten und Nutzen erfuhr man erst im Dialog. Beide
+   Werte kommen aus `regions.config` — derselben Quelle, aus der der
+   Unlock-Command bezahlt. Der Bonus wird aus den echten `productionModifiers`
+   abgeleitet und bleibt **leer**, wenn die Region keinen hat.
+
+**Warum keine Regel, sondern nur Darstellung.** Sichtbarkeit ist keine Mechanik:
+`regionUnlockBlocker`, Baubarkeit und Kosten sind unverändert. Wer wieder
+ausdünnen will, dünnt die Qualitätsstufe aus, nicht eine einzelne Region.
+
+---
+
+## D-055 — Jede Ressource braucht einen Einstieg, der sie nicht voraussetzt
+
+**Kontext.** Der Nutzer meldete einen „Steinbruch-Deadlock". Die Messung
+widerlegt die Ursache und bestätigt das Problem: `quarry` kostet **keinen**
+Stein — der Riegel ist das **Terrain**. Der Steinbruch war die einzige
+Steinquelle und braucht `rock`-Knoten auf `mountain`; die Startregion hat davon
+46 Kacheln ≈ 18 Knoten ≈ **3.312 Stein, einmalig** (Fels wächst nie nach).
+Startvorrat Stein: **0**. Erste Steinkosten: Lagerhaus auf **L6**.
+
+**Entscheidung.** Jede Ressource hat eine **Einstiegsquelle**, die
+(a) verfügbar ist, bevor die erste Baukostenstufe sie verlangt,
+(b) **sich selbst nicht voraussetzt**, und
+(c) **schwächer** ist als der echte Betrieb, damit die Erschließung eines
+Reviers ihren Wert behält.
+
+Erster Fall: **`stone_pit`** (L2, 3×3, `{money 9.000, wood 60}`, 13 Stein/min,
+Ausbau 26). Kein Terrain, keine Knoten — oberirdisches Lesegestein.
+
+**Durchgesetzt, nicht nur beschrieben:** `tests/earlyGameProgression.test.ts`
+prüft (a)–(c) über die **gesamte** Config bis L8 und hält zusätzlich fest,
+welche Betriebe in der Startregion arbeitsunfähig sind (aktuell exakt
+`farm@L4:fertile`). Ein Config-Ausbau, der eine neue Sackgasse erzeugt, fällt
+dort auf.
+
+**Folge für die Farm (offen).** Die Farm bleibt ein Betrieb ohne Vorkommen: die
+Startregion hat **null** fruchtbare Kacheln. Bis das Feldsystem existiert, sagt
+sie es wenigstens — neue Diagnose `no_resource_nodes`, dieselbe Warnstufe wie
+D-047: **Warnung, keine Bauregel**, sonst verbietet man das Vorbauen. Entwurf
+in `docs/agents/EARLY_GAME_AUDIT.md` §5.
+
+---
+
+## D-054 — Die Route wird gefahren, nicht geplant (löst D-050/D-051 teilweise ab)
+
+**Kontext.** Auftrag „Stadtarbeit Overhaul 2.0" mit Mockups: „Die Route wird
+NICHT gezeichnet. Die Route wird gefahren." Zuvor erzeugte
+`createSmartRouteSuggestion` Zielreihenfolge, Fahrzeug und vollständigen Weg;
+der Spieler bestätigte eine fertige Lösung.
+
+**Entscheidung.**
+1. **Der Planer schlägt nichts mehr vor.** Kein Vorschlagsweg, kein
+   „Neu optimieren", kein Zeichenwerkzeug. Der Startknopf nimmt den **Auftrag**
+   an, nicht eine Lösung.
+2. **Die Reihenfolge gehört dem Spieler.** `progressActivity` akzeptiert für
+   Fahrmissionen **jedes offene Ziel**. Vorher galt ausschließlich
+   `targets.find(!done)` — wer als Zweites das nähere Haus ansteuerte, bekam
+   `invalid`. `active.targets` wird beim Abschluss umsortiert und **protokolliert
+   damit die tatsächlich gefahrene Reihenfolge**; Abschlussbericht, Tourübersicht
+   und Karte lesen weiterhin dasselbe Feld.
+3. **Die gefahrene Strecke IST die Route.** Neuer Command
+   `recordActivityDrive(tiles)` schreibt sie in `plannedRoadPath` — dasselbe
+   Feld, das der Abschlussbericht ohnehin auswertet. **Kein zweites Streckenfeld,
+   keine Schemaänderung.** Aufgezeichnet wird nur, was `derived.roadNetwork`
+   hergibt; eine diagonal geschnittene Kurve ergänzt deterministisch die
+   dazwischenliegende Straßenkachel, größere Sprünge werden **verworfen statt
+   interpoliert**.
+4. **Ohne `notify`.** Die Aufzeichnung läuft mit der Bildrate; ein
+   Versionssprung je Kachel zöge die gesamte Oberfläche mit (CLAUDE.md §6).
+   Sichtbar wird die Strecke beim nächsten regulären Command.
+
+**Was D-039 (Active Simplicity) rettet.** Automatisiert wird weiterhin die
+**Ausführung**: „Fahren lassen" bleibt, und weil die UI keine Route mehr
+mitschickt, beschreibt der Abschlussbericht dort jetzt den Weg, den die Stadt
+tatsächlich nimmt (`analyseActivityRoute`) statt gar keinen. Gestrichen ist nur
+die Automatisierung der **Wahl**.
+
+**Status von D-050/D-051.** Der Auftrag verlangt zusätzlich eine isometrische
+Kamera auf die 3D-Welt statt der 2D-Karte (D-053). Dieser Teil ist **noch nicht
+gebaut**; bis dahin bleibt die 2D-Karte die Fahransicht, D-050/D-051 gelten dort
+unverändert weiter.
+
+---
+
+
 ## D-052 — Jede Ware liegt an einem Ort (Bestandsregister)
 
 **Datum:** 01.08.2026 · **Status:** aktiv · **Version:** v1.34 (**Save v32**)

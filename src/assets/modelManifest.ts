@@ -583,6 +583,7 @@ export const BUILDING_PROMPTS: Record<string, string> = {
   house_small: 'a small cozy family house with a red pitched roof, a chimney, a tiny front garden and warm windows',
   residential_tower: 'a tall residential tower with many balconies, a flat roof and a modern colorful facade',
   sawmill: "a wooden sawmill with a pitched roof, log piles, a saw shed and a chimney (name the chimney node 'chimney')",
+  stone_pit: 'a small open-air stone gathering pit: a shallow scrape in the ground with loose surface rocks, hand tools, a wheelbarrow, sorted stone piles and a lean-to shelter',
   quarry: 'a stone quarry site with terraced rock, a small crane, gravel piles and a work shed',
   farm: 'a farm with a barn, a farmhouse, silos and fenced fields, warm rural look',
   well: 'a small stone village well with a little wooden roof and a bucket',
@@ -647,6 +648,10 @@ export const BUILDING_STAGE_PROMPTS: Record<string, readonly string[]> = {
     "a wooden sawmill with a pitched roof, log piles, a saw shed and a chimney (name the chimney node 'chimney'); fills a 4×4 works yard with a loading area",
     "a large sawmill: a bigger mill hall, more stacked logs, a conveyor and a second chimney on the 4×4 yard (name a chimney node 'chimney')",
     "a timber combine: a full industrial wood-processing complex with multiple halls, cranes, huge log stockpiles and smoking chimneys filling the 4×4 yard (name a chimney node 'chimney')",
+  ],
+  stone_pit: [
+    'a small open-air stone gathering pit on a 3×3 plot: a shallow scrape with loose surface rocks, a wheelbarrow, hand tools, sorted stone piles and a lean-to shelter',
+    'a stone collection yard on the same 3×3 plot: a sorting table, a simple hand crane, stacked pallets of dressed stone and a short cart track',
   ],
   quarry: [
     'a stone quarry site with terraced rock, a small crane, gravel piles and a work shed on a 5×5 excavation plot',

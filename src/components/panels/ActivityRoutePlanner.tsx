@@ -13,7 +13,6 @@ import {
   Play,
   Route,
   SlidersHorizontal,
-  Sparkles,
   Truck,
   X,
 } from 'lucide-react';
@@ -33,10 +32,6 @@ import { CitizenPortrait } from '../art/index.ts';
 import { ManualRouteMap, type CityworkMapPoint, type DriveReadout } from '../citywork/ManualRouteMap.tsx';
 import { RouteSummary } from '../citywork/RouteSummary.tsx';
 import { SupplyPicker } from '../citywork/SupplyPicker.tsx';
-import {
-  createSmartRouteSuggestion,
-  type SmartRouteSuggestion,
-} from '../citywork/smartRoutePlan.ts';
 import { TourOverview, type TourDisplayPoint } from '../citywork/TourOverview.tsx';
 import { VehicleSelector } from '../citywork/VehicleSelector.tsx';
 
@@ -89,7 +84,6 @@ export function ActivityRoutePlanner({ defId }: { defId: string }) {
   const def = context?.def;
   const targetIds = context?.targetBuildingIds ?? [];
   const targetKey = targetIds.join('|');
-  const vehicleKey = context?.vehicles.map((vehicle) => vehicle.id).join('|') ?? '';
   const anchors = useMemo(
     () => game.getActivityRouteAnchors(defId, targetIds),
     [game, game.version, defId, targetKey],
@@ -98,13 +92,13 @@ export function ActivityRoutePlanner({ defId }: { defId: string }) {
   const [selectedVehicle, setSelectedVehicle] = useState<DriveVehicle>(
     active?.vehicle ?? defaultVehicle,
   );
-  const [roadPath, setRoadPath] = useState<{ x: number; y: number }[]>(() =>
-    active?.plannedRoadPath?.map((point) => ({ ...point })) ?? (anchors ? [{ ...anchors.source }] : []),
+  // Die gefahrene Strecke des laufenden Auftrags. Vor der Annahme ist sie leer —
+  // es gibt keinen vorgezeichneten Weg mehr (§4).
+  const [roadPath, setRoadPath] = useState<{ x: number; y: number }[]>(
+    () => active?.plannedRoadPath?.map((point) => ({ ...point })) ?? [],
   );
-  // § P2 (D-050): Ausführungsart des Auftrags. Nicht zu verwechseln mit
-  // `manualMode` weiter unten — das ist das Zeichnen des Weges, dies hier die
-  // Frage, WER den Auftrag fährt. Läuft die Mission schon, ist die Wahl
-  // gefallen und wird nur noch angezeigt.
+  // § P2 (D-050/D-054): Ausführungsart des Auftrags — WER fährt. Läuft die
+  // Mission schon, ist die Wahl gefallen und wird nur noch angezeigt.
   const [executionMode, setExecutionMode] = useState<TransportMode>(active?.mode ?? 'auto');
   // Sitzt der Spieler gerade in dieser Karte am Steuer? Eine laufende
   // Manuell-Mission darf beim erneuten Öffnen des Planers weiterfahren.
@@ -116,7 +110,6 @@ export function ActivityRoutePlanner({ defId }: { defId: string }) {
   const [boardFilter, setBoardFilter] = useState<BoardFilter>('all');
   const [showJobs, setShowJobs] = useState(false);
   const [showAdjustments, setShowAdjustments] = useState(false);
-  const [manualMode, setManualMode] = useState(false);
   const initializedPlanKey = useRef('');
 
   // § P4 (§8): Der Ladeort ist eine ECHTE Wahl mit echten Beständen — nicht mehr
@@ -139,48 +132,30 @@ export function ActivityRoutePlanner({ defId }: { defId: string }) {
     () => targetIds.map((id) => buildingPoint(game, id)).filter((point): point is RoutePoint => point !== undefined),
     [game, game.version, targetKey],
   );
-  const smartSuggestion = useMemo(
-    () => context
-      ? createSmartRouteSuggestion(game, defId, targetIds, context.vehicles)
-      : undefined,
-    [game, game.version, defId, targetKey, vehicleKey],
-  );
-
-  // Standardfall: Fahrzeug, Zielreihenfolge und echte Straßenkette werden einmal
-  // automatisch vorgeschlagen. Laufende Missionen behalten ihren gespeicherten
-  // Plan; Simulations-Ticks überschreiben keine UI-Eingabe.
+  // § Overhaul 2.0 (§4/§14.1, D-054): KEIN Routenvorschlag mehr. Der Planer
+  // errechnet weder Reihenfolge noch Weg noch Fahrzeug — er zeigt den Auftrag
+  // und die Stadt. Die Strecke entsteht erst beim Fahren und wird über
+  // `recordActivityDrive` aufgezeichnet; ein laufender Auftrag zeigt genau das,
+  // was bisher gefahren wurde.
   useEffect(() => {
     if (!anchors || !context) return;
     const planKey = `${defId}:${targetKey}:${active ? 'active' : 'draft'}`;
     if (initializedPlanKey.current === planKey) return;
     initializedPlanKey.current = planKey;
-    if (active?.plannedRoadPath?.length) {
-      setSelectedVehicle(active.vehicle ?? defaultVehicle);
-      setRoadPath(active.plannedRoadPath.map((point) => ({ ...point })));
-    } else if (smartSuggestion) {
-      setSelectedVehicle(smartSuggestion.vehicle);
-      setRoadPath(smartSuggestion.roadPath.map((point) => ({ ...point })));
-    } else {
-      setSelectedVehicle(defaultVehicle);
-      setRoadPath([{ ...anchors.source }]);
-    }
-    setManualMode(false);
+    setSelectedVehicle(active?.vehicle ?? defaultVehicle);
+    setRoadPath(active?.plannedRoadPath?.map((point) => ({ ...point })) ?? []);
     setShowAdjustments(false);
     setShowJobs(false);
     setFitNonce((value) => value + 1);
-  }, [
-    active,
-    anchors,
-    context,
-    defaultVehicle,
-    defId,
-    smartSuggestion,
-    targetKey,
-  ]);
+  }, [active, anchors, context, defaultVehicle, defId, targetKey]);
 
+  // Die aufgezeichnete Strecke des laufenden Auftrags nachziehen: der Command
+  // schreibt sie ohne `notify` mit (Bildrate), sichtbar wird sie beim nächsten
+  // regulären Update — Ankunft, Ausstieg, Tick.
   useEffect(() => {
-    if (roadPath.length === 0 && anchors) setRoadPath([{ ...anchors.source }]);
-  }, [anchors, roadPath.length]);
+    if (!active?.plannedRoadPath) return;
+    setRoadPath(active.plannedRoadPath.map((point) => ({ ...point })));
+  }, [active, game.version]);
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
@@ -196,28 +171,22 @@ export function ActivityRoutePlanner({ defId }: { defId: string }) {
         else if (showAdjustments) setShowAdjustments(false);
         else closePlanner();
       }
-      if (event.key === 'r' || event.key === 'R') {
-        if (smartSuggestion) {
-          setSelectedVehicle(smartSuggestion.vehicle);
-          setRoadPath(smartSuggestion.roadPath.map((point) => ({ ...point })));
-          setManualMode(false);
-          pushToast('Bester Routenvorschlag wiederhergestellt.', 'info');
-        }
-      }
       if (event.key === 'f' || event.key === 'F') setFitNonce((value) => value + 1);
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [closePlanner, driving, pushToast, showAdjustments, showJobs, smartSuggestion]);
+  }, [closePlanner, driving, showAdjustments, showJobs]);
 
   const selectedVehicleDef = context?.vehicles.find((vehicle) => vehicle.id === selectedVehicle);
   const preview = useMemo(
     () => game.getActivityRoutePreview(defId, targetIds, roadPath, selectedVehicle),
     [game, game.version, defId, targetKey, roadPath, selectedVehicle],
   );
+  // Verkehrsdichte-Ebene der Karte: eine reine Darstellung des vorhandenen
+  // Netzes zwischen Quelle und Zielen — kein Wegvorschlag (§13).
   const referenceAnalysis = useMemo(
-    () => game.analyseActivityRoute(defId, smartSuggestion?.orderedTargetIds ?? targetIds),
-    [game, game.version, defId, targetKey, smartSuggestion?.orderedTargetIds],
+    () => game.analyseActivityRoute(defId, targetIds),
+    [game, game.version, defId, targetKey],
   );
   const warnings = useMemo<InfrastructureWarning[]>(
     () => preview?.analysis
@@ -230,7 +199,6 @@ export function ActivityRoutePlanner({ defId }: { defId: string }) {
   );
   const blockingWarning = warnings.find((warning) => warning.severity === 'critical');
   const visibleWarning = blockingWarning ?? warnings.find((warning) => warning.severity === 'warn') ?? warnings[0];
-  const routeComplete = preview?.complete === true && !blockingWarning;
   const board = game.getActivityBoard().filter((entry) => entry.def.drive);
   const filteredBoard = board.filter((entry) => boardFilter === 'all' || entry.def.category === boardFilter);
   const filters = useMemo(
@@ -239,35 +207,10 @@ export function ActivityRoutePlanner({ defId }: { defId: string }) {
   );
   const futureVehicles = game.config.activities.vehicles.filter((vehicle) => vehicle.future);
 
-  const applySmartSuggestion = (suggestion: SmartRouteSuggestion | undefined) => {
-    if (!suggestion) {
-      setManualMode(true);
-      setShowAdjustments(true);
-      pushToast('Das Straßennetz ist nicht vollständig verbunden. Korrigiere den fehlenden Abschnitt.', 'error');
-      return;
-    }
-    setSelectedVehicle(suggestion.vehicle);
-    setRoadPath(suggestion.roadPath.map((point) => ({ ...point })));
-    setManualMode(false);
-    setFitNonce((value) => value + 1);
-    pushToast(
-      suggestion.ready ? 'Fahrzeug und Route wurden automatisch optimiert.' : 'Vorschlag erstellt – ein Abschnitt braucht deine Hilfe.',
-      suggestion.ready ? 'success' : 'info',
-    );
-  };
-
+  // Die Fahrzeugwahl ist eine Wahl — sie zieht keine Route nach sich (§13).
   const selectVehicle = (vehicle: DriveVehicle) => {
     if (!context) return;
-    const suggestion = createSmartRouteSuggestion(game, defId, targetIds, [{ id: vehicle }]);
-    if (suggestion) {
-      setSelectedVehicle(vehicle);
-      setRoadPath(suggestion.roadPath.map((point) => ({ ...point })));
-      setManualMode(false);
-      setFitNonce((value) => value + 1);
-    } else {
-      setSelectedVehicle(vehicle);
-      setManualMode(true);
-    }
+    setSelectedVehicle(vehicle);
   };
 
   if (selectionStatus === 'stale' && !active) {
@@ -313,15 +256,15 @@ export function ActivityRoutePlanner({ defId }: { defId: string }) {
     (modeRewardFactor('manual', game.config.activities.manualDriveBonusFactor) - 1) * 100,
   );
 
+  // § Overhaul 2.0 (§4): Angenommen wird der AUFTRAG, nicht eine Lösung. Es geht
+  // keine Route mit an den Command — sie entsteht unterwegs. Die Zielliste ist
+  // die eingefrorene Auswahl des Auftrags, KEINE Reihenfolge: welches Ziel wann
+  // bedient wird, entscheidet erst die Fahrt (`progressActivity`).
   const startRoute = () => {
-    if (!routeComplete || !preview) {
-      pushToast('Die automatische Route braucht noch einen verbundenen Straßenabschnitt.', 'error');
-      return;
-    }
-    const plan = { vehicle: selectedVehicle, roadPath, mode: executionMode };
+    const plan = { vehicle: selectedVehicle, mode: executionMode };
     const result = active
-      ? game.setActiveActivityRoute(preview.orderedTargetIds, plan)
-      : game.startActivity(def.id, preview.orderedTargetIds, plan);
+      ? game.setActiveActivityRoute(active.targets.map((target) => target.buildingId), plan)
+      : game.startActivity(def.id, targetIds, plan);
     if (!result.ok) {
       pushToast(t(`error.${result.error}`), 'error');
       return;
@@ -341,12 +284,17 @@ export function ActivityRoutePlanner({ defId }: { defId: string }) {
   };
 
   const selectedImage = selectedVehicleDef ? vehicleImage(selectedVehicleDef.imageKey) : undefined;
-  const planExplanation =
-    !smartSuggestion
-      ? 'Zwischen Quelle und Ziel fehlt ein durchgehender Straßenweg.'
-      : selectedVehicle === smartSuggestion.vehicle
-      ? smartSuggestion.explanation
-      : 'Die Route wurde automatisch an deine Fahrzeugwahl angepasst.';
+  const openTargets = active ? active.targets.filter((target) => !target.done).length : targetIds.length;
+  /** Tatsächlich angefahrene Ziele in Besuchsreihenfolge — das Protokoll (§5). */
+  const visitedTargetIds = active
+    ? active.targets.filter((target) => target.done).map((target) => target.buildingId)
+    : [];
+  const drivenTiles = active?.plannedRoadPath?.length ?? 0;
+  // Was der Spieler wissen muss, steht hier — und zwar als Aufgabe, nicht als
+  // fertige Lösung (§13: keine automatische Route, keine feste Stoppliste).
+  const planExplanation = selectedVehicleDef
+    ? `${Math.round(selectedVehicleDef.speedKph)} km/h · ${selectedVehicleDef.capacity} Einheiten Ladung`
+    : 'Wähle ein Fahrzeug für diesen Auftrag.';
 
   return (
     <section className="citywork-planner citywork-smart">
@@ -359,17 +307,17 @@ export function ActivityRoutePlanner({ defId }: { defId: string }) {
           </div>
         </div>
 
-        <div className="citywork-smart-progress" aria-label="Planungsfortschritt">
+        <div className="citywork-smart-progress" aria-label="Auftragsfortschritt">
           <span className="done"><Check size={13} /> Auftrag gewählt</span>
-          <span className={roadPath.length > 1 ? 'done' : 'active'}>
-            {roadPath.length > 1 ? <Check size={13} /> : <Sparkles size={13} />} Vorschlag
+          <span className={active ? 'done' : 'active'}>
+            {active ? <Check size={13} /> : <Gamepad2 size={13} />} Angenommen
           </span>
-          <span className={routeComplete ? 'active' : ''}>3&nbsp; Bestätigen</span>
+          <span className={active ? 'active' : ''}>{openTargets} Ziele offen</span>
         </div>
 
         <div className="citywork-smart-header-actions">
           <button
-            onClick={() => pushToast('Der Vorschlag ist startklar. Nur unter „Plan anpassen“ kannst du Fahrzeug oder Weg ändern.', 'info')}
+            onClick={() => pushToast('Du bekommst das Problem, nicht die Lösung: Ladeort und Fahrzeug wählst du, den Weg fährst du selbst. Jedes Ziel zählt, sobald du dort ankommst.', 'info')}
             title="Hilfe"
           >
             <HelpCircle size={18} />
@@ -382,23 +330,25 @@ export function ActivityRoutePlanner({ defId }: { defId: string }) {
         <main className="citywork-smart-map-panel">
           <div className="citywork-smart-map-head">
             <div>
-              <span className={`citywork-smart-state${routeComplete ? ' ready' : ''}`}>
-                <Sparkles size={13} />
-                {routeComplete ? 'Automatisch geplant' : 'Feinplanung nötig'}
+              <span className={`citywork-smart-state${active ? ' ready' : ''}`}>
+                <Gamepad2 size={13} />
+                {driving ? 'Du fährst' : active ? 'Auftrag läuft' : 'Deine Aufgabe'}
               </span>
               <h2>{source.label} → {targetIds.length} Ziele</h2>
               <p>
-                {routeComplete
-                  ? 'Fahrzeug, Reihenfolge und Nachladen sind vorbereitet. Du kannst direkt starten.'
-                  : 'Der beste vorhandene Weg ist sichtbar. Öffne „Plan anpassen“, um den offenen Punkt zu korrigieren.'}
+                {driving
+                  ? `Fahre die Ziele in deiner Reihenfolge an. ${drivenTiles} Kacheln aufgezeichnet.`
+                  : active
+                    ? 'Der Auftrag ist angenommen. Steig ein — welchen Weg du nimmst, entscheidest du.'
+                    : 'Ladeort und Fahrzeug wählst du. Der Weg entsteht beim Fahren, nicht vorher.'}
               </p>
             </div>
             <div className="citywork-smart-map-actions">
               <button onClick={() => setShowJobs((value) => !value)}>
                 <PackageCheck size={15} /> Auftrag wechseln
               </button>
-              <button className="primary" onClick={() => applySmartSuggestion(smartSuggestion)}>
-                <Sparkles size={15} /> Neu optimieren
+              <button onClick={() => setFitNonce((value) => value + 1)}>
+                <Route size={15} /> Alles zeigen
               </button>
             </div>
           </div>
@@ -412,19 +362,17 @@ export function ActivityRoutePlanner({ defId }: { defId: string }) {
               roadPath={roadPath}
               analysis={preview?.analysis}
               referenceSegments={referenceAnalysis?.segments}
-              {...(smartSuggestion && !sameRoadPath(smartSuggestion.roadPath, roadPath)
-                ? { referencePath: smartSuggestion.roadPath }
-                : {})}
-              visitOrder={preview?.orderedTargetIds ?? []}
+              visitOrder={visitedTargetIds}
               {...(preview?.cargoRoute ? { cargoStops: preview.cargoRoute.stops } : {})}
               fitNonce={fitNonce}
               {...(selectedVehicleDef ? { vehicleSpeedKph: selectedVehicleDef.speedKph } : {})}
               {...(preview?.cargoPlan && preview.cargoPlan.capacity > 0
                 ? { loadRatio: Math.min(1, preview.cargoPlan.totalRequired / preview.cargoPlan.capacity) }
                 : {})}
-              editEnabled={manualMode && !driving}
+              editEnabled={false}
               driving={driving}
               onDriveReadout={setDriveReadout}
+              onRecordDrive={(tiles) => game.recordActivityDrive(tiles)}
               onArrive={(buildingId) => {
                 // Der Command entscheidet, ob der Stopp zählt — die Karte meldet
                 // nur die Ankunft. Ist der Auftrag danach fertig, endet die Fahrt.
@@ -446,22 +394,16 @@ export function ActivityRoutePlanner({ defId }: { defId: string }) {
             {driving
               ? <DriveHud readout={driveReadout} targetsTotal={targetIds.length} />
               : <RouteSummary preview={preview} roadPath={roadPath} targetsTotal={targetIds.length} />}
-            {manualMode && !driving && (
-              <div className="citywork-smart-editing">
-                <SlidersHorizontal size={15} />
-                Manuelle Feinplanung aktiv
-              </div>
-            )}
           </div>
         </main>
 
         <aside className="citywork-smart-decision">
-          <section className={`citywork-smart-ready-card${routeComplete ? ' ready' : ''}`}>
-            <span className="citywork-smart-kicker">{routeComplete ? 'Bereit zur Abfahrt' : 'Deine Hilfe nötig'}</span>
+          <section className={`citywork-smart-ready-card${active ? ' ready' : ''}`}>
+            <span className="citywork-smart-kicker">{active ? 'Auftrag läuft' : 'Deine Entscheidung'}</span>
             <div className="citywork-smart-vehicle-hero">
               <span>{selectedImage ? <img src={selectedImage} alt="" /> : <Truck size={48} />}</span>
               <div>
-                <small>{selectedVehicle === smartSuggestion?.vehicle ? 'Automatisch gewählt' : 'Deine Auswahl'}</small>
+                <small>Deine Auswahl</small>
                 <strong>{selectedVehicleDef ? t(selectedVehicleDef.nameKey) : 'Lieferfahrzeug'}</strong>
                 <p>{planExplanation}</p>
               </div>
@@ -471,13 +413,6 @@ export function ActivityRoutePlanner({ defId }: { defId: string }) {
               <div className={`citywork-smart-warning ${visibleWarning.severity}`}>
                 <AlertTriangle size={16} />
                 <span>{WARNING_LABELS[visibleWarning.code]}</span>
-              </div>
-            )}
-
-            {!visibleWarning && routeComplete && (
-              <div className="citywork-smart-ok">
-                <Check size={16} />
-                Alle Ziele und nötigen Nachladehalte sind verbunden.
               </div>
             )}
 
@@ -519,9 +454,26 @@ export function ActivityRoutePlanner({ defId }: { defId: string }) {
               <span>{Math.round(context.reward.xp * rewardFactor)} XP</span>
             </div>
 
-            <button className="citywork-smart-start" disabled={!routeComplete} onClick={startRoute}>
-              <Play size={17} /> {executionMode === 'manual' ? 'Einsteigen und losfahren' : 'Route starten'}
-            </button>
+            {/*
+              § Overhaul 2.0 (§4): Der Knopf nimmt den AUFTRAG an. Er wartete
+              vorher auf eine vollständige automatische Route — jetzt gibt es
+              keine, die fertig sein könnte. Läuft der Auftrag bereits, führt
+              derselbe Knopf zurück ans Steuer.
+            */}
+            {active && executionMode === 'manual' && !driving ? (
+              <button className="citywork-smart-start" onClick={() => setDriving(true)}>
+                <Play size={17} /> Weiterfahren
+              </button>
+            ) : (
+              <button className="citywork-smart-start" disabled={driving} onClick={startRoute}>
+                <Play size={17} />
+                {driving
+                  ? 'Du bist unterwegs'
+                  : executionMode === 'manual'
+                    ? 'Auftrag annehmen und einsteigen'
+                    : 'Auftrag annehmen'}
+              </button>
+            )}
           </section>
 
           <button
@@ -530,7 +482,7 @@ export function ActivityRoutePlanner({ defId }: { defId: string }) {
             onClick={() => setShowAdjustments((value) => !value)}
           >
             <SlidersHorizontal size={16} />
-            Plan anpassen
+            Fahrzeug und Tour
             <ChevronDown size={16} />
           </button>
 
@@ -557,7 +509,6 @@ export function ActivityRoutePlanner({ defId }: { defId: string }) {
             <div className="citywork-smart-adjustments">
               <VehicleSelector
                 compact
-                {...(smartSuggestion ? { recommended: smartSuggestion.vehicle } : {})}
                 vehicles={context.vehicles}
                 futureVehicles={futureVehicles}
                 level={game.state.level.current}
@@ -568,26 +519,17 @@ export function ActivityRoutePlanner({ defId }: { defId: string }) {
                 onSelect={selectVehicle}
               />
 
-              <div className="citywork-smart-route-tools">
-                <button onClick={() => applySmartSuggestion(smartSuggestion)}>
-                  <Sparkles size={15} /> Automatik wiederherstellen
-                </button>
-                <button
-                  className={manualMode ? 'active' : ''}
-                  onClick={() => {
-                    setManualMode((value) => !value);
-                    setFitNonce((value) => value + 1);
-                  }}
-                >
-                  <Route size={15} /> {manualMode ? 'Zeichnen beenden' : 'Weg selbst korrigieren'}
-                </button>
-              </div>
-
+              {/*
+                Keine geplante Stoppliste mehr (§13), sondern das Protokoll:
+                erledigte Ziele in der Reihenfolge, in der SIE angefahren wurden.
+                Vor der Annahme steht hier nichts — es gibt nichts zu
+                protokollieren.
+              */}
               <TourOverview
                 compact
                 source={source}
                 targets={targets}
-                orderedTargetIds={preview?.orderedTargetIds ?? []}
+                orderedTargetIds={visitedTargetIds}
                 {...(preview?.cargoRoute ? { cargoStops: preview.cargoRoute.stops } : {})}
                 {...(preview?.progress ? { progress: preview.progress } : {})}
                 {...(selectedVehicleDef ? { vehicle: selectedVehicleDef } : {})}
@@ -702,11 +644,6 @@ function DriveHud({ readout, targetsTotal }: { readout: DriveReadout | undefined
       </span>
     </div>
   );
-}
-
-/** Zwei Wege sind gleich, wenn sie Kachel für Kachel übereinstimmen. */
-function sameRoadPath(a: readonly { x: number; y: number }[], b: readonly { x: number; y: number }[]): boolean {
-  return a.length === b.length && a.every((point, index) => point.x === b[index]?.x && point.y === b[index]?.y);
 }
 
 function buildingPoint(game: GameController, id?: string): RoutePoint | undefined {

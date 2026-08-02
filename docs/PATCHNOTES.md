@@ -1,5 +1,157 @@
 # Patch Notes
 
+## v1.35 — Stadtarbeit 2.0 (Phasen 1+3), Stein-Einstieg und klar gesperrte Regionen (Save bleibt v32)
+
+Drei Aufträge an einem Strang: die Stadtarbeit hört auf, dem Spieler die Lösung
+vorzugeben; das Frühspiel bekommt seine fehlende Steinquelle; gesperrte Regionen
+werden vollständig gezeigt und vollständig beschriftet. **Keine
+Schemaänderung — Save bleibt v32, alte Spielstände laufen unverändert weiter.**
+
+---
+
+### 1. Die Route wird gefahren, nicht geplant (D-054)
+
+**Was.** Der Routenplaner schlägt nichts mehr vor. Keine automatische
+Zielreihenfolge, kein vorberechneter Weg, kein „Neu optimieren", kein
+Zeichenwerkzeug. Der Knopf heißt jetzt **„Auftrag annehmen und einsteigen"** —
+danach entsteht die Route dadurch, dass du sie fährst.
+
+**Warum.** Auftragstext: „Die Route wird NICHT gezeichnet. Die Route wird
+gefahren." Vorher erzeugte `createSmartRouteSuggestion` Reihenfolge, Fahrzeug
+und Weg vollständig; der Spieler bestätigte eine fertige Lösung. Das ist
+gestrichen.
+
+**Der eigentliche Riegel saß tiefer.** `progressActivity` akzeptierte für
+Fahrmissionen ausschließlich `targets.find(!done)` — **das nächste Ziel der
+Planerliste**. Wer als Zweites das nähere Haus ansteuerte, bekam `invalid` und
+lieferte nicht. Die Reihenfolge war damit Pflicht, nicht Vorschlag. Jetzt zählt
+**jedes offene Ziel**, sobald du dort ankommst.
+
+**Architektur.** `active.targets` wird beim Abschluss eines Stopps umsortiert und
+**protokolliert dadurch die tatsächlich gefahrene Reihenfolge** — Abschluss-
+bericht, Tourübersicht und Karte lesen weiterhin dasselbe Feld, es gibt keine
+zweite Liste. Die gefahrene Strecke geht über den neuen Command
+`recordActivityDrive(tiles)` in `plannedRoadPath`, also in dasselbe Feld, das der
+Abschlussbericht ohnehin auswertet: **kein zweites Streckenfeld, keine
+Migration.** Aufgezeichnet wird nur, was `derived.roadNetwork` hergibt (dieselbe
+Menge, aus der die Fahrt ihre Befahrbarkeit zieht — kein zweiter Verkehrsgraph).
+Eine diagonal geschnittene Kurve ergänzt deterministisch die dazwischenliegende
+Straßenkachel; **größere Sprünge werden verworfen, nicht interpoliert.** Die
+Aufzeichnung läuft bewusst **ohne `notify`**: sie folgt der Bildrate, und ein
+Versionssprung je Kachel zöge die gesamte Oberfläche mit.
+
+**Auswirkung.** „Fahren lassen" bleibt — automatisiert wird die *Ausführung*,
+nicht die *Wahl* (D-039). Weil die UI dort keine Route mehr mitschickt,
+beschreibt der Abschlussbericht jetzt den Weg, den die Stadt tatsächlich nimmt,
+statt gar keinen.
+
+**Zukunft.** Isometrische Weltkamera statt 2D-Karte, Gebäude-Interaktion auf der
+Karte, Nachladen unterwegs und die 3D-Ausführung der aufgezeichneten Route sind
+**nicht** gebaut (D-053 offen).
+
+---
+
+### 2. Stein hat endlich einen Einstieg (D-055)
+
+**Was.** Neues Gebäude **Steingrube** (`stone_pit`), ab **Level 2**, 3×3,
+`{ Geld 9.000, Holz 60 }` — **kein Stein**, kein Terrain, erste gratis.
+13 Stein/min, Ausbau zur *Sammelstelle* (L5) auf 26.
+
+**Warum — und was die Messung ergab.** Die gemeldete Schleife „Stein für den
+Steinbruch" existiert **nicht**: `quarry` kostet Geld und Holz. Der echte Riegel
+ist das **Terrain**. Der Steinbruch war die einzige Steinquelle und braucht
+`rock`-Knoten auf `mountain`; die Startregion hat davon **46 Kacheln ≈ 18 Knoten
+≈ 3.312 Stein — einmalig**, denn Fels wächst nie nach. Startvorrat Stein: **0**.
+Erste Steinkosten: Lagerhaus auf **L6** (100), danach Depot 200, Feuerwache 220,
+Büro 480.
+
+**Kalibrierung.** Ein Drittel des Steinbruchs, testgesichert. Die Grube hält die
+Stadt am Leben, ersetzt aber kein Bergrevier — sonst wäre die
+Regionsfreischaltung entwertet.
+
+**Dauerhaft gesichert.** `tests/earlyGameProgression.test.ts` prüft über die
+gesamte Config bis L8: jede Baukosten-Ressource hat eine Quelle, die sie nicht
+selbst voraussetzt (oder einen Startvorrat > 0), mindestens eine frühe
+Steinquelle hängt **nicht** an Bergterrain, und jede Levelfreischaltung benennt
+ein existierendes Gebäude.
+
+**Farm: der offene Punkt, jetzt sichtbar.** Die Startregion hat **null**
+fruchtbare Kacheln — eine dort gebaute Farm ist gültig platziert, zahlt Unterhalt
+und arbeitet **nie**. Das war unsichtbar. Neue Diagnose **`no_resource_nodes`**
+(„Kein Vorkommen im Arbeitsgebiet — der Betrieb kann nicht arbeiten"), gezählt
+über `nodesInWorkArea` — dieselbe Funktion, aus der der Betrieb seine Arbeiter
+schickt. Wie D-047 ist das eine **Warnung, keine Bauregel**: Vorbauen bleibt
+erlaubt. Das Feldsystem (Felder kaufen und frei platzieren) ist **nicht** gebaut;
+Entwurf und Randbedingungen in `docs/agents/EARLY_GAME_AUDIT.md` §5.
+
+**Felder: die Simulation steht.** Neues reines Sim-Modul `game/operations/farmFields.ts`
+mit `getFarmFieldPlan`/`buildFarmField`/`clearFarmField`/`getFarmFieldTiles`. Ein Feld
+ist **kein Gebäude**, sondern eine bezahlte Geländeänderung — `isNodeTile` schließt
+Kacheln unter Gebäuden aus, ein Feldgebäude könnte also nie selbst der Knoten sein.
+Geschrieben wird in die vorhandenen `world.terrainOverrides` (seit v10 im Schema),
+ab da liefert die **normale** Knotenableitung `crop`-Knoten: kein zweites
+Produktionssystem, kein Schemabruch. 260 Geld je Kachel, nur freies bebaubares
+Gras **im `maxRadius` einer Farm** — dieselbe Reichweite, aus der der Betrieb seine
+Arbeiter schickt. Testbeleg: vor dem Feld findet `deriveNodesInArea` **null**
+Erntepunkte, danach echte. **Offen und nicht vorgetäuscht: die Bedienung** —
+ohne „Felder verwalten" im Farm-Sheet ist das System im Spiel nicht erreichbar.
+
+---
+
+### 3. Gesperrte Regionen: vollständig, farblos, beschriftet (D-056)
+
+**Was.** Gesperrtes Land behält **alle** Props, Bäume, Felsen und
+Landschaftsdetails (`LOCKED_VEGETATION_DENSITY` 0,5 → **1**), ist deutlicher
+entsättigt (0,7 → **0,85**) und trägt am Schloss jetzt **Name, Level, Kosten und
+Bonus** statt nur Name und Level.
+
+**Warum.** Auftrag mit Mockup: „Alles sichtbar, nur ausgegraut." Die halbe
+Vegetation erzeugte einen kahlen Streifen genau an der Regionsgrenze — also
+exakt den „unvollständigen" Eindruck, den der Auftrag ausschließt. Kosten und
+Bonus musste man vorher im Dialog suchen.
+
+**Architektur.** Kosten kommen aus `regions.config` — derselben Quelle, aus der
+der Unlock-Command bezahlt. Der Bonus wird aus den echten `productionModifiers`
+abgeleitet und bleibt **leer**, wenn die Region keinen hat (nichts erfinden).
+Bezahlbar bleibt die volle Dichte, weil gesperrte Vegetation an einem **eigenen**
+Schlüssel hängt (D-045) und keine Schatten wirft: neu gebaut wird sie nur beim
+Freischalten, nie beim Bauklick.
+
+**Auswirkung.** Reine Darstellung. `regionUnlockBlocker`, Baubarkeit und Kosten
+sind unverändert.
+
+---
+
+### 4. Nebenbefund: fünf Doku-Tests waren rot
+
+`models/roads`, `models/bridges` und `docs/ROAD_TEXTURES.md` waren seit den
+Straßen-/Visual-Commits nicht neu generiert. Über die dokumentierten Generatoren
+(`WRITE_MODEL_DOCS=1`, `WRITE_ROAD_DOCS=1`) wieder synchron.
+
+---
+
+### Dateien
+
+**Simulation:** `game/operations/farmFields.ts` (neu), `game/commands/controller.ts` (freie Zielreihenfolge,
+Besuchsprotokoll, `recordActivityDrive`, Auto-Modus-Kennzahlen),
+`game/buildings/diagnostics.ts` (`no_resource_nodes`),
+`game/config/buildings.config.ts` (`stone_pit`), `game/config/levels.config.ts`.
+**Oberfläche:** `components/panels/ActivityRoutePlanner.tsx` (Automatik entfernt),
+`components/citywork/ManualRouteMap.tsx` (Aufzeichnung, freie Ankunft).
+**Welt:** `renderer/worldProjection.ts` (Dichte, Entsättigung),
+`renderer/three/ThreeMapRenderer.ts` (Marker mit Kosten und Bonus).
+**Assets/Doku:** `assets/modelManifest.ts`, `docs/3D_MODEL_MANIFEST.md`,
+`docs/agents/EARLY_GAME_AUDIT.md` (neu), `docs/agents/DECISIONS.md`, `i18n/de.json`.
+**Tests:** `tests/driveRecording.test.ts` (neu, 6),
+`tests/earlyGameProgression.test.ts` (neu, 6), `tests/farmFields.test.ts` (neu, 6),
+`tests/missions.test.ts` (Regel gedreht).
+
+**Assets:** `models/buildings/stone_pit.glb` (Drop-in, Prompts im Manifest) —
+fehlt sie, greift der prozedurale Fallback.
+
+**Verifikation:** `tsc` · `eslint` · **742 Tests / 90 Dateien** · `npm run build`.
+
+
 ## v1.34 — Stadtarbeit P4: Jedes Lager hat seinen eigenen Bestand (Save v32)
 
 ### Was
