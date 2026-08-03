@@ -6,6 +6,7 @@ import { effectiveEffects } from './effects.ts';
 import { locationBonusPct } from './location.ts';
 import { buildingInfrastructureStatus } from '../infrastructure/buildingInfrastructure.ts';
 import { nodesInWorkArea } from '../operations/operations.ts';
+import { nodeProfile } from '../operations/nodes.ts';
 
 /**
  * A single legible statement about a building's current situation — the shared
@@ -32,6 +33,14 @@ export type DiagnosisCode =
    * eine WARNUNG, keine Bauregel — sonst verbietet man das Vorbauen.
    */
   | 'no_resource_nodes'
+  /**
+   * § D-058: Dasselbe Symptom, aber ein völlig anderer Satz. Wo der Spieler die
+   * Knoten selbst anlegen kann (Felder), ist „Kein Vorkommen — der Betrieb kann
+   * nicht arbeiten" schlicht falsch: der Betrieb wartet, und der Spieler hat
+   * etwas zu tun. Sägewerk und Steinbruch behalten die harte Meldung — Wald
+   * wächst nur auf Waldkacheln nach, Stein gar nicht (D-046).
+   */
+  | 'operation_waiting_for_nodes'
   // Benefits (green/amber badge / positive line):
   | 'upgrade_ready'
   | 'location_bonus'
@@ -92,7 +101,12 @@ export function buildingDiagnostics(
   if (def.operation && b.status === 'active') {
     const now = state.meta.lastSimTime;
     if (nodesInWorkArea(state, def, b, def.operation.maxRadius, now).length === 0) {
-      problem('no_resource_nodes', { resource: def.operation.resource });
+      problem(
+        nodeProfile(def.operation.nodeType)?.playerCreatable
+          ? 'operation_waiting_for_nodes'
+          : 'no_resource_nodes',
+        { resource: def.operation.resource, nodeType: def.operation.nodeType },
+      );
     }
   }
 

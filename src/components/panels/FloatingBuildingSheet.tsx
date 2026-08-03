@@ -31,6 +31,7 @@ import {
   Users,
   UserX,
   Warehouse,
+  Wheat,
   X,
 } from 'lucide-react';
 import { useEffect, useState, type ReactNode } from 'react';
@@ -72,6 +73,7 @@ export function FloatingBuildingSheet() {
     pushToast,
     openWorkAreaPlanner,
     openResourceNetwork,
+    openFieldTool,
   } = useUiStore();
   const [confirmDemolish, setConfirmDemolish] = useState(false);
   const [detailsOpen, setDetailsOpen] = useState(false);
@@ -106,6 +108,11 @@ export function FloatingBuildingSheet() {
   const status = buildingStatus(building, visibleDiagnostics);
   const operationInfo = def.operation ? game.getBuildingOperationInfo(building.id) : undefined;
   const activeOperationInfo = building.status === 'active' ? operationInfo : undefined;
+  // § D-058: Eine Farm ist der Betrieb auf `crop` — gefragt wird die Config,
+  // nicht die Gebäude-Id. Wer eine zweite Farm einträgt, bekommt den Knopf
+  // ohne weiteres Zutun.
+  const isFarm = def.operation?.nodeType === 'crop' && building.status === 'active';
+  const fieldSummary = isFarm ? game.getFarmFieldSummary(building.id) : undefined;
   const logisticsWarning = activeOperationInfo
     ? game.getLogisticsWarnings().find((warning) => warning.buildingId === building.id)
     : undefined;
@@ -314,8 +321,17 @@ export function FloatingBuildingSheet() {
           )}
         </section>
 
-        {(radius > 0 || activeOperationInfo) && (
+        {(radius > 0 || activeOperationInfo || isFarm) && (
           <div className="as3-building-map-actions">
+            {/* § D-058: Der Zugang zum Feldsystem. Eine Farm ist ein Gebäude MIT
+                FELDERN — ohne diesen Knopf existierte die Mechanik nur im Code. */}
+            {isFarm && (
+              <button type="button" onClick={() => openFieldTool(building.id)}>
+                <Wheat size={15} />
+                Felder verwalten
+                <span>{fieldSummary?.tiles ?? 0} Kacheln</span>
+              </button>
+            )}
             {radius > 0 && (
               <button type="button" onClick={() => getMapApi()?.focusSelected()}>
                 <Route size={15} />

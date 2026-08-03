@@ -30,6 +30,54 @@ const FIELD_BASE_TERRAIN: readonly TerrainType[] = ['grass', 'fertile'];
 /** Geldkosten je angelegter Feldkachel. */
 export const FIELD_COST_PER_TILE = 260;
 
+/**
+ * Laufende Kosten je Feldkachel und Ingame-Minute. Damit gilt, was der Auftrag
+ * verlangt: „je größer das Feld, desto höher Kosten UND Unterhalt". Der Wert
+ * wird NICHT gespeichert — Felder sind `terrainOverrides` und jederzeit
+ * zählbar (D-059), Feldliste und Unterhalt können also nicht auseinanderlaufen.
+ */
+export const FIELD_UPKEEP_PER_TILE = 1.4;
+
+/** Feldkacheln, die ein Arbeiter bewirtschaftet — daraus folgt der Arbeiterbedarf. */
+export const FIELD_TILES_PER_WORKER = 12;
+
+/**
+ * Ertragsanteil eines Feldes nach Entfernung zur Farm. **Keine zweite
+ * Distanzrechnung** (D-059): dieselben `efficientRadius`/`maxRadius`, nach denen
+ * der Arbeiter läuft. Bis zum effizienten Radius voll, danach linear bis auf
+ * `FIELD_MIN_EFFICIENCY` am äußeren Rand.
+ */
+export const FIELD_MIN_EFFICIENCY = 0.6;
+
+export function fieldEfficiency(distance: number, efficientRadius: number, maxRadius: number): number {
+  if (distance <= efficientRadius) return 1;
+  if (distance >= maxRadius) return FIELD_MIN_EFFICIENCY;
+  const span = Math.max(1e-6, maxRadius - efficientRadius);
+  return 1 - (1 - FIELD_MIN_EFFICIENCY) * ((distance - efficientRadius) / span);
+}
+
+/** Ein Feld, wie Menü und Renderer es brauchen. */
+export interface FarmFieldView {
+  x: number;
+  y: number;
+  /** Reifegrad 0…1 aus dem Knoten, den der Arbeiter gleich aberntet. */
+  growth: number;
+  distanceTiles: number;
+  efficiencyPct: number;
+}
+
+/** Kennzahlen aller Felder einer Farm. */
+export interface FarmFieldSummary {
+  tiles: number;
+  upkeepPerMinute: number;
+  averageEfficiencyPct: number;
+  workersNeeded: number;
+  workerSlots: number;
+  efficientRadius: number;
+  maximumRadius: number;
+  costPerTile: number;
+}
+
 export type FieldTileBlocker =
   | 'out_of_world'
   | 'occupied'
@@ -144,6 +192,18 @@ export function clearFarmField(state: GameState, area: { x: number; y: number; w
     }
   }
   return cleared;
+}
+
+/**
+ * Nur die Anzahl — ohne die Liste zu bauen. `derived` läuft bei jeder
+ * Zustandsänderung; eine Array-Allokation je Aufruf wäre hier Verschwendung.
+ */
+export function countFarmFieldTiles(state: GameState): number {
+  let count = 0;
+  for (const terrain of Object.values(state.world.terrainOverrides ?? {})) {
+    if (terrain === 'fertile') count += 1;
+  }
+  return count;
 }
 
 /** Alle Feldkacheln der Stadt — für Übersicht und Renderer. */

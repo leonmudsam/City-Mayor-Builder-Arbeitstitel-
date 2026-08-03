@@ -37,6 +37,25 @@ export interface ResourceNodeProfile {
    * keine Automatik (D-039).
    */
   regenerationMs?: number;
+  /**
+   * § D-058 — KANN DER SPIELER DIESE KNOTEN SELBST ANLEGEN?
+   *
+   * Nur hierauf darf ein leerer Betriebsstart gestützt werden, und die
+   * Unterscheidung ist schärfer als „wächst nach":
+   *
+   * * `tree` — **nein.** Wald wächst zwar nach, aber nur auf Waldkacheln. Steht
+   *   in Reichweite jetzt kein Baum, entsteht dort auch keiner; „0 Knoten"
+   *   heißt beim Sägewerk wirklich „falsch gebaut".
+   * * `rock` — **nein.** Stein wächst nie nach (D-046).
+   * * `crop` — **ja.** Ein Feld ist eine bezahlte Geländeänderung des Spielers;
+   *   „0 Knoten" heißt hier „noch keine Felder angelegt", nicht „nie".
+   *
+   * PFLICHTFELD: Wer einen Knotentyp ergänzt, muss die Frage beantworten, sonst
+   * compiliert das Profil nicht. Der frühere Riegel stand als
+   * `if (nodeIds.length === 0) return fail('invalid')` in einer Command-Zeile —
+   * an einer Stelle, an der niemand weiß, ob das Gebiet noch etwas werden kann.
+   */
+  playerCreatable: boolean;
 }
 
 /**
@@ -52,14 +71,32 @@ export const RESOURCE_NODE_PROFILES: Partial<Record<ResourceNodeType, ResourceNo
   // Knoten leer ist, die Traglast wäre also nur auf dem Papier größer. Das ist die
   // Voraussetzung der Sägewerk-Kalibrierung (§A6/A7) und save-sicher — angearbeitete
   // Bäume behalten ihre persistierte Restmenge.
-  tree: { resource: 'wood', terrain: 'forest', density: 0.5, maxAmount: 100, regenerationMs: 8 * 60 * 1000 },
+  tree: {
+    resource: 'wood',
+    terrain: 'forest',
+    density: 0.5,
+    maxAmount: 100,
+    regenerationMs: 8 * 60 * 1000,
+    playerCreatable: false,
+  },
   // Felsvorkommen: ergiebig, aber endlich. ~180 Einheiten je Kachel ergeben pro
   // Steinbruch-Standort mehrere Stunden Abbau, danach ist der Bruch leer (§A6).
-  rock: { resource: 'stone', terrain: 'mountain', density: 0.4, maxAmount: 180 },
+  rock: { resource: 'stone', terrain: 'mountain', density: 0.4, maxAmount: 180, playerCreatable: false },
   // Feld: hohe Menge je Kachel, schneller Zyklus — Aussaat/Wachstum/Ernte fallen
   // mit der vorhandenen Regeneration zusammen, es braucht keinen zweiten
   // Lebenszyklus (§2).
-  crop: { resource: 'food', terrain: 'fertile', density: 0.6, maxAmount: 130, regenerationMs: 10 * 60 * 1000 },
+  // Feld: Dichte **1,0**, und das ist keine Balancing-Laune. Feldkacheln sind
+  // bezahlte Fläche (`FIELD_COST_PER_TILE`); bei 0,6 hätte jede fünfte bis
+  // zweite gekaufte Kachel dauerhaft nichts getragen, ohne dass der Spieler
+  // erkennen kann, warum. Wer bezahlt, bekommt die Fläche.
+  crop: {
+    resource: 'food',
+    terrain: 'fertile',
+    density: 1,
+    maxAmount: 130,
+    regenerationMs: 10 * 60 * 1000,
+    playerCreatable: true,
+  },
 };
 
 /** Profil eines Knotentyps (undefined = von keinem Betrieb belegt). */

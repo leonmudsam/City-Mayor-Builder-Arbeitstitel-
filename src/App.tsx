@@ -32,6 +32,7 @@ import { ActivityRoutePlanner } from './components/panels/ActivityRoutePlanner.t
 import { WeatherPanel } from './components/panels/WeatherPanel.tsx';
 import { ActivityExecutionWidget } from './components/citywork/ActivityExecutionWidget.tsx';
 import { WorkAreaPlanner } from './components/operations/WorkAreaPlanner.tsx';
+import { FarmFieldPanel } from './components/operations/FarmFieldPanel.tsx';
 import { ResourceNetworkPanel } from './components/operations/ResourceNetworkPanel.tsx';
 import { InfrastructureNetworkPanel } from './components/operations/InfrastructureNetworkPanel.tsx';
 import { SmartRoadPlannerHud } from './components/operations/SmartRoadPlannerHud.tsx';
@@ -266,6 +267,7 @@ function GameScreen({ onImport, onReset }: { onImport(json: string): boolean; on
   const openPanel = useUiStore((s) => s.openPanel);
   const activityPlannerDefId = useUiStore((s) => s.activityPlannerDefId);
   const workAreaPlannerBuildingId = useUiStore((s) => s.workAreaPlannerBuildingId);
+  const fieldToolBuildingId = useUiStore((s) => s.fieldToolBuildingId);
   const resourceNetworkResource = useUiStore((s) => s.resourceNetworkResource);
   const infrastructureNetworkOpen = useUiStore((s) => s.infrastructureNetworkOpen);
   const placingDefId = useUiStore((s) => s.placingDefId);
@@ -307,6 +309,13 @@ function GameScreen({ onImport, onReset }: { onImport(json: string): boolean; on
 
         {activityPlannerDefId ? (
           <ActivityRoutePlanner key={activityPlannerDefId} defId={activityPlannerDefId} />
+        ) : fieldToolBuildingId ? (
+          <>
+            {/* § D-058: Das Feldwerkzeug ist ein Entwurf am Cursor — die
+                Kamerabedienung bleibt, damit der Spieler zum Ziel fahren kann. */}
+            <FarmFieldPanel key={fieldToolBuildingId} />
+            <CameraControls />
+          </>
         ) : workAreaPlannerBuildingId ? (
           <>
             <WorkAreaPlanner key={workAreaPlannerBuildingId} />

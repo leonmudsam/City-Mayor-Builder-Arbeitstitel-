@@ -95,3 +95,57 @@ describe('Farm-Felder — die Farm bringt ihr Ackerland mit', () => {
     expect(Object.values(raw.world.terrainOverrides ?? {}).filter((t) => t === 'fertile').length).toBe(tiles.length);
   });
 });
+
+// § D-058 — DIE FARM DARF NICHT BLOCKIEREN.
+//
+// Der eigentliche Riegel war nicht die Feldmechanik, sondern eine Zeile im
+// Command: `if (nodeIds.length === 0) return fail('invalid')`. Damit ließ sich
+// eine Farm in der Startregion (null fruchtbare Kacheln) NIE starten — und ohne
+// laufende Farm gab es keinen Grund, das Feldsystem überhaupt zu erreichen.
+//
+// Diese Tests prüfen genau die Regel, nicht ihr Symptom: Wer die Knoten selbst
+// anlegen kann, darf leer starten; wer nicht, bekommt weiterhin den Fehler.
+describe('D-058 — der Betriebsstart hängt daran, wer die Knoten anlegen kann', () => {
+  it('startet die Farm ohne ein einziges Feld und lässt sie warten', () => {
+    const controller = farmCity();
+    const farm = Object.values(controller.state.buildings).find((b) => b.defId === 'farm');
+    expect(farm, 'Die Farm muss stehen — sonst prüft dieser Test nichts').toBeDefined();
+    expect(controller.getFarmFieldTiles().length).toBe(0);
+
+    expect(controller.startBuildingOperation(farm!.id)).toEqual({ ok: true });
+    const op = controller.getBuildingOperation(farm!.id);
+    expect(op, 'der Auftrag muss existieren, nicht bloß „ok" melden').toBeDefined();
+    expect(op?.status, 'ohne Felder wartet der Betrieb, statt zu scheitern').toBe('waiting');
+    expect(op?.workArea, 'nur ein Dauerbetrieb kann später von selbst anlaufen').toBeDefined();
+  });
+
+  it('nimmt die Arbeit von selbst auf, sobald ein Feld angelegt ist', () => {
+    const controller = farmCity();
+    const farm = Object.values(controller.state.buildings).find((b) => b.defId === 'farm')!;
+    controller.startBuildingOperation(farm.id);
+
+    const origin = at(1, 13);
+    expect(controller.buildFarmField({ x: origin.x, y: origin.y, w: 4, h: 4 })).toEqual({ ok: true });
+    // LIVE ticken: `advanceOperations` läuft ausdrücklich nur im Live-Tick,
+    // nie offline. Mit `false` schläft der Betrieb weiter und der Test würde
+    // eine Regression melden, die es nicht gibt.
+    controller.update(T0 + 3_700_000, true);
+
+    expect(
+      controller.getBuildingOperation(farm.id)?.status,
+      'mit Feldern läuft derselbe Dauerbetrieb an',
+    ).toBe('active');
+  });
+
+  it('verweigert dem Steinbruch den Leerstart weiter — Stein wächst nie nach', () => {
+    const controller = farmCity();
+    const quarry = at(6, 8);
+    // Der Steinbruch braucht Fels; auf eingeebnetem Gelände gibt es keinen.
+    // Genau das ist der Fall, der hart scheitern MUSS.
+    if (!controller.placeBuilding('quarry', quarry.x, quarry.y).ok) return;
+    controller.update(T0 + 7_200_000, false);
+    const built = Object.values(controller.state.buildings).find((b) => b.defId === 'quarry');
+    if (!built || built.status !== 'active') return;
+    expect(controller.startBuildingOperation(built.id)).toEqual({ ok: false, error: 'invalid' });
+  });
+});

@@ -5,6 +5,7 @@ import { locationBonusPct } from '../buildings/location.ts';
 import { computeRoadNetwork, regionProductionFactorAt } from '../map/world.ts';
 import { buildingInfrastructureStatus, isInfrastructureOperational } from '../infrastructure/buildingInfrastructure.ts';
 import { computeRoadSegments, type RoadSegmentIndex } from '../infrastructure/networkSegments.ts';
+import { countFarmFieldTiles, FIELD_UPKEEP_PER_TILE } from '../operations/farmFields.ts';
 
 /**
  * Values derived from the set of active buildings. Recomputed only on
@@ -300,6 +301,13 @@ export function recomputeDerived(state: GameState, config: GameConfig): Derived 
     const { cx, cy } = centerOf(def, b);
     if (fireStations.some((s) => chebyshev(cx, cy, s.cx, s.cy) <= s.radius)) fireProtected.add(b.id);
   }
+
+  // § D-059: Felder kosten Unterhalt, und zwar ABGELEITET aus ihrer Zahl. Ein
+  // Feld ist eine `terrainOverrides`-Kachel, also jederzeit zählbar — es gibt
+  // kein Feld-Save-Feld, das mit dem Unterhalt auseinanderlaufen könnte. Genau
+  // hier, weil `upkeep` an EINER Stelle entsteht und Einkommen/HUD sie lesen.
+  const fieldTiles = countFarmFieldTiles(state);
+  if (fieldTiles > 0) upkeep.money += fieldTiles * FIELD_UPKEEP_PER_TILE;
 
   return {
     storageCaps,

@@ -3,6 +3,7 @@ import { AlertTriangle, CheckCircle2, Move, RotateCw, Sparkles } from 'lucide-re
 import { ThreeMapRenderer } from '../renderer/three/ThreeMapRenderer.ts';
 import type { HoverInfo, IMapRenderer, RendererCallbacks } from '../renderer/IMapRenderer.ts';
 import { getController, setMapApi, useUiStore, type MapApi } from '../state/store.ts';
+import type { GameController } from '../game/commands/controller.ts';
 import { ServiceOverlayBanner } from './hud/ServiceOverlayBanner.tsx';
 import { formatGameDuration, t } from '../i18n/index.ts';
 import { costLabel } from './common/costLabel.ts';
@@ -105,6 +106,34 @@ export function MapView() {
         }
       },
       onHoverInfo: (info) => setHoverInfo(info),
+      // § D-058 „Felder verwalten": Der Pinsel wird an der Cursorkachel
+      // ZENTRIERT — wer ein 6×8-Feld setzt, will es dort, wo er hinzeigt, nicht
+      // rechts unterhalb davon.
+      onFieldHover: (x, y) => useUiStore.getState().setFieldHoverTile({ x, y }),
+      onFieldPlace: (x, y) => {
+        const state = useUiStore.getState();
+        const area = fieldAreaAt(state.fieldBrush, x, y);
+        const result = state.fieldToolMode === 'remove'
+          ? controller.clearFarmField(area)
+          : controller.buildFarmField(area);
+        if (result.ok) {
+          state.pushToast(
+            state.fieldToolMode === 'remove' ? 'Feld zurückgebaut.' : 'Feld angelegt.',
+            'success',
+          );
+          return;
+        }
+        // Der Plan weiß, WARUM nichts geht — „ungültig" allein hilft niemandem.
+        const plan = controller.getFarmFieldPlan(area);
+        state.pushToast(
+          state.fieldToolMode === 'remove'
+            ? 'Hier liegt kein Feld.'
+            : result.error === 'insufficient'
+              ? `Nicht genug Geld — das Feld kostet ${plan.cost.toLocaleString('de-DE')} ⌾.`
+              : fieldBlockerText(plan),
+          'error',
+        );
+      },
       onWorkAreaNodeClick: (id) => {
         const state = useUiStore.getState();
         if (state.workAreaSelectionMode === 'single') state.setWorkAreaSelectedNodeIds([id]);
@@ -219,6 +248,18 @@ export function MapView() {
         ? buildSmartRoadPlanView(controller, s.roadPlanPath, 'road')
         : undefined;
       renderer.setRoadPlanOverlay(roadPlan?.tiles ?? []);
+      // Das Feldwerkzeug spiegelt sich genauso wie der Straßenentwurf: Zustand
+      // in der UI, Bild im Renderer, geprüft über die Controller-Projektion.
+      renderer.setFieldTool(
+        s.fieldToolBuildingId
+          ? { buildingId: s.fieldToolBuildingId, w: s.fieldBrush.w, h: s.fieldBrush.h, mode: s.fieldToolMode }
+          : undefined,
+      );
+      renderer.setFieldPlanOverlay(
+        s.fieldToolBuildingId && s.fieldHoverTile
+          ? fieldOverlayTiles(controller, s.fieldBrush, s.fieldHoverTile, s.fieldToolMode)
+          : [],
+      );
       syncWorldReveal(s);
     });
     const unsubscribeController = controller.subscribe(() => syncWorldReveal());
@@ -231,6 +272,7 @@ export function MapView() {
         useUiStore.getState().openRegionDialog(undefined);
         useUiStore.getState().closeWorkAreaPlanner();
         useUiStore.getState().closeResourceNetwork();
+        useUiStore.getState().closeFieldTool();
         renderer.setWorkAreaOverlay(undefined);
         renderer.setRoadPlanOverlay([]);
       }
@@ -450,4 +492,79 @@ function PlacementBanner({ info, moving }: { info: HoverInfo | undefined; moving
       <span className="banner-sub">{t('ui.placement.cancel_hint')}</span>
     </div>
   );
+}
+
+// ---- Feldwerkzeug (§ D-058) ------------------------------------------------
+
+/**
+ * Das Rechteck des Pinsels um die Cursorkachel. EINE Stelle — Vorschau und
+ * Anlegen dürfen sich nicht um eine halbe Kachel unterscheiden, sonst legt der
+ * Klick woanders an, als das grüne Rechteck stand.
+ */
+export function fieldAreaAt(
+  brush: { w: number; h: number },
+  x: number,
+  y: number,
+): { x: number; y: number; w: number; h: number } {
+  return {
+    x: Math.round(x) - Math.floor((brush.w - 1) / 2),
+    y: Math.round(y) - Math.floor((brush.h - 1) / 2),
+    w: brush.w,
+    h: brush.h,
+  };
+}
+
+/**
+ * Die Vorschaukacheln. Gültigkeit kommt aus `getFarmFieldPlan` — derselben
+ * Funktion, die `buildFarmField` gleich ausführt (D-048). Beim Roden ist die
+ * Frage eine andere: „liegt hier ein Feld?", nicht „darf hier eines entstehen?".
+ */
+function fieldOverlayTiles(
+  controller: GameController,
+  brush: { w: number; h: number },
+  hover: { x: number; y: number },
+  mode: 'add' | 'remove',
+): { x: number; y: number; ok: boolean }[] {
+  const area = fieldAreaAt(brush, hover.x, hover.y);
+  if (mode === 'remove') {
+    const existing = new Set(controller.getFarmFieldTiles().map((tile) => `${tile.x},${tile.y}`));
+    const tiles: { x: number; y: number; ok: boolean }[] = [];
+    for (let dy = 0; dy < area.h; dy++) {
+      for (let dx = 0; dx < area.w; dx++) {
+        const x = area.x + dx;
+        const y = area.y + dy;
+        tiles.push({ x, y, ok: existing.has(`${x},${y}`) });
+      }
+    }
+    return tiles;
+  }
+  return controller.getFarmFieldPlan(area).tiles.map((tile) => ({
+    x: tile.x,
+    y: tile.y,
+    ok: tile.blocker === undefined,
+  }));
+}
+
+/** Der häufigste Grund im Rechteck — ein Satz statt einer Fehlerliste. */
+function fieldBlockerText(plan: { tiles: { blocker?: string }[] }): string {
+  const counts = new Map<string, number>();
+  for (const tile of plan.tiles) {
+    if (!tile.blocker) continue;
+    counts.set(tile.blocker, (counts.get(tile.blocker) ?? 0) + 1);
+  }
+  const top = [...counts.entries()].sort((a, b) => b[1] - a[1])[0]?.[0];
+  switch (top) {
+    case 'no_farm_in_range':
+      return 'Zu weit von der Farm entfernt — Felder liegen im Arbeitsgebiet.';
+    case 'wrong_terrain':
+      return 'Hier wächst nichts: Felder brauchen Wiese oder fruchtbares Land.';
+    case 'occupied':
+      return 'Hier steht ein Gebäude.';
+    case 'not_buildable':
+      return 'Das Gelände ist zu steil oder zu nass für ein Feld.';
+    case 'already_field':
+      return 'Hier liegt bereits ein Feld.';
+    default:
+      return 'Hier lässt sich kein Feld anlegen.';
+  }
 }

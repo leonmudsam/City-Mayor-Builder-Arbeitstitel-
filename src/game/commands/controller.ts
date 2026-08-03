@@ -116,7 +116,7 @@ import {
   type OperationThroughput,
   type WorkerRenderState,
 } from '../operations/operations.ts';
-import { resolveNode, type ResourceNode } from '../operations/nodes.ts';
+import { nodeProfile, resolveNode, type ResourceNode } from '../operations/nodes.ts';
 import {
   availableForTransfer,
   cancelInventoryTransfer,
@@ -137,7 +137,13 @@ import {
   applyFarmField,
   clearFarmField as clearFarmFieldTiles,
   farmFieldTiles,
+  fieldEfficiency,
   planFarmField,
+  FIELD_COST_PER_TILE,
+  FIELD_TILES_PER_WORKER,
+  FIELD_UPKEEP_PER_TILE,
+  type FarmFieldSummary,
+  type FarmFieldView,
   type FieldPlan,
 } from '../operations/farmFields.ts';
 import {
@@ -2041,6 +2047,83 @@ export class GameController {
   }
 
   /**
+   * Felder EINER Farm mit allem, was Menü und Darstellung brauchen.
+   *
+   * `growth` ist der Reifegrad 0…1 und wird aus **demselben** Knoten gelesen,
+   * den der Arbeiter gleich abernten wird — die 3D-Darstellung kann deshalb
+   * nicht behaupten, ein Feld stünde voll, während die Simulation es als
+   * abgeerntet führt.
+   *
+   * `efficiencyPct` ist die vorhandene Entfernungsmechanik (`efficientRadius`
+   * gegen `maxRadius`), nicht eine zweite Distanzrechnung für Felder (D-059).
+   */
+  getFarmFields(buildingId?: string): FarmFieldView[] {
+    const now = this.state.meta.lastSimTime;
+    // Ohne `buildingId`: alle Felder der Stadt (die 3D-Darstellung fragt nicht
+    // nach einer bestimmten Farm). Mit: nur die Felder im Arbeitsgebiet dieser
+    // Farm, gemessen mit `operationRadii` — derselben Reichweite, nach der der
+    // Arbeiter läuft, nicht mit einer zweiten Zahl für die Anzeige (D-059).
+    let farm: { cx: number; cy: number; efficientRadius: number; maxRadius: number } | undefined;
+    if (buildingId !== undefined) {
+      const b = this.state.buildings[buildingId];
+      const def = b && this.config.buildings.get(b.defId);
+      if (!b || !def?.operation || def.operation.nodeType !== 'crop') return [];
+      const radii = operationRadii(def.operation, b.upgradeLevel);
+      farm = {
+        cx: b.x + (def.size.w - 1) / 2,
+        cy: b.y + (def.size.h - 1) / 2,
+        efficientRadius: radii.efficientRadius,
+        maxRadius: radii.maxRadius,
+      };
+    }
+    const out: FarmFieldView[] = [];
+    for (const tile of farmFieldTiles(this.state)) {
+      let distanceTiles = 0;
+      let efficiencyPct = 100;
+      if (farm) {
+        const distance = Math.max(Math.abs(tile.x - farm.cx), Math.abs(tile.y - farm.cy));
+        if (distance > farm.maxRadius) continue;
+        distanceTiles = Math.round(distance);
+        efficiencyPct = Math.round(fieldEfficiency(distance, farm.efficientRadius, farm.maxRadius) * 100);
+      }
+      const node = resolveNode(this.state, 'crop', `${tile.x},${tile.y}`, now);
+      const growth = node
+        ? node.state === 'regrowing'
+          ? 0
+          : Math.max(0, Math.min(1, node.remainingAmount / Math.max(1, node.maxAmount)))
+        : 0;
+      out.push({ x: tile.x, y: tile.y, growth, distanceTiles, efficiencyPct });
+    }
+    return out;
+  }
+
+  /**
+   * Zusammenfassung für „Felder verwalten". Unterhalt und Arbeiterbedarf sind
+   * **abgeleitet**, nicht gespeichert (D-059) — Felder sind `terrainOverrides`
+   * und damit jederzeit zählbar. Feldliste und Unterhalt können deshalb gar
+   * nicht auseinanderlaufen, und es gibt keine Migration.
+   */
+  getFarmFieldSummary(buildingId: string): FarmFieldSummary | undefined {
+    const b = this.state.buildings[buildingId];
+    const def = b && this.config.buildings.get(b.defId);
+    if (!b || !def?.operation || def.operation.nodeType !== 'crop') return undefined;
+    const fields = this.getFarmFields(buildingId);
+    const radii = operationRadii(def.operation, b.upgradeLevel);
+    const stage = operationStage(def.operation, b.upgradeLevel);
+    const weighted = fields.reduce((sum, field) => sum + field.efficiencyPct / 100, 0);
+    return {
+      tiles: fields.length,
+      upkeepPerMinute: Math.round(fields.length * FIELD_UPKEEP_PER_TILE),
+      averageEfficiencyPct: fields.length === 0 ? 0 : Math.round((weighted / fields.length) * 100),
+      workersNeeded: Math.ceil(fields.length / FIELD_TILES_PER_WORKER),
+      workerSlots: stage.workerSlots,
+      efficientRadius: radii.efficientRadius,
+      maximumRadius: radii.maxRadius,
+      costPerTile: FIELD_COST_PER_TILE,
+    };
+  }
+
+  /**
    * § Overhaul 2.0 (§4, D-054): **Die Route wird nicht gezeichnet, sie wird
    * gefahren.** Die Fahransicht meldet die Kachel, auf der das Fahrzeug steht;
    * hier wird daraus die Strecke des laufenden Auftrags — dasselbe Feld
@@ -3233,9 +3316,25 @@ export class GameController {
     const now = this.state.meta.lastSimTime;
     // Radien kommen aus der Ausbaustufe (§A7: Großfarm/Tiefbruch greifen weiter).
     const radii = operationRadii(def.operation, b.upgradeLevel);
-    const r = Math.min(radii.maxRadius, Math.max(1, radius ?? radii.efficientRadius));
+    // § D-058: Wo der Spieler die Knoten SELBST setzt, ist das Arbeitsgebiet
+    // standardmäßig der volle Radius. Er hat mit dem Feld bereits entschieden,
+    // wo gearbeitet wird — ihn zusätzlich einen Radiusregler bedienen zu lassen,
+    // damit sein bezahltes Feld überhaupt bewirtschaftet wird, ist genau die
+    // Doppelarbeit, die D-039 verbietet. Die Entfernung bleibt trotzdem eine
+    // Entscheidung: Ertrag fällt mit dem Abstand (D-059).
+    const playerCreatable = nodeProfile(def.operation.nodeType)?.playerCreatable ?? false;
+    const defaultRadius = playerCreatable ? radii.maxRadius : radii.efficientRadius;
+    const r = Math.min(radii.maxRadius, Math.max(1, radius ?? defaultRadius));
     const nodeIds = selectAreaNodeIds(this.state, def, b, r, maxCount ?? 60, now);
-    if (nodeIds.length === 0) return fail('invalid');
+    // § D-058: Ein Dauerbetrieb auf einem Knotentyp, dessen Gebiet sich noch
+    // füllen kann, darf LEER starten — er fällt dann auf `waiting` und nimmt
+    // über `resumeWaitingOperation` von selbst die Arbeit auf. Für die Farm ist
+    // das der Unterschied zwischen spielbar und Deadlock: `crop`-Knoten
+    // entstehen erst durch Felder, Felder verlangen eine Farm in Reichweite —
+    // und die Startregion hat null natürliche fruchtbare Kacheln.
+    // Für Fels bleibt der harte Fehler richtig: Stein wächst nie nach.
+    const mayStartEmpty = continuous && playerCreatable;
+    if (nodeIds.length === 0 && !mayStartEmpty) return fail('invalid');
     ensureInventory(this.state, b.id, operationStage(def.operation, b.upgradeLevel).storageCapacity);
     startOperation(this.state, b.id, nodeIds, now, continuous ? { workArea: { kind: 'circle', radius: r } } : {});
     this.notify({ type: 'change' });

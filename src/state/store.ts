@@ -177,6 +177,21 @@ interface UiState {
   roadPlanPath: { x: number; y: number }[];
   setRoadPlanPath(path: { x: number; y: number }[]): void;
   clearRoadPlan(): void;
+  /**
+   * § D-058 „Felder verwalten": Welche Farm plant gerade Felder, mit welchem
+   * Pinsel, und wo steht der Cursor. Reiner UI-Entwurf — angelegt wird erst
+   * über `buildFarmField`, geprüft über dieselbe `getFarmFieldPlan`, die auch
+   * die Vorschau malt (D-048).
+   */
+  fieldToolBuildingId: string | undefined;
+  fieldBrush: { w: number; h: number };
+  fieldToolMode: 'add' | 'remove';
+  fieldHoverTile: { x: number; y: number } | undefined;
+  openFieldTool(buildingId: string): void;
+  closeFieldTool(): void;
+  setFieldBrush(size: { w: number; h: number }): void;
+  setFieldToolMode(mode: 'add' | 'remove'): void;
+  setFieldHoverTile(tile: { x: number; y: number } | undefined): void;
   placingDefId: string | undefined;
   /** Cosmetic facing (degrees) chosen for the building about to be placed
    *  (§ Gebäude-Rotation). Resets to 0 whenever placement starts/stops. */
@@ -331,6 +346,29 @@ export const useUiStore = create<UiState>((set) => ({
   roadPlanPath: [],
   setRoadPlanPath: (path) => set({ roadPlanPath: path.map((point) => ({ x: Math.round(point.x), y: Math.round(point.y) })) }),
   clearRoadPlan: () => set({ roadPlanPath: [] }),
+  fieldToolBuildingId: undefined,
+  fieldBrush: { w: 4, h: 4 },
+  fieldToolMode: 'add',
+  fieldHoverTile: undefined,
+  // Das Feldwerkzeug schließt aus, was ebenfalls am Cursor hängt — zwei
+  // Entwürfe gleichzeitig gibt es nicht.
+  openFieldTool: (buildingId) =>
+    set({
+      fieldToolBuildingId: buildingId,
+      fieldToolMode: 'add',
+      fieldHoverTile: undefined,
+      placingDefId: undefined,
+      movingBuildingId: undefined,
+      roadPlanPath: [],
+      workAreaPlannerBuildingId: undefined,
+      activityPlannerDefId: undefined,
+      openPanel: undefined,
+    }),
+  closeFieldTool: () => set({ fieldToolBuildingId: undefined, fieldHoverTile: undefined }),
+  setFieldBrush: (size) =>
+    set({ fieldBrush: { w: Math.max(1, Math.round(size.w)), h: Math.max(1, Math.round(size.h)) } }),
+  setFieldToolMode: (mode) => set({ fieldToolMode: mode }),
+  setFieldHoverTile: (tile) => set({ fieldHoverTile: tile }),
   placingDefId: undefined,
   placingRotation: 0,
   rotatePlacing: () => set((s) => ({ placingRotation: (((s.placingRotation + 90) % 360) as 0 | 90 | 180 | 270) })),
@@ -368,6 +406,7 @@ export const useUiStore = create<UiState>((set) => ({
       resourceNetworkResource: undefined,
       infrastructureNetworkOpen: false,
       roadPlanPath: [],
+      fieldToolBuildingId: undefined,
     }),
   stopPlacing: () => set({ placingDefId: undefined, placingRotation: 0, roadPlanPath: [] }),
   startMoving: (id) =>
@@ -382,6 +421,7 @@ export const useUiStore = create<UiState>((set) => ({
       resourceNetworkResource: undefined,
       infrastructureNetworkOpen: false,
       roadPlanPath: [],
+      fieldToolBuildingId: undefined,
     }),
   stopMoving: () => set({ movingBuildingId: undefined }),
   selectBuilding: (id) =>

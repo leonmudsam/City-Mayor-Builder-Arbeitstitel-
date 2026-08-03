@@ -383,6 +383,7 @@
   "diag.storage_full": "Lager voll — Produktion gestoppt.",
   "diag.no_movein": "Hier will aktuell niemand einziehen.",
   "diag.no_resource_nodes": "Kein Vorkommen im Arbeitsgebiet — der Betrieb kann nicht arbeiten.",
+  "diag.operation_waiting_for_nodes": "Der Betrieb wartet auf Nachschub im Arbeitsgebiet — Felder anlegen oder Nachwachsen abwarten.",
   "diag.upgrade_ready": "Ausbau verfügbar — jetzt bezahlbar.",
   "diag.location_bonus": "Standortbonus aktiv (+{pct} %).",
   "diag.road_ok": "An das Straßennetz angeschlossen.",

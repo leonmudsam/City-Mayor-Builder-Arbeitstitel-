@@ -478,11 +478,16 @@ export function startOperation(
   const ops = ensureOperationsState(state);
   // Alte Reservierungen dieses Betriebs freigeben, bevor neu gesetzt wird.
   cancelOperation(state, buildingId);
+  const targetNodeIds = [...new Set(nodeIds)].slice(0, MAX_OPERATION_NODES);
   const op: ActiveBuildingOperation = {
     buildingId,
     type: 'harvest',
-    status: 'active',
-    targetNodeIds: [...new Set(nodeIds)].slice(0, MAX_OPERATION_NODES),
+    // § D-058: Ein Dauerbetrieb OHNE Ziele ist von der ersten Sekunde an ein
+    // wartender Betrieb, kein aktiver. „Aktiv mit null Zielen" wäre nicht nur
+    // eine Anzeige-Lüge — `resumeWaitingOperation` läuft ausschließlich für
+    // `waiting`, der Betrieb würde also gar nicht mehr von selbst anlaufen.
+    status: targetNodeIds.length === 0 && options?.workArea ? 'waiting' : 'active',
+    targetNodeIds,
     startedAt: now,
     ...(options?.workArea ? { continuous: true, workArea: options.workArea } : {}),
   };

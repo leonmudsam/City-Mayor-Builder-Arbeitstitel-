@@ -136,6 +136,7 @@ import {
   createStylizedVehicleMaterial,
 } from './vehicleFallback.ts';
 import { getCameraSettings } from './cameraSettings.ts';
+import { buildFarmFieldMesh } from './farmFieldMesh.ts';
 import { getEnvironmentSettings } from './environmentSettings.ts';
 import { sunElevation } from './environment.ts';
 import {
@@ -217,6 +218,8 @@ import type {
   InfoLayerMode,
   InfrastructureLayerMode,
   RendererCallbacks,
+  FieldOverlayTile,
+  FieldToolState,
   RoadPlanOverlayTile,
   WorkAreaOverlay,
   WorldRevealState,
@@ -643,6 +646,14 @@ export class ThreeMapRenderer implements IMapRenderer {
    * aktualisiert/entsorgt werden. Je Layer entstehen nur wenige Draw-Calls. */
   private workAreaOverlayGroup = new Group();
   private roadPlanOverlayGroup = new Group();
+  /** § D-058: sichtbare Felder (Scholle + Fruchtreihen), eigene Gruppe mit
+   *  eigenem Schlüssel — Felder ändern sich beim Anlegen und beim Ernten,
+   *  nicht bei jedem Bauklick. */
+  private farmFieldGroup = new Group();
+  private farmFieldKey = '';
+  /** Feldwerkzeug am Cursor (Pinsel fester Größe) und seine Vorschau. */
+  private fieldTool: FieldToolState | undefined;
+  private fieldPlanOverlayGroup = new Group();
   private infrastructureOverlayGroup = new Group();
   /** Generisches, terrainfolgendes Versorgungsradius-Overlay. Die Daten kommen
    * ausschließlich aus GameController.getCoverageOverlay(). */
@@ -829,6 +840,8 @@ export class ThreeMapRenderer implements IMapRenderer {
       this.coverageOverlayGroup,
       this.workAreaOverlayGroup,
       this.roadPlanOverlayGroup,
+      this.farmFieldGroup,
+      this.fieldPlanOverlayGroup,
       this.moveOriginGroup,
       this.overlayGroup,
       this.markerGroup,
@@ -1184,6 +1197,69 @@ export class ThreeMapRenderer implements IMapRenderer {
     }
   }
 
+  /**
+   * § D-058 „Felder verwalten": Werkzeug an/aus. Beim Ausschalten verschwindet
+   * auch die Vorschau — sonst bliebe ein grünes Rechteck stehen, das zu nichts
+   * mehr gehört.
+   */
+  setFieldTool(tool: FieldToolState | undefined): void {
+    this.fieldTool = tool;
+    if (!tool) this.setFieldPlanOverlay([]);
+  }
+
+  /**
+   * Vorschau des Feldrechtecks. Die Kacheln kommen aus `getFarmFieldPlan`, also
+   * aus DERSELBEN Funktion, die der Command gleich ausführt (D-048) — der
+   * Renderer entscheidet hier nichts über Gültigkeit, er malt nur.
+   */
+  setFieldPlanOverlay(tiles: FieldOverlayTile[]): void {
+    this.clearOwnedGroup(this.fieldPlanOverlayGroup);
+    if (tiles.length === 0) return;
+    const mesh = new InstancedMesh(
+      new BoxGeometry(0.94, 0.05, 0.94),
+      new MeshBasicMaterial({ vertexColors: true, transparent: true, opacity: 0.55 }),
+      tiles.length,
+    );
+    const dummy = new Object3D();
+    const okColor = new Color(0x63d67f);
+    const badColor = new Color(0xe4574a);
+    tiles.forEach((tile, index) => {
+      dummy.position.set(tile.x + 0.5, terrainHeightAt(tile.x, tile.y) + 0.13, tile.y + 0.5);
+      dummy.updateMatrix();
+      mesh.setMatrixAt(index, dummy.matrix);
+      mesh.setColorAt(index, tile.ok ? okColor : badColor);
+    });
+    mesh.instanceMatrix.needsUpdate = true;
+    if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
+    mesh.renderOrder = 20;
+    this.fieldPlanOverlayGroup.add(mesh);
+  }
+
+  /**
+   * Baut die sichtbaren Felder neu — aber nur, wenn sich wirklich etwas geändert
+   * hat. Der Schlüssel enthält den **gerundeten** Reifegrad: Wüchse ändern sich
+   * dauernd, eine Neuberechnung je Bild wäre pure Verschwendung, ein Aufbau nur
+   * beim Anlegen dagegen würde die Ernte nie zeigen.
+   */
+  private rebuildFarmFields(): void {
+    const fields = this.controller.getFarmFields();
+    const key = fields
+      .map((field) => `${field.x},${field.y}:${Math.round(field.growth * 4)}`)
+      .join('|');
+    if (key === this.farmFieldKey) return;
+    this.farmFieldKey = key;
+    this.clearOwnedGroup(this.farmFieldGroup);
+    const mesh = buildFarmFieldMesh(fields, {
+      heightAt: (x, y) => terrainHeightAt(x, y),
+      // § D-056 REIHENFOLGE: Der Sperr-Patch läuft als LETZTER Hook. Felder
+      // liegen zwar immer in freigeschaltetem Land, aber die Regel gilt für
+      // jedes Material — wer hier eine Ausnahme macht, baut die nächste Gruppe,
+      // die beim Freischalten bunt bleibt.
+      patchMaterial: (material) => patchLockedRegionTint(material, { cacheKey: 'farm-field' }),
+    });
+    if (mesh) this.farmFieldGroup.add(mesh);
+  }
+
   /** MapApi "Karte zentrieren" / Zentrum-preset. */
   centerOnCity(): void {
     this.cam.applyPreset('center');
@@ -1472,7 +1548,9 @@ export class ThreeMapRenderer implements IMapRenderer {
       // § G2 ④: „Es hängt ein Entwurf am Cursor" — das gilt für Bauen UND
       // Versetzen. Davon hängen Fadenkreuz-Cursor, Ghost-Verfolgung und vor
       // allem ab, dass der Linksklick absetzt statt eine Auswahl zu ändern.
-      isPlacing: () => this.placementDraft() !== undefined,
+      // § D-058: Auch der Feldpinsel ist „ein Entwurf am Cursor" — davon hängt
+      // ab, dass der Linksklick absetzt statt die Auswahl zu ändern.
+      isPlacing: () => this.placementDraft() !== undefined || this.fieldTool !== undefined,
       placingPaints: () => {
         if (this.movingId) return false; // ein Umzug wird nicht gemalt.
         const def = this.placingDefId ? this.controller.config.buildings.get(this.placingDefId) : undefined;
@@ -1481,6 +1559,10 @@ export class ThreeMapRenderer implements IMapRenderer {
       place: (cx, cy) => {
         const t = this.pickTileAt(cx, cy);
         if (!t) return;
+        if (this.fieldTool) {
+          this.callbacks.onFieldPlace?.(t.x, t.y);
+          return;
+        }
         // Der Bestätigungsklick eines Umzugs ist genau EIN Command — kein
         // Abreißen + Neubauen (das Gebäude behält Id, Stufe und Betrieb).
         if (this.movingId) {
@@ -1494,7 +1576,14 @@ export class ThreeMapRenderer implements IMapRenderer {
         if (t && this.placingDefId) this.callbacks.onDragPlace(this.placingDefId, t.x, t.y);
       },
       selectAt: (cx, cy) => this.selectAt(cx, cy),
-      ghostMove: (cx, cy) => this.updateGhostAt(cx, cy),
+      ghostMove: (cx, cy) => {
+        if (this.fieldTool) {
+          const t = this.pickTileAt(cx, cy);
+          if (t) this.callbacks.onFieldHover?.(t.x, t.y);
+          return;
+        }
+        this.updateGhostAt(cx, cy);
+      },
       hoverAt: (cx, cy) => this.hoverWorkAreaAt(cx, cy),
       cancel: () => this.callbacks.onCancelPlacement(),
       focusCity: () => this.focusCityFrame(),
@@ -3734,6 +3823,7 @@ export class ThreeMapRenderer implements IMapRenderer {
     this.rebuildBuildingEnvironment();
     this.rebuildBuildingHlod();
     this.rebuildCoverageOverlay();
+    this.rebuildFarmFields();
     this.rebuildVegetation();
     this.seedCars();
     this.seedAnimals();

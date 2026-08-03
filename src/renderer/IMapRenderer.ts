@@ -71,6 +71,26 @@ export interface RoadPlanOverlayTile {
   clearance: number;
 }
 
+/**
+ * § D-058 „Felder verwalten": Der Feld-Pinsel hängt am Cursor wie ein
+ * Gebäude-Ghost — eine feste Größe, ein Klick legt an. Bewusst KEIN
+ * Ziehen-Rechteck: Die Größen stehen im Farm-Menü mit ihrem Preis, damit der
+ * Spieler kauft, was er sieht (die Mockup-Vorgabe 4×4 / 4×6 / 6×6 / 6×8).
+ */
+export interface FieldToolState {
+  buildingId: string;
+  w: number;
+  h: number;
+  mode: 'add' | 'remove';
+}
+
+/** Eine Kachel der Feldvorschau. `ok` = wird wirklich angelegt. */
+export interface FieldOverlayTile {
+  x: number;
+  y: number;
+  ok: boolean;
+}
+
 /** Renderer-owned camera state exposed as plain numbers for lightweight HUDs. */
 export interface MapCameraView {
   targetX: number;
@@ -116,6 +136,9 @@ export interface RendererCallbacks {
   /** Arbeitsgebietsmodus: Kartenklick/-hover auf einen echten Ressourcenknoten. */
   onWorkAreaNodeClick?(id: string): void;
   onWorkAreaNodeHover?(id: string | undefined, clientX?: number, clientY?: number): void;
+  /** Feldwerkzeug: Kachel unter dem Cursor (Vorschau) bzw. Klick (anlegen/roden). */
+  onFieldHover?(x: number, y: number): void;
+  onFieldPlace?(x: number, y: number): void;
   /** Eine Landschaft wurde gerade erschlossen (zentrales "Neues Gebiet"-Popup). */
   onRegionUnlocked(id: RegionId): void;
   /** § A6 Fahrmodus: Ein-/Ausstieg ins gesteuerte Fahrzeug (UI zeigt Fahr-HUD). */
@@ -149,6 +172,9 @@ export interface IMapRenderer {
   /** Terrainfolgende, rein visuelle Planungs-Layer. */
   setWorkAreaOverlay(overlay: WorkAreaOverlay | undefined): void;
   setRoadPlanOverlay(tiles: RoadPlanOverlayTile[]): void;
+  /** Feldwerkzeug aktivieren (`undefined` = aus). */
+  setFieldTool(tool: FieldToolState | undefined): void;
+  setFieldPlanOverlay(tiles: FieldOverlayTile[]): void;
   /** Dev-Präsentation und echte Progression bleiben strikt getrennt. */
   setWorldReveal(state: WorldRevealState): void;
   centerOnCity(): void;
