@@ -1,5 +1,169 @@
 # Patch Notes
 
+## v1.38 — DIE KARTE IST DIE GERENDERTE WELT (Save bleibt v32)
+
+Prioritäten 4 bis 7 des Auftrags „Stadtarbeit Overhaul — aktive Logistik,
+Farm-Felder und visueller Komplettumbau". Damit sind alle sieben Prioritäten
+umgesetzt; was bewusst offen bleibt, steht am Ende — namentlich.
+
+### 1. Die Stadtarbeitskarte zeigt die echte Welt (P4)
+
+**Was war.** „Gebäude in der Stadtarbeitskarte sind flache Platzhalter. Die
+Karte wirkt nicht wie meine echte gebaute Welt." Zu Recht — die *Daten* kamen
+seit D-051 vollständig aus dem echten Spielstand, die *Darstellung* aber nicht:
+Die Karte hat Terrain, Bäume und Gebäude selbst gezeichnet, und ein selbst
+gezeichnetes Haus ist ein Rechteck mit Dach, egal wie gut die Daten sind.
+
+**Was jetzt.** Der 3D-Renderer nimmt seine eigene Szene orthografisch von oben
+auf; die Karte legt ihre Ebenen darüber. Echte Gebäudemodelle, echte Wege,
+echter Bewuchs, echte Küste, echtes Licht — und die Entsättigung gesperrter
+Regionen kommt gratis mit, weil sie im Fragment-Shader des Bodens steckt
+(D-056) und nicht ein zweites Mal nachgebaut wird.
+
+**Architektur.** Kein zweiter Renderer (§11 des Auftrags, CLAUDE.md §2):
+`ThreeMapRenderer.captureTopDown` rendert **dieselbe Szene** mit einer zweiten
+Kamera in ein Renderziel. `src/renderer/worldSnapshot.ts` kennt `three` nicht —
+es hält nur die Anmeldung („wer kann aufnehmen?") und die Rechnung „welcher
+Ausschnitt in welcher Auflösung", letztere als reine, testbare Funktionen. Ohne
+laufende Welt (Tests, kein WebGL) liefert die Anmeldung nichts, und die Karte
+zeichnet wie bisher: Der Rückfallpfad ist kein Sonderfall, sondern eine Schicht
+weniger.
+
+**Streng von oben, nicht gekippt — und das ist eine Entscheidung.** Der Auftrag
+nennt „leicht orthografisch/isometrisch". Erst ohne Neigung fällt die Weltkachel
+exakt auf ihr Pixel. Sobald die Kamera kippt, verschiebt sich jedes Objekt um
+seine **Höhe** gegen den Boden; bei 0–48 m Geländehöhe sind das mehrere
+Kacheln. Marker, Route, Fahrzeug und Klickziele kämen von der ebenen Rechnung,
+das Bild von der gekippten — eine Karte, auf der das Haus nicht dort liegt, wo
+sein Name steht, und man merkt es erst beim Zielen.
+
+**Wo die Aufnahme liegt, nehmen sich die gemalten Ebenen zurück.** Keine
+Vegetation doppelt (dieselben Bäume, einmal gerendert und einmal gemalt), keine
+Gebäudekästen — das *waren* die beklagten flachen Platzhalter —, und statt einer
+zweiten Fahrbahn nur ein schmaler Straßen-Lichtstreifen samt Verkehrslast.
+Umrandet wird nur, was gemeint ist.
+
+**Ein Fehler, den erst diese Aufnahme sichtbar gemacht hat** — und der nicht die
+Karte betrifft, sondern die Simulation: `isFlatDebugSurface` las „es gibt einen
+Terrain-Override" als „hier arbeitet ein Test" und ebnete den Untergrund auf
+Höhe 0 ein. Seit D-059 legt der **Spieler** Overrides an, denn jedes Feld ist
+einer. Ein Feld hätte damit den Boden unter sich eingeebnet und die Kachel der
+Startregion zugeschlagen; ein danach dort gebautes Haus säße in der Erde. Das
+Feld ist jetzt ausdrücklich ausgenommen, mit Test und Gegenprobe.
+
+### 2. Das Gebäude auf der Karte antwortet (P5)
+
+Ein Klick auf ein Haus, ein Lager, einen Betrieb oder einen Hafen öffnet dessen
+Karte: Rolle, Stufe, Entfernung zum Wagen, der Bestand **an diesem Ort** (D-052
+— nicht die Bilanz der Stadt), der Durchsatz eines Betriebs samt Grund, wenn
+nichts fließt, und der offene Lieferbedarf eines Ziels. Trefferfläche ist die
+echte Grundfläche über die Kachelbelegung, nicht ein Abstand zur Mitte —
+umrandet wird genau das, was der Klick trifft.
+
+**„Hier laden" ist genau dann aktiv, wenn der Command es annimmt.** Der Prüfteil
+von `reloadActivityCargo` ist als `reloadBlockerAt` herausgezogen, die Karte
+liest ihn (D-048); die Deckungsgleichheit ist über **alle** Lagerorte getestet,
+nicht an einem Beispiel. Die Entfernungsfrage bleibt, wo sie hingehört: in der
+Ankunftsregel der Fahrschleife (D-057).
+
+**Zwei Dinge, die der Auftrag nennt und die es nicht gibt, fehlen auch als
+Knopf.** „Als Zwischenstopp hinzufügen" — seit D-054 entsteht die Reihenfolge
+beim Fahren, es gibt keine Stoppliste, die man ergänzen könnte. Und
+„Priorität" — ein deklarierter Vertrag ohne Wirkung (D-050). Eine Attrappe wäre
+schlimmer als eine Lücke. Ebenso fehlt ein Ausliefer-Knopf: Geliefert wird durch
+Ankommen, sonst gäbe es eine bequemere Art zu liefern als zu fahren.
+
+### 3. Die gefahrene Route prüfen und übergeben (P6, D-061)
+
+Aussteigen ist kein Abbruch mehr, sondern §8 Phase 4: eine Bilanz der wirklich
+gefahrenen Strecke — Kilometer aus der aufgezeichneten Kachelkette, erledigte
+Stopps, Ladung, Prämie. Von dort gibt es genau zwei Wege: zurück ans Steuer oder
+„Tour in 3D fahren lassen".
+
+**D-061 lockert D-050 an genau einer Stelle.** Die Ausführungsart war nach dem
+Start eingefroren, und der Grund war gut: Sonst führe man die bequeme Hälfte
+selbst und schaltete den Aufschlag für den Rest dazu. Der Riegel traf aber auch
+den ehrlichen Fall — wer ausstieg, ließ eine Tour zurück, die **niemand** mehr
+zu Ende fährt. Erlaubt ist deshalb genau ein Wechsel, und nur in eine Richtung:
+manuell → automatisch. Er kostet den Aufschlag für die **ganze** Tour, weil
+`modeRewardFactor` bei der Auszahlung `active.mode` liest — die Sorge aus D-050
+kann so nicht entstehen. Zurück ans Steuer geht es nicht.
+
+**Ein stiller Fehler nebenbei:** `retargetVan` bevorzugte `plannedRoadPath`. Das
+war einmal ein Fahrplan, ist aber seit D-054 das **Protokoll** der gefahrenen
+Strecke — der Wagen hätte nach der Übergabe die bereits gefahrene Strecke
+wiederholt, statt das nächste offene Ziel anzusteuern.
+
+### 4. Die Karte ist der Fokus, und sie bleibt hell (P7, §7/§9)
+
+Die Kopfzeile trägt, was §7 oben verlangt: Titel, Fracht, offene Ziele, Modus.
+Am Steuer fällt die Entscheidungsspalte auf Fahrzeug und Ladung zusammen —
+Modus-Wahl, Prämie, Start-Knopf, Ladeortwahl und Tourliste beantworten Fragen,
+die **vor** der Fahrt gestellt werden; unterwegs sind sie Ballast. Ebenso
+verschwinden die Auftragsbeschreibung im Kartenkopf (dritte Fassung derselben
+Auskunft) und „Auftrag wechseln" (ein Ausweg, den es am Steuer nicht gibt).
+
+**§9 „immer Tag":** Die Aufnahme entsteht unter Tageslicht und klarem Wetter,
+auch wenn es in der Stadt Abend ist oder regnet. `SkyEnvironment.withDaylight`
+setzt die Beleuchtung für genau einen Renderdurchgang und stellt danach exakt
+den vorherigen Zustand her; die Tageszeit selbst wird **nicht** angefasst — die
+Uhr ist die Simulationsuhr (D-038). Hell ist die Karte, nicht die Stadt.
+
+### Auswirkung
+
+Keine Schema-, Simulations- oder Balancing-Änderung; Save bleibt **v32**. Die
+Aufnahme kostet einen Renderdurchgang plus Rückweg aus dem Grafikspeicher,
+frühestens alle 420 ms und nur, wenn der Blick den vorhandenen Ausschnitt
+verlässt oder deutlich näher zoomt.
+
+### Im laufenden Spiel gemessen
+
+* Karte meldet `backdrop=world`; Häuser mit Dach und Garten, Rathaus, Markt,
+  Sägewerk, Wald und Fels an ihrer echten Stelle.
+* Klick auf ein Wohnhaus → „Kleines Haus · Stufe 1 · 34 m entfernt · braucht
+  noch 40 Essen".
+* Q → „Noch 3 von 3 Zielen offen · Strecke · Stopps · Ladung 120/250 · Prämie";
+  Übergabe → Planer schließt, das Weltwidget bietet keine Fahrt mehr an.
+* Welt auf `dynamic`/Tageszeit 0,92 gestellt: Die 3D-Welt ist nachtdunkel, die
+  Stadtarbeitskarte zeigt Mittagslicht.
+* 0 Konsolenfehler in allen Durchläufen.
+
+### Offen, nicht vorgetäuscht
+
+* **§5 Quicktime-Events** bleiben zurückgestellt. Der Auftrag formuliert sie als
+  Überlegung; sie auf ein Fahrgefühl zu setzen, das gerade erst umgebaut wurde,
+  machte beides gleichzeitig unbewertbar.
+* **Die Karte ist nicht gekippt** — Begründung oben, und sie ist eine Abwägung,
+  keine Bequemlichkeit.
+* **Feld-Balancing** (260 ⌾/Kachel, 1,4 ⌾/min Unterhalt) ist eine Setzung, keine
+  Messung.
+* **Die Traglast bindet praktisch nie:** Das kleinste für Lieferaufträge
+  erlaubte Fahrzeug fasst 250–500, eine ganze Tour wiegt 135–180. D-057 ist
+  umgesetzt, greift in der ausgelieferten Config aber kaum.
+* **Häfen sind noch kein Netzknoten der Stadtarbeit** (§4 „ob er einen Hafen
+  einbindet"): Ein Hafen ist anklickbar und zeigt seine Daten, aber es gibt
+  keine Schiffsetappe innerhalb eines Auftrags.
+
+### Dateien
+
+`src/renderer/worldSnapshot.ts` (neu), `src/renderer/three/worldTopDown.ts`
+(neu), `src/renderer/three/ThreeMapRenderer.ts`,
+`src/renderer/three/SkyEnvironment.ts`,
+`src/components/citywork/ManualRouteMap.tsx`,
+`src/components/citywork/MapBuildingCard.tsx` (neu),
+`src/components/citywork/RouteReview.tsx` (neu),
+`src/components/panels/ActivityRoutePlanner.tsx`,
+`src/game/commands/controller.ts`, `src/game/map/world.ts`,
+`src/game/operations/farmFields.ts`, `src/styles/citywork-v4.css`,
+`src/styles/citywork-smart.css`, `tests/worldSnapshot.test.ts` (neu),
+`tests/cityworkBuildingInfo.test.ts` (neu), `tests/farmFields.test.ts`,
+`tests/driveRecording.test.ts`
+
+### Assets
+
+Keine neuen Assets. Die Karte zeigt die vorhandenen Weltmodelle — das ist der
+Punkt.
+
 ## v1.37 — DIE FARM BRINGT IHR ACKERLAND MIT, UND DIE KREUZUNG IST DIE ENTSCHEIDUNG (Save bleibt v32)
 
 Priorität 1 und 3 des Auftrags „Stadtarbeit Overhaul — aktive Logistik,

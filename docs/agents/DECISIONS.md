@@ -1,5 +1,69 @@
 # Entscheidungen
 
+## D-061 — Die Übergabe ist der eine erlaubte Moduswechsel, und sie kostet
+
+**Kontext.** D-050 hat `ActiveActivity.mode` nach dem Start eingefroren. Der
+Grund war gut: Sonst führe der Spieler die bequeme Hälfte selbst und schaltete
+den +20-%-Aufschlag für den Rest dazu. Der Riegel traf aber auch den ehrlichen
+Fall — bei `manual` steht der Missionswagen still; wer ausstieg, ließ eine Tour
+zurück, die **niemand** mehr zu Ende fährt.
+
+**Entscheidung.** Genau ein erlaubter Wechsel, und nur in eine Richtung:
+`handOverActivityDrive()` setzt `manual → auto`. Zurück geht es nicht.
+
+Die Sorge aus D-050 löst sich dabei von selbst, statt durch eine zweite Regel:
+`modeRewardFactor` liest `active.mode` **bei der Auszahlung**, also entfällt der
+Aufschlag rückwirkend für die ganze Tour. Wer übergibt, zahlt dafür — es gibt
+keinen Weg, die Hälfte selbst zu fahren und den Bonus zu behalten. Deshalb
+braucht die Übergabe auch keine Fortschrittsprüfung: Sie ist zu jedem Zeitpunkt
+gleich teuer und damit nie ein Trick.
+
+**Folge im Renderer.** `retargetVan` bevorzugte `plannedRoadPath`. Das war
+einmal ein Fahrplan, ist seit D-054 aber das Protokoll der GEFAHRENEN Strecke —
+nach einer Übergabe hätte der Wagen die bereits gefahrene Strecke wiederholt,
+statt das nächste offene Ziel anzusteuern. Die Automatik routet jetzt immer zum
+Ziel. Wer künftig ein Feld von „Plan" zu „Protokoll" umwidmet, muss jeden Leser
+mitnehmen; ein Feldname allein sagt nicht, wofür er inzwischen steht.
+
+**Konsequenz.** Aussteigen ist kein Abbruch mehr, sondern §8 Phase 4: die Bilanz
+der gefahrenen Route mit zwei Auswegen (weiterfahren / übergeben).
+
+## D-062 — Die Draufsicht ist eine Aufnahme derselben Szene, nicht ein zweites Bild der Welt
+
+**Kontext.** Die Stadtarbeitskarte bezog ihre *Daten* seit D-051 vollständig aus
+der echten Welt, zeichnete aber ihre *Darstellung* selbst: Terrainfarbe je
+Kachel, Bäume als Formen, Gebäude als Rechteck mit Dach. Der Nutzerbefund
+(„flache Platzhalter", „wirkt nicht wie meine echte Welt") beschreibt genau
+diese Lücke — gute Daten, nachgebautes Bild.
+
+**Entscheidung.** Der 3D-Renderer nimmt **seine eigene Szene** orthografisch von
+oben auf (`captureTopDown`), die Karte legt ihre Ebenen darüber. Kein zweiter
+Renderer, keine zweite Szene, kein zweites Material.
+
+Der Nebengewinn ist der eigentliche Beleg: Die Entsättigung gesperrter Regionen
+(D-056) erscheint auf der Karte, **ohne dass dafür eine Zeile geschrieben
+wurde** — sie steckt im Fragment-Shader des Bodens. Alles, was die Welt kann,
+kann die Karte damit automatisch mit. Wer eine Weltinformation auf der Karte
+vermisst, ergänzt sie in der Welt.
+
+**Streng von oben, nicht gekippt.** Der Auftrag nennt „leicht
+orthografisch/isometrisch"; umgesetzt ist die Draufsicht ohne Neigung, und das
+ist eine Abwägung, keine Bequemlichkeit: Erst ohne Neigung fällt die Weltkachel
+exakt auf ihr Pixel. Bei gekippter Kamera verschiebt sich jedes Objekt um seine
+HÖHE gegen den Boden (0–48 m Gelände = mehrere Kacheln). Marker, Route,
+Fahrzeug und Klickziele kommen aus der ebenen Rechnung; das Bild käme aus der
+gekippten. Eine Karte, auf der das Haus nicht dort liegt, wo sein Name steht,
+ist unbrauchbar — und man merkt es erst beim Zielen.
+
+**Regel für die Ebenen darüber.** Wo die Aufnahme den Blick deckt, nehmen sich
+die gemalten Ebenen zurück (keine zweite Vegetation, keine Gebäudekästen, keine
+zweite Fahrbahn). Gezeichnet wird nur, was ein Bild nicht sagen kann:
+Verkehrslast, Ziele, Route, Fahrzeug, Auswahl.
+
+**Rückfallpfad ist kein Sonderfall.** Ohne laufende Welt (Tests, kein WebGL)
+liefert die Anmeldung nichts, und die Karte zeichnet wie zuvor. Deshalb darf die
+Aufnahme jederzeit fehlschlagen, ohne die Stadtarbeit zu beenden.
+
 ## D-058 — Ein Betrieb, dessen Knoten der Spieler selbst anlegt, darf leer starten
 
 **Kontext.** Eine Farm in der Startregion konnte nie in Betrieb gehen.

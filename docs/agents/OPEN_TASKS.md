@@ -2,7 +2,7 @@
 > Auftrag genau einmal, nach Thema (Straßen, Stadtarbeit, Betriebe, Bauen/Kamera,
 > Welt/Grafik, Häfen …). Diese Datei hier bleibt die auftrags-/phasenbezogene Detailsicht.
 
-# Offene Aufgaben nach v1.37
+# Offene Aufgaben nach v1.38
 
 ## Auftrag „Stadtarbeit Overhaul — Logistik, Farm-Felder, visueller Umbau"
 
@@ -14,18 +14,28 @@ Vollständiger Ist-Zustand, Zielbild und Architektur:
 | P1 | Farm-Felder: kein Vorkommens-Riegel, „Felder verwalten", 3D-Felder | ✅ v1.37 (D-058/D-059) |
 | P2 | Keine erzwungene Route/Reihenfolge/Quelle | ✅ war bereits erfüllt (D-052/D-054/D-057), gesichert durch `driveRecording.test.ts` |
 | P3 | Selbstfahren als Kreuzungsentscheidung | ✅ v1.37 (D-060) |
-| P4 | Stadtarbeitskarte aus der echten 3D-Szene (orthografische Weltkamera) | **offen** |
-| P5 | Gebäude-Interaktion auf der Karte (Bestand, laden/entladen, Zwischenstopp, Priorität) | **offen** |
-| P6 | Route bestätigen → Ausführung in der 3D-Welt | **offen** |
-| P7 | UI-Layout nach den sechs Mockups | **offen** |
+| P4 | Stadtarbeitskarte aus der echten 3D-Szene (orthografische Aufnahme) | ✅ v1.38 (D-062) |
+| P5 | Gebäude-Interaktion auf der Karte (Bestand, laden, Bedarf) | ✅ v1.38 |
+| P6 | Route prüfen → Übergabe an die 3D-Welt | ✅ v1.38 (D-061) |
+| P7 | UI-Layout nach den Mockups (§7) + immer Tag (§9) | ✅ v1.38 |
 | §5 | Quicktime-/Aktiv-Events | bewusst zurückgestellt |
 
-**Zu P4, damit es niemand zweimal misst:** Die Draufsicht bezieht ihre *Daten*
-seit D-051 vollständig aus der echten Welt (Terrain, Höhe, Regionen, Straßen,
-Gebäude, Vegetation über `collectRegionNature`). Was fehlt, ist die
-**Darstellung** aus der 3D-Szene. Sie darf deshalb nirgends „isometrisch" heißen,
-solange sie gezeichnet wird. Kein zweiter Renderer (§11 des Auftrags,
-CLAUDE.md §2) — gemeint ist ein Kameramodus des `ThreeMapRenderer`.
+**Alle sieben Prioritäten sind umgesetzt.** Was am Auftrag offen bleibt, steht
+hier — bewusst offen, nicht vergessen.
+
+**Zu P4, damit es niemand zweimal misst:** Die Karte ist eine **orthografische
+Aufnahme derselben Szene** (D-062), keine geneigte Kamera. Wer die Neigung will,
+muss zuerst `toScreen`/`worldAt` durch die Kameramatrix führen — sonst zeigt die
+Karte woandershin, als sie klickt (bei 0–48 m Gelände sind das mehrere Kacheln).
+
+**Weiterhin offen aus dem Auftrag:**
+* **§5 Quicktime-/Aktiv-Events** — bewusst zurückgestellt.
+* **Häfen als Netzknoten der Stadtarbeit** (§4 „ob er einen Hafen einbindet"):
+  Ein Hafen ist anklickbar und zeigt seine Daten, aber es gibt keine
+  Schiffsetappe innerhalb eines Auftrags.
+* **„Priorität" und „als Zwischenstopp hinzufügen"** (§6) sind bewusst NICHT
+  gebaut: Seit D-054 gibt es keine Stoppliste, und `priority` ist ein Vertrag
+  ohne Wirkung. Wer sie will, baut zuerst die Simulation dahinter.
 
 **Nachzuholen:** Feld-Balancing (260 ⌾/Kachel, 1,4 ⌾/min Unterhalt) ist eine
 Setzung, keine Messung. Und die Fahrzeug-Zulassung für Liefermissionen: Das

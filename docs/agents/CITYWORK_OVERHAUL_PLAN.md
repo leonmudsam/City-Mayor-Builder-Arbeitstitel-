@@ -137,20 +137,25 @@ Punkt 1 und 2 aus §2.1 entfällt zusammen. Zusätzlich:
 | P1 | Farm-Felder: Riegel weg (D-058), „Felder verwalten", Rechteck-Werkzeug, 3D-Darstellung | **umgesetzt** |
 | P2 | Keine erzwungene Route | **war bereits erfüllt** (D-052/D-054/D-057), belegt in §1 |
 | P3 | Kreuzungs-Fahren (D-060), Fahrzeugsymbol statt Pfeilspitze | **umgesetzt** |
-| P4 | Stadtarbeitskarte aus der echten Welt (ortho/iso) | **offen** |
-| P5 | Gebäude-Interaktion auf der Karte | **offen** |
-| P6 | Route bestätigen → Ausführung in der 3D-Welt | **offen** |
-| P7 | UI nach den Mockups | **offen** |
+| P4 | Stadtarbeitskarte aus der echten Welt (orthografische Aufnahme, D-062) | **umgesetzt** |
+| P5 | Gebäude-Interaktion auf der Karte | **umgesetzt** |
+| P6 | Route prüfen → Übergabe an die 3D-Welt (D-061) | **umgesetzt** |
+| P7 | UI nach den Mockups (§7) + immer Tag (§9) | **umgesetzt** |
 
 ---
 
 ## 6. Offene Risiken — ehrlich benannt
 
-* **P4 ist der teure Punkt.** Die Stadtarbeitskarte aus der echten
-  3D-Szene zu rendern heißt: eine zweite Kamera auf **denselben**
-  `ThreeMapRenderer` (kein zweiter Renderer, §11 des Auftrags und CLAUDE.md §2).
-  Solange das nicht steht, bleibt die Draufsicht das, was sie ist — sie darf
-  nicht als „isometrisch" beschriftet werden.
+* **P4 ist erledigt, aber nicht gekippt.** Die Karte ist eine orthografische
+  Aufnahme derselben Szene (D-062). Eine geneigte Kamera ist bewusst *nicht*
+  umgesetzt: Bei Neigung verschiebt sich jedes Objekt um seine Höhe gegen den
+  Boden, und alle Overlays (Marker, Route, Fahrzeug, Klickziele) rechnen eben.
+  Wer die Neigung will, muss vorher `toScreen`/`worldAt` durch die
+  Kameramatrix führen — sonst zeigt die Karte woandershin, als sie klickt.
+* **Die Aufnahme darf fehlschlagen.** Ohne WebGL oder laufende Welt gibt es
+  kein Bild; die Karte zeichnet dann ihre eigenen Ebenen. Wer eine Ebene
+  entfernt, weil „die Aufnahme sie ja mitbringt", nimmt dem Rückfallpfad ein
+  Stück Welt.
 * **Quicktime-Events (§5 des Auftrags) sind bewusst zurückgestellt.** Sie sind
   im Auftrag als Überlegung formuliert („Überlege, ob…"), und sie auf ein
   Fahrgefühl zu setzen, das gerade erst umgebaut wurde, würde beides

@@ -62,7 +62,60 @@ der Cloud-Umgebung** (kein Rust/Windows) — dort nur den Browser-Pfad verifizie
 (gitignored). GitHub Pages ist abgeschaltet — kein Deploy-Workflow wieder einführen.
 `archive/legacy-2d/` = archivierte 2D-/Iso-Reste (nicht reaktivieren).
 
-## Status: v1.37 — ACKERLAND UND KREUZUNGEN (Save v32, D-058/D-059/D-060) — AKTUELL
+## Status: v1.38 — DIE KARTE IST DIE GERENDERTE WELT (Save v32, D-061/D-062) — AKTUELL
+Prioritäten **4–7** des Auftrags „Stadtarbeit Overhaul"; damit sind **alle
+sieben** umgesetzt (P1/P3 in v1.37, P2 war erfüllt). Verbindlicher Einstieg
+bleibt `docs/agents/CITYWORK_OVERHAUL_PLAN.md`.
+**(1) Die Draufsicht ist eine Aufnahme DERSELBEN Szene (D-062).** Die *Daten*
+kamen seit D-051 aus der echten Welt, die *Darstellung* nicht — die Karte hat
+Terrain, Bäume und Gebäude selbst gezeichnet, und ein selbst gezeichnetes Haus
+ist ein Rechteck mit Dach. Jetzt rendert `ThreeMapRenderer.captureTopDown` die
+laufende Szene orthografisch von oben in ein Renderziel; die Karte legt ihre
+Ebenen darüber. **Kein zweiter Renderer** — `src/renderer/worldSnapshot.ts`
+kennt `three` nicht und hält nur die Anmeldung plus die reinen Funktionen
+„welcher Ausschnitt, welche Auflösung". Der Beleg, dass es wirklich dieselbe
+Szene ist: Die Entsättigung gesperrter Regionen (D-056) erscheint auf der Karte,
+**ohne eine Zeile dafür**. **Streng von oben, nicht gekippt** — bei Neigung
+verschiebt sich jedes Objekt um seine HÖHE gegen den Boden (0–48 m = mehrere
+Kacheln); Marker/Route/Fahrzeug/Klick kämen aus der ebenen Rechnung, das Bild
+aus der gekippten. Wo die Aufnahme deckt, nehmen sich die gemalten Ebenen
+zurück (keine doppelte Vegetation, keine Gebäudekästen, statt zweiter Fahrbahn
+ein schmaler Lichtstreifen). Ohne WebGL/Welt liefert die Anmeldung nichts und
+die Karte zeichnet wie zuvor — der Rückfallpfad ist kein Sonderfall.
+**Gefunden von dieser Aufnahme, aber ein SIM-Fehler:** `isFlatDebugSurface` las
+„es gibt einen Terrain-Override" als „hier arbeitet ein Test" und ebnete auf
+Höhe 0 ein. Seit D-059 legt der **Spieler** Overrides an (jedes Feld ist einer)
+— ein Feld hätte den Boden unter sich eingeebnet und die Kachel der Startregion
+zugeschlagen. Feld ausgenommen, mit Test und Gegenprobe.
+**(2) Das Gebäude auf der Karte antwortet (P5).** Klick → Rolle, Stufe,
+Entfernung, Bestand **an diesem Ort** (D-052), Betriebsdurchsatz samt Grund bei
+Stillstand, offener Lieferbedarf. Trefferfläche = Kachelbelegung (nicht Abstand
+zur Mitte). „Hier laden" ist genau dann aktiv, wenn der Command annimmt —
+`reloadBlockerAt` ist der herausgezogene Prüfteil (D-048), deckungsgleich
+getestet über **alle** Lagerorte. **Nicht gebaut, weil es die Sim nicht kennt:**
+„als Zwischenstopp hinzufügen" (seit D-054 gibt es keine Stoppliste) und
+„Priorität" (Vertrag ohne Wirkung, D-050); ebenso kein Ausliefer-Knopf —
+geliefert wird durch Ankommen.
+**(3) Die Übergabe kostet (D-061).** Aussteigen ist §8 Phase 4: Bilanz der
+gefahrenen Strecke, zwei Auswege. `handOverActivityDrive` erlaubt **einen**
+Moduswechsel, nur `manual → auto`; der Aufschlag entfällt für die **ganze** Tour
+(`modeRewardFactor` liest `active.mode` bei der Auszahlung), damit ist D-050s
+Sorge gegenstandslos. Nebenbei: `retargetVan` bevorzugte `plannedRoadPath` —
+seit D-054 das **Protokoll**, kein Fahrplan; der Wagen hätte die schon gefahrene
+Strecke wiederholt.
+**(4) §7/§9.** Kopfzeile trägt Titel/Fracht/Ziele/Modus; am Steuer schrumpft die
+rechte Spalte auf Fahrzeug und Ladung. `SkyEnvironment.withDaylight` rendert die
+Aufnahme unter Tageslicht und stellt danach exakt den vorherigen Zustand her —
+die **Uhr bleibt unberührt** (D-038). Gemessen: Welt nachtdunkel, Karte
+Mittagslicht.
+**Keine Schema-, Sim- oder Balancing-Änderung, v32.**
+**Offen, nicht vortäuschen:** §5 Quicktime-Events (bewusst zurückgestellt) ·
+Karte ist nicht gekippt (Begründung oben) · Feld-Balancing ist eine Setzung ·
+D-057s Traglast bindet in der ausgelieferten Config praktisch nie (kleinstes
+Fahrzeug 250–500 gegen 135–180 Tourgewicht) · Häfen sind noch kein Netzknoten
+der Stadtarbeit.
+
+## Status: v1.37 — ACKERLAND UND KREUZUNGEN (Save v32, D-058/D-059/D-060)
 Auftrag „Stadtarbeit Overhaul — aktive Logistik, Farm-Felder, visueller
 Komplettumbau"; Priorität 1 und 3 umgesetzt, P4–P7 offen (siehe unten und
 `docs/agents/CITYWORK_OVERHAUL_PLAN.md` — **verbindlicher Einstieg** vor jeder
