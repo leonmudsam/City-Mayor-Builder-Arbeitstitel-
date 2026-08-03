@@ -112,6 +112,7 @@ import {
   workAreaBounds,
   workerRenderStates,
   type ContinuousOperationStatus,
+  type OperationIdleReason,
   type OperationPreview,
   type OperationThroughput,
   type WorkerRenderState,
@@ -264,6 +265,43 @@ export interface ActivityCargoStatus {
   missingLoads: number;
   /** Traglast reicht nicht für alle offenen Stopps — unterwegs nachladen. */
   needsReload: boolean;
+}
+
+/**
+ * § P5 — warum an DIESEM Lager gerade nicht nachgeladen werden kann. Eine
+ * aufzählbare Menge, damit die Oberfläche jeden Fall benennen MUSS (D-046:
+ * `t()` gibt fehlende Schlüssel roh aus, der Compiler fängt das nicht).
+ */
+export const CITYWORK_RELOAD_BLOCKERS = [
+  'no_mission',
+  'no_cargo_mission',
+  'not_a_store',
+  'cargo_full',
+  'insufficient',
+] as const;
+export type CityworkReloadBlocker = (typeof CITYWORK_RELOAD_BLOCKERS)[number];
+
+/** § P5 (§6): Ein Gebäude, wie es die Stadtarbeitskarte zeigt. Reine Projektion. */
+export interface CityworkBuildingInfo {
+  buildingId: string;
+  defId: string;
+  nameKey: string;
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+  upgradeLevel: number;
+  /** Führt dieses Gebäude einen eigenen Bestand (D-052)? */
+  isStore: boolean;
+  isHarbour: boolean;
+  /** Bestände AN DIESEM ORT — leer, wo die Ware die Bilanz der Stadt bleibt. */
+  stock: { resource: ResourceId; amount: number; cap: number }[];
+  /** `undefined` heißt: hier kann jetzt nachgeladen werden. */
+  reloadBlocker?: CityworkReloadBlocker;
+  /** Lieferziel des laufenden Auftrags. */
+  delivery?: { done: boolean; resource: ResourceId; amount: number };
+  /** Aktiver Betrieb (Sägewerk/Steinbruch/Farm). */
+  operation?: { resource: ResourceId; perMinute: number; idleReason?: OperationIdleReason };
 }
 
 export interface ActivityRunResult {
@@ -2391,14 +2429,15 @@ export class GameController {
    * Eine zweite Entfernungsregel hier wäre ein zweites Fahrmodell (§2/§8).
    */
   reloadActivityCargo(buildingId: string): CommandResult {
-    const active = this.state.activities.active;
-    if (!active) return fail('invalid');
-    const def = this.config.activities.activities.find((a) => a.id === active.defId);
-    if (!def?.costPerTarget) return fail('invalid');
-    if (!this.derived.storageSites.some((site) => site.buildingId === buildingId)) return fail('invalid');
-
-    const status = this.getActivityCargoStatus();
-    if (!status || status.missingLoads <= 0) return fail('invalid');
+    // § D-048: Der Prüfteil ist herausgezogen, damit die Karte GENAU DIESE
+    // Bedingung liest. Sonst könnte ein Knopf einladend aussehen, den der
+    // Command danach ablehnt — oder umgekehrt.
+    const blocker = this.reloadBlockerAt(buildingId);
+    if (blocker) return fail(blocker === 'insufficient' ? 'insufficient' : 'invalid');
+    const active = this.state.activities.active!;
+    const def = this.config.activities.activities.find((a) => a.id === active.defId)!;
+    const costPerTarget = def.costPerTarget!;
+    const status = this.getActivityCargoStatus()!;
 
     const reserved = (active.reserved ??= {});
     const taken: Partial<Record<ResourceId, number>> = {};
@@ -2407,7 +2446,7 @@ export class GameController {
     for (let load = 0; load < status.missingLoads; load++) {
       const step: Partial<Record<ResourceId, number>> = {};
       let complete = true;
-      for (const [res, amount] of Object.entries(def.costPerTarget)) {
+      for (const [res, amount] of Object.entries(costPerTarget)) {
         const want = amount ?? 0;
         if (want <= 0) continue;
         const got = withdrawStock(this.state, this.derived, buildingId, res as ResourceId, want);
@@ -2433,6 +2472,98 @@ export class GameController {
     active.sourceBuildingId = buildingId;
     this.notify({ type: 'change' });
     return ok;
+  }
+
+  /**
+   * § P5 — WARUM GEHT DAS HIER NICHT?
+   *
+   * Der herausgezogene Prüfteil von `reloadActivityCargo` (D-048). Die
+   * Gebäudekarte liest ihn, statt das Ergebnis zu erraten; ein
+   * „Nachladen"-Knopf ist damit genau dann aktiv, wenn der Command ihn auch
+   * annimmt — und nennt sonst den Grund.
+   *
+   * Bewusst OHNE Entfernungsprüfung: Reichweite ist eine Frage der Bedienung
+   * (D-057) und steckt in `reachedTarget` der Fahrschleife. Eine zweite
+   * Entfernungsregel hier wäre ein zweites Fahrmodell (§2/§8).
+   */
+  private reloadBlockerAt(buildingId: string): CityworkReloadBlocker | undefined {
+    const active = this.state.activities.active;
+    if (!active) return 'no_mission';
+    const def = this.config.activities.activities.find((a) => a.id === active.defId);
+    if (!def?.costPerTarget) return 'no_cargo_mission';
+    if (!this.derived.storageSites.some((site) => site.buildingId === buildingId)) return 'not_a_store';
+    const status = this.getActivityCargoStatus();
+    if (!status || status.missingLoads <= 0) return 'cargo_full';
+    for (const [res, amount] of Object.entries(def.costPerTarget)) {
+      if (stockAt(this.state, buildingId, res as ResourceId) + 1e-6 < (amount ?? 0)) return 'insufficient';
+    }
+    return undefined;
+  }
+
+  /**
+   * § P5 (§6 des Auftrags) — EIN GEBÄUDE AUF DER KARTE, IN EINER ANTWORT.
+   *
+   * „Jedes relevante Gebäude soll interaktiv sein: Lager (Bestand ansehen,
+   * laden), Farm, Markt, Rathaus, Hafen, Wohnhaus (Bedarf, Lieferung)."
+   *
+   * Alles hier ist Projektion vorhandener Wahrheiten: Bestände aus dem
+   * Bestandsregister (D-052 — ortsgenau, NICHT die Stadtbilanz), der offene
+   * Lieferstand aus dem laufenden Auftrag, der Betriebszustand aus dem
+   * Betriebssystem, die Nachladefrage aus dem Prüfteil des Commands. Es wird
+   * nichts nachgerechnet und nichts erfunden: Was die Simulation nicht kennt
+   * — etwa eine Stoppliste mit Priorität —, erscheint hier auch nicht.
+   */
+  getCityworkBuildingInfo(buildingId: string): CityworkBuildingInfo | undefined {
+    const building = this.state.buildings[buildingId];
+    const def = building && this.config.buildings.get(building.defId);
+    if (!building || !def) return undefined;
+    const site = this.derived.storageSites.find((candidate) => candidate.buildingId === buildingId);
+    const stock = site
+      ? (Object.entries(site.caps) as [ResourceId, number][])
+          .filter(([, cap]) => cap > 0)
+          .map(([resource, cap]) => ({ resource, cap, amount: stockAt(this.state, buildingId, resource) }))
+          .sort((a, b) => b.amount - a.amount)
+      : [];
+
+    const active = this.state.activities.active;
+    const activityDef = active && this.config.activities.activities.find((a) => a.id === active.defId);
+    const targetEntry = active?.targets.find((target) => target.buildingId === buildingId);
+    const perTarget = activityDef?.costPerTarget;
+    const delivery = targetEntry && perTarget
+      ? {
+          done: targetEntry.done,
+          resource: (Object.keys(perTarget)[0] ?? 'wood') as ResourceId,
+          amount: Object.values(perTarget).reduce<number>((sum, value) => sum + (value ?? 0), 0),
+        }
+      : undefined;
+
+    // Der Durchsatz ist bereits eine geprüfte Projektion des Betriebssystems —
+    // die Karte fragt sie, statt aus Arbeitern und Knoten neu zu rechnen.
+    const throughput = this.getOperationThroughput(buildingId);
+    const operation = def.operation && throughput
+      ? {
+          resource: throughput.resource,
+          perMinute: throughput.perMinute,
+          ...(throughput.idleReason ? { idleReason: throughput.idleReason } : {}),
+        }
+      : undefined;
+
+    return {
+      buildingId,
+      defId: building.defId,
+      nameKey: def.nameKey,
+      x: building.x,
+      y: building.y,
+      w: def.size.w,
+      h: def.size.h,
+      upgradeLevel: building.upgradeLevel,
+      isStore: site !== undefined,
+      isHarbour: def.waterfront !== undefined,
+      stock,
+      ...(this.reloadBlockerAt(buildingId) ? { reloadBlocker: this.reloadBlockerAt(buildingId)! } : {}),
+      ...(delivery ? { delivery } : {}),
+      ...(operation ? { operation } : {}),
+    };
   }
 
   /**

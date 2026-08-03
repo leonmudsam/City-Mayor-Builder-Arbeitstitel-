@@ -825,3 +825,134 @@
 }
 .citywork-junction-options button > span { font-size: 19px; line-height: 1; }
 .citywork-junction-options button > small { font-size: 10px; opacity: 0.6; }
+
+/* § P5 (§6) — die Karte eines Gebäudes auf der Stadtarbeitskarte.
+   Rechts oben im Kartenfeld: nah am Angeklickten, ohne die Fahrspur unten oder
+   die Kreuzungsanzeige in der Mitte zu verdecken. */
+.citywork-building-card {
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  z-index: 9;
+  width: 268px;
+  max-height: calc(100% - 130px);
+  overflow-y: auto;
+  padding: 12px 13px 13px;
+  border-radius: 15px;
+  background: rgba(7, 21, 29, 0.9);
+  border: 1px solid rgba(140, 225, 245, 0.24);
+  backdrop-filter: blur(9px);
+  box-shadow: 0 16px 38px rgba(0, 0, 0, 0.46);
+  pointer-events: auto;
+}
+
+.citywork-building-card > header {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 2px 8px;
+  align-items: center;
+  margin-bottom: 8px;
+}
+.citywork-building-card > header strong { grid-column: 1; font-size: 15px; line-height: 1.2; }
+.citywork-building-card > header button {
+  grid-row: 1 / span 2;
+  grid-column: 2;
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.05);
+  color: inherit;
+  cursor: pointer;
+}
+.citywork-building-card > header button:hover { background: rgba(255, 255, 255, 0.12); }
+
+.citywork-building-role {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 10.5px;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: #8ce1f5;
+}
+
+.citywork-building-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 10px;
+  font-size: 11px;
+  opacity: 0.72;
+}
+.citywork-building-meta span {
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.citywork-building-card h4 {
+  margin: 0 0 5px;
+  font-size: 10.5px;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  opacity: 0.6;
+}
+.citywork-building-card section { margin-bottom: 11px; }
+.citywork-building-card section > b { font-size: 16px; }
+.citywork-building-card p { margin: 0; font-size: 12px; opacity: 0.75; }
+.citywork-building-card small { display: block; margin-top: 5px; font-size: 11px; opacity: 0.66; }
+.citywork-building-card p.warn {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  margin-top: 5px;
+  color: #f0b45a;
+  opacity: 1;
+}
+
+.citywork-building-stock ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 7px; }
+.citywork-building-stock li {
+  position: relative;
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  align-items: baseline;
+  gap: 6px;
+  padding-bottom: 6px;
+  font-size: 12.5px;
+}
+.citywork-building-stock li span { opacity: 0.85; }
+.citywork-building-stock li b { font-size: 14px; }
+.citywork-building-stock li small { margin: 0; font-size: 10.5px; opacity: 0.55; }
+/* Der Balken ist die Füllung, nicht ein zweiter Zahlenwert. */
+.citywork-building-stock li i {
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  height: 2px;
+  border-radius: 2px;
+  background: linear-gradient(90deg, #4bc8d1, #7ce0a4);
+}
+.citywork-building-stock li::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 2px;
+  border-radius: 2px;
+  background: rgba(255, 255, 255, 0.09);
+  z-index: -1;
+}
+
+.citywork-building-actions { display: grid; gap: 4px; }
+.citywork-building-actions button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  width: 100%;
+}
+.citywork-building-actions button:disabled { opacity: 0.45; cursor: not-allowed; }

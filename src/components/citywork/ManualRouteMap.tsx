@@ -129,6 +129,8 @@ export interface DriveReadout {
   junctionMeters?: number;
   intent?: TurnHint;
   stopped?: boolean;
+  /** § P5: Wo der Wagen steht — die Gebäudekarte misst damit ihre Entfernung. */
+  vehicle?: { x: number; y: number };
 }
 
 interface ViewState {
@@ -170,6 +172,8 @@ export function ManualRouteMap({
   loadRatio,
   editEnabled = true,
   driving = false,
+  inspectedId,
+  onInspect,
   onArrive,
   onStorageReach,
   onDriveControls,
@@ -208,6 +212,13 @@ export function ManualRouteMap({
    * keine 3D-Welt, keine zweite Karte.
    */
   driving?: boolean;
+  /**
+   * § P5 (§6): Das Gebäude, dessen Karte gerade offen ist. Die Karte hält den
+   * Zustand NICHT selbst — sie meldet den Klick, der Planer zeigt die Auskunft.
+   * Sonst gäbe es zwei Stellen, an denen „was ist ausgewählt" steht.
+   */
+  inspectedId?: string | undefined;
+  onInspect?(buildingId: string | undefined): void;
   /** Zielgebäude erreicht — der Aufrufer schließt den Stopp über den Command ab. */
   onArrive?(buildingId: string): void;
   /** Wagen steht an einem Lager (oder an keinem mehr): Id oder . */
@@ -294,6 +305,26 @@ export function ManualRouteMap({
     }
     return result;
   }, [game, game.version]);
+  /**
+   * § P5: Die Trefferfläche der Gebäude — Kachel → Gebäude-Id. Straßen und Deko
+   * bleiben draußen: Auf eine Straße klickt man, um zu fahren, nicht um sie zu
+   * befragen. Aufgebaut in derselben Schleifenform wie `occupied`, damit beide
+   * dieselbe Vorstellung von „belegt" haben.
+   */
+  const buildingTiles = useMemo(() => {
+    const result = new Map<string, string>();
+    for (const building of Object.values(game.state.buildings)) {
+      const definition = game.config.buildings.get(building.defId);
+      if (!definition || definition.category === 'roads' || definition.category === 'decoration') continue;
+      for (let dy = 0; dy < definition.size.h; dy++) {
+        for (let dx = 0; dx < definition.size.w; dx++) {
+          result.set(`${building.x + dx},${building.y + dy}`, building.id);
+        }
+      }
+    }
+    return result;
+  }, [game, game.version]);
+  const [hoverId, setHoverId] = useState<string | undefined>(undefined);
 
   // § P3: Weltbild und Vegetation der ECHTEN Insel. Beide hängen NUR am
   // Freischaltzustand — hingen sie an der Belegung, würde jeder Bauklick das
@@ -563,6 +594,11 @@ export function ManualRouteMap({
       if (covered) drawBuildingOutlines(ctx, game, targets, bounds, transform);
       else drawBuildings(ctx, game, targets, bounds, transform);
     }
+    // § P5: Was unter dem Zeiger liegt und was befragt wird. Bewusst NACH den
+    // Gebäuden und vor den Markern — die Hervorhebung gehört zum Gebäude, nicht
+    // zur Route.
+    drawBuildingFocus(ctx, game, hoverId, 'rgba(255,255,255,.5)', transform);
+    drawBuildingFocus(ctx, game, inspectedId, 'rgba(90, 214, 232, .95)', transform);
     drawInfrastructure(ctx, game, bounds, transform);
     if (referencePath && referencePath.length > 1 && !drive) drawAlternativeRoute(ctx, referencePath, transform);
     if (trailRef.current.length > 1) drawTrail(ctx, trailRef.current, transform);
@@ -605,6 +641,8 @@ export function ManualRouteMap({
     cargoStops,
     game,
     game.version,
+    hoverId,
+    inspectedId,
     markerImages,
     natureChunks,
     occupied,
@@ -842,6 +880,7 @@ export function ManualRouteMap({
             : {}),
           ...(stepped.intent ? { intent: stepped.intent } : {}),
           stopped: stoppedRef.current,
+          vehicle: { x: pose.x, y: pose.y },
         });
       }
     };
@@ -863,11 +902,27 @@ export function ManualRouteMap({
     const canvas = canvasRef.current;
     if (!canvas) return undefined;
     const rect = canvas.getBoundingClientRect();
-    const transform = mapTransform(view);
+    // Während der Fahrt führt die Verfolgeransicht (`viewRef`), nicht der
+    // React-Zustand. Ohne diese Zeile zeigte ein Klick am Steuer auf die
+    // Stelle, an der die Karte vor dem Losfahren stand.
+    const current = drivingRef.current && viewRef.current ? viewRef.current : view;
+    const transform = mapTransform(current);
     return {
-      x: view.centerX + ((clientX - rect.left) / rect.width) * CANVAS_W / transform.scale - CANVAS_W / transform.scale / 2,
-      y: view.centerY + ((clientY - rect.top) / rect.height) * CANVAS_H / transform.scale - CANVAS_H / transform.scale / 2,
+      x: current.centerX + ((clientX - rect.left) / rect.width) * CANVAS_W / transform.scale - CANVAS_W / transform.scale / 2,
+      y: current.centerY + ((clientY - rect.top) / rect.height) * CANVAS_H / transform.scale - CANVAS_H / transform.scale / 2,
     };
+  };
+
+  /**
+   * § P5: Welches Gebäude liegt unter dem Zeiger? Über die Kachelbelegung, nicht
+   * über einen Abstand zur Gebäudemitte — ein 4×3-Lagerhaus ist am Rand genauso
+   * anklickbar wie in der Mitte, und die Trefferfläche ist exakt die, die
+   * gezeichnet wird.
+   */
+  const buildingAtPointer = (clientX: number, clientY: number): string | undefined => {
+    const world = worldAt(clientX, clientY);
+    if (!world) return undefined;
+    return buildingTiles.get(`${Math.floor(world.x)},${Math.floor(world.y)}`);
   };
 
   const appendRoad = (clientX: number, clientY: number, noisy: boolean) => {
@@ -918,6 +973,7 @@ export function ManualRouteMap({
         ref={canvasRef}
         width={CANVAS_W}
         height={CANVAS_H}
+        style={hoverId ? { cursor: 'pointer' } : undefined}
         aria-label="Logistikkarte der Stadt – Draufsicht auf die echte Spielwelt"
         onContextMenu={(event) => {
           event.preventDefault();
@@ -925,6 +981,17 @@ export function ManualRouteMap({
           rightDraggedRef.current = false;
         }}
         onPointerDown={(event) => {
+          // § P5 (§6): Ein Gebäude befragen geht IMMER — auch am Steuer. Genau
+          // dort will man wissen, was im Lager liegt, an dem man gerade steht.
+          if (event.button === 0) {
+            const hit = buildingAtPointer(event.clientX, event.clientY);
+            if (hit) {
+              onInspect?.(hit === inspectedId ? undefined : hit);
+              if (driving) return;
+            } else if (!editEnabled && inspectedId) {
+              onInspect?.(undefined);
+            }
+          }
           // § P2: Während der Fahrt führt die Verfolgeransicht — Ziehen und
           // Zeichnen würden gegen sie arbeiten.
           if (driving) return;
@@ -944,7 +1011,13 @@ export function ManualRouteMap({
         }}
         onPointerMove={(event) => {
           const interaction = interactionRef.current;
-          if (!interaction) return;
+          if (!interaction) {
+            // Nur ohne laufende Geste: Während des Ziehens gehört der Zeiger der
+            // Karte, und ein wanderndes Gebäude-Highlight wäre reine Unruhe.
+            const hit = driving ? undefined : buildingAtPointer(event.clientX, event.clientY);
+            if (hit !== hoverId) setHoverId(hit);
+            return;
+          }
           if (Math.hypot(event.clientX - interaction.clientX, event.clientY - interaction.clientY) > 3) interaction.moved = true;
           if (interaction.kind === 'pan') {
             const transform = mapTransform(interaction.view);
@@ -966,6 +1039,7 @@ export function ManualRouteMap({
         onPointerCancel={() => {
           interactionRef.current = undefined;
         }}
+        onPointerLeave={() => setHoverId(undefined)}
         onDoubleClick={(event) => {
           const world = worldAt(event.clientX, event.clientY);
           if (!world || !anchors) return;
@@ -1282,6 +1356,40 @@ function drawBuildings(
       ctx.fillRect(point.x + width * 0.66, point.y + height * 0.53, windowSize, windowSize * 0.75);
     }
   }
+}
+
+/**
+ * § P5 — die Hervorhebung eines einzelnen Gebäudes (unter dem Zeiger, befragt).
+ * Ein Rahmen um die ECHTE Grundfläche: Genau die Kacheln, die der Treffertest
+ * zählt, werden auch umrandet — sonst zeigte der Rahmen woanders hin als der
+ * Klick wirkt (die Lehre aus D-047/D-049).
+ */
+function drawBuildingFocus(
+  ctx: CanvasRenderingContext2D,
+  game: GameController,
+  buildingId: string | undefined,
+  color: string,
+  transform: Transform,
+) {
+  if (!buildingId) return;
+  const building = game.state.buildings[buildingId];
+  const definition = building && game.config.buildings.get(building.defId);
+  if (!building || !definition) return;
+  const point = toScreen(building.x, building.y, transform);
+  ctx.save();
+  ctx.strokeStyle = color;
+  ctx.lineWidth = Math.max(2, transform.scale * 0.11);
+  ctx.setLineDash([Math.max(6, transform.scale * 0.4), Math.max(4, transform.scale * 0.26)]);
+  roundedRect(
+    ctx,
+    point.x - 2,
+    point.y - 2,
+    definition.size.w * transform.scale + 4,
+    definition.size.h * transform.scale + 4,
+    Math.max(3, transform.scale * 0.14),
+  );
+  ctx.stroke();
+  ctx.restore();
 }
 
 /**

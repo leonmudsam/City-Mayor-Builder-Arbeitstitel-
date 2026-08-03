@@ -31,6 +31,7 @@ import { useGame, useUiStore } from '../../state/store.ts';
 import '../../styles/citywork-smart.css';
 import { CitizenPortrait } from '../art/index.ts';
 import { ManualRouteMap, type CityworkMapPoint, type DriveReadout } from '../citywork/ManualRouteMap.tsx';
+import { MapBuildingCard } from '../citywork/MapBuildingCard.tsx';
 import { RouteSummary } from '../citywork/RouteSummary.tsx';
 import { SupplyPicker } from '../citywork/SupplyPicker.tsx';
 import { TourOverview, type TourDisplayPoint } from '../citywork/TourOverview.tsx';
@@ -116,6 +117,12 @@ export function ActivityRoutePlanner({ defId }: { defId: string }) {
    * eigene Entfernung, sonst gäbe es zwei Reichweitenbegriffe.
    */
   const [storageAtHand, setStorageAtHand] = useState<string | undefined>(undefined);
+  /**
+   * § P5 (§6): Das befragte Gebäude. Der Zustand liegt HIER und nicht in der
+   * Karte — die Karte meldet den Klick, der Planer beantwortet ihn. Zwei Stellen
+   * für „was ist ausgewählt" laufen unweigerlich auseinander.
+   */
+  const [inspectedId, setInspectedId] = useState<string | undefined>(undefined);
   /**
    * § D-060: Die Bedienung der laufenden Fahrt, von der Karte herausgereicht.
    * Damit ist ein Klick auf eine Richtung exakt derselbe Vorgang wie ein
@@ -304,6 +311,15 @@ export function ActivityRoutePlanner({ defId }: { defId: string }) {
     requestAnimationFrame(() => setMissionFollow(true));
   };
 
+  // Reine Projektionen — die Oberfläche rechnet weder Bestand noch Betrieb nach.
+  const inspectedInfo = inspectedId ? game.getCityworkBuildingInfo(inspectedId) : undefined;
+  const inspectedDistance = inspectedInfo && driveReadout?.vehicle
+    ? Math.hypot(
+        inspectedInfo.x + inspectedInfo.w / 2 - driveReadout.vehicle.x,
+        inspectedInfo.y + inspectedInfo.h / 2 - driveReadout.vehicle.y,
+      )
+    : undefined;
+
   const selectedImage = selectedVehicleDef ? vehicleImage(selectedVehicleDef.imageKey) : undefined;
   const openTargets = active ? active.targets.filter((target) => !target.done).length : targetIds.length;
   /** Tatsächlich angefahrene Ziele in Besuchsreihenfolge — das Protokoll (§5). */
@@ -392,6 +408,8 @@ export function ActivityRoutePlanner({ defId }: { defId: string }) {
                 : {})}
               editEnabled={false}
               driving={driving}
+              inspectedId={inspectedId}
+              onInspect={setInspectedId}
               onDriveReadout={setDriveReadout}
               onRecordDrive={(tiles) => game.recordActivityDrive(tiles)}
               onArrive={(buildingId) => {
@@ -414,6 +432,19 @@ export function ActivityRoutePlanner({ defId }: { defId: string }) {
               onPathChange={setRoadPath}
               onInvalid={() => pushToast('Nutze einen direkt angrenzenden Straßenabschnitt.', 'info')}
             />
+            {inspectedInfo && (
+              <MapBuildingCard
+                info={inspectedInfo}
+                distanceTiles={inspectedDistance}
+                atHand={storageAtHand === inspectedInfo.buildingId}
+                onClose={() => setInspectedId(undefined)}
+                onReload={() => {
+                  const result = game.reloadActivityCargo(inspectedInfo.buildingId);
+                  if (result.ok) pushToast('Nachgeladen. Die Ware kommt aus genau diesem Lager.', 'success');
+                  else pushToast(t(`error.${result.error}`), 'error');
+                }}
+              />
+            )}
             {driving && storageAtHand && cargoStatus && cargoStatus.missingLoads > 0 && (
               <button
                 type="button"
