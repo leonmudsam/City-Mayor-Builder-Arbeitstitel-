@@ -956,3 +956,59 @@
   width: 100%;
 }
 .citywork-building-actions button:disabled { opacity: 0.45; cursor: not-allowed; }
+
+/* § P6 (§8 Phase 4) — die Prüfung der gefahrenen Route.
+   Mittig über der Karte: Sie ist in diesem Moment die einzige Entscheidung. */
+.citywork-review {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 12;
+  width: min(420px, calc(100% - 48px));
+  padding: 18px 20px 16px;
+  border-radius: 18px;
+  background: rgba(6, 20, 27, 0.94);
+  border: 1px solid rgba(140, 225, 245, 0.28);
+  backdrop-filter: blur(10px);
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.55);
+  pointer-events: auto;
+}
+.citywork-review > header { display: grid; gap: 3px; margin-bottom: 14px; }
+.citywork-review > header span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 10.5px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #8ce1f5;
+}
+.citywork-review > header strong { font-size: 18px; }
+
+.citywork-review-figures {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 10px 14px;
+  margin: 0 0 16px;
+}
+.citywork-review-figures div { display: grid; gap: 2px; }
+.citywork-review-figures dt {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 10.5px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  opacity: 0.6;
+}
+.citywork-review-figures dd { margin: 0; font-size: 17px; font-weight: 700; }
+
+.citywork-review-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 9px; }
+.citywork-review-actions button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+}
+.citywork-review small { display: block; margin-top: 10px; font-size: 11px; opacity: 0.62; line-height: 1.45; }

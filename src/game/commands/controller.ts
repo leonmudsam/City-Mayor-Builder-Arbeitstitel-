@@ -2040,6 +2040,33 @@ export class GameController {
     // `active.mode` bleibt bewusst UNBERÜHRT: Route und Fahrzeug darf der Spieler
     // unterwegs ändern, die Ausführungsart nicht (§ P2 — sonst wäre der Aufschlag
     // nachträglich zuschaltbar, nachdem die Stadt die halbe Tour gefahren ist).
+    // Der EINE erlaubte Wechsel läuft über `handOverActivityDrive` und geht
+    // ausschließlich in die andere Richtung.
+    this.notify({ type: 'change' });
+    return ok;
+  }
+
+  /**
+   * § P6 (D-061) — DEN REST FAHREN LASSEN.
+   *
+   * D-050 hat die Ausführungsart nach dem Start eingefroren, und der Grund war
+   * gut: Sonst führe man die bequeme Hälfte selbst und schaltete den Aufschlag
+   * für den Rest dazu. Der Riegel traf aber auch den ehrlichen Fall — wer
+   * aussteigt, ließ eine Tour zurück, die NIEMAND mehr zu Ende fährt (bei
+   * `manual` steht der Missionswagen still).
+   *
+   * Deshalb genau ein erlaubter Wechsel, und nur in eine Richtung: manuell →
+   * automatisch. Der Aufschlag entfällt damit für die GANZE Tour, weil
+   * `modeRewardFactor` bei der Auszahlung `active.mode` liest — die Sorge aus
+   * D-050 kann so nicht entstehen, und die Übergabe kostet, was sie wert ist.
+   * Zurück ans Steuer geht es nicht: Sonst wäre der Aufschlag am Ende doch
+   * wieder zuschaltbar.
+   */
+  handOverActivityDrive(): CommandResult {
+    const active = this.state.activities.active;
+    if (!active) return fail('invalid');
+    if ((active.mode ?? DEFAULT_TRANSPORT_MODE) !== 'manual') return fail('invalid');
+    active.mode = 'auto';
     this.notify({ type: 'change' });
     return ok;
   }

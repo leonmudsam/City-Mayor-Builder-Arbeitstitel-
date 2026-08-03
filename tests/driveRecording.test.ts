@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { nearTownHall, newController, setLevel, flattenTerrain, T0 } from './helpers.ts';
 import type { GameController } from '../src/game/commands/controller.ts';
+import { modeRewardFactor } from '../src/game/activities/transportOrder.ts';
 
 // § Stadtarbeit-Overhaul 2.0, Phasen 1+3 (D-054) — „Die Route wird NICHT
 // gezeichnet. Die Route wird gefahren."
@@ -30,6 +31,16 @@ function deliveryCity(): GameController {
   controller.placeBuilding('house_small', at(17, 6).x, at(17, 6).y);
   controller.update(T0 + 3_600_000, false);
   return controller;
+}
+
+/** Startet den ersten verfügbaren Fahrauftrag ausdrücklich zum Selbstfahren. */
+function startManualDrive(controller: GameController): string | undefined {
+  for (const entry of controller.getActivityBoard()) {
+    if (!entry.def.drive || !entry.available) continue;
+    const targets = controller.getActivityPlanningContext(entry.def.id)?.targetBuildingIds ?? [];
+    if (controller.startActivity(entry.def.id, targets, { mode: 'manual' }).ok) return entry.def.id;
+  }
+  return undefined;
 }
 
 /** Startet den ersten verfügbaren Fahrauftrag ohne jede Wegvorgabe. */
@@ -118,5 +129,41 @@ describe('Stadtarbeit 2.0 — die Route entsteht beim Fahren', () => {
       .filter((target) => target.done)
       .map((target) => target.buildingId);
     expect(done).toEqual([targets.at(-1), targets[1]]);
+  });
+});
+
+/**
+ * § P6 (D-061) — DEN REST FAHREN LASSEN.
+ *
+ * D-050 hat die Ausführungsart eingefroren, damit der Aufschlag nicht nach der
+ * bequemen Hälfte zuschaltbar ist. Der Riegel traf aber auch den ehrlichen
+ * Fall: Wer aussteigt, ließ eine Tour zurück, die niemand mehr fährt. Erlaubt
+ * ist deshalb genau ein Wechsel, und nur in eine Richtung — er KOSTET den
+ * Aufschlag für die ganze Tour.
+ */
+describe('Übergabe an die Stadt', () => {
+  it('schaltet eine manuelle Tour auf automatisch — und nur in diese Richtung', () => {
+    const controller = deliveryCity();
+    const defId = startManualDrive(controller);
+    expect(defId, 'kein Fahrauftrag verfügbar — Fixture prüfen').toBeTruthy();
+    expect(controller.state.activities.active?.mode).toBe('manual');
+
+    expect(controller.handOverActivityDrive()).toEqual({ ok: true });
+    expect(controller.state.activities.active?.mode).toBe('auto');
+
+    // Zurück ans Steuer gibt es nicht — sonst wäre der Aufschlag am Ende doch
+    // wieder zuschaltbar.
+    expect(controller.handOverActivityDrive().ok).toBe(false);
+  });
+
+  it('lehnt ohne laufenden Auftrag ab, statt still nichts zu tun', () => {
+    const controller = deliveryCity();
+    expect(controller.handOverActivityDrive()).toEqual({ ok: false, error: 'invalid' });
+  });
+
+  it('kostet den Aufschlag: die Prämie folgt dem Modus zum Zeitpunkt der Auszahlung', () => {
+    const controller = deliveryCity();
+    const bonus = controller.config.activities.manualDriveBonusFactor;
+    expect(modeRewardFactor('manual', bonus)).toBeGreaterThan(modeRewardFactor('auto', bonus));
   });
 });

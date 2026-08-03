@@ -5797,16 +5797,11 @@ export class ThreeMapRenderer implements IMapRenderer {
       return;
     }
     const selectedVehicle = active.vehicle ?? this.activeDriveDef()?.vehicle ?? 'van';
-    const planned = active.plannedRoadPath;
-    if (planned && planned.length >= 2) {
-      const pathKey = planned.map((point) => `${point.x},${point.y}`).join('|');
-      if (!this.missionVan || this.missionVan.pathKey !== pathKey) {
-        this.clearMissionVan();
-        this.missionVan = this.createMissionVehicle(selectedVehicle, planned, pathKey);
-      }
-      return;
-    }
-
+    // § P6: `plannedRoadPath` ist seit D-054 das PROTOKOLL der gefahrenen
+    // Strecke, kein Fahrplan. Der Wagen fuhr es bis hierher nach — bei einer
+    // Übergabe mitten in der Tour (D-061) hätte er damit die bereits gefahrene
+    // Strecke wiederholt, statt das nächste offene Ziel anzusteuern. Die
+    // Automatik tut jetzt, was sie verspricht: Sie fährt zum Ziel.
     const start = this.missionVan ? this.vanTile() : this.deliverySourceTile() ?? this.roadTiles[0];
     if (!start) return;
     const b = this.controller.state.buildings[nextStop.buildingId];

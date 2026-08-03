@@ -32,6 +32,7 @@ import '../../styles/citywork-smart.css';
 import { CitizenPortrait } from '../art/index.ts';
 import { ManualRouteMap, type CityworkMapPoint, type DriveReadout } from '../citywork/ManualRouteMap.tsx';
 import { MapBuildingCard } from '../citywork/MapBuildingCard.tsx';
+import { RouteReview } from '../citywork/RouteReview.tsx';
 import { RouteSummary } from '../citywork/RouteSummary.tsx';
 import { SupplyPicker } from '../citywork/SupplyPicker.tsx';
 import { TourOverview, type TourDisplayPoint } from '../citywork/TourOverview.tsx';
@@ -123,6 +124,11 @@ export function ActivityRoutePlanner({ defId }: { defId: string }) {
    * für „was ist ausgewählt" laufen unweigerlich auseinander.
    */
   const [inspectedId, setInspectedId] = useState<string | undefined>(undefined);
+  /**
+   * § P6 (§8 Phase 4): Die Prüfung der gefahrenen Route. Sie öffnet sich beim
+   * Aussteigen und führt zurück ans Steuer oder in die 3D-Welt.
+   */
+  const [reviewOpen, setReviewOpen] = useState(false);
   /**
    * § D-060: Die Bedienung der laufenden Fahrt, von der Karte herausgereicht.
    * Damit ist ein Klick auf eine Richtung exakt derselbe Vorgang wie ein
@@ -427,11 +433,41 @@ export function ActivityRoutePlanner({ defId }: { defId: string }) {
               onDriveControls={(controls) => setDriveControls(() => controls)}
               onExitDrive={() => {
                 setDriving(false);
+                // § P6 (§8 Phase 4): Aussteigen ist kein Abbruch, sondern eine
+                // Zwischenbilanz — mit genau zwei Auswegen.
+                if (game.state.activities.active) {
+                  setReviewOpen(true);
+                  return;
+                }
                 pushToast('Ausgestiegen. Über „Selbst fahren" geht es weiter.', 'info');
               }}
               onPathChange={setRoadPath}
               onInvalid={() => pushToast('Nutze einen direkt angrenzenden Straßenabschnitt.', 'info')}
             />
+            {reviewOpen && active && (
+              <RouteReview
+                drivenTiles={drivenTiles}
+                stopsDone={visitedTargetIds.length}
+                stopsTotal={active.targets.length}
+                cargoOnboard={cargoStatus?.onboard}
+                cargoCapacity={cargoStatus?.capacity}
+                rewardMoney={Math.round(context.reward.money * rewardFactor)}
+                rewardXp={Math.round(context.reward.xp * rewardFactor)}
+                bonusLostPercent={bonusPercent}
+                onResume={() => { setReviewOpen(false); setDriving(true); }}
+                onHandOver={() => {
+                  const result = game.handOverActivityDrive();
+                  if (!result.ok) {
+                    pushToast(t(`error.${result.error}`), 'error');
+                    return;
+                  }
+                  setReviewOpen(false);
+                  closePlanner();
+                  pushToast('Übergeben. Die Stadt fährt die offenen Ziele in der Welt ab.', 'success');
+                  requestAnimationFrame(() => setMissionFollow(true));
+                }}
+              />
+            )}
             {inspectedInfo && (
               <MapBuildingCard
                 info={inspectedInfo}
