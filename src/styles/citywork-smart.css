@@ -1276,3 +1276,87 @@
   color: #8fb4cf;
   font-size: 11.5px;
 }
+
+/* § 7 des Auftrags — DIE KARTE IST DER FOKUS.
+   Am Steuer schrumpft die rechte Spalte auf Fahrzeug und Ladung; die Karte
+   bekommt den Platz, den sie in den Mockups hat. */
+.citywork-smart-workspace.is-driving {
+  grid-template-columns: minmax(0, 1fr) 236px;
+}
+
+.citywork-smart-drive-rail {
+  min-width: 0;
+  display: grid;
+  align-content: start;
+  gap: 12px;
+  padding: 13px;
+  border: 1px solid rgba(96, 190, 219, 0.26);
+  border-radius: 14px;
+  background: rgba(8, 33, 44, 0.92);
+}
+
+.citywork-smart-drive-cargo {
+  position: relative;
+  display: grid;
+  gap: 3px;
+  padding-bottom: 8px;
+}
+.citywork-smart-drive-cargo small {
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  opacity: 0.6;
+}
+.citywork-smart-drive-cargo b { font-size: 20px; }
+.citywork-smart-drive-cargo em { font-size: 11px; font-style: normal; opacity: 0.7; }
+.citywork-smart-drive-cargo i {
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  height: 3px;
+  border-radius: 3px;
+  background: linear-gradient(90deg, #4bc8d1, #7ce0a4);
+}
+.citywork-smart-drive-cargo::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 3px;
+  border-radius: 3px;
+  background: rgba(255, 255, 255, 0.1);
+  z-index: -1;
+}
+
+.citywork-smart-drive-hint {
+  margin: 0;
+  font-size: 11px;
+  line-height: 1.5;
+  opacity: 0.62;
+}
+
+/* Die Gebäudekarte darf die schmale Fahrspalte nicht überlappen. */
+.citywork-smart-workspace.is-driving .citywork-building-card { width: 244px; }
+
+@media (max-width: 1400px) {
+  .citywork-smart-workspace.is-driving { grid-template-columns: minmax(0, 1fr); }
+  .citywork-smart-workspace.is-driving .citywork-smart-drive-rail { display: none; }
+}
+
+/* Der schmale Fahr-Rail: Fahrzeugbild kleiner, Name darf umbrechen. */
+.citywork-smart-drive-rail .citywork-smart-vehicle-hero { grid-template-columns: 62px minmax(0, 1fr); gap: 10px; }
+.citywork-smart-drive-rail .citywork-smart-vehicle-hero > span { width: 62px; height: 52px; }
+.citywork-smart-drive-rail .citywork-smart-vehicle-hero strong {
+  font-size: 14px;
+  line-height: 1.2;
+  white-space: normal;
+  overflow: visible;
+  text-overflow: clip;
+}
+.citywork-smart-drive-rail .citywork-smart-vehicle-hero p { font-size: 11px; }
+
+/* Am Steuer trägt die Kopfzeile Auftrag, Fracht, Ziele und Modus — die
+   Beschreibung darunter wäre die dritte Fassung derselben Auskunft. */
+.citywork-smart-workspace.is-driving .citywork-smart-map-head > div:first-child p { display: none; }

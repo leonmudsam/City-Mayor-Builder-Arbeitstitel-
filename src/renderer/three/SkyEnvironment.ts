@@ -32,7 +32,7 @@ import {
   type Texture,
 } from 'three';
 import { dawnReadability, grade, sunDirection, sunElevation, wrap01, type EnvGrade } from './environment.ts';
-import { getEnvironmentSettings, subscribeEnvironmentSettings } from './environmentSettings.ts';
+import { DAY_ONLY_TIME_OF_DAY, getEnvironmentSettings, subscribeEnvironmentSettings } from './environmentSettings.ts';
 import { environmentImage } from '../../assets/registry.ts';
 import type { GraphicsQualityLevel } from './graphicsQuality.ts';
 
@@ -245,6 +245,28 @@ export class SkyEnvironment {
   /** Aktuelle, tatsächlich gerenderte Tageszeit inklusive Auto-Zyklus. */
   get timeOfDay(): number {
     return this.tod;
+  }
+
+  /**
+   * § 9 des Auftrags — DIE STADTARBEITSKARTE BLEIBT HELL.
+   *
+   * „Im Stadtarbeitsmodus immer helle Tagesansicht verwenden. Uhr läuft normal
+   * weiter, aber die Karte bleibt hell und lesbar."
+   *
+   * Führt `run` unter Tageslicht und klarem Wetter aus und stellt danach exakt
+   * den Zustand her, der vorher galt. `this.tod` — die tatsächliche Tageszeit —
+   * wird NICHT angefasst: Die Uhr ist die Simulationsuhr (D-038), und ein
+   * heller Kartenausschnitt darf sie nicht anhalten oder verstellen. Geändert
+   * wird nur das Licht dieses einen Renderdurchgangs.
+   */
+  withDaylight<T>(run: () => T): T {
+    const settings = getEnvironmentSettings();
+    this.apply(grade(DAY_ONLY_TIME_OF_DAY), 'clear');
+    try {
+      return run();
+    } finally {
+      this.apply(grade(this.tod), settings.weather);
+    }
   }
 
   setShadowFocus(x: number, y: number, z: number): void {

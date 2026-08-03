@@ -350,12 +350,21 @@ export function ActivityRoutePlanner({ defId }: { defId: string }) {
           </div>
         </div>
 
-        <div className="citywork-smart-progress" aria-label="Auftragsfortschritt">
+        {/*
+          § 7 des Auftrags („Oben: Auftragstitel, Fracht, offene Ziele,
+          aktueller Modus"). Vier Angaben, die sonst über drei Panels verteilt
+          waren — und die während der Fahrt der einzige Grund waren, überhaupt
+          nach rechts zu schauen.
+        */}
+        <div className="citywork-smart-progress" aria-label="Auftragsstatus">
           <span className="done"><Check size={13} /> Auftrag gewählt</span>
-          <span className={active ? 'done' : 'active'}>
-            {active ? <Check size={13} /> : <Gamepad2 size={13} />} Angenommen
-          </span>
+          {cargoStatus && (
+            <span><PackageCheck size={13} /> {Math.floor(cargoStatus.onboard)}{cargoStatus.capacity > 0 ? ` / ${cargoStatus.capacity}` : ''}</span>
+          )}
           <span className={active ? 'active' : ''}>{openTargets} Ziele offen</span>
+          <span className="done">
+            {driving ? <><Gamepad2 size={13} /> Du fährst</> : active?.mode === 'auto' ? <><Bot size={13} /> Die Stadt fährt</> : <><Gamepad2 size={13} /> Bereit</>}
+          </span>
         </div>
 
         <div className="citywork-smart-header-actions">
@@ -369,7 +378,7 @@ export function ActivityRoutePlanner({ defId }: { defId: string }) {
         </div>
       </header>
 
-      <div className="citywork-smart-workspace">
+      <div className={`citywork-smart-workspace${driving ? ' is-driving' : ''}`}>
         <main className="citywork-smart-map-panel">
           <div className="citywork-smart-map-head">
             <div>
@@ -387,9 +396,13 @@ export function ActivityRoutePlanner({ defId }: { defId: string }) {
               </p>
             </div>
             <div className="citywork-smart-map-actions">
-              <button onClick={() => setShowJobs((value) => !value)}>
-                <PackageCheck size={15} /> Auftrag wechseln
-              </button>
+              {/* Am Steuer wechselt niemand den Auftrag — der Knopf wäre ein
+                  Ausweg, den es nicht gibt (§7: weniger, dafür Zutreffendes). */}
+              {!driving && (
+                <button onClick={() => setShowJobs((value) => !value)}>
+                  <PackageCheck size={15} /> Auftrag wechseln
+                </button>
+              )}
               <button onClick={() => setFitNonce((value) => value + 1)}>
                 <Route size={15} /> Alles zeigen
               </button>
@@ -512,6 +525,40 @@ export function ActivityRoutePlanner({ defId }: { defId: string }) {
           </div>
         </main>
 
+        {/*
+          § 7: „Die Karte ist der Fokus. Nicht die Seitenleisten." Am Steuer
+          bleibt von der Entscheidungsspalte genau das übrig, was dann noch eine
+          Entscheidung ist — Fahrzeug und Ladung. Modus-Wahl, Prämie,
+          Start-Knopf, Ladeortwahl und Tourliste beantworten alle Fragen, die
+          VOR der Fahrt gestellt werden; unterwegs sind sie Ballast.
+        */}
+        {driving ? (
+          <aside className="citywork-smart-drive-rail">
+            <div className="citywork-smart-vehicle-hero">
+              <span>{selectedImage ? <img src={selectedImage} alt="" /> : <Truck size={40} />}</span>
+              <div>
+                <small>Dein Fahrzeug</small>
+                <strong>{selectedVehicleDef ? t(selectedVehicleDef.nameKey) : 'Lieferfahrzeug'}</strong>
+                <p>{planExplanation}</p>
+              </div>
+            </div>
+            {cargoStatus && (
+              <div className="citywork-smart-drive-cargo">
+                <small>Ladung</small>
+                <b>{Math.floor(cargoStatus.onboard)}{cargoStatus.capacity > 0 ? ` / ${cargoStatus.capacity}` : ''}</b>
+                <i style={{ width: `${cargoStatus.capacity > 0 ? Math.min(100, (cargoStatus.onboard / cargoStatus.capacity) * 100) : 0}%` }} />
+                <em>
+                  {cargoStatus.missingLoads > 0
+                    ? `${cargoStatus.missingLoads} Lieferung(en) passen noch drauf`
+                    : 'Ladung reicht für die offenen Ziele'}
+                </em>
+              </div>
+            )}
+            <p className="citywork-smart-drive-hint">
+              Klick ein Gebäude an, um Bestand und Bedarf zu sehen. Q oder ESC beendet die Fahrt und zeigt deine Route.
+            </p>
+          </aside>
+        ) : (
         <aside className="citywork-smart-decision">
           <section className={`citywork-smart-ready-card${active ? ' ready' : ''}`}>
             <span className="citywork-smart-kicker">{active ? 'Auftrag läuft' : 'Deine Entscheidung'}</span>
@@ -652,6 +699,7 @@ export function ActivityRoutePlanner({ defId }: { defId: string }) {
             </div>
           )}
         </aside>
+        )}
       </div>
 
       {showJobs && (

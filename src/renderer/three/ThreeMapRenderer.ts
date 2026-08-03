@@ -909,11 +909,15 @@ export class ThreeMapRenderer implements IMapRenderer {
   private captureTopDown(area: WorldSnapshotArea, pixelsPerTile: number): WorldSnapshot | undefined {
     const renderer = this.renderer;
     if (!renderer || this.destroyed) return undefined;
+    const env = this.env;
     const hlodWasVisible = this.buildingHlodGroup.visible;
     const envWasVisible = this.buildingEnvironmentGroup.visible;
     const nodeVisibility = new Map<string, boolean>();
     const lodVisibility = new Map<NatureLodEntry, boolean>();
-    return captureTopDown(renderer, this.scene, area, pixelsPerTile, {
+    // § 9 des Auftrags: Die Aufnahme entsteht unter Tageslicht, auch wenn in
+    // der Welt gerade Abend ist oder es regnet. Die Uhr läuft unberührt weiter
+    // — hell ist die KARTE, nicht die Stadt.
+    const capture = () => captureTopDown(renderer, this.scene, area, pixelsPerTile, {
       hidden: [
         this.markerGroup,
         this.overlayGroup,
@@ -959,6 +963,7 @@ export class ThreeMapRenderer implements IMapRenderer {
         for (const [lod, visible] of lodVisibility) lod.object.visible = visible;
       },
     });
+    return env ? env.withDaylight(capture) : capture();
   }
 
   destroy(): void {
