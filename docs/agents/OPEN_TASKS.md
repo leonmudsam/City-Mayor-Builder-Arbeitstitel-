@@ -2,7 +2,37 @@
 > Auftrag genau einmal, nach Thema (Straßen, Stadtarbeit, Betriebe, Bauen/Kamera,
 > Welt/Grafik, Häfen …). Diese Datei hier bleibt die auftrags-/phasenbezogene Detailsicht.
 
-# Offene Aufgaben nach v1.34
+# Offene Aufgaben nach v1.37
+
+## Auftrag „Stadtarbeit Overhaul — Logistik, Farm-Felder, visueller Umbau"
+
+Vollständiger Ist-Zustand, Zielbild und Architektur:
+**`CITYWORK_OVERHAUL_PLAN.md`** (verbindlicher Einstieg).
+
+| Prio | Aufgabe | Stand |
+| --- | --- | --- |
+| P1 | Farm-Felder: kein Vorkommens-Riegel, „Felder verwalten", 3D-Felder | ✅ v1.37 (D-058/D-059) |
+| P2 | Keine erzwungene Route/Reihenfolge/Quelle | ✅ war bereits erfüllt (D-052/D-054/D-057), gesichert durch `driveRecording.test.ts` |
+| P3 | Selbstfahren als Kreuzungsentscheidung | ✅ v1.37 (D-060) |
+| P4 | Stadtarbeitskarte aus der echten 3D-Szene (orthografische Weltkamera) | **offen** |
+| P5 | Gebäude-Interaktion auf der Karte (Bestand, laden/entladen, Zwischenstopp, Priorität) | **offen** |
+| P6 | Route bestätigen → Ausführung in der 3D-Welt | **offen** |
+| P7 | UI-Layout nach den sechs Mockups | **offen** |
+| §5 | Quicktime-/Aktiv-Events | bewusst zurückgestellt |
+
+**Zu P4, damit es niemand zweimal misst:** Die Draufsicht bezieht ihre *Daten*
+seit D-051 vollständig aus der echten Welt (Terrain, Höhe, Regionen, Straßen,
+Gebäude, Vegetation über `collectRegionNature`). Was fehlt, ist die
+**Darstellung** aus der 3D-Szene. Sie darf deshalb nirgends „isometrisch" heißen,
+solange sie gezeichnet wird. Kein zweiter Renderer (§11 des Auftrags,
+CLAUDE.md §2) — gemeint ist ein Kameramodus des `ThreeMapRenderer`.
+
+**Nachzuholen:** Feld-Balancing (260 ⌾/Kachel, 1,4 ⌾/min Unterhalt) ist eine
+Setzung, keine Messung. Und die Fahrzeug-Zulassung für Liefermissionen: Das
+kleinste erlaubte Fahrzeug fasst 500, die ganze Tour wiegt 135–180 — die Traglast
+aus D-057 bindet in der ausgelieferten Config praktisch nie.
+
+# Frühere offene Aufgaben (Stand v1.34)
 
 ## 🔴 ZUERST: Entscheidung D-053 — 2D-Karte oder isometrische Weltkamera?
 

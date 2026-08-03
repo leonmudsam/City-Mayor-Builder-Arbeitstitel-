@@ -771,3 +771,57 @@
   opacity: .78;
   font-weight: 600;
 }
+
+/* ---- § D-060 Kreuzungsentscheidung ---------------------------------------
+   Die vier Richtungen als anklickbare Karten über dem Fahr-HUD. Sie erscheinen
+   nur, wenn es wirklich eine Kreuzung gibt — eine dauerhaft sichtbare Leiste
+   wäre wieder eine Anzeige ohne Entscheidung. */
+.citywork-junction {
+  position: absolute;
+  left: 50%;
+  bottom: 104px;
+  transform: translateX(-50%);
+  z-index: 8;
+  padding: 8px 10px 10px;
+  border-radius: 14px;
+  background: rgba(8, 22, 30, 0.82);
+  border: 1px solid rgba(140, 225, 245, 0.22);
+  backdrop-filter: blur(8px);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.4);
+  pointer-events: auto;
+}
+
+.citywork-junction > header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 14px;
+  margin-bottom: 7px;
+}
+.citywork-junction > header small { font-size: 10.5px; opacity: 0.65; letter-spacing: 0.04em; text-transform: uppercase; }
+.citywork-junction > header b { font-size: 12.5px; color: #8ce1f5; }
+
+.citywork-junction-options { display: flex; gap: 7px; }
+
+.citywork-junction-options button {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  min-width: 74px;
+  padding: 7px 9px;
+  border-radius: 11px;
+  cursor: pointer;
+  color: inherit;
+  font-size: 11.5px;
+  background: rgba(18, 44, 56, 0.7);
+  border: 1px solid rgba(140, 225, 245, 0.2);
+  transition: border-color 110ms ease, background 110ms ease, transform 110ms ease;
+}
+.citywork-junction-options button:hover { border-color: rgba(140, 225, 245, 0.55); transform: translateY(-1px); }
+.citywork-junction-options button.active {
+  border-color: rgba(99, 214, 127, 0.85);
+  background: rgba(28, 66, 46, 0.8);
+}
+.citywork-junction-options button > span { font-size: 19px; line-height: 1; }
+.citywork-junction-options button > small { font-size: 10px; opacity: 0.6; }

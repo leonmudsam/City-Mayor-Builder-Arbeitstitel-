@@ -7,7 +7,27 @@
 // keine Zeitquelle. Renderer und 2D-Karte rufen DIESELBE Funktion; wer die
 // Dynamik ändert, ändert sie für beide Ansichten.
 //
-// P3 ERSETZT die frühere Arcade-Lenkung (freie Position, freier Winkel, weiche
+// § D-060 (Stadtarbeit-Overhaul) ERSETZT die Dauerlenkung durch eine
+// KREUZUNGSENTSCHEIDUNG. Gemessener Anlass, wörtlich aus dem Auftrag: „Die
+// Steuerung fühlt sich kaputt an. Man kann schlecht wenden."
+//
+// Beides hatte eine Ursache, und es war NICHT die Physik: Die Lenktaste wurde
+// genau in dem Bild gelesen, in dem das Fahrzeug eine Kachelgrenze überquerte.
+// Wer eine Zehntelsekunde zu früh losließ, fuhr geradeaus — und wer die Taste
+// gedrückt hielt, bog an JEDER Gelegenheit ab, weil `chooseNext` bei
+// `steer > 0` rechts auch mitten im Korridor nach vorn sortierte. Halten war
+// also keine Lösung, sondern ein zweiter Fehler. Wenden wiederum gab es gar
+// nicht: `back` war die letzte Option und nur in der Sackgasse erreichbar,
+// weshalb der Spieler rückwärts rangieren musste.
+//
+// Jetzt ist ein Tastendruck eine ABSICHT, kein Signal. Sie bleibt stehen, bis
+// eine Kreuzung sie einlösen kann. Damit ist es gleichgültig, WANN gedrückt
+// wird — der häufigste Frustmoment entfällt strukturell statt durch ein
+// größeres Zeitfenster. Zusätzlich: Gas ist der Normalzustand (ein
+// Logistikmodus, in dem man W halten muss, beschäftigt ohne zu entscheiden,
+// D-039), und Wenden ist eine eigene Taste.
+//
+// P3 hatte zuvor die Arcade-Lenkung ersetzt (freie Position, freier Winkel, weiche
 // Rückführung auf die Fahrbahn) durch **Führung auf dem Straßengraphen**.
 // Begründung steht wörtlich im Auftrag: „Das aktuelle WASD-System ist zu
 // kompliziert … Das Fahrzeug fährt automatisch auf dem Straßennetz. Der Spieler
@@ -44,8 +64,6 @@ export const DRIVE_KEYS: ReadonlySet<string> = new Set([
 export const DRIVE_ACCEL = 5.2;
 /** Bremsverzögerung in Kacheln/s² — spürbar stärker als das Gas. */
 export const DRIVE_BRAKE = 8.5;
-/** Anteil der Höchstgeschwindigkeit, der rückwärts erreicht wird. */
-export const DRIVE_REVERSE_FACTOR = 0.4;
 /** Höchstgeschwindigkeit in Kacheln/s, wenn kein Fahrzeug angegeben ist. */
 export const DRIVE_DEFAULT_MAX_SPEED = 4.6;
 /** Suchradius (Kacheln) für die nächste Straße beim Einsteigen. */
@@ -73,16 +91,26 @@ export interface DriveState {
   from: Tile;
   to: Tile;
   t: number;
-  /** Tempo in Kacheln/s; negativ = rückwärts. */
+  /** Tempo in Kacheln/s. Nie negativ — rückwärts wird nicht mehr gefahren. */
   speed: number;
+  /**
+   * § D-060: die GEMERKTE Absicht. Ein Tastendruck legt sie ab; eingelöst wird
+   * sie an der nächsten Kreuzung, an der die Richtung wirklich existiert, und
+   * erst dann gelöscht. Genau hier — im Zustand, nicht im Tastenereignis —
+   * verschwindet der „Ich habe doch gedrückt"-Fehler.
+   */
+  intent?: TurnHint;
 }
 
-/** Was der Spieler gerade drückt. */
+/** Was der Spieler will — nicht, was er in diesem Bild drückt. */
 export interface DriveInput {
-  /** −1 bremsen/rückwärts, 0 ausrollen, +1 Gas. */
-  forward: number;
-  /** −1 an der Kreuzung links, +1 rechts, 0 geradeaus. */
-  steer: number;
+  /**
+   * Neue Absicht für die nächste Kreuzung (`undefined` = keine Änderung, die
+   * bisherige bleibt stehen).
+   */
+  intent?: TurnHint;
+  /** Angehalten? Gas ist der Normalzustand, Halten die Ausnahme. */
+  stopped?: boolean;
 }
 
 /** Position und Blickrichtung des Fahrzeugs in Weltkacheln. */
@@ -92,11 +120,29 @@ export interface DrivePose {
   heading: number;
 }
 
-/** Leitet aus gedrückten Tasten die Achsen ab (eine Auswertung für beide Ansichten). */
-export function driveInputFromKeys(held: ReadonlySet<string>): DriveInput {
-  const forward = (held.has('w') || held.has('arrowup') ? 1 : 0) - (held.has('s') || held.has('arrowdown') ? 1 : 0);
-  const steer = (held.has('d') || held.has('arrowright') ? 1 : 0) - (held.has('a') || held.has('arrowleft') ? 1 : 0);
-  return { forward, steer };
+/**
+ * Eine Taste = eine der VIER Richtungen, die es an einer Kreuzung gibt. Das ist
+ * die Abbildung aus dem Auftrag („links / geradeaus / rechts / wenden"), und
+ * sie macht die Bedienung erklärbar, ohne dass irgendwo eine fünfte Bedeutung
+ * dazukommt. Halten ist bewusst NICHT auf S — S ist wenden.
+ */
+export function turnFromKey(key: string): TurnHint | undefined {
+  switch (key) {
+    case 'a':
+    case 'arrowleft':
+      return 'left';
+    case 'd':
+    case 'arrowright':
+      return 'right';
+    case 'w':
+    case 'arrowup':
+      return 'straight';
+    case 's':
+    case 'arrowdown':
+      return 'around';
+    default:
+      return undefined;
+  }
 }
 
 /**
@@ -175,6 +221,17 @@ export function beginDrive(roads: RoadTileSet, at: Tile, towards?: Tile): DriveS
  * gibt den neuen Zustand zurück; bei gleichem Eingang immer dasselbe Ergebnis —
  * deshalb ohne Renderer testbar.
  *
+ * § D-060, die drei Änderungen und ihr Grund:
+ *
+ * 1. **Gas ist der Normalzustand.** Ohne `stopped` beschleunigt das Fahrzeug auf
+ *    `maxSpeed`. Ein Logistikmodus, in dem man W halten muss, beschäftigt den
+ *    Spieler, ohne ihn entscheiden zu lassen (D-039).
+ * 2. **Die Absicht wird gemerkt, nicht abgetastet.** Sie überlebt so viele
+ *    Kacheln, wie es braucht, bis eine Kreuzung sie einlösen kann.
+ * 3. **Kein Rückwärts mehr.** Wenden ist eine Richtung wie jede andere und
+ *    braucht dafür keinen zweiten Bewegungsmodus. Damit entfällt die gesamte
+ *    Rangiererei, die der Auftrag als „nerviges Zurücksetzen" benennt.
+ *
  * `maxSpeed` kommt aus dem gewählten Fahrzeug (`vehicleTileSpeed`).
  */
 export function stepDrive(
@@ -184,12 +241,13 @@ export function stepDrive(
   roads: RoadTileSet,
   maxSpeed: number = DRIVE_DEFAULT_MAX_SPEED,
 ): DriveState {
+  // Eine neue Absicht ersetzt die alte; ohne neue bleibt die alte stehen.
+  let intent = input.intent ?? state.intent;
+
   let speed = state.speed;
-  if (input.forward > 0) speed += DRIVE_ACCEL * dt;
-  else if (input.forward < 0) speed -= DRIVE_BRAKE * dt;
-  else speed *= Math.exp(-dt * 2.2);
-  speed = Math.min(maxSpeed, Math.max(-maxSpeed * DRIVE_REVERSE_FACTOR, speed));
-  if (Math.abs(speed) < 0.02) speed = 0;
+  if (input.stopped) speed = Math.max(0, speed - DRIVE_BRAKE * dt);
+  else speed = Math.min(maxSpeed, speed + DRIVE_ACCEL * dt);
+  if (speed < 0.02) speed = 0;
 
   let from = state.from;
   let to = state.to;
@@ -197,35 +255,122 @@ export function stepDrive(
   // der zurückgelegte Weg.
   let t = state.t + speed * dt;
 
-  // Der Zähler deckelt beides zusammen: bei sehr großem `dt` (Tabwechsel) darf
-  // die Schleife nicht die halbe Insel durchlaufen.
+  // Der Zähler deckelt die Schleife: bei sehr großem `dt` (Tabwechsel) darf sie
+  // nicht die halbe Insel durchlaufen.
   let guard = 0;
   while (t >= 1 && guard++ < 16) {
-    const next = chooseNext(roads, from, to, input.steer);
-    if (!next) {
+    const step = advanceAcrossTile(roads, from, to, intent);
+    if (!step) {
+      // Kann nur passieren, wenn die Kachel gar keinen Nachbarn mehr hat (die
+      // Straße wurde unter dem Fahrzeug abgerissen). Stehenbleiben ist hier die
+      // ehrliche Antwort — irgendwohin zu springen wäre es nicht.
       t = 1;
       speed = 0;
       break;
     }
     from = to;
-    to = next;
+    to = step.next;
+    if (step.consumed) intent = undefined;
     t -= 1;
   }
-  while (t < 0 && guard++ < 16) {
-    // Rückwärts über `from` hinaus: die Kachel HINTER `from` wird zum neuen
-    // Anfang. Das Lenkzeichen dreht sich wie beim echten Rückwärtsfahren.
-    const behind = chooseNext(roads, to, from, -input.steer);
-    if (!behind) {
-      t = 0;
-      speed = 0;
-      break;
-    }
-    to = from;
-    from = behind;
-    t += 1;
-  }
 
-  return { from, to, t: Math.max(0, Math.min(1, t)), speed };
+  return {
+    from,
+    to,
+    t: Math.max(0, Math.min(1, t)),
+    speed,
+    ...(intent ? { intent } : {}),
+  };
+}
+
+/**
+ * Der Übergang über EINE Kachelgrenze: wohin geht es weiter, und war das die
+ * Einlösung der Absicht?
+ *
+ * Die Absicht wird nur verbraucht, wenn die gewünschte Richtung an dieser
+ * Kachel wirklich existiert. Wer „rechts" drückt, während links eine Einfahrt
+ * liegt, fährt weiter geradeaus und biegt an der nächsten echten Möglichkeit
+ * ab — statt die Eingabe stillschweigend zu verlieren.
+ */
+function advanceAcrossTile(
+  roads: RoadTileSet,
+  from: Tile,
+  to: Tile,
+  intent: TurnHint | undefined,
+): { next: Tile; consumed: boolean } | undefined {
+  const options = turnOptionsAt(roads, from, to);
+  if (options.length === 0) return undefined;
+  if (intent) {
+    const wanted = options.find((option) => option.turn === intent);
+    if (wanted) return { next: wanted.tile, consumed: true };
+  }
+  // Ohne (einlösbare) Absicht folgt das Fahrzeug der Straße: geradeaus, solange
+  // es geht; in der Kurve die einzige Fortsetzung; in der Sackgasse zurück.
+  const straight = options.find((option) => option.turn === 'straight');
+  if (straight) return { next: straight.tile, consumed: false };
+  const forward = options.filter((option) => option.turn !== 'around');
+  const pick = forward[0] ?? options[0]!;
+  return { next: pick.tile, consumed: false };
+}
+
+/**
+ * Alle Richtungen, die an der Kachel `to` offenstehen, wenn man aus `from`
+ * kommt — in fester Reihenfolge (links, geradeaus, rechts, wenden).
+ *
+ * DAS ist die Liste, die die Oberfläche anzeigt und anklickbar macht (§3 des
+ * Auftrags). Sie wird nicht nachgebaut: Anzeige und Fahrt lesen dieselbe
+ * Funktion, sonst kündigt die Kreuzungsanzeige früher oder später etwas an,
+ * das dann nicht passiert (Lehre D-042).
+ */
+export function turnOptionsAt(
+  roads: RoadTileSet,
+  from: Tile,
+  to: Tile,
+): { turn: TurnHint; tile: Tile }[] {
+  const dir = { x: to.x - from.x, y: to.y - from.y };
+  // Bildschirm-Konvention: +y zeigt nach Süden, deshalb ist (−dy, dx) rechts.
+  const candidates: { turn: TurnHint; offset: Tile }[] = [
+    { turn: 'left', offset: { x: dir.y, y: -dir.x } },
+    { turn: 'straight', offset: dir },
+    { turn: 'right', offset: { x: -dir.y, y: dir.x } },
+    { turn: 'around', offset: { x: -dir.x, y: -dir.y } },
+  ];
+  const out: { turn: TurnHint; tile: Tile }[] = [];
+  for (const candidate of candidates) {
+    const tile = { x: to.x + candidate.offset.x, y: to.y + candidate.offset.y };
+    if (roads.has(`${tile.x},${tile.y}`)) out.push({ turn: candidate.turn, tile });
+  }
+  return out;
+}
+
+/**
+ * Die nächste Stelle, an der der Spieler wirklich etwas zu entscheiden hat, mit
+ * Entfernung und den offenen Richtungen. Grundlage der Navi-Anzeige.
+ *
+ * „Etwas zu entscheiden" heißt: mehr als eine Fortsetzung außer Wenden. Eine
+ * Kurve ist keine Kreuzung — sie anzukündigen wäre Lärm, weil es dort nichts zu
+ * wählen gibt.
+ */
+export function nextJunction(
+  state: DriveState,
+  roads: RoadTileSet,
+  lookaheadTiles = TURN_LOOKAHEAD_TILES,
+): { distanceTiles: number; options: { turn: TurnHint; tile: Tile }[] } | undefined {
+  let from = state.from;
+  let to = state.to;
+  let distance = 1 - state.t;
+  for (let step = 0; step < lookaheadTiles; step++) {
+    const options = turnOptionsAt(roads, from, to);
+    if (options.filter((option) => option.turn !== 'around').length > 1) {
+      return { distanceTiles: distance, options };
+    }
+    const next = advanceAcrossTile(roads, from, to, state.intent);
+    if (!next) return undefined;
+    from = to;
+    to = next.next;
+    distance += 1;
+  }
+  return undefined;
 }
 
 /** Position und Blickrichtung — ABGELEITET, nie getrennt gespeichert. */
@@ -245,27 +390,32 @@ export type TurnHint = 'straight' | 'left' | 'right' | 'around';
  * Wohin die Straße als Nächstes abbiegt und wie weit es bis dahin ist —
  * die Grundlage des Abbiegehinweises („In 120 m rechts abbiegen").
  *
- * Vorausgeschaut wird mit DERSELBEN `chooseNext`-Regel, nach der das Fahrzeug
- * gleich tatsächlich fährt. Ein Hinweis aus einer zweiten Wegfindung würde
- * früher oder später etwas anderes ankündigen, als dann passiert.
+ * Vorausgeschaut wird mit DERSELBEN Regel, nach der das Fahrzeug gleich
+ * tatsächlich fährt (`advanceAcrossTile`, inklusive der gemerkten Absicht). Ein
+ * Hinweis aus einer zweiten Wegfindung würde früher oder später etwas anderes
+ * ankündigen, als dann passiert.
  */
 export function nextTurn(
   state: DriveState,
   roads: RoadTileSet,
-  steer = 0,
 ): { turn: TurnHint; distanceTiles: number; junction: boolean } | undefined {
   let from = state.from;
   let to = state.to;
   let distance = 1 - state.t;
   for (let step = 0; step < TURN_LOOKAHEAD_TILES; step++) {
-    const next = chooseNext(roads, from, to, steer);
-    if (!next) return undefined;
+    const advance = advanceAcrossTile(roads, from, to, state.intent);
+    if (!advance) return undefined;
+    const next = advance.next;
     const turn = turnBetween(
       { x: to.x - from.x, y: to.y - from.y },
       { x: next.x - to.x, y: next.y - to.y },
     );
     if (turn !== 'straight') {
-      return { turn, distanceTiles: distance, junction: roadNeighbours(roads, to).length > 2 };
+      return {
+        turn,
+        distanceTiles: distance,
+        junction: turnOptionsAt(roads, from, to).filter((option) => option.turn !== 'around').length > 1,
+      };
     }
     from = to;
     to = next;
@@ -298,33 +448,6 @@ export function roadNeighbours(roads: RoadTileSet, tile: Tile): Tile[] {
     if (roads.has(`${next.x},${next.y}`)) result.push(next);
   }
   return result;
-}
-
-/**
- * Die Abzweigung nach `to`, wenn man aus Richtung `from` kommt.
- *
- * Ohne gedrückte Lenktaste fährt das Fahrzeug GERADEAUS weiter, solange es
- * kann — im Korridor folgt es dadurch der Straße von selbst, an der Kreuzung
- * bleibt die Wahl beim Spieler. Gibt es keine Fortsetzung, wendet es. Die
- * Reihenfolge ist fest und damit deterministisch: gleiche Straßen, gleiche
- * Taste, gleicher Weg.
- */
-export function chooseNext(roads: RoadTileSet, from: Tile, to: Tile, steer: number): Tile | undefined {
-  const dir = { x: to.x - from.x, y: to.y - from.y };
-  // Bildschirm-Konvention: +y zeigt nach Süden, deshalb ist (−dy, dx) rechts.
-  const right = { x: -dir.y, y: dir.x };
-  const left = { x: dir.y, y: -dir.x };
-  const back = { x: -dir.x, y: -dir.y };
-  const order = steer > 0
-    ? [right, dir, left, back]
-    : steer < 0
-    ? [left, dir, right, back]
-    : [dir, right, left, back];
-  for (const option of order) {
-    const candidate = { x: to.x + option.x, y: to.y + option.y };
-    if (roads.has(`${candidate.x},${candidate.y}`)) return candidate;
-  }
-  return undefined;
 }
 
 function turnBetween(before: Tile, after: Tile): TurnHint {

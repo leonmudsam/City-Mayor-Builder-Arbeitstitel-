@@ -62,7 +62,58 @@ der Cloud-Umgebung** (kein Rust/Windows) — dort nur den Browser-Pfad verifizie
 (gitignored). GitHub Pages ist abgeschaltet — kein Deploy-Workflow wieder einführen.
 `archive/legacy-2d/` = archivierte 2D-/Iso-Reste (nicht reaktivieren).
 
-## Status: v1.36 — DIE SPERRE IST EIN ORT (Save v32, D-056 verschärft) — AKTUELL
+## Status: v1.37 — ACKERLAND UND KREUZUNGEN (Save v32, D-058/D-059/D-060) — AKTUELL
+Auftrag „Stadtarbeit Overhaul — aktive Logistik, Farm-Felder, visueller
+Komplettumbau"; Priorität 1 und 3 umgesetzt, P4–P7 offen (siehe unten und
+`docs/agents/CITYWORK_OVERHAUL_PLAN.md` — **verbindlicher Einstieg** vor jeder
+Arbeit an Stadtarbeit, Fahren oder Farm).
+**(1) Die Farm blockierte (D-058).** Kein Balancing-Problem, ein Deadlock:
+`crop`-Knoten nur auf `fertile`, `fertile` nur durch Felder, Felder nur bei einer
+Farm in Reichweite — und die Startregion hat **null** fruchtbare Kacheln. Der
+Riegel war eine Zeile im Command (`if (nodeIds.length === 0) return fail`). Er
+liegt jetzt in der **Datenlage**: `ResourceNodeProfile.playerCreatable` — kann der
+Spieler diese Knoten selbst anlegen? Feld ja, Baum **nein**, Fels nein. Ein
+Dauerbetrieb mit leerem Gebiet startet als `waiting` (nicht „aktiv mit null
+Zielen" — sonst liefe `resumeWaitingOperation` nie) und läuft von selbst an.
+**Lehrreicher Irrweg, steht im Code:** Die erste Fassung hieß `replenishable`
+(„wächst nach") und war falsch — ein Bestandstest hat sie sofort widerlegt, weil
+Wald nur auf **Waldkacheln** nachwächst; „0 Bäume" heißt beim Sägewerk wirklich
+„falsch gebaut". Die tragfähige Frage ist enger als die naheliegende.
+**(2) Felder sind ein Bauwerkzeug (D-059).** „Felder verwalten" im Farm-Menü,
+vier kaufbare Größen mit Preis (4×4/4×6/6×6/6×8), Pinsel am Cursor, Vorschau aus
+**derselben** `getFarmFieldPlan`, die der Command ausführt (D-048), Roden als
+zweiter Modus; 3D über `farmFieldMesh.ts` (Low-Poly nach D-044, Reifegrad aus dem
+Knoten, den der Arbeiter aberntet, Sperr-Patch als **letzter** Hook nach D-056).
+Ertrag/Unterhalt/Arbeiterbedarf sind **abgeleitet** — Entfernungseffizienz ist die
+vorhandene `efficientRadius`/`maxRadius`-Mechanik (keine zweite Distanzrechnung),
+Unterhalt entsteht in `derived` aus der gezählten Feldzahl. Felder sind
+`terrainOverrides`: kein Save-Feld, keine Migration, kein Auseinanderlaufen. Wo
+der Spieler die Knoten selbst setzt, ist das Arbeitsgebiet standardmäßig der
+**volle** Radius (D-039: nach dem bezahlten Feld nicht noch einen Regler).
+`crop`-Dichte 0,6 → **1,0** — wer bezahlt, bekommt die Fläche.
+**(3) Die Kreuzung ist die Entscheidung (D-060).** Nicht die Physik war kaputt,
+sondern die Abtastung: Die Lenktaste wurde **genau im Bild des Grenzübertritts**
+gelesen (zu früh losgelassen ⇒ geradeaus), und gedrückt Halten bog an *jeder*
+Gelegenheit ab, weil `chooseNext` rechts auch im Korridor nach vorn sortierte.
+Wenden gab es nur in der Sackgasse ⇒ Rückwärtsrangieren. Jetzt ist ein Druck eine
+**Absicht** im Fahrzustand, die bis zur ersten einlösbaren Kreuzung stehen bleibt;
+Gas ist der Normalzustand, Leertaste hält an, **Rückwärts entfällt ersatzlos**.
+Belegung = Struktur: **A links · W geradeaus · D rechts · S wenden**.
+`nextJunction` liefert die offenen Richtungen der nächsten **echten** Kreuzung
+(eine Kurve ist keine) — anklickbar, vorgemerkte Richtung markiert, aus derselben
+Funktion, nach der gefahren wird. Fahrzeug ist ein **Lieferwagen**, keine
+Pfeilspitze (eine Pfeilspitze liest sich als Marker, nicht als Fahrzeug).
+**Im laufenden Spiel gemessen:** fährt ohne gedrückte Taste, HUD „unterwegs /
+64 km/h", Kreuzungsanzeige „in 95 m — links A · rechts D · wenden S", 0
+Konsolenfehler. Keine Schemaänderung, **v32**.
+**Offen, nicht vortäuschen:** P4 Stadtarbeitskarte aus der echten 3D-Szene
+(orthografische Weltansicht — die *Daten* kommen seit D-051 aus der echten Welt,
+die **Darstellung** nicht; deshalb heißt sie nirgends „isometrisch") · P5
+Gebäude-Interaktion auf der Karte · P6 Ausführung der Route in der 3D-Welt · P7
+Layout nach den Mockups · §5 Quicktime-Events (bewusst zurückgestellt) ·
+Feld-Balancing ist eine Setzung, keine Messung.
+
+## Status: v1.36 — DIE SPERRE IST EIN ORT (Save v32, D-056 verschärft)
 Spieltestbefund: „Props in nicht freigeschalteten Sektoren sind immer noch voll
 Farbe." Zu Recht — die Entsättigung stand **nur in der Vertexfarbe des Bodens**,
 und der Splat-Shader mischte danach Fototexturen (bis 44 %) darüber und hob die

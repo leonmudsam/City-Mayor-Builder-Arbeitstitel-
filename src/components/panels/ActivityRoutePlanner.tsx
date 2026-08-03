@@ -116,6 +116,14 @@ export function ActivityRoutePlanner({ defId }: { defId: string }) {
    * eigene Entfernung, sonst gäbe es zwei Reichweitenbegriffe.
    */
   const [storageAtHand, setStorageAtHand] = useState<string | undefined>(undefined);
+  /**
+   * § D-060: Die Bedienung der laufenden Fahrt, von der Karte herausgereicht.
+   * Damit ist ein Klick auf eine Richtung exakt derselbe Vorgang wie ein
+   * Tastendruck — es gibt keinen zweiten Weg, eine Absicht zu setzen.
+   */
+  const [driveControls, setDriveControls] = useState<
+    { turn(turn: NonNullable<DriveReadout['turn']>): void; toggleStop(): void } | undefined
+  >(undefined);
   // Gedrosselte Fahrdaten fürs HUD (≈4×/s) — die Fahrt selbst läuft an React
   // vorbei, sonst wäre jedes Bild ein Re-Render (CLAUDE.md §6).
   const [driveReadout, setDriveReadout] = useState<DriveReadout>();
@@ -398,6 +406,7 @@ export function ActivityRoutePlanner({ defId }: { defId: string }) {
                 }
               }}
               onStorageReach={setStorageAtHand}
+              onDriveControls={(controls) => setDriveControls(() => controls)}
               onExitDrive={() => {
                 setDriving(false);
                 pushToast('Ausgestiegen. Über „Selbst fahren" geht es weiter.', 'info');
@@ -426,6 +435,9 @@ export function ActivityRoutePlanner({ defId }: { defId: string }) {
                 <PackagePlus size={16} /> Hier nachladen
                 <small>{game.state.buildings[storageAtHand] ? t(`building.${game.state.buildings[storageAtHand]!.defId}`) : 'Lager'}</small>
               </button>
+            )}
+            {driving && (
+              <JunctionChoice readout={driveReadout} onChoose={(turn) => driveControls?.turn(turn)} />
             )}
             {driving
               ? <DriveHud readout={driveReadout} targetsTotal={targetIds.length} />
@@ -655,6 +667,65 @@ const TURN_LABELS: Record<NonNullable<DriveReadout['turn']>, string> = {
  * Status." Alle Werte kommen gedrosselt aus der Fahrschleife — die Anzeige
  * rechnet nichts nach, sonst gäbe es zwei Wahrheiten über dieselbe Fahrt.
  */
+/**
+ * § D-060 — DIE KREUZUNG IST DIE ENTSCHEIDUNG.
+ *
+ * Die vier Richtungen mit ihrer Taste, angeklickt genauso gültig wie gedrückt
+ * (§3 des Auftrags: „per WASD / Pfeiltasten / oder Klick auf Richtung"). Was
+ * hier steht, kommt aus `nextJunction` — derselben Funktion, nach der gleich
+ * gefahren wird; die Anzeige kann also nichts ankündigen, was dann nicht geht.
+ * Die vorgemerkte Richtung ist markiert, damit der Spieler SIEHT, dass seine
+ * Eingabe angekommen ist. Genau dieses Signal fehlte vorher.
+ */
+function JunctionChoice({
+  readout,
+  onChoose,
+}: {
+  readout: DriveReadout | undefined;
+  onChoose(turn: NonNullable<DriveReadout['turn']>): void;
+}) {
+  const options = readout?.junctionTurns;
+  if (!options || options.length === 0) return null;
+  return (
+    <div className="citywork-junction">
+      <header>
+        <small>Nächste Kreuzung</small>
+        <b>{readout?.junctionMeters !== undefined ? `in ${Math.round(readout.junctionMeters)} m` : 'voraus'}</b>
+      </header>
+      <div className="citywork-junction-options">
+        {(['left', 'straight', 'right', 'around'] as const)
+          .filter((turn) => options.includes(turn))
+          .map((turn) => (
+            <button
+              key={turn}
+              type="button"
+              className={readout?.intent === turn ? 'active' : ''}
+              onClick={() => onChoose(turn)}
+            >
+              <span aria-hidden>{TURN_GLYPHS[turn]}</span>
+              {TURN_LABELS[turn]}
+              <small>{TURN_KEYS[turn]}</small>
+            </button>
+          ))}
+      </div>
+    </div>
+  );
+}
+
+const TURN_GLYPHS: Record<NonNullable<DriveReadout['turn']>, string> = {
+  straight: '↑',
+  left: '←',
+  right: '→',
+  around: '↺',
+};
+
+const TURN_KEYS: Record<NonNullable<DriveReadout['turn']>, string> = {
+  straight: 'W',
+  left: 'A',
+  right: 'D',
+  around: 'S',
+};
+
 function DriveHud({ readout, targetsTotal }: { readout: DriveReadout | undefined; targetsTotal: number }) {
   const done = targetsTotal - (readout?.remaining ?? targetsTotal);
   return (
@@ -677,6 +748,15 @@ function DriveHud({ readout, targetsTotal }: { readout: DriveReadout | undefined
         <small>Ziele</small>
         <b>{Math.max(0, done)} / {targetsTotal}</b>
         <em>erledigt</em>
+      </span>
+      <span>
+        <small>Fahrt</small>
+        <b>{readout?.stopped ? 'angehalten' : 'unterwegs'}</b>
+        {/* § D-060: Die vorgemerkte Richtung gehört sichtbar hierher, nicht nur
+            an die Kreuzungskarte. Sie ist der Beleg, dass die Eingabe angekommen
+            ist — und sie steht auch dann, wenn gerade keine Kreuzung in Sicht
+            ist, also genau in der Situation, in der man früher zweifelte. */}
+        <em>{readout?.intent ? `vorgemerkt: ${TURN_LABELS[readout.intent]}` : 'Leertaste hält an'}</em>
       </span>
     </div>
   );

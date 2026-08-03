@@ -1,5 +1,158 @@
 # Patch Notes
 
+## v1.37 — DIE FARM BRINGT IHR ACKERLAND MIT, UND DIE KREUZUNG IST DIE ENTSCHEIDUNG (Save bleibt v32)
+
+Priorität 1 und 3 des Auftrags „Stadtarbeit Overhaul — aktive Logistik,
+Farm-Felder und visueller Komplettumbau". Was offen bleibt, steht am Ende dieses
+Eintrags — namentlich und ohne Beschönigung.
+
+### 1. Die Farm blockiert nicht mehr (D-058)
+
+**Was war.** „Kein Vorkommen im Arbeitsgebiet — der Betrieb kann nicht
+arbeiten." Eine Farm in der Startregion ließ sich nie in Betrieb nehmen.
+
+**Warum.** Kein Balancing-Problem, sondern ein Deadlock: `crop`-Knoten entstehen
+nur auf `fertile`-Kacheln, `fertile` entsteht nur durch Felder, Felder verlangen
+eine Farm in Reichweite — und die Startregion hat **null** natürliche fruchtbare
+Kacheln (gemessen in `EARLY_GAME_AUDIT.md`). Der Riegel war eine einzige Zeile im
+Command: `if (nodeIds.length === 0) return fail('invalid')`.
+
+**Architektur.** Der Riegel wandert aus der Command-Zeile in die **Datenlage**.
+`ResourceNodeProfile.playerCreatable` beantwortet die Frage dort, wo sie
+entscheidbar ist: Kann der Spieler diese Knoten selbst anlegen? Feld ja, Baum
+nein, Fels nein. Ein Dauerbetrieb mit leerem Gebiet startet als `waiting` und
+nimmt die Arbeit über die **vorhandene** `resumeWaitingOperation` von selbst auf,
+sobald das erste Feld liegt. Kein zweites Produktionssystem, kein Schemabruch.
+
+**Ein Irrweg, der im Code steht, weil er lehrreich ist.** Die erste Fassung des
+Flags hieß `replenishable` („wächst nach") — und war falsch. Ein Bestandstest
+(`tests/operations.test.ts`) hat sie sofort widerlegt: Ein Sägewerk ohne Bäume in
+Reichweite startete plötzlich und wartete für immer. Wald wächst zwar nach, aber
+**nur auf Waldkacheln**; steht dort jetzt kein Baum, entsteht dort auch keiner.
+„0 Knoten" heißt beim Sägewerk wirklich „falsch gebaut". Die tragfähige Frage ist
+enger als die naheliegende.
+
+**Auswirkung.** Farm bauen, „Betrieb starten", Felder anlegen — in dieser
+Reihenfolge, ohne Sackgasse. Sägewerk und Steinbruch verhalten sich exakt wie
+vorher und behalten die harte Meldung; die Farm bekommt „Der Betrieb wartet auf
+Nachschub im Arbeitsgebiet — Felder anlegen".
+
+### 2. Felder sind ein Bauwerkzeug (D-059)
+
+**Bedienung.** „Felder verwalten" im Farm-Menü öffnet vier kaufbare Größen mit
+Preis (4×4, 4×6, 6×6, 6×8 — die Vorgabe aus dem Mockup). Der Pinsel hängt am
+Cursor wie ein Gebäude-Ghost, die Vorschau ist grün/rot, „Feld roden" ist der
+zweite Modus. Bewusst **kein** Ziehen-Rechteck: Der Spieler kauft, was er sieht.
+
+**Die Vorschau lügt nicht.** Sie liest `getFarmFieldPlan` — dieselbe Funktion,
+die der Command ausführt (D-048). Wird abgelehnt, nennt die Meldung den
+häufigsten Grund im Rechteck, nicht bloß „ungültig".
+
+**Ertrag, Unterhalt, Arbeiter sind ABGELEITET.** Die Entfernungseffizienz ist die
+vorhandene `efficientRadius`/`maxRadius`-Mechanik (100 % nah, 60 % am äußeren
+Rand) — **keine zweite Distanzrechnung** für Felder. Unterhalt und Arbeiterbedarf
+entstehen aus der gezählten Feldzahl; Felder sind `terrainOverrides` und damit
+jederzeit zählbar. Kein Save-Feld, keine Migration, keine Möglichkeit, dass
+Feldliste und Unterhalt auseinanderlaufen.
+
+**Wo der Spieler die Knoten selbst setzt, ist das Arbeitsgebiet standardmäßig der
+volle Radius.** Er hat mit dem Feld bereits entschieden, wo gearbeitet wird; ihn
+danach auch noch einen Radiusregler bedienen zu lassen, damit sein bezahltes Feld
+überhaupt bewirtschaftet wird, wäre genau die Doppelarbeit, die D-039 verbietet.
+
+**Darstellung.** `farmFieldMesh.ts` baut Ackerscholle und Fruchtreihen als
+stilisierte Low-Poly-Instanzen — D-044 gilt: die Natur-`.glb` wiegen je rund
+29.000 Dreiecke, die Masse ist Geometrie, Vielfalt kommt aus Transformation. Der
+Reifegrad kommt aus **demselben** Knoten, den der Arbeiter aberntet; ein
+abgeerntetes Feld ist sichtbar Stoppelacker, kein grünes Versprechen. Die
+Materialien laufen durch `patchLockedRegionTint` als **letzten** Hook (D-056).
+
+**Eine Zahl, die eine Erklärung braucht.** `crop`-Dichte 0,6 → **1,0**. Bei 0,6
+hätte bis zu jede zweite bezahlte Feldkachel dauerhaft nichts getragen, ohne dass
+der Spieler den Grund erkennen kann. Wer bezahlt, bekommt die Fläche.
+
+### 3. Die Kreuzung ist die Entscheidung (D-060)
+
+**Was war.** „Die Steuerung fühlt sich kaputt an. Man kann schlecht wenden."
+
+**Warum — und es war nicht die Physik.** Die Lenktaste wurde genau in dem Bild
+gelesen, in dem das Fahrzeug eine Kachelgrenze überquerte. Wer eine
+Zehntelsekunde zu früh losließ, fuhr geradeaus. Wer die Taste gedrückt hielt, bog
+an **jeder** Gelegenheit ab, weil `chooseNext` bei `steer > 0` rechts auch mitten
+im Korridor nach vorn sortierte — Halten war also keine Abhilfe, sondern ein
+zweiter Fehler. Und Wenden gab es gar nicht: `back` war die letzte Option und nur
+in der Sackgasse erreichbar, weshalb rückwärts rangiert werden musste. Genau das
+ist das „nervige Zurücksetzen" aus dem Auftrag.
+
+**Architektur.** Ein Tastendruck ist jetzt eine **Absicht**, kein Signal. Sie
+liegt im Fahrzustand und bleibt stehen, bis eine Kreuzung sie einlösen kann —
+danach wird sie gelöscht. Damit ist gleichgültig, *wann* gedrückt wird; der
+häufigste Frustmoment entfällt strukturell statt durch ein größeres Zeitfenster.
+Wer „rechts" drückt, während nur links eine Einfahrt liegt, fährt weiter und
+biegt an der nächsten echten Möglichkeit ab, statt die Eingabe zu verlieren.
+
+Dazu: **Gas ist der Normalzustand** (ein Logistikmodus, in dem man W halten muss,
+beschäftigt ohne zu entscheiden — D-039), die Leertaste hält an, und **Rückwärts
+gibt es nicht mehr**. Wenden ist eine Richtung wie jede andere.
+
+Die Tastenbelegung ist die Struktur selbst: **A links · W geradeaus · D rechts ·
+S wenden** — die vier Richtungen, die es an einer Kreuzung gibt, mehr nicht.
+
+**Navi.** `nextJunction` liefert die offenen Richtungen der nächsten **echten**
+Kreuzung mit Entfernung; die Anzeige macht sie anklickbar (§3: „per WASD /
+Pfeiltasten / oder Klick auf Richtung") und markiert die vorgemerkte Richtung.
+Eine Kurve ist dabei ausdrücklich **keine** Kreuzung — sie anzukündigen wäre
+Lärm, weil es dort nichts zu wählen gibt. Anzeige und Fahrt lesen dieselbe
+Funktion; die Kreuzungsanzeige kann nichts ankündigen, was dann nicht passiert.
+
+**Das Fahrzeug ist ein Lieferwagen, keine Pfeilspitze.** Das ist mehr als
+Geschmack: Eine Pfeilspitze liest sich als Marker, also als etwas, das man
+*zieht* — nicht als etwas, das fährt. Kabine, Fenster und Räder sagen in einem
+Blick, wo vorne ist und dass hier transportiert wird.
+
+### Im laufenden Spiel gemessen
+
+Nicht aus dem Code behauptet, sondern im Smoke gegen die gebaute App geprüft: Das
+Fahrzeug fährt **ohne jede gedrückte Taste** los (die Bildmitte ändert sich über
+2,6 s), das HUD meldet „unterwegs / 64 km/h", die Kreuzungsanzeige erscheint an
+einer echten Kreuzung („NÄCHSTE KREUZUNG in 95 m — links A · rechts D ·
+wenden S"), **0 Konsolenfehler**.
+
+### Dateien
+
+`src/game/operations/nodes.ts` · `src/game/operations/farmFields.ts` ·
+`src/game/operations/operations.ts` · `src/game/commands/controller.ts` ·
+`src/game/simulation/derived.ts` · `src/game/buildings/diagnostics.ts` ·
+`src/game/activities/driving.ts` · `src/renderer/three/farmFieldMesh.ts` (neu) ·
+`src/renderer/three/ThreeMapRenderer.ts` · `src/renderer/IMapRenderer.ts` ·
+`src/components/operations/FarmFieldPanel.tsx` (neu) ·
+`src/components/panels/FloatingBuildingSheet.tsx` ·
+`src/components/panels/ActivityRoutePlanner.tsx` ·
+`src/components/citywork/ManualRouteMap.tsx` · `src/components/MapView.tsx` ·
+`src/state/store.ts` · `src/App.tsx` · `src/styles/active-operations.css` ·
+`src/styles/citywork-v4.css` · `src/i18n/de.json` · `tests/farmFields.test.ts` ·
+`tests/driving.test.ts` · `docs/agents/CITYWORK_OVERHAUL_PLAN.md` (neu).
+
+### Assets
+
+Keine. Felder und Fahrzeug sind prozedurale Geometrie (D-044).
+
+### Offen — und in der Oberfläche nicht vorgetäuscht
+
+* **P4 Stadtarbeitskarte aus der echten 3D-Welt** (orthografische Weltansicht mit
+  Overlays). Die Draufsicht bezieht ihre Daten seit D-051 bereits vollständig aus
+  der echten Welt; was fehlt, ist die **Darstellung** aus der 3D-Szene. Sie wird
+  deshalb nirgends „isometrisch" genannt.
+* **P5 Gebäude-Interaktion auf der Karte** (Bestand ansehen, laden/entladen,
+  Zwischenstopp, Priorität).
+* **P6 Route bestätigen und in der echten 3D-Welt abfahren.**
+* **P7 UI-Layout nach den sechs Mockups.**
+* **§5 Quicktime-/Aktiv-Events** — bewusst zurückgestellt: Sie auf ein Fahrgefühl
+  zu setzen, das gerade erst umgebaut wurde, macht beides gleichzeitig
+  unbewertbar.
+* **Feld-Balancing** (260 ⌾/Kachel, 1,4 ⌾/min Unterhalt) ist eine Setzung, keine
+  Messung. Gehört nachgerechnet, sobald Felder im Spiel getestet sind.
+
 ## v1.36 — DIE SPERRE IST EIN ORT: gesperrtes Land wird wirklich grau (Save bleibt v32)
 
 **Was war.** v1.35 hat die Entsättigung gesperrter Regionen verstärkt (0,7 →

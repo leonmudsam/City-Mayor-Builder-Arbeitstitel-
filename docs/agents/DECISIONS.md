@@ -1,5 +1,88 @@
 # Entscheidungen
 
+## D-058 — Ein Betrieb, dessen Knoten der Spieler selbst anlegt, darf leer starten
+
+**Kontext.** Eine Farm in der Startregion konnte nie in Betrieb gehen.
+`crop`-Knoten liegen nur auf `fertile`, `fertile` entsteht nur durch Felder,
+Felder verlangen eine Farm in Reichweite — und die Startregion hat null
+natürliche fruchtbare Kacheln. Der Riegel war eine Zeile in
+`startBuildingOperation`: `if (nodeIds.length === 0) return fail('invalid')`.
+
+**Entscheidung.** Der Riegel gehört nicht in den Command, sondern in die
+**Datenlage**: `ResourceNodeProfile.playerCreatable` (Pflichtfeld). Ein
+Dauerbetrieb auf einem solchen Knotentyp darf mit leerem Gebiet starten und
+fällt auf `waiting`; `resumeWaitingOperation` nimmt die Arbeit von selbst auf.
+`startOperation` setzt bei leerer Zielliste **sofort** `waiting` — „aktiv mit
+null Zielen" wäre nicht nur eine Anzeigelüge, es würde den Wiederanlauf ganz
+verhindern, weil er nur für `waiting` läuft.
+
+**Warum nicht „replenishable".** Die erste Fassung fragte „wächst nach?" und war
+falsch; `tests/operations.test.ts` hat sie sofort widerlegt. Wald wächst nach —
+aber nur auf Waldkacheln. Steht in Reichweite jetzt kein Baum, entsteht dort auch
+keiner; „0 Knoten" heißt beim Sägewerk wirklich „falsch gebaut". Die tragfähige
+Frage ist enger: **Kann der SPIELER die Knoten erzeugen?**
+
+**Konsequenz für die Weiterarbeit.** Wer einen Knotentyp ergänzt, muss die Frage
+beantworten (ohne Flag compiliert das Profil nicht). Und: Eine Bedingung, die von
+Weltzustand *und* Zukunft abhängt, gehört dorthin, wo beides bekannt ist — nicht
+in die Command-Zeile, die nur das Jetzt sieht.
+
+## D-059 — Was aus Feldern folgt, wird abgeleitet, nicht gespeichert
+
+**Kontext.** Der Auftrag verlangt: größeres Feld ⇒ mehr Kosten, mehr Unterhalt,
+mehr Produktion, mehr Arbeiterbedarf; Entfernung zur Farm senkt die Effizienz.
+
+**Entscheidung.** Keine dieser Zahlen bekommt ein Save-Feld.
+* **Entfernungseffizienz** ist die vorhandene `efficientRadius`/`maxRadius`-
+  Mechanik des `BuildingOperationProfile` — dieselbe Reichweite, nach der der
+  Arbeiter läuft. Keine zweite Distanzrechnung für Felder.
+* **Unterhalt und Arbeiterbedarf** entstehen aus der **gezählten** Feldzahl
+  (`countFarmFieldTiles`) in `derived.upkeep`, an der einen Stelle, an der
+  Unterhalt ohnehin entsteht.
+* Felder selbst sind `terrainOverrides` — seit v10 im Save, jederzeit zählbar.
+
+**Warum.** Eine gespeicherte Feldliste neben den `terrainOverrides` wäre ein
+zweites Modell derselben Sache und könnte auseinanderlaufen; ein gespeicherter
+Unterhalt könnte den Feldern widersprechen. Fortsetzung von D-042/D-049: Wer eine
+Zahl aus einer Menge ableiten kann, leitet sie ab.
+
+**Zusatz.** Wo der Spieler die Knoten selbst setzt, ist das Arbeitsgebiet
+standardmäßig der **volle** Radius. Er hat mit dem Feld bereits entschieden, wo
+gearbeitet wird; ein zusätzlicher Radiusregler wäre die Doppelarbeit, die D-039
+verbietet.
+
+## D-060 — Die Kreuzung ist die Entscheidung, nicht der Tastendruck
+
+**Kontext.** „Die Steuerung fühlt sich kaputt an. Man kann schlecht wenden."
+
+**Befund — es war nicht die Physik.** `stepDrive` las `input.steer` genau in dem
+Bild, in dem das Fahrzeug eine Kachelgrenze überquerte. Drei Folgen:
+1. Eine Zehntelsekunde zu früh losgelassen ⇒ Eingabe verloren.
+2. Gedrückt gehalten ⇒ `chooseNext` sortierte rechts auch **mitten im Korridor**
+   nach vorn, das Fahrzeug bog an jeder Gelegenheit ab. Halten war also keine
+   Abhilfe für (1), sondern ein zweiter Fehler.
+3. Wenden war die letzte Option in `chooseNext` und nur in der Sackgasse
+   erreichbar ⇒ der Spieler rangierte rückwärts.
+
+**Entscheidung.**
+* Ein Tastendruck setzt eine **Absicht** (`DriveState.intent`), kein Signal. Sie
+  wird erst verbraucht, wenn die gewünschte Richtung an einer Kachel wirklich
+  existiert. Damit ist gleichgültig, *wann* gedrückt wird.
+* **Gas ist der Normalzustand**, die Leertaste hält an (D-039: keine Bedienung
+  ohne Entscheidung).
+* **Rückwärts entfällt ersatzlos.** Wenden ist eine Richtung wie jede andere.
+* Belegung = Struktur: **A links · W geradeaus · D rechts · S wenden**.
+* `turnOptionsAt`/`nextJunction` sind die **einzige** Aufzählung der offenen
+  Richtungen; Anzeige und Fahrt lesen dieselbe Funktion (Lehre D-042). Eine Kurve
+  ist keine Kreuzung — sie anzukündigen wäre Lärm.
+
+**Darstellung.** Das Fahrzeug ist ein Lieferwagen, keine Pfeilspitze: Eine
+Pfeilspitze liest sich als Marker/Cursor, also als etwas, das man *zieht*.
+
+**Konsequenz.** Wer die Fahrbedienung erweitert, erweitert die Absicht — nicht
+den Abtastzeitpunkt. Ein größeres Zeitfenster hätte den Fehler verkleinert, aber
+nicht beseitigt.
+
 ## D-056 — Gesperrtes Land ist vollständig, nur farblos (schärft D-045)
 
 **Kontext.** Nutzerauftrag 02.08.2026 mit Mockup: „Alles sichtbar, nur

@@ -4,11 +4,12 @@ import { uiImage } from '../../assets/registry.ts';
 import {
   DRIVE_KEYS,
   beginDrive,
-  driveInputFromKeys,
   drivePose,
+  nextJunction,
   nextTurn,
   reachedTarget,
   stepDrive,
+  turnFromKey,
   loadedTileSpeed,
   vehicleTileSpeed,
   type DriveState,
@@ -98,6 +99,16 @@ export interface DriveReadout {
   turn: TurnHint | undefined;
   turnMeters: number | undefined;
   remaining: number;
+  /**
+   * § D-060 — die NAVI-STRUKTUR, die der Auftrag verlangt. Die offenen
+   * Richtungen der nächsten echten Kreuzung samt Entfernung; dazu, was der
+   * Spieler gerade vorgemerkt hat und ob der Wagen steht. Alles abgeleitet,
+   * nichts gespeichert.
+   */
+  junctionTurns?: TurnHint[];
+  junctionMeters?: number;
+  intent?: TurnHint;
+  stopped?: boolean;
 }
 
 interface ViewState {
@@ -141,6 +152,7 @@ export function ManualRouteMap({
   driving = false,
   onArrive,
   onStorageReach,
+  onDriveControls,
   onRecordDrive,
   onExitDrive,
   onDriveReadout,
@@ -181,6 +193,13 @@ export function ManualRouteMap({
   /** Wagen steht an einem Lager (oder an keinem mehr): Id oder . */
   onStorageReach?(buildingId: string | undefined): void;
   /**
+   * § D-060: Die Fahrschleife reicht ihre Bedienung nach außen, damit die
+   * Kreuzungsanzeige ANKLICKBAR ist (§3 des Auftrags). Bewusst dieselben Refs
+   * wie die Tastatur — sonst gäbe es zwei Wege, eine Absicht zu setzen, und
+   * einer davon würde irgendwann anders wirken.
+   */
+  onDriveControls?(controls: { turn(turn: TurnHint): void; toggleStop(): void } | undefined): void;
+  /**
    * § Overhaul 2.0 (§4): Jede neu befahrene Kachel. Die Karte entscheidet nichts
    * über die Route — sie meldet, wo das Fahrzeug war; die Strecke entsteht im
    * Command (`recordActivityDrive`).
@@ -207,7 +226,12 @@ export function ManualRouteMap({
   // zu schicken wäre genau die Art Re-Render, die CLAUDE.md §6 verbietet.
   const driveRef = useRef<DriveState>();
   const viewRef = useRef<ViewState>();
-  const heldRef = useRef<Set<string>>(new Set());
+  /**
+   * § D-060: die gemerkte Kreuzungsabsicht (ein Druck, kein gehaltener Zustand)
+   * und das Anhalten. Beides als Ref, weil die Fahrschleife an React vorbeiläuft.
+   */
+  const intentRef = useRef<TurnHint | undefined>(undefined);
+  const stoppedRef = useRef(false);
   const drivingRef = useRef(false);
   /** Bereits gefahrene Strecke (§5 „Handelswege"), gedeckelt. */
   const trailRef = useRef<{ x: number; y: number }[]>([]);
@@ -492,6 +516,7 @@ export function ManualRouteMap({
     maxSpeed: loadedTileSpeed(vehicleTileSpeed(vehicleSpeedKph ?? 0), loadRatio ?? 0),
     onArrive,
     onStorageReach,
+    onDriveControls,
     onRecordDrive,
     onExitDrive,
     onDriveReadout,
@@ -505,6 +530,7 @@ export function ManualRouteMap({
     maxSpeed: loadedTileSpeed(vehicleTileSpeed(vehicleSpeedKph ?? 0), loadRatio ?? 0),
     onArrive,
     onStorageReach,
+    onDriveControls,
     onRecordDrive,
     onExitDrive,
     onDriveReadout,
@@ -525,14 +551,16 @@ export function ManualRouteMap({
   //
   // Physik und Reichweite kommen aus `game/activities/driving.ts` — derselben
   // Quelle, aus der auch der 3D-Renderer fährt (§2/§8: kein zweites Fahrmodell).
-  // Seit P3 ist die Fahrt straßengebunden: W gibt Gas, A/D wählen an der
-  // Kreuzung, S bremst und fährt rückwärts. Die Schleife läuft an React vorbei
+  // Seit D-060 ist die Fahrt eine Kreuzungsentscheidung: das Fahrzeug fährt von
+  // selbst, W/A/D/S merken die Richtung für die nächste
+  // Kreuzung, S wendet, Leertaste hält an. Die Schleife läuft an React vorbei
   // über Refs; nur Ein-/Aussteigen und erreichte Ziele lösen ein Update aus.
   useEffect(() => {
     drivingRef.current = driving;
     if (!driving) {
       driveRef.current = undefined;
-      heldRef.current.clear();
+      intentRef.current = undefined;
+      stoppedRef.current = false;
       trailRef.current = [];
       recordedTileRef.current = { x: Number.NaN, y: Number.NaN };
       // Beim Aussteigen die zuletzt gefahrene Ansicht in den React-Zustand
@@ -567,15 +595,32 @@ export function ManualRouteMap({
         liveRef.current.onExitDrive?.();
         return;
       }
+      // § D-060: Anhalten/Weiterfahren liegt auf der Leertaste — S ist wenden.
+      if (key === ' ' || key === 'spacebar') {
+        if (down) stoppedRef.current = !stoppedRef.current;
+        event.preventDefault();
+        return;
+      }
       if (!DRIVE_KEYS.has(key)) return;
-      if (down) heldRef.current.add(key);
-      else heldRef.current.delete(key);
+      // Nur das Drücken zählt. Die Absicht überlebt das Loslassen und wird an
+      // der nächsten Kreuzung eingelöst — genau deshalb ist es gleichgültig,
+      // WANN der Spieler drückt.
+      if (down) intentRef.current = turnFromKey(key);
       event.preventDefault();
     };
     const onKeyDown = (event: KeyboardEvent) => onKey(event, true);
     const onKeyUp = (event: KeyboardEvent) => onKey(event, false);
     window.addEventListener('keydown', onKeyDown);
     window.addEventListener('keyup', onKeyUp);
+
+    liveRef.current.onDriveControls?.({
+      turn: (turn) => {
+        intentRef.current = turn;
+      },
+      toggleStop: () => {
+        stoppedRef.current = !stoppedRef.current;
+      },
+    });
 
     let raf = 0;
     let last = performance.now();
@@ -592,8 +637,15 @@ export function ManualRouteMap({
       if (!drive || !currentView) return;
 
       const live = liveRef.current;
-      const input = driveInputFromKeys(heldRef.current);
-      const stepped = stepDrive(drive, input, dt, live.roadSet, live.maxSpeed);
+      const intent = intentRef.current;
+      intentRef.current = undefined; // einmal übergeben, dann führt der Zustand sie weiter
+      const stepped = stepDrive(
+        drive,
+        { ...(intent ? { intent } : {}), stopped: stoppedRef.current },
+        dt,
+        live.roadSet,
+        live.maxSpeed,
+      );
       driveRef.current = stepped;
       const pose = drivePose(stepped);
       // Gefahrene Strecke mitschreiben — sichtbar (Spur) und verbindlich
@@ -635,7 +687,8 @@ export function ManualRouteMap({
       // der Re-Render, den die Schleife vermeidet.
       if (now - lastReadout > 240 && live.onDriveReadout) {
         lastReadout = now;
-        const turn = nextTurn(stepped, live.roadSet, input.steer);
+        const turn = nextTurn(stepped, live.roadSet);
+        const junction = nextJunction(stepped, live.roadSet);
         const distance = openTarget
           ? Math.hypot(
               openTarget.x + openTarget.size.w / 2 - pose.x,
@@ -649,12 +702,24 @@ export function ManualRouteMap({
           turn: turn?.turn,
           turnMeters: turn ? turn.distanceTiles * ROAD_TILE_METERS : undefined,
           remaining: arrivalTargetsRef.current.length,
+          // § D-060: Die Kreuzungsoptionen kommen aus derselben Funktion, nach
+          // der gleich gefahren wird — die Anzeige kann nichts ankündigen, was
+          // dann nicht passiert.
+          ...(junction
+            ? {
+                junctionTurns: junction.options.map((option) => option.turn),
+                junctionMeters: junction.distanceTiles * ROAD_TILE_METERS,
+              }
+            : {}),
+          ...(stepped.intent ? { intent: stepped.intent } : {}),
+          stopped: stoppedRef.current,
         });
       }
     };
     raf = requestAnimationFrame(frame);
     return () => {
       cancelAnimationFrame(raf);
+      liveRef.current.onDriveControls?.(undefined);
       window.removeEventListener('keydown', onKeyDown);
       window.removeEventListener('keyup', onKeyUp);
     };
@@ -797,7 +862,7 @@ export function ManualRouteMap({
 
       {driving ? (
         <div className="citywork-v4-map-drive">
-          <span><Gamepad2 size={15} /> W Gas · S Bremse/Rückwärts · A/D Abzweigung</span>
+          <span><Gamepad2 size={15} /> A/W/D/S: links · geradeaus · rechts · wenden — Leertaste hält an</span>
           <span>Q oder ESC: aussteigen</span>
         </div>
       ) : (
@@ -875,32 +940,60 @@ function toScreen(x: number, y: number, transform: Transform) {
 }
 
 /**
- * § P2/P3: Das gesteuerte Fahrzeug in der Draufsicht — ein gerichteter Keil,
- * damit die Fahrtrichtung auch bei kleinem Zoom ablesbar bleibt. Bewusst
- * schlicht: die Karte ist eine Logistikansicht, kein zweiter Renderer.
+ * § D-060: Das gesteuerte Fahrzeug in der Draufsicht — ein LIEFERWAGEN, keine
+ * Pfeilspitze. Der Auftrag benennt das ausdrücklich („Der Pfeil als Fahrzeug ist
+ * nicht intuitiv"), und der Grund ist mehr als Geschmack: Eine Pfeilspitze liest
+ * sich als Marker/Cursor, also als etwas, das man ZIEHT — nicht als etwas, das
+ * fährt. Ein Aufbau mit Kabine, Fenster und Rädern sagt in einem Blick, dass hier
+ * etwas transportiert wird und wo vorne ist.
+ *
+ * Bewusst weiter Canvas-Geometrie statt eines Bildes: eine Draufsicht muss bei
+ * jedem Zoom scharf bleiben, und die Karte ist eine Logistikansicht, kein
+ * zweiter Renderer.
  */
 function drawVehicle(ctx: CanvasRenderingContext2D, drive: DriveState, transform: Transform): void {
   const pose = drivePose(drive);
   const point = toScreen(pose.x, pose.y, transform);
-  const size = Math.max(9, transform.scale * 0.62);
+  const size = Math.max(11, transform.scale * 0.7);
+  const halfW = size * 0.34;
   ctx.save();
   ctx.translate(point.x, point.y);
-  // Der Keil zeigt ungedreht nach oben (−y). Weltvorwärts ist `(sin h, cos h)`,
+  // Der Wagen zeigt ungedreht nach oben (−y). Weltvorwärts ist `(sin h, cos h)`,
   // und die Karte bildet +y nach UNTEN ab — daraus folgt der Bildwinkel π − h.
   ctx.rotate(Math.PI - pose.heading);
-  ctx.shadowColor = 'rgba(0, 0, 0, 0.55)';
-  ctx.shadowBlur = size * 0.5;
-  ctx.beginPath();
-  ctx.moveTo(0, -size * 0.72);
-  ctx.lineTo(size * 0.5, size * 0.6);
-  ctx.lineTo(0, size * 0.3);
-  ctx.lineTo(-size * 0.5, size * 0.6);
-  ctx.closePath();
-  ctx.fillStyle = '#ffd45e';
+
+  // Räder zuerst, damit sie unter dem Aufbau hervorschauen.
+  ctx.fillStyle = 'rgba(24, 20, 16, 0.9)';
+  const wheelW = size * 0.13;
+  const wheelH = size * 0.2;
+  for (const [wx, wy] of [
+    [-halfW - wheelW * 0.35, -size * 0.22],
+    [halfW - wheelW * 0.65, -size * 0.22],
+    [-halfW - wheelW * 0.35, size * 0.28],
+    [halfW - wheelW * 0.65, size * 0.28],
+  ] as const) {
+    ctx.fillRect(wx, wy, wheelW, wheelH);
+  }
+
+  ctx.shadowColor = 'rgba(0, 0, 0, 0.5)';
+  ctx.shadowBlur = size * 0.45;
+  // Kofferaufbau.
+  ctx.fillStyle = '#f2f5f7';
+  roundedRect(ctx, -halfW, -size * 0.12, halfW * 2, size * 0.68, size * 0.1);
   ctx.fill();
   ctx.shadowBlur = 0;
-  ctx.lineWidth = Math.max(1, size * 0.09);
-  ctx.strokeStyle = 'rgba(38, 24, 4, 0.85)';
+  // Kabine — sie zeigt, wo vorne ist.
+  ctx.fillStyle = '#ffd45e';
+  roundedRect(ctx, -halfW, -size * 0.56, halfW * 2, size * 0.46, size * 0.12);
+  ctx.fill();
+  // Windschutzscheibe.
+  ctx.fillStyle = 'rgba(38, 62, 78, 0.85)';
+  roundedRect(ctx, -halfW * 0.68, -size * 0.5, halfW * 1.36, size * 0.18, size * 0.05);
+  ctx.fill();
+
+  ctx.lineWidth = Math.max(1, size * 0.07);
+  ctx.strokeStyle = 'rgba(30, 22, 8, 0.8)';
+  roundedRect(ctx, -halfW, -size * 0.56, halfW * 2, size * 1.12, size * 0.11);
   ctx.stroke();
   ctx.restore();
 }

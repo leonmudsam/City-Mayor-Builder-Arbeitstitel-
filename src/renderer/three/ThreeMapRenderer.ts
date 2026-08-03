@@ -170,10 +170,11 @@ import {
   DRIVE_DEFAULT_MAX_SPEED,
   DRIVE_KEYS,
   beginDrive,
-  driveInputFromKeys,
+  turnFromKey,
   drivePose,
   reachedTarget,
   stepDrive,
+  type TurnHint,
   vehicleTileSpeed,
   type DriveState,
 } from '../../game/activities/driving.ts';
@@ -755,7 +756,9 @@ export class ThreeMapRenderer implements IMapRenderer {
         arrow: Object3D;
         /** Straßengebundener Fahrzustand — die eine Quelle, aus der Pose folgt. */
         state: DriveState;
-        held: Set<string>;
+        /** § D-060: gemerkte Kreuzungsabsicht + Halt statt gehaltener Tasten. */
+        intent: TurnHint | undefined;
+        stopped: boolean;
       }
     | undefined;
   private readonly driveKeyDown = (e: KeyboardEvent): void => this.driveKey(e, true);
@@ -1390,7 +1393,7 @@ export class ThreeMapRenderer implements IMapRenderer {
       this.disposeGroup(arrow);
       return false;
     }
-    this.drive = { mesh, arrow, state, held: new Set() };
+    this.drive = { mesh, arrow, state, intent: undefined, stopped: false };
     const pose = drivePose(state);
     const vehicleY = this.roadSurfaceHeightAt(pose.x, pose.y) + VEHICLE_ROAD_CLEARANCE;
     mesh.position.set(pose.x, vehicleY, pose.y);
@@ -1446,17 +1449,25 @@ export class ThreeMapRenderer implements IMapRenderer {
       this.exitDrive();
       return;
     }
+    if (down && (k === ' ' || k === 'spacebar')) {
+      this.drive.stopped = !this.drive.stopped;
+      e.preventDefault();
+      return;
+    }
     if (DRIVE_KEYS.has(k)) {
-      if (down) this.drive.held.add(k);
-      else this.drive.held.delete(k);
+      // § D-060: Nur das Drücken zählt; die Absicht wird an der nächsten
+      // Kreuzung eingelöst, nicht im Bild des Tastendrucks abgetastet.
+      if (down) this.drive.intent = turnFromKey(k);
       e.preventDefault();
     }
   }
 
   /**
-   * Ein Fahr-Schritt (§ A6, seit P3 straßengebunden): W gibt Gas, A/D wählen an
-   * der Kreuzung die Abzweigung, S bremst und fährt rückwärts. Erreichte Ziele
-   * lösen `progressActivity` aus; ist die Mission vorbei, endet der Fahrmodus.
+   * Ein Fahr-Schritt (§ A6, seit P3 straßengebunden, seit D-060 als
+   * Kreuzungsentscheidung): Das Fahrzeug fährt von selbst, W/A/S/D merken
+   * geradeaus/links/wenden/rechts für die nächste Kreuzung vor, die Leertaste
+   * hält an. Erreichte Ziele lösen `progressActivity` aus; ist die Mission
+   * vorbei, endet der Fahrmodus.
    */
   private updateDrive(dt: number): void {
     const d = this.drive;
@@ -1469,7 +1480,15 @@ export class ThreeMapRenderer implements IMapRenderer {
     // § P2/P3: EINE Fahrphysik für 3D-Welt und 2D-Stadtarbeitskarte
     // (`game/activities/driving.ts`) — der Renderer rechnet hier nichts mehr
     // selbst, sonst gäbe es zwei Fahrmodelle (§2/§8).
-    d.state = stepDrive(d.state, driveInputFromKeys(d.held), dt, this.roadSet, this.driveMaxSpeed());
+    const intent = d.intent;
+    d.intent = undefined; // einmal übergeben — danach führt der Fahrzustand sie weiter
+    d.state = stepDrive(
+      d.state,
+      { ...(intent ? { intent } : {}), stopped: d.stopped },
+      dt,
+      this.roadSet,
+      this.driveMaxSpeed(),
+    );
     const pose = drivePose(d.state);
     const dx = pose.x;
     const dz = pose.y;
