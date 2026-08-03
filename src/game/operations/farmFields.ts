@@ -22,7 +22,7 @@
 import type { GameConfig } from '../config/index.ts';
 import type { GameState, TerrainType } from '../types.ts';
 import { bakedSurfaceAt, WORLD_TILES } from '../config/startRegion.config.ts';
-import { tileAt, worldTerrainAt } from '../map/world.ts';
+import { FARM_FIELD_TERRAIN, tileAt, worldTerrainAt } from '../map/world.ts';
 
 /** Terrain, das ein Feld tragen darf. Wald wird nicht gerodet, Fels nicht gesprengt. */
 const FIELD_BASE_TERRAIN: readonly TerrainType[] = ['grass', 'fertile'];
@@ -122,7 +122,7 @@ export function farmInRange(state: GameState, config: GameConfig, x: number, y: 
 
 /** Trägt diese Kachel bereits ein Feld? */
 export function isFieldTile(state: GameState, x: number, y: number): boolean {
-  return state.world.terrainOverrides?.[`${x},${y}`] === 'fertile';
+  return state.world.terrainOverrides?.[`${x},${y}`] === FARM_FIELD_TERRAIN;
 }
 
 /**
@@ -168,7 +168,7 @@ export function applyFarmField(state: GameState, plan: FieldPlan): number {
   let changed = 0;
   for (const tile of plan.tiles) {
     if (tile.blocker) continue;
-    overrides[`${tile.x},${tile.y}`] = 'fertile';
+    overrides[`${tile.x},${tile.y}`] = FARM_FIELD_TERRAIN;
     changed += 1;
   }
   return changed;
@@ -186,7 +186,7 @@ export function clearFarmField(state: GameState, area: { x: number; y: number; w
   for (let dy = 0; dy < Math.max(0, area.h); dy++) {
     for (let dx = 0; dx < Math.max(0, area.w); dx++) {
       const key = `${area.x + dx},${area.y + dy}`;
-      if (overrides[key] !== 'fertile') continue;
+      if (overrides[key] !== FARM_FIELD_TERRAIN) continue;
       delete overrides[key];
       cleared += 1;
     }

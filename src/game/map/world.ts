@@ -96,14 +96,33 @@ export function tileAt(state: GameState, x: number, y: number): TileState | unde
 const UNBUILDABLE: ReadonlySet<string> = new Set(['river', 'water', 'mountain']);
 
 /**
+ * Terrain, das die SIMULATION im normalen Spiel selbst setzt.
+ *
+ * Seit D-059 legt der Spieler Felder an, und ein Feld IST ein
+ * `terrainOverrides`-Eintrag. Damit hat der Debug-Kanal sein Erkennungsmerkmal
+ * verloren — vorher hieß „es gibt einen Override" zuverlässig „hier arbeitet
+ * ein Test". Ein Feld darf das Gelände nicht einebnen.
+ */
+export const FARM_FIELD_TERRAIN: TerrainType = 'fertile';
+
+/**
  * Sparse Terrain-Overrides sind ein expliziter Debug-/Testkanal. Ein bebaubarer
  * Override bildet deshalb eine ebene virtuelle Arbeitsfläche und entkoppelt
  * Gameplay-Tests von der jeweils neu gebackenen Inselgeometrie. Normales Spiel
  * und Saves ohne Overrides lesen weiterhin ausschließlich die Bake-Daten.
+ *
+ * § Gefunden beim P4-Smoke, nicht von einem Test: Ein Feld setzt denselben
+ * Override und wurde deshalb als Debug-Fläche gelesen — der Boden unter dem
+ * Feld galt plötzlich als Höhe 0 UND als Startregion. Ein danach dort
+ * gebautes Haus säße in der Erde, und die Regionsprüfung antwortete für die
+ * falsche Region. Das Feld ist deshalb ausdrücklich ausgenommen; wer künftig
+ * einen weiteren Spielmechanismus über Overrides baut, gehört hier ebenfalls
+ * eingetragen (oder der Debug-Kanal bekommt endlich ein eigenes Feld).
  */
 function isFlatDebugSurface(state: GameState, x: number, y: number): boolean {
   const terrain = state.world.terrainOverrides?.[`${x},${y}`];
-  return terrain !== undefined && !UNBUILDABLE.has(terrain);
+  if (terrain === undefined || terrain === FARM_FIELD_TERRAIN) return false;
+  return !UNBUILDABLE.has(terrain);
 }
 
 function placementHeightAt(state: GameState, x: number, y: number): number {

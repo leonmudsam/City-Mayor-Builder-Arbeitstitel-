@@ -24,6 +24,13 @@ import { ROAD_TILE_METERS } from '../../game/roads/roadProfile.ts';
 import type { BuildingCategory, BuildingInstance, RoadVariant } from '../../game/types.ts';
 import type { BuildingDef } from '../../game/config/types.ts';
 import {
+  captureWorldSnapshot,
+  hasWorldSnapshotSource,
+  planWorldSnapshot,
+  snapshotCovers,
+  type WorldSnapshot,
+} from '../../renderer/worldSnapshot.ts';
+import {
   buildNatureChunks,
   buildWorldImage,
   drawNature,
@@ -53,6 +60,19 @@ const OVERVIEW_SCALE = 5;
  * zeigt genau das, was auch gespeichert wird, und nicht mehr.
  */
 const DRIVE_TRAIL_MAX = 4096;
+/**
+ * § P4: Mindestabstand zwischen zwei Weltaufnahmen. Eine Aufnahme ist ein
+ * Renderdurchgang plus Rückweg aus dem Grafikspeicher — günstig genug für ein
+ * Verschieben, zu teuer für jedes Bild einer Fahrt. Der Rand um den sichtbaren
+ * Bereich (`SNAPSHOT_PADDING`) sorgt dafür, dass in dieser Zeit meist gar keine
+ * neue nötig wird.
+ */
+const BACKDROP_MIN_INTERVAL_MS = 420;
+/**
+ * Nach so vielen Fehlversuchen wird nicht mehr gefragt. Ohne WebGL (Tests,
+ * Software-Rendering) gäbe es sonst bei jedem Bild einen vergeblichen Anlauf.
+ */
+const BACKDROP_MAX_FAILURES = 3;
 const BUILDINGS: Partial<Record<BuildingCategory, { wall: string; roof: string }>> = {
   residential: { wall: '#e3c68a', roof: '#9c4933' },
   economy: { wall: '#cf9755', roof: '#69452d' },
@@ -240,6 +260,16 @@ export function ManualRouteMap({
    * ein Command — 60×/s dieselbe Kachel. Gemeldet wird nur der Wechsel.
    */
   const recordedTileRef = useRef<{ x: number; y: number }>({ x: Number.NaN, y: Number.NaN });
+  /**
+   * § P4: Die aufgenommene Welt. Als Ref, weil die Fahrschleife sie 60×/s liest;
+   * `backdropNonce` löst nur außerhalb der Fahrt ein Neuzeichnen aus.
+   */
+  const backdropRef = useRef<WorldSnapshot | undefined>(undefined);
+  const backdropPendingRef = useRef(false);
+  const backdropAtRef = useRef(0);
+  const backdropFailuresRef = useRef(0);
+  const backdropWorldKeyRef = useRef('');
+  const [backdropNonce, setBackdropNonce] = useState(0);
 
   const roadTiles = useMemo(() => {
     const roads = new Map<string, BuildingInstance>();
@@ -287,6 +317,63 @@ export function ManualRouteMap({
     (regionId: number) => regionId !== 0 && !unlockedIds.has(regionId),
     [unlockedIds],
   );
+  /**
+   * § P4: Woran erkennt man, dass die AUFGENOMMENE Welt veraltet ist?
+   *
+   * Nicht an `game.version` — die zählt bei jedem Tick hoch, und eine Aufnahme
+   * je Tick wäre ein Ruckler im Sekundentakt. Es zählt, was man von oben sieht:
+   * welche Gebäude in welcher Ausbaustufe und welchem Zustand stehen, und
+   * welche Regionen frei sind. Ein Rollhash statt einer Zeichenkette, weil das
+   * hier bei jedem Update über alle Gebäude läuft.
+   */
+  const worldKey = useMemo(() => {
+    let hash = 2166136261;
+    for (const building of Object.values(game.state.buildings)) {
+      const part = `${building.id}:${building.upgradeLevel}:${building.status}`;
+      for (let index = 0; index < part.length; index += 1) {
+        hash = Math.imul(hash ^ part.charCodeAt(index), 16777619);
+      }
+    }
+    return `${unlockKey}#${(hash >>> 0).toString(36)}`;
+  }, [game, game.version, unlockKey]);
+
+  /**
+   * § P4 — DIE KARTE FRAGT DIE WELT NACH IHREM BILD.
+   *
+   * Angefordert wird nur, was fehlt: ein Ausschnitt, der den Blick nicht deckt,
+   * oder eine Aufnahme, die für den jetzigen Zoom zu grob ist (`snapshotCovers`).
+   * Die Aufnahme selbst läuft einen Zurückstellungsschritt später — im
+   * Zeichenaufruf würde der Rückweg aus dem Grafikspeicher die Bildschleife
+   * anhalten, und genau während der Fahrt fiele das auf.
+   */
+  const requestBackdrop = useCallback((visible: Bounds, scale: number) => {
+    if (backdropPendingRef.current) return;
+    if (backdropFailuresRef.current >= BACKDROP_MAX_FAILURES) return;
+    if (!hasWorldSnapshotSource()) return;
+    const current = backdropRef.current;
+    const stale = backdropWorldKeyRef.current !== worldKey && !drivingRef.current;
+    if (current && !stale && snapshotCovers(current, visible, scale)) return;
+    const now = performance.now();
+    if (now - backdropAtRef.current < BACKDROP_MIN_INTERVAL_MS) return;
+    backdropPendingRef.current = true;
+    const plan = planWorldSnapshot(visible, scale, WORLD_TILES);
+    const key = worldKey;
+    window.setTimeout(() => {
+      backdropPendingRef.current = false;
+      backdropAtRef.current = performance.now();
+      const snapshot = captureWorldSnapshot(plan.area, plan.pixelsPerTile);
+      if (!snapshot) {
+        backdropFailuresRef.current += 1;
+        return;
+      }
+      backdropFailuresRef.current = 0;
+      backdropWorldKeyRef.current = key;
+      backdropRef.current = snapshot;
+      // Während der Fahrt zeichnet die rAF-Schleife ohnehin jedes Bild neu.
+      if (!drivingRef.current) setBackdropNonce((value) => value + 1);
+    }, 0);
+  }, [worldKey]);
+
   const worldImage = useMemo(() => {
     if (worldImageCache?.key === unlockKey) return worldImageCache.image;
     const image = buildWorldImage(isLocked, regionIdAt);
@@ -417,9 +504,10 @@ export function ManualRouteMap({
     };
 
     // ---- Ebene 1: die echte Welt --------------------------------------------
-    // Ein Zeichenaufruf. Terrain, Höhenrelief, Klippen, Küste und Wassertiefe
-    // stecken im gebackenen Weltbild (`worldMapLayers`), das dieselben Höhen und
-    // Masken liest wie der 3D-Renderer.
+    // Die Unterlage ist das gebackene Weltbild (`worldMapLayers`) — dieselben
+    // Höhen und Masken wie im 3D-Renderer, ein Zeichenaufruf, immer vorhanden.
+    // Sie deckt die ganze Insel und trägt damit auch die Ränder, die eine
+    // Aufnahme nicht erreicht.
     const origin = project(0, 0);
     ctx.imageSmoothingEnabled = true;
     ctx.imageSmoothingQuality = 'high';
@@ -431,12 +519,50 @@ export function ManualRouteMap({
       WORLD_TILES * transform.scale,
     );
 
+    // § P4: Darüber die AUFNAHME der laufenden 3D-Szene — echte Gebäude, echte
+    // Straßenbauwerke, echter Bewuchs, echte Küstenlinie, echtes Licht. Sie
+    // fehlt genau dann, wenn es keine laufende Welt gibt (Tests, kein WebGL);
+    // dann bleibt es bei den gezeichneten Ebenen darunter. Deshalb ist das hier
+    // kein Sonderfall, sondern eine zusätzliche Schicht.
+    requestBackdrop(bounds, transform.scale);
+    const backdrop = backdropRef.current;
+    const covered = backdrop !== undefined && snapshotCovers(backdrop, bounds, transform.scale);
+    // Woher das Bild kommt, steht am Element. Nicht für den Spieler (er sieht
+    // es), sondern damit ein Smoke im laufenden Spiel es EINDEUTIG prüfen kann
+    // statt Pixel zu raten. Nur bei Wechsel geschrieben — im Zeichenaufruf
+    // steht sonst ein DOM-Schreibzugriff je Bild.
+    const kind = covered ? 'world' : 'painted';
+    if (canvas.dataset['backdrop'] !== kind) canvas.dataset['backdrop'] = kind;
+    if (backdrop) {
+      const anchor = project(backdrop.area.x, backdrop.area.y);
+      ctx.drawImage(
+        backdrop.canvas,
+        anchor.x,
+        anchor.y,
+        backdrop.area.w * transform.scale,
+        backdrop.area.h * transform.scale,
+      );
+    }
+
     // ---- Ebene 2: Vegetation aus derselben Verteilung wie die 3D-Welt -------
-    if (showNature) drawNature(ctx, natureChunks, occupied, bounds, project, transform.scale);
+    // Nur, wo die Aufnahme sie nicht schon mitbringt. Beides gleichzeitig wären
+    // zwei Wälder übereinander — dieselben Bäume, einmal gerendert und einmal
+    // gemalt.
+    if (showNature && !covered) drawNature(ctx, natureChunks, occupied, bounds, project, transform.scale);
 
     drawRegionBorders(ctx, bounds, transform);
-    drawRoadNetwork(ctx, roadTiles, traffic, showTraffic, bounds, transform);
-    if (showBuildings && transform.scale >= OVERVIEW_SCALE) drawBuildings(ctx, game, targets, bounds, transform);
+    // Liegt die echte Welt im Bild, ist die Straße schon da — dann bleibt vom
+    // Straßenlayer nur die Auskunft, die ein Foto nicht geben kann: wie voll
+    // sie ist. Der volle Belag darüber würde die gerenderte Fahrbahn zudecken
+    // und die Karte wieder in ein Schema verwandeln.
+    drawRoadNetwork(ctx, roadTiles, traffic, showTraffic, bounds, transform, covered);
+    // Ebenso die Gebäudekästen: Sie WAREN die „flachen Platzhalter" aus dem
+    // Auftrag. Liegt die echte Welt im Bild, treten an ihre Stelle die
+    // Umrisse — Trefferfläche und Hervorhebung statt eines gemalten Hauses.
+    if (showBuildings && transform.scale >= OVERVIEW_SCALE) {
+      if (covered) drawBuildingOutlines(ctx, game, targets, bounds, transform);
+      else drawBuildings(ctx, game, targets, bounds, transform);
+    }
     drawInfrastructure(ctx, game, bounds, transform);
     if (referencePath && referencePath.length > 1 && !drive) drawAlternativeRoute(ctx, referencePath, transform);
     if (trailRef.current.length > 1) drawTrail(ctx, trailRef.current, transform);
@@ -483,6 +609,7 @@ export function ManualRouteMap({
     natureChunks,
     occupied,
     referencePath,
+    requestBackdrop,
     roadPath,
     roadTiles,
     routePhase,
@@ -497,10 +624,12 @@ export function ManualRouteMap({
   ]);
 
   // Normaler Neuzeichnen-Pfad (Planung): React-Zustand ändert sich → neu malen.
+  // `backdropNonce` gehört dazu: Die Aufnahme kommt einen Schritt später an und
+  // hat keinen anderen Weg ins Bild.
   useEffect(() => {
     if (drivingRef.current) return; // während der Fahrt führt die rAF-Schleife
     drawScene(view, undefined);
-  }, [drawScene, view]);
+  }, [drawScene, view, backdropNonce]);
 
   /**
    * Alles, was die Fahr-Schleife braucht, aber bei jedem Command eine neue
@@ -1047,6 +1176,7 @@ function drawRoadNetwork(
   showTraffic: boolean,
   bounds: Bounds,
   transform: Transform,
+  subtle = false,
 ) {
   for (const [id, building] of roads) {
     const [x, y] = id.split(',').map(Number) as [number, number];
@@ -1056,6 +1186,22 @@ function drawRoadNetwork(
     const elevated = variant !== undefined && ELEVATED_VARIANTS.has(variant);
     const load = traffic.get(id) ?? 0;
     const busy = load >= 2;
+    if (subtle) {
+      // § 2 des Auftrags verlangt „klare Straßen-Highlights", nicht eine zweite
+      // Fahrbahn. Der gerenderte Weg ist da — aus der Draufsicht liest er sich
+      // aber wie heller Boden. Ein schmaler Lichtstreifen sagt „hier darf
+      // gefahren werden", ohne das Bild zuzudecken.
+      ctx.lineCap = 'round';
+      ctx.strokeStyle = elevated ? 'rgba(180, 226, 244, .34)' : 'rgba(226, 242, 248, .22)';
+      ctx.lineWidth = clamp(transform.scale * 0.22, 1.5, 9);
+      drawRoadLinks(ctx, center, x, y, roads, transform);
+      if (showTraffic && load > 0) {
+        ctx.strokeStyle = ['', 'rgba(211,210,73,.42)', 'rgba(244,163,48,.5)', 'rgba(235,78,58,.62)'][load]!;
+        ctx.lineWidth = clamp(transform.scale * 0.16, 1.5, 7);
+        drawRoadLinks(ctx, center, x, y, roads, transform);
+      }
+      continue;
+    }
     // Nach OBEN gedeckelt: eine Kachel ist 4 m breit, aber beim Heranzoomen darf
     // die Fahrbahn nicht zur Landebahn werden — sonst verschwindet die Stadt
     // unter ihren eigenen Straßen.
@@ -1136,6 +1282,45 @@ function drawBuildings(
       ctx.fillRect(point.x + width * 0.66, point.y + height * 0.53, windowSize, windowSize * 0.75);
     }
   }
+}
+
+/**
+ * § P4 — Gebäude, wenn die ECHTE Welt im Bild liegt.
+ *
+ * Das Haus selbst kommt jetzt aus der Aufnahme; hier bleibt nur, was ein
+ * gerendertes Bild nicht leisten kann: sagen, WELCHES Haus gemeint ist. Ein
+ * dünner Sockelumriss macht die Trefferfläche sichtbar, Lieferziele bekommen
+ * einen warmen Ring. Bewusst kein zweiter Baukörper darüber — genau das war
+ * der „flache Platzhalter", den der Auftrag beklagt.
+ */
+function drawBuildingOutlines(
+  ctx: CanvasRenderingContext2D,
+  game: GameController,
+  targets: CityworkMapPoint[],
+  bounds: Bounds,
+  transform: Transform,
+) {
+  const targetIds = new Set(targets.map((target) => target.id));
+  ctx.save();
+  for (const building of Object.values(game.state.buildings)) {
+    if (building.x < bounds.minX - 8 || building.x > bounds.maxX + 2) continue;
+    if (building.y < bounds.minY - 8 || building.y > bounds.maxY + 2) continue;
+    const definition = game.config.buildings.get(building.defId);
+    if (!definition || definition.category === 'roads' || definition.category === 'decoration') continue;
+    const point = toScreen(building.x, building.y, transform);
+    const width = definition.size.w * transform.scale;
+    const height = definition.size.h * transform.scale;
+    // Nur was gemeint ist, wird umrandet. Ein Rahmen um JEDES Haus wäre ein
+    // Gitternetz über der Stadt — genau die Schemazeichnung, die weg sollte.
+    if (!targetIds.has(building.id)) continue;
+    ctx.lineWidth = Math.max(1.5, transform.scale * 0.12);
+    ctx.strokeStyle = 'rgba(255, 196, 92, .92)';
+    roundedRect(ctx, point.x, point.y, width, height, Math.max(2, transform.scale * 0.12));
+    ctx.fillStyle = 'rgba(255, 186, 74, .16)';
+    ctx.fill();
+    ctx.stroke();
+  }
+  ctx.restore();
 }
 
 /**

@@ -107,6 +107,12 @@ import {
   type NatureInstance,
 } from './natureDistribution.ts';
 import { NATURE_KINDS, type NatureKind } from './natureZones.ts';
+import { captureTopDown } from './worldTopDown.ts';
+import {
+  setWorldSnapshotSource,
+  type WorldSnapshot,
+  type WorldSnapshotArea,
+} from '../worldSnapshot.ts';
 import {
   buildNatureMass,
   hasNatureGeometry,
@@ -872,11 +878,92 @@ export class ThreeMapRenderer implements IMapRenderer {
       this.vegKey = ''; // erzwingt Neuaufbau der Vegetation im nächsten Frame
       this.rebuildVegetation();
     });
+    // § P4: Ab hier kann die Stadtarbeitskarte die echte Szene von oben
+    // aufnehmen. Die Anmeldung steht bewusst am Ende von `init` — vorher gäbe
+    // es weder Renderer noch Welt, und eine Aufnahme des Nichts wäre schlimmer
+    // als gar keine.
+    setWorldSnapshotSource((area, pixelsPerTile) => this.captureTopDown(area, pixelsPerTile));
+
     renderer.setAnimationLoop(() => this.frame());
+  }
+
+  /**
+   * § P4 — DIE KARTE IST DIE GERENDERTE WELT.
+   *
+   * Nimmt den Weltausschnitt orthografisch von oben auf. Aufgenommen wird die
+   * laufende Szene; hier stehen nur die Ausnahmen, und jede hat einen Grund:
+   *
+   * * **Marker, Overlays, Ghost, Ursprungsmarkierung** gehören dem Bauen, nicht
+   *   der Logistik. Sie lägen sonst als eingebrannte Bilder auf der Karte —
+   *   nicht wegklickbar, weil sie Teil des Hintergrunds wären.
+   * * **Fahrzeuge** zeichnet die Karte selbst (D-060). Zwei Wagen auf derselben
+   *   Straße wären zwei Wahrheiten über eine Fahrt.
+   * * **Gebäudedetail wird erzwungen.** Die HLOD-Umschaltung folgt sonst der
+   *   Spielkamera — die Karte sähe je nach Zoomstand des HAUPTFENSTERS anders
+   *   aus, ohne dass jemand etwas an ihr geändert hätte.
+   * * **Die Vegetations-LOD wird auf die Bildmitte umgerechnet.** Dieselbe
+   *   Distanzregel wie im Bild, nur um den Aufnahmepunkt statt um die
+   *   Spielkamera; sonst fehlte auf der Karte genau der Bewuchs, der gerade
+   *   hinter dem Rücken der Spielkamera liegt.
+   */
+  private captureTopDown(area: WorldSnapshotArea, pixelsPerTile: number): WorldSnapshot | undefined {
+    const renderer = this.renderer;
+    if (!renderer || this.destroyed) return undefined;
+    const hlodWasVisible = this.buildingHlodGroup.visible;
+    const envWasVisible = this.buildingEnvironmentGroup.visible;
+    const nodeVisibility = new Map<string, boolean>();
+    const lodVisibility = new Map<NatureLodEntry, boolean>();
+    return captureTopDown(renderer, this.scene, area, pixelsPerTile, {
+      hidden: [
+        this.markerGroup,
+        this.overlayGroup,
+        this.coverageOverlayGroup,
+        this.workAreaOverlayGroup,
+        this.roadPlanOverlayGroup,
+        this.fieldPlanOverlayGroup,
+        this.infrastructureOverlayGroup,
+        this.moveOriginGroup,
+        this.lockedMarkerGroup,
+        this.vehicleGroup,
+        this.ghost,
+      ],
+      beforeRender: (center) => {
+        this.buildingHlodGroup.visible = false;
+        this.buildingEnvironmentGroup.visible = true;
+        for (const [id, node] of this.nodes) {
+          nodeVisibility.set(id, node.group.visible);
+          node.group.visible = true;
+        }
+        for (const lodList of [
+          this.vegetationDistanceLod,
+          this.lockedVegetationLod,
+          this.roadDetailDistanceLod,
+        ]) {
+          for (const lod of lodList) {
+            lodVisibility.set(lod, lod.object.visible);
+            const distance = Math.hypot(center.x - lod.centerX, center.z - lod.centerZ);
+            const padding = lod.paddingRadius ?? 0;
+            lod.object.visible =
+              distance >= (lod.minDistance ?? 0) - padding &&
+              distance <= lod.maxDistance + padding;
+          }
+        }
+      },
+      afterRender: () => {
+        this.buildingHlodGroup.visible = hlodWasVisible;
+        this.buildingEnvironmentGroup.visible = envWasVisible;
+        for (const [id, visible] of nodeVisibility) {
+          const node = this.nodes.get(id);
+          if (node) node.group.visible = visible;
+        }
+        for (const [lod, visible] of lodVisibility) lod.object.visible = visible;
+      },
+    });
   }
 
   destroy(): void {
     this.destroyed = true;
+    setWorldSnapshotSource(undefined);
     this.unsubGraphics?.();
     if (this.drive) this.exitDrive();
     this.resizeObs?.disconnect();

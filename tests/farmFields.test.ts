@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { nearTownHall, newController, setLevel, flattenTerrain, T0 } from './helpers.ts';
+import { overrideTerrain, samplePlacementSurface } from '../src/game/map/world.ts';
 import { FIELD_COST_PER_TILE } from '../src/game/operations/farmFields.ts';
 import { deriveNodesInArea } from '../src/game/operations/nodes.ts';
 import type { GameController } from '../src/game/commands/controller.ts';
@@ -147,5 +148,36 @@ describe('D-058 — der Betriebsstart hängt daran, wer die Knoten anlegen kann'
     const built = Object.values(controller.state.buildings).find((b) => b.defId === 'quarry');
     if (!built || built.status !== 'active') return;
     expect(controller.startBuildingOperation(built.id)).toEqual({ ok: false, error: 'invalid' });
+  });
+});
+
+/**
+ * § P4-Smoke-Befund (03.08.2026) — EIN FELD IST KEIN DEBUG-OVERRIDE.
+ *
+ * Gefunden hat das kein Test, sondern die Aufnahme der 3D-Szene: In einem
+ * Spielstand mit Terrain-Overrides standen die Häuser im Boden. Die Ursache
+ * liegt tiefer als die Karte — `isFlatDebugSurface` las „es gibt einen
+ * Override" als „hier arbeitet ein Test" und ebnete den Untergrund auf Höhe 0
+ * ein. Seit D-059 legt der SPIELER Overrides an (jedes Feld ist einer), damit
+ * war die Annahme falsch: Ein Feld hätte den Boden unter sich eingeebnet und
+ * die Kachel zusätzlich der Startregion zugeschlagen.
+ */
+describe('Felder verändern das Gelände nicht', () => {
+  const probe = nearTownHall(-4, -6); // echte Bake-Höhe (~5,6), nicht eingeebnet
+
+  it('lässt die Platzierungshöhe unberührt', () => {
+    const { controller } = newController(T0, { flatten: false });
+    const before = samplePlacementSurface(controller.state, probe.x, probe.y, 1, 1);
+    expect(before.maxHeight).toBeGreaterThan(0); // sonst misst der Test nichts
+    overrideTerrain(controller.state, probe.x, probe.y, 'fertile');
+    const after = samplePlacementSurface(controller.state, probe.x, probe.y, 1, 1);
+    expect(after.maxHeight).toBe(before.maxHeight);
+    expect(after.minHeight).toBe(before.minHeight);
+  });
+
+  it('der Debug-Kanal ebnet weiterhin ein — die Gegenprobe', () => {
+    const { controller } = newController(T0, { flatten: false });
+    overrideTerrain(controller.state, probe.x, probe.y, 'grass');
+    expect(samplePlacementSurface(controller.state, probe.x, probe.y, 1, 1).maxHeight).toBe(0);
   });
 });
