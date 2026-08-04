@@ -4,6 +4,7 @@ import type { GameController } from '../game/commands/controller.ts';
 import type { RegionId, ResourceId } from '../game/types.ts';
 import type { CameraPreset } from '../renderer/three/CameraConfig.ts';
 import type {
+  DriveStatus,
   InfoLayerMode,
   InfrastructureLayerMode,
   MapCameraView,
@@ -144,6 +145,13 @@ interface UiState {
    *  Fahr-HUD (Timer, verbleibende Ziele, „Fahrt beenden") statt der Panels. */
   driveActive: boolean;
   setDriveActive(active: boolean): void;
+  /**
+   * § Stadtarbeit 3.0 / A4+A5: Fahrstatus aus der 3D-Fahrschleife (Tempo,
+   * nächste Kreuzung, Gebäude vor Ort). Der Renderer meldet ihn gedrosselt;
+   * das Einsatz-HUD ist eine reine Projektion darauf und rechnet nichts nach.
+   */
+  driveStatus: DriveStatus | undefined;
+  setDriveStatus(status: DriveStatus | undefined): void;
   missionFollow: boolean;
   setMissionFollow(active: boolean): void;
   /** UI-only draft route. Targets are committed only through startActivity(). */
@@ -254,7 +262,9 @@ export const useUiStore = create<UiState>((set) => ({
     set({ cameraPreset: preset });
   },
   driveActive: false,
-  setDriveActive: (active) => set({ driveActive: active }),
+  setDriveActive: (active) => set({ driveActive: active, ...(active ? {} : { driveStatus: undefined }) }),
+  driveStatus: undefined,
+  setDriveStatus: (status) => set({ driveStatus: status }),
   missionFollow: false,
   setMissionFollow: (active) => {
     getMapApi()?.setMissionFollow(active);

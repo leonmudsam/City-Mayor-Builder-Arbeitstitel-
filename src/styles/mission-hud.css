@@ -1,0 +1,123 @@
+/* § Stadtarbeit 3.0 — Einsatz-HUD in der echten Welt (A7).
+   Leitregel des Auftrags: „großer Fokus auf Welt, wenige klare Panels."
+   Deshalb sitzt hier NICHTS in der Bildmitte: Die Stadt ist das Spielfeld,
+   die Panels kleben an den Rändern und lassen sie frei. */
+
+.mission-junction,
+.mission-side,
+.mission-bar-bottom {
+  position: fixed;
+  z-index: 60;
+  color: var(--text-primary, #eaf2f8);
+  background: rgba(12, 22, 33, 0.86);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 14px;
+  backdrop-filter: blur(9px);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
+  pointer-events: auto;
+}
+
+/* Kreuzung — erscheint nur, wenn es wirklich eine Wahl gibt. */
+.mission-junction {
+  left: 50%;
+  transform: translateX(-50%);
+  top: 96px;
+  padding: 10px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  align-items: center;
+}
+.mission-junction-head { font-size: 12px; opacity: 0.8; }
+.mission-junction-head strong { opacity: 1; }
+.mission-junction-turns { display: flex; gap: 8px; }
+.mission-turn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 7px 12px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.07);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  min-width: 68px;
+}
+.mission-turn small { font-size: 11px; opacity: 0.78; }
+
+/* Rechte Spalte — Fahrzeug, Ladung, Aktion am Ort. */
+.mission-side {
+  right: 18px;
+  top: 96px;
+  width: 300px;
+  max-height: calc(100vh - 220px);
+  overflow-y: auto;
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.mission-side > header { display: flex; align-items: center; gap: 10px; }
+.mission-side > header span { display: flex; flex-direction: column; }
+.mission-side > header small { font-size: 11px; opacity: 0.7; }
+
+.mission-cargo { display: flex; flex-direction: column; gap: 4px; }
+.mission-cargo > span { font-size: 11px; opacity: 0.72; }
+.mission-cargo strong { font-size: 18px; font-variant-numeric: tabular-nums; }
+.mission-cargo strong i { font-style: normal; font-size: 12px; opacity: 0.6; }
+.mission-bar {
+  display: block;
+  height: 6px;
+  border-radius: 3px;
+  background: rgba(255, 255, 255, 0.13);
+  overflow: hidden;
+}
+.mission-bar-fill { display: block; height: 100%; background: #6fd3a0; }
+
+.mission-action { display: flex; flex-direction: column; gap: 8px; }
+.mission-action h4 { margin: 0; font-size: 12px; letter-spacing: 0.06em; text-transform: uppercase; opacity: 0.65; }
+.mission-action-empty { margin: 0; font-size: 12px; opacity: 0.6; }
+.mission-action-place { margin: 0; font-weight: 600; }
+.mission-action-stock { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 3px; }
+.mission-action-stock li { display: flex; justify-content: space-between; font-size: 12px; }
+.mission-action-note { margin: 0; font-size: 11px; opacity: 0.75; display: flex; gap: 5px; align-items: center; }
+.mission-action button { width: 100%; justify-content: center; }
+
+.mission-leave { width: 100%; justify-content: center; opacity: 0.85; }
+
+/* Untere Leiste — Fahrt auf einen Blick. */
+.mission-bar-bottom {
+  left: 50%;
+  transform: translateX(-50%);
+  bottom: 18px;
+  padding: 10px 18px;
+  display: flex;
+  align-items: center;
+  gap: 22px;
+}
+.mission-speed { display: flex; align-items: baseline; gap: 6px; }
+.mission-speed strong { font-size: 26px; font-variant-numeric: tabular-nums; line-height: 1; }
+.mission-speed small { font-size: 11px; opacity: 0.66; }
+.mission-metric { display: flex; flex-direction: column; }
+.mission-metric small { font-size: 10px; letter-spacing: 0.05em; text-transform: uppercase; opacity: 0.6; }
+.mission-metric strong { font-size: 15px; font-variant-numeric: tabular-nums; }
+.mission-metric strong i { font-style: normal; font-size: 11px; opacity: 0.6; }
+.mission-hint { font-size: 11px; opacity: 0.65; }
+
+.mission-junction kbd,
+.mission-side kbd,
+.mission-bar-bottom kbd {
+  display: inline-block;
+  min-width: 18px;
+  padding: 1px 5px;
+  border-radius: 5px;
+  background: rgba(255, 255, 255, 0.12);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  font-size: 10px;
+  font-family: inherit;
+  text-align: center;
+}
+
+@media (max-width: 1280px) {
+  .mission-side { width: 250px; }
+  .mission-hint { display: none; }
+}

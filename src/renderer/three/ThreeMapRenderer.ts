@@ -35,6 +35,8 @@ import {
   LineDashedMaterial,
   LineSegments,
   MathUtils,
+  type BufferGeometry as TBufferGeometry,
+  type Material as TMaterial,
   Mesh,
   MeshBasicMaterial,
   MeshLambertMaterial,
@@ -61,6 +63,7 @@ import {
   type Texture,
 } from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
+import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { SkyEnvironment } from './SkyEnvironment.ts';
 import { WorldPostProcessing } from './WorldPostProcessing.ts';
 import { harmonizeBuildingAppearance } from './buildingAppearanceRenderer.ts';
@@ -141,6 +144,7 @@ import {
   createStylizedVehicleGeometry,
   createStylizedVehicleMaterial,
 } from './vehicleFallback.ts';
+import { FARM_FIELD_CROP_MODEL } from '../../assets/modelManifest.ts';
 import { getCameraSettings } from './cameraSettings.ts';
 import { buildFarmFieldMesh } from './farmFieldMesh.ts';
 import { getEnvironmentSettings } from './environmentSettings.ts';
@@ -180,10 +184,12 @@ import {
   drivePose,
   reachedTarget,
   stepDrive,
+  nextJunction,
   type TurnHint,
   vehicleTileSpeed,
   type DriveState,
 } from '../../game/activities/driving.ts';
+import { ROAD_TILE_METERS } from '../../game/roads/roadProfile.ts';
 import {
   buildingModel,
   buildingConstructionModel,
@@ -767,6 +773,11 @@ export class ThreeMapRenderer implements IMapRenderer {
         stopped: boolean;
       }
     | undefined;
+  /** § A4: letzter gemeldeter Fahrstatus — drosselt die Meldung an die UI. */
+  private driveStatusKey = '';
+  /** Drop-in-Geometrie für Feldkacheln (CLAUDE.md §5); fehlt sie, bleibt es prozedural. */
+  private cropDropIn: { geometry: TBufferGeometry; material: TMaterial } | undefined;
+  private cropDropInState: 'idle' | 'loading' | 'ready' | 'absent' = 'idle';
   private readonly driveKeyDown = (e: KeyboardEvent): void => this.driveKey(e, true);
   private readonly driveKeyUp = (e: KeyboardEvent): void => this.driveKey(e, false);
 
@@ -1338,14 +1349,18 @@ export class ThreeMapRenderer implements IMapRenderer {
    */
   private rebuildFarmFields(): void {
     const fields = this.controller.getFarmFields();
-    const key = fields
-      .map((field) => `${field.x},${field.y}:${Math.round(field.growth * 4)}`)
-      .join('|');
+    // Der Drop-in-Zustand gehört in den Schlüssel: Das Modell trifft
+    // asynchron ein, und ohne ihn bliebe die prozedurale Fassung stehen, bis
+    // sich zufällig ein Reifegrad ändert.
+    const key =
+      `${this.cropDropIn ? 'glb' : 'proc'}|` +
+      fields.map((field) => `${field.x},${field.y}:${Math.round(field.growth * 4)}`).join('|');
     if (key === this.farmFieldKey) return;
     this.farmFieldKey = key;
     this.clearOwnedGroup(this.farmFieldGroup);
     const mesh = buildFarmFieldMesh(fields, {
       heightAt: (x, y) => terrainHeightAt(x, y),
+      cropModel: this.cropDropIn,
       // § D-056 REIHENFOLGE: Der Sperr-Patch läuft als LETZTER Hook. Felder
       // liegen zwar immer in freigeschaltetem Land, aber die Regel gilt für
       // jedes Material — wer hier eine Ausnahme macht, baut die nächste Gruppe,
@@ -1353,6 +1368,75 @@ export class ThreeMapRenderer implements IMapRenderer {
       patchMaterial: (material) => patchLockedRegionTint(material, { cacheKey: 'farm-field' }),
     });
     if (mesh) this.farmFieldGroup.add(mesh);
+    this.ensureCropDropIn();
+  }
+
+  /**
+   * § CLAUDE.md §5 — DROP-IN FÜR DAS ACKERLAND.
+   *
+   * Liegt `props/farm/field_crop_rows.glb` vor, wird daraus **eine** Geometrie
+   * gebacken (alle Teilmeshes zusammengeführt, Weltmatrizen eingerechnet, auf
+   * eine Kachel normiert, Unterkante auf y=0). Das Feld bleibt damit ein
+   * einziger Draw-Call — ein `.glb` je Kachel als eigenes Objekt wäre bei
+   * Hunderten Feldkacheln genau der Fehler, vor dem D-044 warnt.
+   *
+   * Läuft genau einmal; ohne Datei passiert nichts und die prozedurale Fassung
+   * bleibt (der Rückfallpfad ist kein Sonderfall).
+   */
+  private ensureCropDropIn(): void {
+    if (this.cropDropInState !== 'idle') return;
+    const url = propModel(FARM_FIELD_CROP_MODEL);
+    if (!url) {
+      this.cropDropInState = 'absent';
+      return;
+    }
+    this.cropDropInState = 'loading';
+    void loadModel(url)
+      .then((src) => {
+        if (this.destroyed) return;
+        const source = src.clone(true);
+        source.updateMatrixWorld(true);
+        const parts: TBufferGeometry[] = [];
+        let material: TMaterial | undefined;
+        source.traverse((node) => {
+          const mesh = node as Mesh;
+          if (!mesh.isMesh || !mesh.geometry) return;
+          const geometry = mesh.geometry.clone();
+          geometry.applyMatrix4(mesh.matrixWorld);
+          // Ohne Normalen wäre das Feld unbeleuchtet; ohne UV bliebe eine
+          // Textur ungenutzt. Beides ergänzen, statt später zu rätseln.
+          if (!geometry.getAttribute('normal')) geometry.computeVertexNormals();
+          parts.push(geometry);
+          if (!material) material = Array.isArray(mesh.material) ? mesh.material[0] : mesh.material;
+        });
+        if (parts.length === 0 || !material) {
+          this.cropDropInState = 'absent';
+          return;
+        }
+        const merged = parts.length === 1 ? parts[0]! : mergeGeometries(parts, false);
+        if (!merged) {
+          this.cropDropInState = 'absent';
+          return;
+        }
+        merged.computeBoundingBox();
+        const box = merged.boundingBox!;
+        const spanX = Math.max(1e-4, box.max.x - box.min.x);
+        const spanZ = Math.max(1e-4, box.max.z - box.min.z);
+        const scale = 1 / Math.max(spanX, spanZ); // füllt genau eine Kachel
+        merged.translate(-(box.min.x + box.max.x) / 2, -box.min.y, -(box.min.z + box.max.z) / 2);
+        merged.scale(scale, scale, scale);
+        const cropMaterial = (material as TMaterial).clone();
+        // Der Sperr-Patch als LETZTER Hook (D-056) — dieselbe Regel wie für die
+        // prozedurale Fassung, sonst bliebe ein Feld in gesperrtem Land bunt.
+        patchLockedRegionTint(cropMaterial, { cacheKey: 'farm-field-glb' });
+        this.cropDropIn = { geometry: merged, material: cropMaterial };
+        this.cropDropInState = 'ready';
+        this.farmFieldKey = ''; // erzwingt den Neuaufbau mit dem Modell
+        this.rebuildFarmFields();
+      })
+      .catch(() => {
+        this.cropDropInState = 'absent';
+      });
   }
 
   /** MapApi "Karte zentrieren" / Zentrum-preset. */
@@ -1588,11 +1672,19 @@ export class ThreeMapRenderer implements IMapRenderer {
     d.mesh.position.set(dx, y, dz);
     d.mesh.rotation.y = pose.heading;
 
-    // Ziel erreicht? Nächstes offenes Ziel abschließen, wenn nah genug.
+    // § D-070 — FREIE REIHENFOLGE GILT ÜBERALL.
+    //
+    // Hier stand `targets.find((t) => !t.done)`: geprüft wurde nur das ERSTE
+    // offene Ziel. Die Simulation gibt die Reihenfolge seit D-054 frei
+    // (`progressActivity` nimmt jedes offene Ziel), und die 2D-Karte nutzt das
+    // auch — im 3D-Einsatz wäre sie dadurch trotzdem erzwungen gewesen: Wer am
+    // näheren Haus vorbeikommt, hätte dort nichts abliefern können.
+    // Eine Freiheit, die nur eine von zwei Ansichten gewährt, ist keine.
     const active = this.controller.state.activities.active;
     let nearestTarget: { cx: number; cz: number } | undefined;
-    const nextStop = active?.targets.find((target) => !target.done);
-    for (const t of nextStop ? [nextStop] : []) {
+    let nearestDistance = Number.POSITIVE_INFINITY;
+    for (const t of active?.targets ?? []) {
+      if (t.done) continue;
       const b = this.controller.state.buildings[t.buildingId];
       const bdef = b && this.controller.config.buildings.get(b.defId);
       if (!b || !bdef) continue;
@@ -1604,7 +1696,14 @@ export class ThreeMapRenderer implements IMapRenderer {
         this.callbacks.onDriveProgress?.(t.buildingId);
         return; // Version-Bump führt zu erneutem updateMission/rebuild
       }
-      nearestTarget = { cx, cz };
+      // Der Zielpfeil zeigt auf das NÄCHSTE offene Ziel, nicht auf das erste
+      // der Liste — sonst weist er an einem Haus vorbei, das direkt daneben
+      // liegt und ebenfalls beliefert werden darf.
+      const distance = Math.hypot(cx - dx, cz - dz);
+      if (distance < nearestDistance) {
+        nearestDistance = distance;
+        nearestTarget = { cx, cz };
+      }
     }
     // Zielpfeil über dem Fahrzeug in Richtung des nächsten offenen Ziels drehen.
     d.arrow.position.set(dx, y + 1.5, dz);
@@ -1614,8 +1713,68 @@ export class ThreeMapRenderer implements IMapRenderer {
     } else {
       d.arrow.visible = false;
     }
-    // Verfolgerkamera nachführen.
+    // Einsatzkamera nachführen (A3).
     this.cam.setChase(dx, dz, pose.heading, DRIVE_CAM_DIST, DRIVE_CAM_PITCH, false, y);
+    this.reportDriveStatus(d, { x: dx, y: dz });
+  }
+
+  /**
+   * § Stadtarbeit 3.0 / A4+A5 — WAS DAS EINSATZ-HUD WISSEN MUSS.
+   *
+   * Gemeldet wird, was nur die Fahrschleife kennt: Tempo, die nächste echte
+   * Kreuzung samt offenen Richtungen und das Gebäude, an dem der Wagen GERADE
+   * steht. Alles drei kommt aus denselben Funktionen, nach denen auch gefahren
+   * wird (`nextJunction`, `reachedTarget`) — eine zweite Reichweiten- oder
+   * Wegregel für die Anzeige gäbe es sonst sofort, und sie liefe auseinander.
+   *
+   * Gedrosselt auf spürbare Änderungen: Der Aufruf hängt an der Bildrate, ein
+   * Zustands-Update je Frame würde die gesamte Oberfläche mitziehen
+   * (CLAUDE.md §6).
+   */
+  private reportDriveStatus(
+    d: NonNullable<ThreeMapRenderer['drive']>,
+    at: { x: number; y: number },
+  ): void {
+    const report = this.callbacks.onDriveStatus;
+    if (!report) return;
+    const junction = nextJunction(d.state, this.roadSet);
+    const atBuilding = this.buildingAt(at);
+    const speedKph = Math.round(d.state.speed * ROAD_TILE_METERS * 3.6);
+    // Nur bei echter Änderung melden: Tempo in 2-km/h-Stufen, Kreuzung in
+    // ganzen Kacheln. Sonst feuert jede Bewegung ein React-Update.
+    const key = `${Math.round(speedKph / 2)}|${junction ? Math.round(junction.distanceTiles) : -1}|${junction?.options.map((o) => o.turn).join('') ?? ''}|${atBuilding ?? ''}|${d.stopped ? 1 : 0}`;
+    if (key === this.driveStatusKey) return;
+    this.driveStatusKey = key;
+    report({
+      speedKph,
+      stopped: d.stopped,
+      ...(junction
+        ? {
+            junction: {
+              distanceMeters: Math.round(junction.distanceTiles * ROAD_TILE_METERS),
+              turns: junction.options.map((option) => option.turn),
+            },
+          }
+        : {}),
+      ...(atBuilding ? { atBuildingId: atBuilding } : {}),
+    });
+  }
+
+  /**
+   * Gebäude, an dem das Fahrzeug gerade steht — dieselbe Ankunftsregel wie bei
+   * Lieferzielen (`reachedTarget`). Damit kann kein Gebäude „erreicht" gelten,
+   * an dem sich keine Ladung abgeben ließe, und umgekehrt.
+   */
+  private buildingAt(at: { x: number; y: number }): string | undefined {
+    let best: { id: string; distance: number } | undefined;
+    for (const b of Object.values(this.controller.state.buildings)) {
+      const def = this.controller.config.buildings.get(b.defId);
+      if (!def || def.category === 'roads' || def.category === 'decoration') continue;
+      if (!reachedTarget(at, b, def.size)) continue;
+      const distance = Math.hypot(b.x + def.size.w / 2 - at.x, b.y + def.size.h / 2 - at.y);
+      if (!best || distance < best.distance) best = { id: b.id, distance };
+    }
+    return best?.id;
   }
 
   /**
@@ -7247,8 +7406,21 @@ function makeCarMesh(seed: string): Group {
 const ANIMAL_CAP = 48; // § A7: Obergrenze aller Weidetiere (Draw-Call-Budget)
 // § P2: Tasten und Fahrwerte liegen in `game/activities/driving.ts` — die eine
 // Fahrphysik für 3D-Welt und 2D-Stadtarbeitskarte (§2/§8).
-const DRIVE_CAM_DIST = 8.5;
-const DRIVE_CAM_PITCH = 0.64; // rad über der Horizontalen (Verfolgerblick von schräg oben)
+// § Stadtarbeit 3.0 / A3 — DIE EINSATZKAMERA.
+//
+// Vorher saß die Kamera 8,5 Kacheln hinter dem Wagen bei 0,64 rad: ein
+// Verfolgerblick fast auf Straßenhöhe. Der zeigt das Fahrzeug schön und die
+// STADT gar nicht — man sieht die nächste Häuserzeile und sonst nichts, also
+// weder das Ziel noch die Alternativroute. Für einen Einsatz, in dem man
+// unterwegs entscheiden soll, ist das die falsche Information.
+//
+// Jetzt: deutlich höher und weiter („leicht von oben, taktisch"). Der Blick
+// bleibt bewusst HINTER dem Fahrzeug ausgerichtet statt senkrecht — bei
+// Norden-oben verliert man die Fahrtrichtung, und „links abbiegen" wird zur
+// Kopfrechenaufgabe. Die Kachelzuordnung bleibt davon unberührt: Ziele und
+// Abbiegungen entstehen aus dem Straßengraphen, nicht aus dem Bildpunkt (D-062).
+const DRIVE_CAM_DIST = 24;
+const DRIVE_CAM_PITCH = 1.02; // rad über der Horizontalen — taktische Schrägsicht
 
 /** Gebündeltes, typabhängig lesbares Missionsfahrzeug. Jede Variante bleibt ein
  * Draw-Call; ein passendes Drop-in-GLB ersetzt sie weiterhin automatisch. */

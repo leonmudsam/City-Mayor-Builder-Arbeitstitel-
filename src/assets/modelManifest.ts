@@ -576,6 +576,15 @@ export interface FolderPrompts {
 
 /** Ein Motiv je Config-Gebäude (Dateiname = ID). Der Test erzwingt Vollständigkeit,
  *  d. h. jedes neue Gebäude braucht hier einen Eintrag. */
+/**
+ * Drop-in-Modell einer Farm-Feldkachel (CLAUDE.md §5). Liegt die Datei unter
+ * `src/assets/models/props/farm/`, ersetzt sie die prozeduralen Fruchtreihen —
+ * als EINE `InstancedMesh`, also weiterhin ein Draw-Call für das ganze
+ * Ackerland. Der Name steht hier und nicht im Renderer, damit Manifest,
+ * Prompt-Doku und Ladepfad denselben String benutzen.
+ */
+export const FARM_FIELD_CROP_MODEL = 'field_crop_rows';
+
 export const BUILDING_PROMPTS: Record<string, string> = {
   town_hall: 'a grand town hall with a clock tower, columns, a flag and a red roof, a small plaza in front',
   mayor_house: "an elegant mayor's residence, larger than a normal house, with a small portico, bay windows and a tidy front garden",
@@ -949,7 +958,7 @@ export const FOLDER_PROMPTS: FolderPrompts[] = [
           { name: 'market_stall', footprint: '1×1', sizeClass: 'prop', biome: 'Stadtzentrum, Markt', instancing: false, status: 'planned', motif: 'a market stall with a striped awning and crates of goods' },
           { name: 'hay_bale', footprint: '1×1', sizeClass: 'prop', biome: 'Fruchtbares Land', instancing: true, status: 'planned', motif: 'a round hay bale, low-poly' },
           { name: 'tractor_small', footprint: '1×1', sizeClass: 'prop', frontFacing: '+Z', biome: 'Fruchtbares Land', instancing: false, status: 'planned', motif: 'a small farm tractor, front facing +Z, low-poly' },
-          { name: 'field_crop_rows', footprint: '1×1', sizeClass: 'prop', heightRange: '≈0.3 Kacheln', biome: 'Fruchtbares Land, Farm', placeOn: 'freie Kacheln im Farm-Footprint', instancing: true, randomize: 'Zufallsrotation (0/90°), Frucht-Farbvariante', status: 'planned', motif: 'a patch of neat crop rows (wheat or vegetables) on ploughed soil, tileable, low-poly' },
+          { name: 'field_crop_rows', footprint: '1×1', sizeClass: 'prop', heightRange: '≈0.3 Kacheln', biome: 'Fruchtbares Land, Farm', placeOn: 'freie Kacheln im Farm-Footprint', instancing: true, randomize: 'Zufallsrotation (0/90°), Frucht-Farbvariante', status: 'live', motif: 'a patch of neat crop rows (wheat or vegetables) on ploughed soil, tileable, low-poly; ONE tile wide, flat bottom at y=0, UNDER 300 TRIANGLES (mass geometry — one instanced draw call carries the whole farmland)' },
           { name: 'fence_wooden', footprint: '1×1, modular', sizeClass: 'prop', heightRange: '≈0.5 Kacheln', biome: 'Farm, Weide', placeOn: 'Rand des Farm-/Weide-Grundstücks', instancing: true, status: 'planned', motif: 'a wooden farm fence segment with posts and rails, tileable side to side, low-poly' },
           { name: 'farm_gate', footprint: '1×1', sizeClass: 'prop', heightRange: '≈0.6 Kacheln', biome: 'Farm, Weide', placeOn: 'Zaun-Öffnung zur Straße', instancing: false, status: 'planned', motif: 'a simple wooden farm gate in a fence line, low-poly' },
           { name: 'scarecrow', footprint: '1×1', sizeClass: 'prop', heightRange: '≈0.8 Kacheln', biome: 'Fruchtbares Land, Farm', placeOn: 'im Feld', instancing: true, status: 'planned', motif: 'a straw scarecrow on a wooden cross frame standing in a field, low-poly' },

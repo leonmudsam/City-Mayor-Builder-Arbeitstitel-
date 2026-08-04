@@ -250,10 +250,10 @@ Low-poly stylized 3D city-builder game asset, colorful cartoon look, clean shape
 ### `field_crop_rows.glb` — 1×1
 
 ```text
-Low-poly stylized 3D city-builder game asset, colorful cartoon look, clean shapes, soft bevels, hand-painted feel, optimized for realtime rendering, embedded textures, no lights, no cameras, centered object, pivot at bottom center, +Y up, front facing +Z — a patch of neat crop rows (wheat or vegetables) on ploughed soil, tileable, low-poly
+Low-poly stylized 3D city-builder game asset, colorful cartoon look, clean shapes, soft bevels, hand-painted feel, optimized for realtime rendering, embedded textures, no lights, no cameras, centered object, pivot at bottom center, +Y up, front facing +Z — a patch of neat crop rows (wheat or vegetables) on ploughed soil, tileable, low-poly; ONE tile wide, flat bottom at y=0, UNDER 300 TRIANGLES (mass geometry — one instanced draw call carries the whole farmland)
 ```
 
-**Spec:** Größenklasse `prop` — kleines Prop (< 500 Tris, ≤ 256², 1 Material) · Höhe ≈0.3 Kacheln · Pivot unten-mittig (X/Z zentriert, Unterkante Y = 0) · Front +Z · Biom: Fruchtbares Land, Farm · platzierbar auf: freie Kacheln im Farm-Footprint · Zufallsrotation (0/90°), Frucht-Farbvariante · Instancing: ja · *geplant* (noch nicht verdrahtet)
+**Spec:** Größenklasse `prop` — kleines Prop (< 500 Tris, ≤ 256², 1 Material) · Höhe ≈0.3 Kacheln · Pivot unten-mittig (X/Z zentriert, Unterkante Y = 0) · Front +Z · Biom: Fruchtbares Land, Farm · platzierbar auf: freie Kacheln im Farm-Footprint · Zufallsrotation (0/90°), Frucht-Farbvariante · Instancing: ja · **live** (bereits verdrahtet)
 
 ### `fence_wooden.glb` — 1×1, modular
 

@@ -10,6 +10,7 @@ import './styles/responsive.css';
 import './styles/citywork.css';
 import './styles/citywork-v4.css';
 import './styles/active-operations.css';
+import './styles/mission-hud.css';
 import './styles/visual-overhaul.css';
 import './styles/overhaul-core-ui.css';
 import './styles/overhaul-build-ux.css';

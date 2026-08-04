@@ -150,6 +150,8 @@ export function MapView() {
       },
       // § A6 Fahrmodus: Ein-/Ausstieg spiegeln + erreichte Ziele abschließen.
       onDriveChange: (isActive) => useUiStore.getState().setDriveActive(isActive),
+      // § Stadtarbeit 3.0: Fahrstatus fürs Einsatz-HUD (bereits gedrosselt).
+      onDriveStatus: (status) => useUiStore.getState().setDriveStatus(status),
       onDriveProgress: (id) => {
         const result = controller.progressActivity(id);
         if (result.ok) {

@@ -118,6 +118,22 @@ export interface WorldRevealState {
    *  über gesperrte Regionen, ohne den Nebel zu deaktivieren. Nicht persistiert. */
 }
 
+/**
+ * § Stadtarbeit 3.0 — was der Einsatz aus der Fahrschleife meldet.
+ *
+ * Bewusst eine reine Zustandsmeldung ohne Texte: Wie „links" heißt und wie
+ * Meter formatiert werden, entscheidet die Oberfläche. Der Renderer liefert
+ * Zahlen und Richtungen aus denselben Funktionen, nach denen er fährt.
+ */
+export interface DriveStatus {
+  speedKph: number;
+  stopped: boolean;
+  /** Nächste ECHTE Kreuzung (eine Kurve ist keine) mit den offenen Richtungen. */
+  junction?: { distanceMeters: number; turns: ('straight' | 'left' | 'right' | 'around')[] };
+  /** Gebäude, an dem der Wagen gerade steht — Grundlage jeder Aktion vor Ort. */
+  atBuildingId?: string;
+}
+
 export interface RendererCallbacks {
   onSelectBuilding(id: string | undefined): void;
   /** Klick auf eine gesperrte Landschaft → Erschließen-Dialog (§ Welt 2.0). */
@@ -145,6 +161,12 @@ export interface RendererCallbacks {
   onDriveChange?(active: boolean): void;
   /** § A6 Fahrmodus: erreichtes Missionsziel — die UI ruft progressActivity auf. */
   onDriveProgress?(buildingId: string): void;
+  /**
+   * § Stadtarbeit 3.0 / A4+A5: Fahrstatus für das Einsatz-HUD — Tempo, nächste
+   * echte Kreuzung und das Gebäude, an dem der Wagen steht. Gedrosselt auf
+   * spürbare Änderungen; ein Update je Frame würde die Oberfläche mitziehen.
+   */
+  onDriveStatus?(status: DriveStatus): void;
   /** Coverage overlay is active (or cleared) — UI shows/hides the legend (§1). */
   onCoverageInfo(
     info:

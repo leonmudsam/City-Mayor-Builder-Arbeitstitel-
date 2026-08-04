@@ -27,7 +27,7 @@ import { TILE_METERS } from '../../renderer/worldProjection.ts';
 import type { BuildingInstance } from '../../game/types.ts';
 import { formatMoney, t } from '../../i18n/index.ts';
 import { playFeedback } from '../../services/feedback.ts';
-import { useGame, useUiStore } from '../../state/store.ts';
+import { getMapApi, useGame, useUiStore } from '../../state/store.ts';
 import '../../styles/citywork-smart.css';
 import { CitizenPortrait } from '../art/index.ts';
 import { ManualRouteMap, type CityworkMapPoint, type DriveReadout } from '../citywork/ManualRouteMap.tsx';
@@ -304,12 +304,24 @@ export function ActivityRoutePlanner({ defId }: { defId: string }) {
       return;
     }
     playFeedback('activity_start');
-    // § P2 (D-050): „Selbst fahren" findet in DIESER Karte statt — der Planer
-    // bleibt offen und wird zur Fahransicht. Kein Wechsel in die 3D-Welt und
-    // kein zweiter Renderer (ausdrückliche Vorgabe des Auftrags).
+    // § D-068 (Stadtarbeit 3.0): DER EINSATZ FINDET IN DER WELT STATT.
+    //
+    // Das kehrt D-050 um („gefahren wird in der 2D-Karte, nicht in der
+    // 3D-Welt") — ausdrücklich und auf Nutzerwunsch: „echte Weltansicht statt
+    // flacher Karte". Kein zweiter Renderer: Es ist derselbe
+    // `ThreeMapRenderer` mit einer Einsatzkamera, und `activities/driving.ts`
+    // bleibt die eine Fahrphysik, die beide Ansichten schon heute teilen.
     if (executionMode === 'manual') {
-      setDriving(true);
-      pushToast('Du sitzt am Steuer – W/A/S/D oder Pfeiltasten, Q zum Aussteigen.', 'success');
+      closePlanner();
+      // Nach dem Schließen, damit die Kamera nicht gegen ein sich schließendes
+      // Panel arbeitet und der Renderer die frische Zielmenge kennt.
+      requestAnimationFrame(() => {
+        if (getMapApi()?.enterDrive()) {
+          pushToast('Einsatz gestartet – W/A/S/D an der Kreuzung, Q zum Verlassen.', 'success');
+        } else {
+          pushToast('Kein befahrbarer Straßenanschluss für diesen Einsatz.', 'error');
+        }
+      });
       return;
     }
     closePlanner();

@@ -10,7 +10,7 @@ import { importSave } from './game/storage/exportImport.ts';
 import { getController, setController, useUiStore } from './state/store.ts';
 import { MapView } from './components/MapView.tsx';
 import { GameHud } from './components/hud/GameHud.tsx';
-import { DriveHud } from './components/hud/DriveHud.tsx';
+import { MissionHud } from './components/hud/MissionHud.tsx';
 import { FoundingHud } from './components/hud/FoundingHud.tsx';
 import { QuickActionBar } from './components/hud/QuickActionBar.tsx';
 import { CameraControls } from './components/hud/CameraControls.tsx';
@@ -294,7 +294,7 @@ function GameScreen({ onImport, onReset }: { onImport(json: string): boolean; on
             <Eye size={18} />
             <span>{t('ui.quick.show')}</span>
           </button>
-          <DriveHud />
+          <MissionHud />
         </main>
         <Toasts />
       </div>
@@ -360,7 +360,7 @@ function GameScreen({ onImport, onReset }: { onImport(json: string): boolean; on
             <RegionDialog />
             {openPanel === 'build' && <BuildMenu />}
             <ActivityExecutionWidget />
-            <DriveHud />
+            <MissionHud />
             {/* § 12.2: Gründung — erscheint nur, solange kein Rathaus steht. */}
             <FoundingHud />
             {placingDefId !== undefined
