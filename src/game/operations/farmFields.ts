@@ -56,6 +56,26 @@ export function fieldEfficiency(distance: number, efficientRadius: number, maxRa
   return 1 - (1 - FIELD_MIN_EFFICIENCY) * ((distance - efficientRadius) / span);
 }
 
+/**
+ * Nachhaltiger Ertrag der Felder je Ingame-Minute (§2 „Ertrag").
+ *
+ * **Abgeleitet, nicht gesetzt:** Eine Feldkachel trägt `maxAmount` Nahrung und
+ * wächst in `regenerationMs` nach — mehr als `maxAmount / Regenerationsdauer`
+ * kann sie auf Dauer nicht liefern, egal wie viele Arbeiter danebenstehen. Die
+ * Bodengüte steckt bereits in `maxAmount` (`nodeSoilFactor`), die Entfernung
+ * über `fieldEfficiency` im Weg des Arbeiters. Damit gibt es weiterhin genau
+ * eine Distanz- und eine Bodenrechnung (D-059).
+ *
+ * Wer die Zahl mit dem tatsächlichen Betriebsdurchsatz vergleicht, sieht
+ * sofort, was gerade bindet: zu wenig Feld oder zu wenig Hände.
+ */
+export function fieldYieldPerMinute(fields: readonly { yieldPct: number }[], nodeMaxAmount: number, regenerationMs: number): number {
+  if (fields.length === 0 || regenerationMs <= 0) return 0;
+  const perTilePerMinute = nodeMaxAmount / (regenerationMs / 60_000);
+  const weight = fields.reduce((sum, field) => sum + field.yieldPct / 100, 0);
+  return perTilePerMinute * weight;
+}
+
 /** Ein Feld, wie Menü und Renderer es brauchen. */
 export interface FarmFieldView {
   x: number;
@@ -64,6 +84,16 @@ export interface FarmFieldView {
   growth: number;
   distanceTiles: number;
   efficiencyPct: number;
+  /**
+   * Bodengüte dieser Kachel in Prozent (100 = Wiese, 130 = natürlich
+   * fruchtbar). Kommt aus dem **Bake**, nicht aus dem Feld-Override — sonst
+   * wäre jede gekaufte Kachel automatisch bester Boden (§2, `nodeSoilFactor`).
+   */
+  soilQualityPct: number;
+  /** Entfernungs- UND Bodenwirkung zusammen — die Zahl, die zählt. */
+  yieldPct: number;
+  /** Farm, in deren Arbeitsgebiet diese Kachel liegt (nächste, falls mehrere). */
+  farmId?: string;
 }
 
 /** Kennzahlen aller Felder einer Farm. */
@@ -71,6 +101,15 @@ export interface FarmFieldSummary {
   tiles: number;
   upkeepPerMinute: number;
   averageEfficiencyPct: number;
+  /** Mittlere Bodengüte der Felder dieser Farm. */
+  averageSoilPct: number;
+  /**
+   * Erwarteter Nahrungsertrag je Minute. **Abgeleitet, nicht erfunden**: das
+   * Minimum aus dem, was die Arbeiter schaffen (Betriebsrate) und dem, was die
+   * Felder hergeben — gewichtet mit Entfernung und Boden. Steht kein Feld, ist
+   * die Zahl 0, und genau das soll sie dann auch sagen.
+   */
+  yieldPerMinute: number;
   workersNeeded: number;
   workerSlots: number;
   efficientRadius: number;

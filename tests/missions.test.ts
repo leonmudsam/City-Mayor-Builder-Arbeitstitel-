@@ -15,7 +15,7 @@ function richCity(level = 20): GameController {
   const { controller } = newController();
   setLevel(controller, level);
   flattenTerrain(controller);
-  controller.state.resources = { money: 10_000_000, wood: 100_000, stone: 100_000, food: 100_000, freshwater: 100_000, planks: 0, cut_stone: 0 };
+  controller.state.resources = { money: 10_000_000, wood: 100_000, stone: 100_000, food: 100_000, freshwater: 100_000, planks: 400, cut_stone: 400 };
   return controller;
 }
 

@@ -16,11 +16,15 @@ import { useGame, useUiStore } from '../../state/store.ts';
 import { GamePanel, GameSectionHeader, StatusChip } from '../common/GamePanel.tsx';
 
 /**
- * Die kaufbaren Feldgrößen. Genau die vier aus dem Mockup — der Spieler wählt
- * eine Größe mit Preis, statt ein Rechteck zu ziehen und hinterher zu erfahren,
- * was es kostet.
+ * Die kaufbaren Feldgrößen. § Lieferketten-Overhaul §2 verlangt ausdrücklich
+ * **modulare 1×1-Feldkacheln** — die kleinste Größe ist deshalb eine einzelne
+ * Kachel, mit der sich jede Lücke und jede unregelmäßige Fläche ausfüllen
+ * lässt. Die großen Zuschnitte bleiben, weil niemand 36 Mal klicken will
+ * (D-039: was man mehr als dreimal tut, gehört automatisiert oder gebündelt).
  */
 const FIELD_SIZES: { w: number; h: number }[] = [
+  { w: 1, h: 1 },
+  { w: 2, h: 2 },
   { w: 4, h: 4 },
   { w: 4, h: 6 },
   { w: 6, h: 6 },
@@ -79,12 +83,22 @@ export function FarmFieldPanel() {
 
         <div className="field-summary-grid">
           <Metric label="Felder" value={`${summary.tiles}`} hint="Kacheln bewirtschaftet" />
+          <Metric
+            label="Ertrag"
+            value={`${summary.yieldPerMinute.toLocaleString('de-DE')}`}
+            hint="Nahrung je Minute, nachhaltig"
+          />
           <Metric label="Erntereif" value={`${ripe}`} hint="Kacheln über 60 %" />
           <Metric
             label="Mittlere Effizienz"
             value={`${summary.averageEfficiencyPct}%`}
             hint={`voll bis ${summary.efficientRadius} Felder Abstand`}
             {...(summary.averageEfficiencyPct < 80 ? { tone: 'warn' as const } : {})}
+          />
+          <Metric
+            label="Bodenqualität"
+            value={`${summary.averageSoilPct}%`}
+            hint={summary.averageSoilPct > 100 ? 'natürlich fruchtbar' : 'Wiese — Bonus möglich'}
           />
           <Metric
             label="Unterhalt"
@@ -158,8 +172,8 @@ export function FarmFieldPanel() {
         </div>
 
         <p className="operation-hint">
-          Fruchtbares Land gibt einen Bonus, ist aber keine Bedingung — auf Wiese wächst es auch.
-          ESC beendet das Werkzeug.
+          Fruchtbares Land gibt einen Bonus (+30 % Ertrag je Kachel), ist aber keine Bedingung —
+          auf Wiese wächst es auch. ESC beendet das Werkzeug.
         </p>
       </GamePanel>
     </div>

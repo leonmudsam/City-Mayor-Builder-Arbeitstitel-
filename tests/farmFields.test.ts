@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { nearTownHall, newController, setLevel, flattenTerrain, T0 } from './helpers.ts';
 import { overrideTerrain, samplePlacementSurface } from '../src/game/map/world.ts';
 import { FIELD_COST_PER_TILE } from '../src/game/operations/farmFields.ts';
-import { deriveNodesInArea } from '../src/game/operations/nodes.ts';
+import { deriveNodesInArea, nodeSoilFactor, SOIL_BONUS_NATURAL_FERTILE } from '../src/game/operations/nodes.ts';
 import type { GameController } from '../src/game/commands/controller.ts';
 
 // § Frühspiel-Audit / D-055 — FELDER STATT FRUCHTBARKEITS-GATE.
@@ -179,5 +179,73 @@ describe('Felder verändern das Gelände nicht', () => {
     const { controller } = newController(T0, { flatten: false });
     overrideTerrain(controller.state, probe.x, probe.y, 'grass');
     expect(samplePlacementSurface(controller.state, probe.x, probe.y, 1, 1).maxHeight).toBe(0);
+  });
+});
+
+// § Wirtschafts-/Lieferketten-Overhaul §2 — MODULARE FELDER UND BODENQUALITÄT.
+//
+// Der Auftrag verlangt „Effizienz abhängig von Entfernung UND Bodenqualität"
+// bei gleichzeitig „fruchtbares Land ist ein Bonus, keine Bedingung". Der
+// heikle Punkt steckt in der Umsetzung: Ein angelegtes Feld SETZT `fertile` als
+// Terrain-Override. Wer die Bodengüte darüber liest, gibt jeder gekauften
+// Kachel automatisch Bestnote — der Bonus wäre geschenkt und die Landschaft
+// bedeutungslos. Gelesen wird deshalb der Bake.
+
+describe('Farm-Felder — Bodenqualität kommt aus der Landschaft, nicht aus dem Feld', () => {
+  it('gibt einer Kachel auf Wiese 100 %, nicht den Fruchtbar-Bonus', () => {
+    const controller = farmCity();
+    const origin = at(1, 13);
+    expect(controller.buildFarmField({ x: origin.x, y: origin.y, w: 2, h: 2 })).toEqual({ ok: true });
+    const fields = controller.getFarmFieldTiles();
+    expect(fields.length).toBeGreaterThan(0);
+    const views = controller.getFarmFields();
+    // Der Override sagt jetzt „fertile" — die Güte darf das NICHT übernehmen.
+    for (const view of views) expect(view.soilQualityPct).toBe(100);
+  });
+
+  it('kauft auch eine einzelne Kachel — modulare Felder (§2)', () => {
+    const controller = farmCity();
+    const origin = at(4, 13);
+    const plan = controller.getFarmFieldPlan({ x: origin.x, y: origin.y, w: 1, h: 1 });
+    expect(plan.plantable).toBe(1);
+    expect(plan.cost).toBe(FIELD_COST_PER_TILE);
+    expect(controller.buildFarmField({ x: origin.x, y: origin.y, w: 1, h: 1 })).toEqual({ ok: true });
+    expect(controller.getFarmFieldTiles().length).toBe(1);
+  });
+
+  it('ordnet jede Feldkachel der Farm zu, in deren Arbeitsgebiet sie liegt', () => {
+    const controller = farmCity();
+    const farm = Object.values(controller.state.buildings).find((b) => b.defId === 'farm')!;
+    const origin = at(1, 13);
+    expect(controller.buildFarmField({ x: origin.x, y: origin.y, w: 2, h: 2 })).toEqual({ ok: true });
+    for (const view of controller.getFarmFields()) expect(view.farmId).toBe(farm.id);
+  });
+
+  it('nennt einen Ertrag, sobald Felder da sind — und 0, wenn keine da sind', () => {
+    const controller = farmCity();
+    const farm = Object.values(controller.state.buildings).find((b) => b.defId === 'farm')!;
+    expect(controller.getFarmFieldSummary(farm.id)!.yieldPerMinute).toBe(0);
+
+    const origin = at(1, 13);
+    expect(controller.buildFarmField({ x: origin.x, y: origin.y, w: 4, h: 4 })).toEqual({ ok: true });
+    const summary = controller.getFarmFieldSummary(farm.id)!;
+    expect(summary.tiles).toBeGreaterThan(0);
+    // Nachhaltig = Kachelmenge ÷ Nachwachsdauer; bei 130 je Kachel und 10 min
+    // sind das 13/min je voll effizienter Kachel.
+    expect(summary.yieldPerMinute).toBeGreaterThan(0);
+    expect(summary.yieldPerMinute).toBeLessThanOrEqual(summary.tiles * 13 * 1.3);
+    expect(summary.averageSoilPct).toBe(100);
+  });
+
+  it('macht eine natürlich fruchtbare Kachel ergiebiger als dieselbe auf Wiese', () => {
+    // Direkt am Knotenprofil gemessen: der Bonus wirkt über die Ergiebigkeit
+    // der Kachel, nicht über eine zweite Effizienzformel (D-059).
+    const grass = nodeSoilFactor('crop', at(1, 13).x, at(1, 13).y);
+    expect(grass).toBe(1);
+    expect(SOIL_BONUS_NATURAL_FERTILE).toBeGreaterThan(1);
+    // Und Bäume/Fels kennen keine Bodengüte — sonst wäre es eine allgemeine
+    // Ergiebigkeitsschraube statt einer Aussage über Ackerland.
+    expect(nodeSoilFactor('tree', at(1, 13).x, at(1, 13).y)).toBe(1);
+    expect(nodeSoilFactor('rock', at(1, 13).x, at(1, 13).y)).toBe(1);
   });
 });

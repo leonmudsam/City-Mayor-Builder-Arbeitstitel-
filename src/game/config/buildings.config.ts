@@ -57,7 +57,7 @@ export const buildingsConfig: BuildingDef[] = [
     // wird je Stufe sichtbarer gefüllt; jede Stufe ist ein Stadt-Meilenstein.
     upgrades: [
       {
-        cost: { money: 150_000, wood: 140, stone: 140 },
+        cost: { money: 150_000, wood: 140, stone: 140, cut_stone: 30 },
         constructionSec: 180,
         xpReward: 60,
         unlockLevel: 6,
@@ -73,7 +73,7 @@ export const buildingsConfig: BuildingDef[] = [
         ],
       },
       {
-        cost: { money: 600_000, wood: 300, stone: 380 },
+        cost: { money: 600_000, wood: 300, stone: 380, planks: 160, cut_stone: 220 },
         constructionSec: 360,
         xpReward: 150,
         unlockLevel: 11,
@@ -257,7 +257,7 @@ export const buildingsConfig: BuildingDef[] = [
         ],
       },
       {
-        cost: { money: 160_000, wood: 150, stone: 100 },
+        cost: { money: 160_000, wood: 150, stone: 100, planks: 40 },
         constructionSec: 240,
         xpReward: 36,
         unlockLevel: 6,
@@ -398,7 +398,7 @@ export const buildingsConfig: BuildingDef[] = [
     // Stufen statt vieler kleiner — jede füllt das Gelände sichtbar weiter.
     upgrades: [
       {
-        cost: { money: 220_000, wood: 160, stone: 130 },
+        cost: { money: 220_000, wood: 160, stone: 130, planks: 50 },
         constructionSec: 240,
         xpReward: 45,
         unlockLevel: 7,
@@ -585,7 +585,7 @@ export const buildingsConfig: BuildingDef[] = [
     // Kette: Steinbruch → Tiefbruch (L8) → Bergbaukomplex (L13).
     upgrades: [
       {
-        cost: { money: 300_000, wood: 120, stone: 140 },
+        cost: { money: 300_000, wood: 120, stone: 140, cut_stone: 70 },
         constructionSec: 300,
         xpReward: 55,
         unlockLevel: 8,
@@ -672,7 +672,7 @@ export const buildingsConfig: BuildingDef[] = [
     // TRINKEN: echte Wasser-Nachfrage — Nahrung skalieren heißt Wasser skalieren.
     upgrades: [
       {
-        cost: { money: 320_000, wood: 150, stone: 130 },
+        cost: { money: 320_000, wood: 150, stone: 130, planks: 70 },
         constructionSec: 300,
         xpReward: 55,
         unlockLevel: 8,
@@ -976,7 +976,7 @@ export const buildingsConfig: BuildingDef[] = [
     // Kette: Lagerhaus → Hochregallager (L10).
     upgrades: [
       {
-        cost: { money: 260_000, wood: 200, stone: 150 },
+        cost: { money: 260_000, wood: 200, stone: 150, planks: 110, cut_stone: 90 },
         constructionSec: 180,
         xpReward: 30,
         unlockLevel: 10,
@@ -1005,7 +1005,7 @@ export const buildingsConfig: BuildingDef[] = [
     sizeClass: 'L',
     requiresRoad: true,
     unlockLevel: 7,
-    cost: { money: 210_000, wood: 150, stone: 200 },
+    cost: { money: 210_000, wood: 150, stone: 200, planks: 60 },
     constructionSec: 240,
     xpReward: 55,
     effects: [
@@ -1209,7 +1209,7 @@ export const buildingsConfig: BuildingDef[] = [
     sizeClass: 'L',
     requiresRoad: true,
     unlockLevel: 8,
-    cost: { money: 280_000, wood: 160, stone: 220 },
+    cost: { money: 280_000, wood: 160, stone: 220, cut_stone: 60 },
     constructionSec: 360,
     xpReward: 85,
     canRelocate: true,
@@ -1449,7 +1449,7 @@ export const buildingsConfig: BuildingDef[] = [
     sizeClass: 'L',
     requiresRoad: true,
     unlockLevel: 8,
-    cost: { money: 850_000, wood: 260, stone: 480 },
+    cost: { money: 850_000, wood: 260, stone: 480, planks: 120, cut_stone: 100 },
     constructionSec: 540,
     xpReward: 200,
     effects: [

@@ -15,6 +15,8 @@ describe('upgrade keeps old effects until it completes (§2)', () => {
     controller.state.resources.money = 500_000;
     controller.state.resources.wood = 500;
     controller.state.resources.stone = 500;
+    controller.state.resources.planks = 400;
+    controller.state.resources.cut_stone = 400;
     // Base town-hall wood store (the only storage source at the start).
     expect(controller.derived.storageCaps.wood).toBe(400);
 
@@ -41,7 +43,7 @@ describe('upgrade keeps old effects until it completes (§2)', () => {
     const { controller } = newController();
     setLevel(controller, 12);
     flattenTerrain(controller); // zero terrain bonus → exact rates
-    controller.state.resources = { money: 900_000, wood: 500, stone: 500, food: 0, freshwater: 0, planks: 0, cut_stone: 0 };
+    controller.state.resources = { money: 900_000, wood: 500, stone: 500, food: 0, freshwater: 0, planks: 400, cut_stone: 400 };
     controller.placeBuilding('bakery', at(1, 6).x, at(1, 6).y); // 2×2 unter den Startstrassen
     controller.update(T0 + 245_000); // bakery finishes (240s)
     const bakery = Object.values(controller.state.buildings).find((b) => b.defId === 'bakery')!;
@@ -119,6 +121,8 @@ describe('prototype cheats (§10)', () => {
     controller.state.resources.money = 500_000;
     controller.state.resources.wood = 500;
     controller.state.resources.stone = 500;
+    controller.state.resources.planks = 400;
+    controller.state.resources.cut_stone = 400;
     controller.upgradeBuilding(house.id);
     expect(house.status).toBe('constructing');
     controller.debugFinishConstruction('upgrade');

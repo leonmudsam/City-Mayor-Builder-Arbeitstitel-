@@ -104,6 +104,30 @@ export function nodeProfile(type: ResourceNodeType): ResourceNodeProfile | undef
   return RESOURCE_NODE_PROFILES[type];
 }
 
+/**
+ * § Lieferketten-Overhaul §2 — BODENQUALITÄT.
+ *
+ * Der Auftrag verlangt „Effizienz abhängig von Entfernung UND Bodenqualität"
+ * und zugleich „fruchtbares Land ist ein Bonus, keine Bedingung". Beides
+ * zusammen heißt: Ein Feld auf natürlich fruchtbarem Grund trägt mehr als
+ * dasselbe Feld auf der Wiese — mehr, nicht ausschließlich.
+ *
+ * ENTSCHEIDEND ist, WORAUS die Qualität gelesen wird: aus dem **Bake**
+ * (`baseTerrainAt`), nicht aus `worldTerrainAt`. Ein angelegtes Feld SETZT
+ * `fertile` als Override — über den Override gelesen wäre jede Feldkachel
+ * automatisch beste Qualität, der Bonus also geschenkt und die Landschaft
+ * bedeutungslos. Der Bake weiß, wo wirklich fruchtbarer Boden liegt.
+ *
+ * Wirkt über die Ergiebigkeit der Kachel, nicht über eine zweite
+ * Effizienzformel: Es gibt weiterhin genau eine Distanzrechnung (D-059).
+ */
+export const SOIL_BONUS_NATURAL_FERTILE = 1.3;
+
+export function nodeSoilFactor(type: ResourceNodeType, x: number, y: number): number {
+  if (type !== 'crop') return 1; // Bäume und Fels kennen keine Bodengüte
+  return terrainAt(x, y) === 'fertile' ? SOIL_BONUS_NATURAL_FERTILE : 1;
+}
+
 /** Grundmenge Holz je Baumknoten (Referenzschnitt, für Bestandscode/Tests). */
 export const TREE_MAX_AMOUNT = RESOURCE_NODE_PROFILES.tree!.maxAmount;
 /** Nachwachsdauer eines gefällten Baums (ms Simulationszeit). */
@@ -179,6 +203,9 @@ export function resolveNode(state: GameState, type: ResourceNodeType, id: string
   if (!pos) return undefined;
   if (!isNodeTile(state, type, pos.x, pos.y)) return undefined;
   const delta = state.operations?.nodeDeltas[id];
+  // Bodengüte skaliert die Ergiebigkeit der KACHEL (§2). Persistierte
+  // Restmengen sind absolute Zahlen und bleiben dadurch gültig.
+  const maxAmount = profile.maxAmount * nodeSoilFactor(type, pos.x, pos.y);
   const base: ResourceNode = {
     id,
     type,
@@ -186,8 +213,8 @@ export function resolveNode(state: GameState, type: ResourceNodeType, id: string
     y: pos.y,
     resource: profile.resource,
     state: 'available',
-    remainingAmount: profile.maxAmount,
-    maxAmount: profile.maxAmount,
+    remainingAmount: maxAmount,
+    maxAmount,
   };
   if (!delta) return base;
   // Erschöpft & noch nicht nachgewachsen → regrowing.
@@ -197,7 +224,7 @@ export function resolveNode(state: GameState, type: ResourceNodeType, id: string
     }
     return base; // nachgewachsen → wieder voll verfügbar
   }
-  const remaining = delta.remaining ?? profile.maxAmount;
+  const remaining = delta.remaining ?? maxAmount;
   if (remaining <= 0) return { ...base, state: 'depleted', remainingAmount: 0 };
   return {
     ...base,

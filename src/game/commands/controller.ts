@@ -126,7 +126,7 @@ import {
   workshopThroughput,
   type WorkshopThroughput,
 } from '../operations/workshops.ts';
-import { nodeProfile, resolveNode, type ResourceNode } from '../operations/nodes.ts';
+import { nodeProfile, nodeSoilFactor, resolveNode, type ResourceNode } from '../operations/nodes.ts';
 import {
   availableForTransfer,
   cancelInventoryTransfer,
@@ -148,6 +148,8 @@ import {
   clearFarmField as clearFarmFieldTiles,
   farmFieldTiles,
   fieldEfficiency,
+  farmInRange,
+  fieldYieldPerMinute,
   planFarmField,
   FIELD_COST_PER_TILE,
   FIELD_TILES_PER_WORKER,
@@ -2179,12 +2181,12 @@ export class GameController {
     const out: FarmFieldView[] = [];
     for (const tile of farmFieldTiles(this.state)) {
       let distanceTiles = 0;
-      let efficiencyPct = 100;
+      let efficiency = 1;
       if (farm) {
         const distance = Math.max(Math.abs(tile.x - farm.cx), Math.abs(tile.y - farm.cy));
         if (distance > farm.maxRadius) continue;
         distanceTiles = Math.round(distance);
-        efficiencyPct = Math.round(fieldEfficiency(distance, farm.efficientRadius, farm.maxRadius) * 100);
+        efficiency = fieldEfficiency(distance, farm.efficientRadius, farm.maxRadius);
       }
       const node = resolveNode(this.state, 'crop', `${tile.x},${tile.y}`, now);
       const growth = node
@@ -2192,7 +2194,20 @@ export class GameController {
           ? 0
           : Math.max(0, Math.min(1, node.remainingAmount / Math.max(1, node.maxAmount)))
         : 0;
-      out.push({ x: tile.x, y: tile.y, growth, distanceTiles, efficiencyPct });
+      // Bodengüte aus derselben Funktion, die die Kachel-Ergiebigkeit setzt
+      // (§2) — keine zweite Tabelle, die abweichen könnte.
+      const soil = nodeSoilFactor('crop', tile.x, tile.y);
+      const owner = buildingId ?? farmInRange(this.state, this.config, tile.x, tile.y);
+      out.push({
+        x: tile.x,
+        y: tile.y,
+        growth,
+        distanceTiles,
+        efficiencyPct: Math.round(efficiency * 100),
+        soilQualityPct: Math.round(soil * 100),
+        yieldPct: Math.round(efficiency * soil * 100),
+        ...(owner ? { farmId: owner } : {}),
+      });
     }
     return out;
   }
@@ -2211,10 +2226,20 @@ export class GameController {
     const radii = operationRadii(def.operation, b.upgradeLevel);
     const stage = operationStage(def.operation, b.upgradeLevel);
     const weighted = fields.reduce((sum, field) => sum + field.efficiencyPct / 100, 0);
+    const soilSum = fields.reduce((sum, field) => sum + field.soilQualityPct / 100, 0);
+    // Ertrag = was die FELDER auf Dauer hergeben. Die zweite Grenze (Hände)
+    // steht direkt daneben als `workersNeeded / workerSlots` — welche der
+    // beiden bindet, soll der Spieler sehen und nicht in einer einzigen
+    // geglätteten Zahl verlieren.
+    const cropProfile = nodeProfile('crop');
     return {
       tiles: fields.length,
       upkeepPerMinute: Math.round(fields.length * FIELD_UPKEEP_PER_TILE),
       averageEfficiencyPct: fields.length === 0 ? 0 : Math.round((weighted / fields.length) * 100),
+      averageSoilPct: fields.length === 0 ? 0 : Math.round((soilSum / fields.length) * 100),
+      yieldPerMinute: Math.round(
+        fieldYieldPerMinute(fields, cropProfile?.maxAmount ?? 0, cropProfile?.regenerationMs ?? 0),
+      ),
       workersNeeded: Math.ceil(fields.length / FIELD_TILES_PER_WORKER),
       workerSlots: stage.workerSlots,
       efficientRadius: radii.efficientRadius,

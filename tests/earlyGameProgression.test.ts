@@ -17,11 +17,24 @@ import type { ResourceId } from '../src/game/types.ts';
 
 const LEVEL_CAP = 8;
 
-/** Ressourcen, die dieses Gebäude produziert (passiv oder über einen Betrieb). */
+/** Veredelte Ware → das einzige Gebäude, das sie herstellt (§ Lieferketten-Overhaul). */
+const REFINED_SOURCES: [ResourceId, string][] = [
+  ['planks', 'wood_workshop'],
+  ['cut_stone', 'stone_workshop'],
+];
+
+/**
+ * Ressourcen, die dieses Gebäude produziert — passiv, über einen Betrieb ODER
+ * über eine Werkstatt. Die dritte Möglichkeit kam mit dem Lieferketten-Overhaul
+ * hinzu; ohne sie hielte dieser Test eine Werkstatt für keine Quelle und
+ * meldete Bretter als unerreichbar, obwohl es sie ab L5 gibt.
+ */
 function producedBy(def: BuildingDef): ResourceId[] {
-  return (def.effects ?? [])
+  const out = (def.effects ?? [])
     .filter((effect): effect is { type: 'produce'; resource: ResourceId; perMinute: number } => effect.type === 'produce')
     .map((effect) => effect.resource);
+  if (def.conversion) out.push(def.conversion.output);
+  return out;
 }
 
 /** Kosten-Ressourcen ohne Geld — Geld hat immer eine Quelle (Steuern). */
@@ -98,6 +111,28 @@ describe('Frühspiel — jede Ressource hat einen Einstieg', () => {
     // Sonst wäre der Steinbruch — samt Regionsfreischaltung — überflüssig.
     expect(rateOf('stone_pit')).toBeGreaterThan(0);
     expect(rateOf('stone_pit')).toBeLessThan(rateOf('quarry') / 2);
+  });
+
+  it('verlangt keine veredelte Ware, bevor eine Werkstatt sie herstellen kann', () => {
+    // § Lieferketten-Overhaul §6/§7: „gestaffelt einführen, nicht alles auf
+    // einmal". Die harte Untergrenze ist aber keine Balancing-Frage, sondern
+    // dieselbe Erreichbarkeitsregel wie oben — nur schärfer, weil eine
+    // veredelte Ware NIE aus der Welt kommt: Ohne Werkstatt gibt es kein
+    // einziges Brett, auch nicht mit Glück oder Startvorrat.
+    const problems: string[] = [];
+    for (const def of buildingsConfig) {
+      for (const [resource, source] of REFINED_SOURCES) {
+        const sourceLevel = buildingsConfig.find((c) => c.id === source)!.unlockLevel;
+        const check = (level: number, where: string, cost: Partial<Record<ResourceId, number>> | undefined) => {
+          if ((cost?.[resource] ?? 0) > 0 && level < sourceLevel) {
+            problems.push(`${where} (L${level}) kostet ${resource}, ${source} gibt es erst ab L${sourceLevel}`);
+          }
+        };
+        check(def.unlockLevel ?? 1, def.id, def.cost);
+        for (const up of def.upgrades ?? []) check(up.unlockLevel ?? (def.unlockLevel ?? 1), `${def.id}^`, up.cost);
+      }
+    }
+    expect(problems, problems.join(' · ')).toEqual([]);
   });
 
   it('macht jede Freischaltung des Levels auch baubar', () => {
