@@ -101,15 +101,15 @@ interface RadiusSource {
 export function recomputeDerived(state: GameState, config: GameConfig): Derived {
   const roadNetwork = computeRoadNetwork(state, config);
   const roadSegments = computeRoadSegments(state, config, roadNetwork);
-  const storageCaps: Record<ResourceId, number> = { money: Number.POSITIVE_INFINITY, wood: 0, stone: 0, food: 0, freshwater: 0 };
+  const storageCaps: Record<ResourceId, number> = { money: Number.POSITIVE_INFINITY, wood: 0, stone: 0, food: 0, freshwater: 0, planks: 0, cut_stone: 0 };
   const storageSiteOf = new Map<string, StorageSite>();
   const capacity: Record<NeedId, number> = { housing: 0, water: 0, food: 0, work: 0, leisure: 0, energy: 0, safety: 0, health: 0, freshwater: 0 };
-  const productionPerMin: Record<ResourceId, number> = { money: 0, wood: 0, stone: 0, food: 0, freshwater: 0 };
+  const productionPerMin: Record<ResourceId, number> = { money: 0, wood: 0, stone: 0, food: 0, freshwater: 0, planks: 0, cut_stone: 0 };
   const productionBonus: Record<string, number> = {};
   const extraDemand: Record<NeedId, number> = { housing: 0, water: 0, food: 0, work: 0, leisure: 0, energy: 0, safety: 0, health: 0, freshwater: 0 };
   const coverageCapacity: Record<NeedId, number> = { housing: 0, water: 0, food: 0, work: 0, leisure: 0, energy: 0, safety: 0, health: 0, freshwater: 0 };
   const revenueBase = { commercial: 0, industrial: 0 };
-  const upkeep: Record<ResourceId, number> = { money: 0, wood: 0, stone: 0, food: 0, freshwater: 0 };
+  const upkeep: Record<ResourceId, number> = { money: 0, wood: 0, stone: 0, food: 0, freshwater: 0, planks: 0, cut_stone: 0 };
   let housingUnits = 0;
 
   const coverageSources: Partial<Record<NeedId, RadiusSource[]>> = {};

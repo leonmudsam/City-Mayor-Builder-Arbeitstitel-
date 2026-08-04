@@ -174,6 +174,17 @@ Low-poly stylized 3D city-builder game asset, colorful cartoon look, clean shape
 **Spec:** Größenklasse `L` — großes Gebäude (3 000–6 000 Tris, ≤ 1024², 2–3 Materialien) · Footprint 4×4 (fix über alle Stufen) · Pivot unten-mittig (X/Z zentriert, Unterkante Y = 0) · Front +Z (Eingang zur Straße) · Nodes: `chimney` (Rauch-Ursprung am Schornstein) · Stufe 3/3 — `sawmill_stage3.glb`
 > Baustelle (Bau *und* Upgrade): `sawmill_construction.glb`, sonst generisches Baustellen-Prop, sonst prozedurales Gerüst. Der Renderer skaliert jedes Modell automatisch auf den Footprint.
 
+### stone_pit_small — 1 Stufe
+
+#### `stone_pit_small.glb` — Stufe 1/1
+
+```text
+Low-poly stylized 3D city-builder game asset, colorful cartoon look, clean shapes, soft bevels, hand-painted feel, optimized for realtime rendering, embedded textures, no lights, no cameras, centered object, pivot at bottom center, +Y up, front facing +Z — a tiny one-tile stone gathering spot: a shallow hand-dug scrape with a few loose surface rocks, a small sorted stone pile, a pickaxe leaning on a wooden post and a single wheelbarrow — humble, hand-worked, no machinery
+```
+
+**Spec:** Größenklasse `XS` — Deko/Kachel (< 600 Tris, ≤ 256², 1 Material) · Footprint 1×1 (fix über alle Stufen) · Pivot unten-mittig (X/Z zentriert, Unterkante Y = 0) · Front +Z (Eingang zur Straße) · Stufe 1/1 — Basis `stone_pit_small.glb`
+> Baustelle (Bau *und* Upgrade): `stone_pit_small_construction.glb`, sonst generisches Baustellen-Prop, sonst prozedurales Gerüst. Der Renderer skaliert jedes Modell automatisch auf den Footprint.
+
 ### stone_pit — 2 Stufen
 
 #### `stone_pit.glb` — Stufe 1/2
@@ -246,6 +257,60 @@ Low-poly stylized 3D city-builder game asset, colorful cartoon look, clean shape
 
 **Spec:** Größenklasse `XL` — Groß-Areal (5 000–9 000 Tris, ≤ 1024², 3–4 Materialien) · Footprint 6×6 (fix über alle Stufen) · Pivot unten-mittig (X/Z zentriert, Unterkante Y = 0) · Front +Z (Eingang zur Straße) · Stufe 3/3 — `farm_stage3.glb`
 > Baustelle (Bau *und* Upgrade): `farm_construction.glb`, sonst generisches Baustellen-Prop, sonst prozedurales Gerüst. Der Renderer skaliert jedes Modell automatisch auf den Footprint.
+
+### wood_workshop — 3 Stufen
+
+#### `wood_workshop.glb` — Stufe 1/3
+
+```text
+Low-poly stylized 3D city-builder game asset, colorful cartoon look, clean shapes, soft bevels, hand-painted feel, optimized for realtime rendering, embedded textures, no lights, no cameras, centered object, pivot at bottom center, +Y up, front facing +Z — a small timber joinery workshop on a 3×3 yard: a wooden hall with a wide door, a sawbench, stacked fresh planks under a lean-to and a delivery bay
+```
+
+**Spec:** Größenklasse `M` — mittleres Gebäude (1 500–3 500 Tris, ≤ 512², 2 Materialien) · Footprint 3×3 (fix über alle Stufen) · Pivot unten-mittig (X/Z zentriert, Unterkante Y = 0) · Front +Z (Eingang zur Straße) · Stufe 1/3 — Basis `wood_workshop.glb`
+
+#### `wood_workshop_stage2.glb` — Stufe 2/3
+
+```text
+Low-poly stylized 3D city-builder game asset, colorful cartoon look, clean shapes, soft bevels, hand-painted feel, optimized for realtime rendering, embedded textures, no lights, no cameras, centered object, pivot at bottom center, +Y up, front facing +Z — a timber manufactory on the same 3×3 yard: a larger hall with a powered saw, a drying rack of boards, a small crane and a loaded handcart
+```
+
+**Spec:** Größenklasse `M` — mittleres Gebäude (1 500–3 500 Tris, ≤ 512², 2 Materialien) · Footprint 3×3 (fix über alle Stufen) · Pivot unten-mittig (X/Z zentriert, Unterkante Y = 0) · Front +Z (Eingang zur Straße) · Stufe 2/3 — `wood_workshop_stage2.glb`
+
+#### `wood_workshop_stage3.glb` — Stufe 3/3
+
+```text
+Low-poly stylized 3D city-builder game asset, colorful cartoon look, clean shapes, soft bevels, hand-painted feel, optimized for realtime rendering, embedded textures, no lights, no cameras, centered object, pivot at bottom center, +Y up, front facing +Z — a timber works on the 3×3 yard: an industrial joinery with a tall hall, conveyor, dense plank stacks, a chimney and a busy loading bay
+```
+
+**Spec:** Größenklasse `M` — mittleres Gebäude (1 500–3 500 Tris, ≤ 512², 2 Materialien) · Footprint 3×3 (fix über alle Stufen) · Pivot unten-mittig (X/Z zentriert, Unterkante Y = 0) · Front +Z (Eingang zur Straße) · Stufe 3/3 — `wood_workshop_stage3.glb`
+> Baustelle (Bau *und* Upgrade): `wood_workshop_construction.glb`, sonst generisches Baustellen-Prop, sonst prozedurales Gerüst. Der Renderer skaliert jedes Modell automatisch auf den Footprint.
+
+### stone_workshop — 3 Stufen
+
+#### `stone_workshop.glb` — Stufe 1/3
+
+```text
+Low-poly stylized 3D city-builder game asset, colorful cartoon look, clean shapes, soft bevels, hand-painted feel, optimized for realtime rendering, embedded textures, no lights, no cameras, centered object, pivot at bottom center, +Y up, front facing +Z — a small stonemason's workshop on a 3×3 yard: a stone-walled hall, a cutting frame, rough blocks on one side and dressed ashlar on the other
+```
+
+**Spec:** Größenklasse `M` — mittleres Gebäude (1 500–3 500 Tris, ≤ 512², 2 Materialien) · Footprint 3×3 (fix über alle Stufen) · Pivot unten-mittig (X/Z zentriert, Unterkante Y = 0) · Front +Z (Eingang zur Straße) · Stufe 1/3 — Basis `stone_workshop.glb`
+
+#### `stone_workshop_stage2.glb` — Stufe 2/3
+
+```text
+Low-poly stylized 3D city-builder game asset, colorful cartoon look, clean shapes, soft bevels, hand-painted feel, optimized for realtime rendering, embedded textures, no lights, no cameras, centered object, pivot at bottom center, +Y up, front facing +Z — a stonemasonry on the same 3×3 yard: a bigger cutting hall with a hoist, several saw frames, pallets of dressed stone and a delivery bay
+```
+
+**Spec:** Größenklasse `M` — mittleres Gebäude (1 500–3 500 Tris, ≤ 512², 2 Materialien) · Footprint 3×3 (fix über alle Stufen) · Pivot unten-mittig (X/Z zentriert, Unterkante Y = 0) · Front +Z (Eingang zur Straße) · Stufe 2/3 — `stone_workshop_stage2.glb`
+
+#### `stone_workshop_stage3.glb` — Stufe 3/3
+
+```text
+Low-poly stylized 3D city-builder game asset, colorful cartoon look, clean shapes, soft bevels, hand-painted feel, optimized for realtime rendering, embedded textures, no lights, no cameras, centered object, pivot at bottom center, +Y up, front facing +Z — a stone works on the 3×3 yard: an industrial stone-dressing plant with gantry, cutting bays, stacked ashlar blocks and a dust extractor
+```
+
+**Spec:** Größenklasse `M` — mittleres Gebäude (1 500–3 500 Tris, ≤ 512², 2 Materialien) · Footprint 3×3 (fix über alle Stufen) · Pivot unten-mittig (X/Z zentriert, Unterkante Y = 0) · Front +Z (Eingang zur Straße) · Stufe 3/3 — `stone_workshop_stage3.glb`
+> Baustelle (Bau *und* Upgrade): `stone_workshop_construction.glb`, sonst generisches Baustellen-Prop, sonst prozedurales Gerüst. Der Renderer skaliert jedes Modell automatisch auf den Footprint.
 
 ### well — 2 Stufen
 

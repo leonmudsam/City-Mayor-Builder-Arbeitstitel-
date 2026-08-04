@@ -114,7 +114,7 @@ describe('region expansion (Insel-Welt, organische Landschaften)', () => {
   it('founds the river district: a self-connected build area at the water (§8)', () => {
     const { controller } = newController();
     setLevel(controller, 12);
-    controller.state.resources = { money: 2_000_000, wood: 2_000, stone: 2_000, food: 1_000, freshwater: 0 };
+    controller.state.resources = { money: 2_000_000, wood: 2_000, stone: 2_000, food: 1_000, freshwater: 0, planks: 0, cut_stone: 0 };
     // Kandidat: eine gesperrte, nicht-gebirgige Fluss-Landschaft mit echtem
     // Bauumfeld (§ 10.0: ein Gebirgs-Fluss-Pocket wäre von Bergen umschlossen und
     // ließe keine Anschlussstraße zu — der Distrikt braucht bebaubares Umland).

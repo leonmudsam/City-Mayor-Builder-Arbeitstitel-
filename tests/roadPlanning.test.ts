@@ -7,7 +7,7 @@ describe('roadPathPreview — Straßenplanung ohne Sofortbau (§ C6)', () => {
 
   it('validiert einen an das Netz anschließenden Pfad und summiert Kosten', () => {
     const { controller } = newController();
-    controller.state.resources = { money: 500_000, wood: 500, stone: 200, food: 40, freshwater: 0 };
+    controller.state.resources = { money: 500_000, wood: 500, stone: 200, food: 40, freshwater: 0, planks: 0, cut_stone: 0 };
     // Start-Straßen liegen bei y+5 (dx 0..4). Pfad nach Osten verlängert sie.
     const preview = controller.roadPathPreview([at(5, 5), at(6, 5), at(7, 5)]);
     expect(preview.valid).toBe(true);
@@ -28,7 +28,7 @@ describe('roadPathPreview — Straßenplanung ohne Sofortbau (§ C6)', () => {
 
   it('blockiert Kacheln ohne Anschluss an das Straßennetz', () => {
     const { controller } = newController();
-    controller.state.resources = { money: 500_000, wood: 500, stone: 200, food: 40, freshwater: 0 };
+    controller.state.resources = { money: 500_000, wood: 500, stone: 200, food: 40, freshwater: 0, planks: 0, cut_stone: 0 };
     const preview = controller.roadPathPreview([at(20, 20)]);
     expect(preview.valid).toBe(false);
     expect(preview.blocked).toBe(1);

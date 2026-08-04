@@ -20,7 +20,7 @@ describe('Straßen-Router (Infrastruktur 2.0 / I2)', () => {
   function ready(): GameController {
     const { controller } = newController(); // flach begraster Start
     unlockAll(controller);
-    controller.state.resources = { money: 2_000_000, wood: 2_000, stone: 500, food: 40, freshwater: 0 };
+    controller.state.resources = { money: 2_000_000, wood: 2_000, stone: 500, food: 40, freshwater: 0, planks: 0, cut_stone: 0 };
     return controller;
   }
 

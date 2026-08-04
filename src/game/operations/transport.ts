@@ -23,7 +23,14 @@ import { newId } from '../engine/rng.ts';
 import { analyseActivityRouteFrom, buildingCenter } from '../activities/routeAnalysis.ts';
 import { vehicleCapacity } from '../activities/logistics.ts';
 import { ensureOperationsState, getInventory, inventoryAmount, inventoryFree } from './operations.ts';
-import { isCityStorageBuilding } from '../economy/stockLedger.ts';
+import { isCityStorageBuilding, withdrawStock } from '../economy/stockLedger.ts';
+import {
+  conversionStage,
+  ensureWorkshopInventory,
+  isWorkshopBuilding,
+  workshopAcceptsResource,
+  workshopInputFree,
+} from './workshops.ts';
 
 /** Untergrenze der reinen Fahrdauer, damit auch kurze Strecken kurz „fahren". */
 const MIN_TRAVEL_MS = 1_500;
@@ -84,6 +91,13 @@ export function transferTargets(state: GameState, config: GameConfig, sourceId: 
     if (b.id === sourceId || !isContributing(b)) continue;
     const def = config.buildings.get(b.defId);
     if (!def) continue;
+    // Bewusst NUR Stadtlager, obwohl `canReceiveResource` inzwischen mehr
+    // zulässt: Diese Liste beantwortet „wohin bringt ein Betrieb seine Ernte?".
+    // Stünde die Werkstatt hier, würde ein Sägewerk sein Holz automatisch dort
+    // abladen, und der Stadt fehlte Baumaterial, ohne dass der Spieler es
+    // entschieden hätte. Die Werkstatt wird GEZOGEN (`workshopSupplyDemand`),
+    // nicht beliefert — das ist der Unterschied zwischen Abtransport und
+    // Lieferkette.
     const storesResource = effectiveEffects(def, b.upgradeLevel).some(
       (e) => e.type === 'storage' && e.resource === resource,
     );
@@ -92,6 +106,34 @@ export function transferTargets(state: GameState, config: GameConfig, sourceId: 
     out.push({ buildingId: b.id, defId: def.id, nameKey: def.nameKey, x: center.x, y: center.y });
   }
   return out;
+}
+
+/**
+ * § Lieferketten-Overhaul §5 — WER DARF QUELLE, WER DARF ZIEL SEIN?
+ *
+ * Vor diesem Auftrag lief jeder Transport in EINE Richtung: aus dem lokalen
+ * Lager eines Betriebs in ein Stadtlager. Die Werkstatt kehrt das um — sie ist
+ * das erste Gebäude, das Ware EMPFÄNGT. Damit daraus kein zweites
+ * Transportsystem wird, beantworten zwei Funktionen die Frage für alle Fälle;
+ * `createInventoryTransfer` und die Automatik lesen dieselben.
+ */
+export function canSupplyResource(state: GameState, config: GameConfig, buildingId: string, resource: ResourceId): boolean {
+  const b = state.buildings[buildingId];
+  const def = b && config.buildings.get(b.defId);
+  if (!b || !def || !isContributing(b)) return false;
+  if (def.operation) return def.operation.resource === resource;
+  // Eine Werkstatt gibt ihr PRODUKT ab, nie ihren Rohstoff — sonst führe die
+  // Automatik das gerade Angelieferte im Kreis.
+  if (isWorkshopBuilding(def)) return def.conversion.output === resource;
+  return isCityStorageBuilding(state, config, buildingId);
+}
+
+export function canReceiveResource(state: GameState, config: GameConfig, buildingId: string, resource: ResourceId): boolean {
+  const b = state.buildings[buildingId];
+  const def = b && config.buildings.get(b.defId);
+  if (!b || !def || !isContributing(b)) return false;
+  if (workshopAcceptsResource(def, resource)) return true;
+  return effectiveEffects(def, b.upgradeLevel).some((e) => e.type === 'storage' && e.resource === resource);
 }
 
 // ---- Erstellung ------------------------------------------------------------
@@ -206,15 +248,11 @@ export function createInventoryTransfer(
   now: number,
 ): InventoryTransfer | TransferError {
   const source = state.buildings[input.sourceBuildingId];
-  const sourceDef = source && config.buildings.get(source.defId);
-  if (!source || !sourceDef?.operation || source.status !== 'active') return 'invalid';
+  if (!source || source.status !== 'active') return 'invalid';
+  if (!canSupplyResource(state, config, input.sourceBuildingId, input.resource)) return 'invalid';
   const target = state.buildings[input.targetBuildingId];
-  if (!target || target.id === source.id || !isContributing(target)) return 'no_target';
-  const targetDef = config.buildings.get(target.defId);
-  const targetStores = targetDef
-    ? effectiveEffects(targetDef, target.upgradeLevel).some((e) => e.type === 'storage' && e.resource === input.resource)
-    : false;
-  if (!targetStores) return 'no_target';
+  if (!target || target.id === source.id) return 'no_target';
+  if (!canReceiveResource(state, config, input.targetBuildingId, input.resource)) return 'no_target';
 
   const capacity = vehicleCapacity(config, input.vehicleId);
   if (capacity <= 0) return 'no_vehicle';
@@ -315,9 +353,17 @@ export function advanceTransfers(state: GameState, config: GameConfig, derived: 
         const inv = getInventory(state, transfer.sourceBuildingId);
         const want = Math.min(capacity > 0 ? capacity : atSourceOf(transfer), atSourceOf(transfer));
         const present = inv ? inventoryAmount(inv, transfer.resource) : 0;
-        const take = Math.max(0, Math.min(want, present));
+        // § Lieferketten-Overhaul: Wird an einem STADTLAGER geladen, muss auch
+        // die Bilanzsumme sinken — die Ware liegt danach auf dem Fahrzeug, nicht
+        // in der Stadt. Ohne `withdrawStock` würde `reconcileStock` im nächsten
+        // `notify` den Bestand aus dem unveränderten Pool sofort wieder
+        // auffüllen: das Fahrzeug führe mit einer Kopie los (D-052).
+        const fromCityStore = isCityStorageBuilding(state, config, transfer.sourceBuildingId);
+        const take = fromCityStore
+          ? withdrawStock(state, derived, transfer.sourceBuildingId, transfer.resource, Math.min(want, present))
+          : Math.max(0, Math.min(want, present));
         if (inv && take > 0) {
-          inv.items[transfer.resource] = present - take;
+          if (!fromCityStore) inv.items[transfer.resource] = present - take;
           const res = (inv.reserved[transfer.resource] ?? 0) - take;
           if (res <= 0) delete inv.reserved[transfer.resource];
           else inv.reserved[transfer.resource] = res;
@@ -354,9 +400,22 @@ export function advanceTransfers(state: GameState, config: GameConfig, derived: 
         // der Passivproduktion). `stats.produced` wird NICHT erneut erhöht — die
         // Ware wurde beim Fällen gezählt (kein Doppelzählen).
         const onboard = onboardOf(transfer);
-        const cap = derived.storageCaps[transfer.resource] ?? Number.POSITIVE_INFINITY;
-        const stored = Math.min(onboard, Math.max(0, cap - state.resources[transfer.resource]));
-        state.resources[transfer.resource] += stored;
+        const targetDef = config.buildings.get(target.defId);
+        if (isWorkshopBuilding(targetDef)) {
+          // § Lieferketten-Overhaul: Anlieferung an eine Werkstatt geht in DEREN
+          // Lager, nicht in den Pool. Sonst wäre der Rohstoff nach der Fahrt
+          // wieder überall verfügbar und die Fahrt hätte nichts bedeutet.
+          const free = workshopInputFree(state, config, target.id);
+          const put = Math.min(onboard, free);
+          if (put > 0) {
+            const inv = ensureWorkshopInventory(state, target.id, conversionStage(targetDef.conversion, target.upgradeLevel));
+            inv.items[transfer.resource] = inventoryAmount(inv, transfer.resource) + put;
+          }
+        } else {
+          const cap = derived.storageCaps[transfer.resource] ?? Number.POSITIVE_INFINITY;
+          const stored = Math.min(onboard, Math.max(0, cap - state.resources[transfer.resource]));
+          state.resources[transfer.resource] += stored;
+        }
         transfer.delivered = deliveredOf(transfer) + onboard;
         transfer.onboard = 0;
         transfer.progress = 0;

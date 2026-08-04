@@ -26,6 +26,12 @@ import {
   transferRoute,
   transferTargets,
 } from './transport.ts';
+import { stockSources } from '../economy/stockLedger.ts';
+import {
+  conversionStage,
+  isWorkshopBuilding,
+  supplyRuleOf,
+} from './workshops.ts';
 
 /**
  * Ab welchem Füllstand des lokalen Lagers automatisch abtransportiert wird. Bewusst
@@ -128,10 +134,14 @@ export function advanceAutoLogistics(state: GameState, config: GameConfig, deriv
   for (const [buildingId, inventory] of Object.entries(ops.inventories)) {
     const building = state.buildings[buildingId];
     const def = building ? config.buildings.get(building.defId) : undefined;
-    if (!building || !def?.operation || building.status !== 'active') continue;
+    if (!building || building.status !== 'active') continue;
+    // Betrieb ODER Werkstatt: beide geben eine Ware ab. Für die Werkstatt ist
+    // das ihr PRODUKT — der Rohstoff bleibt, wo er ist.
+    const outgoing = def?.operation?.resource ?? (isWorkshopBuilding(def) ? def.conversion.output : undefined);
+    if (!def || outgoing === undefined) continue;
     if (!isAutoTransportEnabled(state, buildingId)) continue;
 
-    const resource = def.operation.resource;
+    const resource = outgoing;
     if (hasRunningTransfer(state, buildingId, resource)) continue;
 
     const available = availableForTransfer(state, buildingId, resource);
@@ -143,7 +153,14 @@ export function advanceAutoLogistics(state: GameState, config: GameConfig, deriv
 
     // Abholen, sobald eine volle Ladung zusammenkommt ODER das Lager spürbar voll
     // wird. So steht ein kleiner Betrieb nicht ewig auf einer Teilladung.
-    const fillRatio = inventory.capacity > 0 ? inventoryAmount(inventory, resource) / inventory.capacity : 0;
+    // Bezugsgröße ist der Platz für GENAU DIESE Ware. Beim Betrieb ist das das
+    // ganze Lager; bei der Werkstatt liegen Rohstoff und Produkt im selben
+    // Eintrag, und `capacity` wäre die Summe — der Ausgang gälte dann nie als
+    // voll, und die Werkstatt bliebe auf ihrem Produkt sitzen.
+    const outCapacity = isWorkshopBuilding(def)
+      ? conversionStage(def.conversion, building.upgradeLevel).outputCapacity
+      : inventory.capacity;
+    const fillRatio = outCapacity > 0 ? inventoryAmount(inventory, resource) / outCapacity : 0;
     if (available < capacity && fillRatio < AUTO_TRANSPORT_FILL_RATIO) continue;
 
     if (globalFree(state, derived, resource) <= 0) continue; // nirgends Platz → Warnung
@@ -164,6 +181,109 @@ export function advanceAutoLogistics(state: GameState, config: GameConfig, deriv
       state.meta.lastSimTime,
     );
   }
+}
+
+// ---- Nachschub für Werkstätten (§ Lieferketten-Overhaul §5) ----------------
+
+/**
+ * Ab welchem Füllstand des EINGANGS-Lagers Nachschub angefordert wird. Bewusst
+ * hoch: Eine Werkstatt, die erst bei 20 % bestellt, steht während der Fahrt
+ * still — und die Fahrt dauert bei einer Insel dieser Größe minutenlang.
+ */
+export const WORKSHOP_REFILL_RATIO = 0.5;
+
+export interface WorkshopDemand {
+  buildingId: string;
+  resource: ResourceId;
+  /** Freier Eingangsplatz — mehr geht physisch nicht hinein. */
+  missing: number;
+  priority: number;
+}
+
+/**
+ * Was fehlt welcher Werkstatt? Reine Projektion, absteigend nach Priorität —
+ * **das ist die einzige Stelle, an der `priority` wirkt**, und sie wirkt echt:
+ * Bei knappem Rohstoff bekommt die vordere Werkstatt die Ladung, die hintere
+ * geht leer aus. (Anders als der gleichnamige, wirkungslose Vertrag der
+ * Stadtarbeit — der ist bis heute nicht gebaut, weil dahinter keine Simulation
+ * steht. Hier steht eine.)
+ */
+export function workshopSupplyDemand(state: GameState, config: GameConfig): WorkshopDemand[] {
+  const out: WorkshopDemand[] = [];
+  for (const b of Object.values(state.buildings)) {
+    const def = config.buildings.get(b.defId);
+    if (!isWorkshopBuilding(def) || b.status !== 'active') continue;
+    const rule = supplyRuleOf(state, b.id);
+    if (!rule.enabled) continue; // pausiert = kein Nachschub, nicht „später"
+    const stage = conversionStage(def.conversion, b.upgradeLevel);
+    const stock = inventoryAmount(getInventory(state, b.id), def.conversion.input);
+    if (stock >= stage.inputCapacity * WORKSHOP_REFILL_RATIO) continue;
+    out.push({
+      buildingId: b.id,
+      resource: def.conversion.input,
+      missing: Math.max(0, stage.inputCapacity - stock),
+      priority: rule.priority ?? 1,
+    });
+  }
+  // Deterministisch: höhere Priorität zuerst, bei Gleichstand die kleinere Id.
+  return out.sort((a, b) => b.priority - a.priority || (a.buildingId < b.buildingId ? -1 : 1));
+}
+
+/**
+ * Ein Schritt des Werkstatt-Nachschubs: beauftragt je Werkstatt höchstens
+ * **eine** Fahrt beim besten Lagerort. „Bester" heißt: der vom Spieler gewählte
+ * (`rule.sourceBuildingId`), sonst der mit dem meisten Bestand — die Reihenfolge
+ * kommt aus `stockSources`, also aus dem Bestandsregister und nicht aus einer
+ * zweiten Lagerliste (D-052).
+ *
+ * Erteilt wird wieder nur ein Auftrag an den bestehenden Lagertransport; Route,
+ * Fahrzeug, Ladezeit und Betriebskosten bleiben unverändert (§2/§8).
+ */
+export function advanceWorkshopSupply(state: GameState, config: GameConfig, derived: Derived): void {
+  const demands = workshopSupplyDemand(state, config);
+  if (demands.length === 0) return;
+  const vehicleId = bestAvailableVehicle(config, state.level.current);
+  if (!vehicleId) return;
+  const capacity = vehicleCapacity(config, vehicleId);
+
+  for (const demand of demands) {
+    if (hasIncomingTransfer(state, demand.buildingId, demand.resource)) continue;
+    const rule = supplyRuleOf(state, demand.buildingId);
+    const sources = stockSources(state, derived, demand.resource);
+    const preferred = rule.sourceBuildingId
+      ? sources.filter((share) => share.site.buildingId === rule.sourceBuildingId)
+      : sources;
+    // Eine ausdrücklich gewählte Quelle wird NICHT stillschweigend ersetzt:
+    // Wer „aus dem Nordlager" sagt, meint das auch, wenn dort gerade nichts
+    // liegt. Der Stillstand ist dann sichtbar (`no_input`), nicht überspielt.
+    for (const share of preferred) {
+      const amount = Math.min(share.stored, demand.missing, capacity);
+      if (amount <= 0) continue;
+      const created = createInventoryTransfer(
+        state,
+        config,
+        derived,
+        {
+          sourceBuildingId: share.site.buildingId,
+          targetBuildingId: demand.buildingId,
+          resource: demand.resource,
+          amount,
+          vehicleId,
+        },
+        state.meta.lastSimTime,
+      );
+      if (typeof created !== 'string') break; // Fahrt läuft
+    }
+  }
+}
+
+/** Läuft schon eine Anlieferung zu diesem Gebäude? Dann nicht doppelt bestellen. */
+function hasIncomingTransfer(state: GameState, targetId: string, resource: ResourceId): boolean {
+  const transfers = state.operations?.transfers;
+  if (!transfers) return false;
+  return Object.values(transfers).some(
+    (transfer) => transfer.targetBuildingId === targetId && transfer.resource === resource,
+  );
 }
 
 /**

@@ -20,7 +20,7 @@ const at = (dx: number, dy: number) => nearTownHall(dx, dy);
 function constructingCity() {
   const bundle = newController();
   const { controller } = bundle;
-  controller.state.resources = { money: 100_000, wood: 500, stone: 500, food: 500, freshwater: 0 };
+  controller.state.resources = { money: 100_000, wood: 500, stone: 500, food: 500, freshwater: 0, planks: 0, cut_stone: 0 };
   for (let dx = 3; dx <= 12; dx++) controller.placeBuilding('road', at(dx, 5).x, at(dx, 5).y);
   const placed = controller.placeBuilding('house_small', at(6, 6).x, at(6, 6).y);
   if (!placed.ok) throw new Error(`house_small placement failed: ${JSON.stringify(placed)}`);

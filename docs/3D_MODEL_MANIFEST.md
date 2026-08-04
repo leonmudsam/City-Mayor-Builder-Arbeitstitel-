@@ -168,8 +168,11 @@ fix (§3 in `docs/3D_WORLD_ASSETS.md`).
 | ID | Datei | Klasse | Footprint | Ab Level | Stufen | Hinweis |
 |---|---|---|---|---|---|---|
 | sawmill | `sawmill.glb` | L | 4×4 | 2 | 3 | Schornstein (`chimney`) für Rauch |
+| stone_pit_small | `stone_pit_small.glb` | XS | 1×1 | 1 | 1 | Einstieg ab Minute eins, ohne Straße |
 | stone_pit | `stone_pit.glb` | M | 3×3 | 2 | 2 | Einstiegsquelle für Stein |
 | quarry | `quarry.glb` | L | 5×5 | 4 | 3 | |
+| wood_workshop | `wood_workshop.glb` | M | 3×3 | 5 | 3 | Holz → Bretter; Anlieferbucht sichtbar |
+| stone_workshop | `stone_workshop.glb` | M | 3×3 | 5 | 3 | Stein → Werkstein; roh/behauen getrennt |
 | farm | `farm.glb` | XL | 6×6 | 4 | 3 | Weidetiere/Felder rundum (A7) |
 | warehouse | `warehouse.glb` | L | 4×4 | 6 | 2 | |
 | depot | `depot.glb` | L | 5×5 | 7 | 2 | |

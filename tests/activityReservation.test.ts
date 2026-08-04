@@ -17,7 +17,7 @@ function deliveryCity() {
   const { controller } = bundle;
   setLevel(controller, 6);
   flattenTerrain(controller);
-  controller.state.resources = { money: 100_000, wood: 500, stone: 500, food: 1_000, freshwater: 0 };
+  controller.state.resources = { money: 100_000, wood: 500, stone: 500, food: 1_000, freshwater: 0, planks: 0, cut_stone: 0 };
   for (let dx = 5; dx <= 23; dx++) controller.placeBuilding('road', at(dx, 5).x, at(dx, 5).y);
   for (const dx of [3, 6, 9, 12, 15]) controller.placeBuilding('house_small', at(dx, 6).x, at(dx, 6).y);
   controller.placeBuilding('farm', at(18, 6).x, at(18, 6).y);

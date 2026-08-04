@@ -18,9 +18,12 @@ Ordner: `src/assets/models/buildings/`  ·  Loader: `buildingModel(id, stage)`  
 | house_small | `house_small.glb` | housing/ | 3×3 | 1 | 6 | `house_small_stage2`…`house_small_stage6` | `house_small_construction.glb` |
 | residential_tower | `residential_tower.glb` | housing/ | 5×5 | 15 | 3 | `residential_tower_stage2`…`residential_tower_stage3` | `residential_tower_construction.glb` |
 | sawmill | `sawmill.glb` | resources/ | 4×4 | 2 | 3 | `sawmill_stage2`…`sawmill_stage3` | `sawmill_construction.glb` |
+| stone_pit_small | `stone_pit_small.glb` | resources/ | 1×1 | 1 | 1 | — | `stone_pit_small_construction.glb` |
 | stone_pit | `stone_pit.glb` | resources/ | 3×3 | 2 | 2 | `stone_pit_stage2` | `stone_pit_construction.glb` |
 | quarry | `quarry.glb` | resources/ | 5×5 | 4 | 3 | `quarry_stage2`…`quarry_stage3` | `quarry_construction.glb` |
 | farm | `farm.glb` | resources/ | 6×6 | 4 | 3 | `farm_stage2`…`farm_stage3` | `farm_construction.glb` |
+| wood_workshop | `wood_workshop.glb` | resources/ | 3×3 | 5 | 3 | `wood_workshop_stage2`…`wood_workshop_stage3` | `wood_workshop_construction.glb` |
+| stone_workshop | `stone_workshop.glb` | resources/ | 3×3 | 5 | 3 | `stone_workshop_stage2`…`stone_workshop_stage3` | `stone_workshop_construction.glb` |
 | well | `well.glb` | services/ | 1×1 | 3 | 2 | `well_stage2` | `well_construction.glb` |
 | water_pump | `water_pump.glb` | services/ | 3×3 | 7 | 2 | `water_pump_stage2` | `water_pump_construction.glb` |
 | warehouse | `warehouse.glb` | resources/ | 4×4 | 6 | 2 | `warehouse_stage2` | `warehouse_construction.glb` |

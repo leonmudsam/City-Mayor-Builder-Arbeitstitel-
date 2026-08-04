@@ -599,6 +599,35 @@ const migrateV31ToV32: Migration = (raw) => {
   return raw;
 };
 
+// ---- v32 → v33 (§ Wirtschafts-/Lieferketten-Overhaul: Bretter + Werkstein) --
+
+/**
+ * Zwei neue Waren im Pool und in der Produktionsstatistik. Sie MÜSSEN hier
+ * explizit auf 0 gesetzt werden, obwohl das Schema sie als Record führt: ein
+ * fehlender Schlüssel wäre zur Laufzeit `undefined`, und jede Rechnung darüber
+ * (Bilanz, Deckelung, Bestandsregister) ergäbe `NaN` — ein Fehler, der sich
+ * erst Minuten später als „Ressourcen verschwunden" zeigt.
+ *
+ * Werkstatt-Regeln (`operations.supplyRules`) werden bewusst NICHT angelegt:
+ * Ein Altspielstand hat keine Werkstatt, und eine Werkstatt ohne Regel läuft
+ * auf ihren Standardwerten (`DEFAULT_SUPPLY_RULE`). Leere Voreinträge wären
+ * Daten ohne Gegenstand.
+ */
+const migrateV32ToV33: Migration = (raw) => {
+  const resources = raw.resources as Record<string, number> | undefined;
+  if (resources) {
+    resources.planks ??= 0;
+    resources.cut_stone ??= 0;
+  }
+  const stats = raw.stats as { produced?: Record<string, number> } | undefined;
+  if (stats?.produced) {
+    stats.produced.planks ??= 0;
+    stats.produced.cut_stone ??= 0;
+  }
+  raw.schemaVersion = 33;
+  return raw;
+};
+
 /**
  * Migration chain: migrations[n] upgrades a save from schemaVersion n to n+1.
  * Beginnt bei v10 (Insel-Basis).
@@ -626,6 +655,7 @@ const migrations: Record<number, Migration> = {
   29: migrateV29ToV30,
   30: migrateV30ToV31,
   31: migrateV31ToV32,
+  32: migrateV32ToV33,
 };
 
 export class SaveValidationError extends Error {}

@@ -29,7 +29,18 @@ import type { Derived, StorageSite } from '../simulation/derived.ts';
 import { effectiveEffects } from '../buildings/effects.ts';
 
 /** Ressourcen, die physisch in Lagern liegen (Geld liegt in keinem Lagerhaus). */
-export const LEDGER_RESOURCES: readonly ResourceId[] = ['wood', 'stone', 'food', 'freshwater'];
+export const LEDGER_RESOURCES: readonly ResourceId[] = [
+  'wood',
+  'stone',
+  'food',
+  'freshwater',
+  // § Lieferketten-Overhaul: Bretter und Werkstein liegen genauso an einem ORT
+  // wie alles andere. Wären sie hier nicht gelistet, wäre der Pool für sie
+  // wieder die „globale magische Ressource", die §8 des Vorauftrags abgeschafft
+  // hat — und die Werkstatt könnte aus dem Nichts beliefert werden.
+  'planks',
+  'cut_stone',
+];
 
 export function isLedgerResource(resource: ResourceId): boolean {
   return LEDGER_RESOURCES.includes(resource);

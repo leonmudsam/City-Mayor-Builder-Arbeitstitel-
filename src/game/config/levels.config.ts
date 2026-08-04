@@ -10,11 +10,17 @@ import type { LevelDef } from './types.ts';
 // XP no longer flows from residential spam — supply build-out, big public
 // buildings, quests and milestones are the real sources.
 export const levelsConfig: LevelDef[] = [
-  { level: 1, xpRequired: 0, unlocks: ['road', 'house_small'], rewards: {} },
+  // L1 trägt seit dem Lieferketten-Overhaul die kleine Steingrube: die erste
+  // Steinkosten-Stelle ist das Wohnhaus-Upgrade auf L3, die Quelle muss also
+  // vorher stehen — und zwar ohne Straße, ohne Holz und ohne Platzbedarf.
+  { level: 1, xpRequired: 0, unlocks: ['road', 'house_small', 'stone_pit_small'], rewards: {} },
   { level: 2, xpRequired: 36, unlocks: ['sawmill', 'stone_pit', 'road_elevated'], rewards: { money: 13_000 } },
   { level: 3, xpRequired: 130, unlocks: ['well', 'mayor_house'], rewards: { money: 20_000, gold: 10 } },
   { level: 4, xpRequired: 310, unlocks: ['farm', 'quarry'], rewards: { money: 30_000 } },
-  { level: 5, xpRequired: 620, unlocks: ['market', 'trading_post'], rewards: { money: 47_000, gold: 15 } },
+  // L5 ist der Wendepunkt (§6 des Lieferketten-Auftrags): Ab hier ist die Stadt
+  // nicht mehr nur Sammler, sondern Verarbeiter. Beide Werkstätten öffnen
+  // GLEICHZEITIG — sonst wäre die erste Wahl keine, sondern eine Reihenfolge.
+  { level: 5, xpRequired: 620, unlocks: ['market', 'trading_post', 'wood_workshop', 'stone_workshop'], rewards: { money: 47_000, gold: 15 } },
   { level: 6, xpRequired: 1120, unlocks: ['shop_small', 'warehouse', 'dock_small'], rewards: { money: 85_000 } },
   { level: 7, xpRequired: 1780, unlocks: ['park', 'playground', 'water_pump', 'depot', 'deco_tree', 'deco_flowerbed', 'deco_fountain', 'deco_bench'], rewards: { money: 130_000, gold: 20 } },
   { level: 8, xpRequired: 2680, unlocks: ['fire_station', 'office'], rewards: { money: 200_000 } },

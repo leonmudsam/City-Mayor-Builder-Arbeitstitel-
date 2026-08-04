@@ -47,7 +47,7 @@ describe('kanonischer Fundamentplan', () => {
   it('zeigt und berechnet am echten Hang exakt dieselben Mehrkosten und dieselbe Bauzeit', () => {
     const { controller } = newController(undefined, { flatten: false });
     for (const region of Object.values(controller.state.world.regions)) region.status = 'unlocked';
-    controller.state.resources = { money: 5_000_000, wood: 10_000, stone: 10_000, food: 1_000, freshwater: 0 };
+    controller.state.resources = { money: 5_000_000, wood: 10_000, stone: 10_000, food: 1_000, freshwater: 0, planks: 0, cut_stone: 0 };
     let candidate: {
       x: number;
       y: number;

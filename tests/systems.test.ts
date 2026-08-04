@@ -29,7 +29,7 @@ describe('income breakdown (§5)', () => {
     const { controller } = newController();
     setLevel(controller, 6);
     flattenTerrain(controller);
-    controller.state.resources = { money: 200_000, wood: 500, stone: 500, food: 100, freshwater: 0 };
+    controller.state.resources = { money: 200_000, wood: 500, stone: 500, food: 100, freshwater: 0, planks: 0, cut_stone: 0 };
     controller.placeBuilding('road', at(5, 5).x, at(5, 5).y);
     controller.placeBuilding('road', at(6, 5).x, at(6, 5).y);
     controller.placeBuilding('sawmill', at(1, 6).x, at(1, 6).y); // industrial 600 (4×4)
@@ -73,7 +73,7 @@ describe('logistics & workplaces', () => {
     const { controller } = newController();
     setLevel(controller, 7);
     flattenTerrain(controller); // isolate the logistics boost from terrain bonus
-    controller.state.resources = { money: 500_000, wood: 1_000, stone: 1_000, food: 1_000, freshwater: 0 };
+    controller.state.resources = { money: 500_000, wood: 1_000, stone: 1_000, food: 1_000, freshwater: 0, planks: 0, cut_stone: 0 };
     for (let dx = 5; dx <= 13; dx++) controller.placeBuilding('road', at(dx, 5).x, at(dx, 5).y);
     // § Active Operations 2.0 / A6+A7: Sägewerk, Steinbruch und Farm produzieren
     // nicht mehr passiv. Der Passiv-Boost wird deshalb an der Bäckerei geprüft.
@@ -99,7 +99,7 @@ describe('logistics & workplaces', () => {
       const { controller } = newController();
       setLevel(controller, 7);
       flattenTerrain(controller);
-      controller.state.resources = { money: 900_000, wood: 1_000, stone: 1_000, food: 1_000, freshwater: 0 };
+      controller.state.resources = { money: 900_000, wood: 1_000, stone: 1_000, food: 1_000, freshwater: 0, planks: 0, cut_stone: 0 };
       for (let dx = 5; dx <= 13; dx++) controller.placeBuilding('road', at(dx, 5).x, at(dx, 5).y);
       // Wald außerhalb beider Grundflächen, aber im effizienten Radius (8).
       paintTerrain(controller, forestPatch(at(6, 11).x, at(6, 11).y, 3, 3), 'forest');
@@ -130,7 +130,7 @@ describe('logistics & workplaces', () => {
     const { controller } = newController();
     setLevel(controller, 8);
     flattenTerrain(controller);
-    controller.state.resources = { money: 1_200_000, wood: 1_000, stone: 1_000, food: 1_000, freshwater: 0 };
+    controller.state.resources = { money: 1_200_000, wood: 1_000, stone: 1_000, food: 1_000, freshwater: 0, planks: 0, cut_stone: 0 };
     for (let dx = 5; dx <= 8; dx++) controller.placeBuilding('road', at(dx, 5).x, at(dx, 5).y);
     const before = controller.derived.capacity.work;
     expect(controller.placeBuilding('office', at(5, 6).x, at(5, 6).y)).toEqual({ ok: true }); // 4×4, 2000 jobs
@@ -144,7 +144,7 @@ describe('energy grid (MVP 2)', () => {
     const { controller } = newController();
     setLevel(controller, 11);
     flattenTerrain(controller);
-    controller.state.resources = { money: 1_500_000, wood: 2_000, stone: 2_000, food: 1_000, freshwater: 0 };
+    controller.state.resources = { money: 1_500_000, wood: 2_000, stone: 2_000, food: 1_000, freshwater: 0, planks: 0, cut_stone: 0 };
     for (let dx = 5; dx <= 17; dx++) controller.placeBuilding('road', at(dx, 5).x, at(dx, 5).y);
     // A warehouse draws 5 energy; there is no supply until a plant is built.
     expect(controller.placeBuilding('warehouse', at(5, 6).x, at(5, 6).y)).toEqual({ ok: true });
@@ -164,7 +164,7 @@ describe('emergency services (MVP 2)', () => {
     const { controller } = newController();
     setLevel(controller, 13);
     flattenTerrain(controller);
-    controller.state.resources = { money: 1_000_000, wood: 2_000, stone: 2_000, food: 1_000, freshwater: 0 };
+    controller.state.resources = { money: 1_000_000, wood: 2_000, stone: 2_000, food: 1_000, freshwater: 0, planks: 0, cut_stone: 0 };
     for (let dx = 5; dx <= 10; dx++) controller.placeBuilding('road', at(dx, 5).x, at(dx, 5).y);
     controller.placeBuilding('house_small', at(3, 6).x, at(3, 6).y);
     controller.update(T0 + 25_000); // house finishes
@@ -210,7 +210,7 @@ describe('housing model (§6)', () => {
     const { controller } = newController();
     setLevel(controller, 15); // residential tower unlocks at L15 (§ Gebäudesystem 2.0)
     flattenTerrain(controller);
-    controller.state.resources = { money: 5_000_000, wood: 3_000, stone: 3_000, food: 1_000, freshwater: 0 };
+    controller.state.resources = { money: 5_000_000, wood: 3_000, stone: 3_000, food: 1_000, freshwater: 0, planks: 0, cut_stone: 0 };
     for (let dx = 5; dx <= 11; dx++) controller.placeBuilding('road', at(dx, 5).x, at(dx, 5).y);
     controller.placeBuilding('house_small', at(3, 6).x, at(3, 6).y); // 1 unit × 5 = 5
     controller.placeBuilding('residential_tower', at(7, 6).x, at(7, 6).y); // 900 units × 5 = 4500
@@ -225,7 +225,7 @@ describe('building upgrades (v0.17)', () => {
   it('gates densification upgrades behind city level and grows capacity on the same tile', () => {
     const { controller } = newController();
     flattenTerrain(controller);
-    controller.state.resources = { money: 3_000_000, wood: 3_000, stone: 3_000, food: 1_000, freshwater: 0 };
+    controller.state.resources = { money: 3_000_000, wood: 3_000, stone: 3_000, food: 1_000, freshwater: 0, planks: 0, cut_stone: 0 };
     controller.placeBuilding('house_small', at(3, 6).x, at(3, 6).y);
     controller.update(T0 + 25_000); // house finishes (20s)
     const house = Object.values(controller.state.buildings).find((b) => b.defId === 'house_small')!;

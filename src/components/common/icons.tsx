@@ -1,4 +1,5 @@
 import {
+  Blocks,
   BriefcaseBusiness,
   Coins,
   Droplets,
@@ -10,6 +11,7 @@ import {
   Landmark,
   Logs,
   Mountain,
+  Ruler,
   Route,
   ShieldCheck,
   ShoppingBasket,
@@ -33,6 +35,11 @@ export const RESOURCE_ICON: Record<ResourceId, LucideIcon> = {
   stone: Mountain,
   food: Wheat,
   freshwater: GlassWater,
+  // Veredelte Waren (§ Lieferketten-Overhaul): bewusst andere Glyphen als ihr
+  // Rohstoff — Holz/Bretter und Stein/Werkstein dürfen in keiner Liste
+  // verwechselbar sein.
+  planks: Ruler,
+  cut_stone: Blocks,
 };
 
 export const NEED_ICON: Record<NeedId, LucideIcon> = {

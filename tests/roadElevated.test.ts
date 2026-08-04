@@ -11,7 +11,7 @@ describe('Höhenstraße / Brücke (Infrastruktur 2.0 / I1)', () => {
   function elevatedReady() {
     const { controller } = newController();
     setLevel(controller, 2);
-    controller.state.resources = { money: 2_000_000, wood: 2_000, stone: 500, food: 40, freshwater: 0 };
+    controller.state.resources = { money: 2_000_000, wood: 2_000, stone: 500, food: 40, freshwater: 0, planks: 0, cut_stone: 0 };
     return controller;
   }
 

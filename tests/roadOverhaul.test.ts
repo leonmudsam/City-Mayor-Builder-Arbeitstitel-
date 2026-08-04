@@ -12,7 +12,7 @@ describe('automatischer Straßen-Overhaul', () => {
 
   it('baut einen Pfad in einem Bulk-Commit und friert das Engineering im Save ein', () => {
     const { controller } = newController();
-    controller.state.resources = { money: 2_000_000, wood: 2_000, stone: 2_000, food: 40, freshwater: 0 };
+    controller.state.resources = { money: 2_000_000, wood: 2_000, stone: 2_000, food: 40, freshwater: 0, planks: 0, cut_stone: 0 };
     const waypoints = [at(0, 6), at(0, 12)];
     const preview = controller.roadPathPreview(waypoints);
     expect(preview.valid).toBe(true);

@@ -10,7 +10,8 @@ import { updateQuests } from './quests.ts';
 import { advanceOperations } from '../operations/operations.ts';
 import { advanceTransfers } from '../operations/transport.ts';
 import { advanceShippingRoutes } from '../infrastructure/shippingRoutes.ts';
-import { advanceAutoLogistics } from '../operations/autoLogistics.ts';
+import { advanceAutoLogistics, advanceWorkshopSupply } from '../operations/autoLogistics.ts';
+import { advanceWorkshops } from '../operations/workshops.ts';
 import { nextRandom, newId } from '../engine/rng.ts';
 
 export interface TickResult {
@@ -201,6 +202,18 @@ function advanceLiveEconomy(
   //      planen. Erteilt nur Aufträge an denselben Lagertransport (kein zweites
   //      System) und läuft VOR dessen Schritt, damit eine neue Fahrt sofort anläuft.
   advanceAutoLogistics(state, config, derived);
+
+  // 2b2b. Nachschub für Werkstätten (§ Lieferketten-Overhaul §5): Der Abtransport
+  //       oben SCHIEBT Ware aus den Betrieben; hier ZIEHT die Werkstatt sich
+  //       ihren Rohstoff aus dem Lager. Zwei Richtungen, ein Transportsystem.
+  advanceWorkshopSupply(state, config, derived);
+
+  // 2b3. Werkstätten (§ Lieferketten-Overhaul §4): veredeln angeliefertes
+  //      Material im EIGENEN Lager. Läuft nach der Auto-Logistik, damit eine
+  //      soeben eingetroffene Ladung im selben Takt verarbeitet werden kann,
+  //      und vor `advanceTransfers`, damit frisches Produkt sofort abgeholt
+  //      werden darf. Derselbe `dtMin`-Pfad → Pause/2×/4× wirken automatisch.
+  advanceWorkshops(state, config, derived, dtMin);
 
   advanceTransfers(state, config, derived, dtMin);
 

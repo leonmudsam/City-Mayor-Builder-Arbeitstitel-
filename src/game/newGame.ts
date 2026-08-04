@@ -4,6 +4,14 @@ import type { GameState } from './types.ts';
 import { allRegionIds, createRegionStub } from './map/world.ts';
 
 /**
+ * v33 (§ Wirtschafts-/Lieferketten-Overhaul): ZWEI NEUE WAREN + WERKSTÄTTEN.
+ * `resources.planks`/`resources.cut_stone` (Bretter/Werkstein) und ihre
+ * `stats.produced`-Zähler kommen additiv hinzu; dazu die persistierten
+ * Werkstatt-Regeln `operations.supplyRules` (Verarbeitungsanteil, Mindest-
+ * bestand, Quelle, Priorität, aktiv/pausiert). Alte Stände bleiben vollständig
+ * erhalten — Migration `v32→v33` setzt die neuen Bestände auf 0 und legt keine
+ * Regel an; eine Werkstatt ohne Regel läuft auf ihren Standardwerten. Keine
+ * Welt-, Koordinaten- oder Balancing-Änderung an Bestehendem.
  * v31 (Straßen-, Höhen- und Terrain-Overhaul): additive, eingefrorene
  * `BuildingInstance.roadEngineering`-Metadaten für automatisch gewählte
  * Straßenvarianten und Deckhöhen. Alte Straßen bleiben ohne Feld gültig und
@@ -62,7 +70,7 @@ import { allRegionIds, createRegionStub } from './map/world.ts';
  * v12 (§ Stadtarbeit 2D): laufende Fahrmissionen speichern Fahrzeugklasse und
  * manuell gezeichnete Straßenkette.
  */
-export const SCHEMA_VERSION = 32;
+export const SCHEMA_VERSION = 33;
 
 export function createNewGame(config: GameConfig, cityName: string, now: number): GameState {
   const state: GameState = {
@@ -101,7 +109,7 @@ export function createNewGame(config: GameConfig, cityName: string, now: number)
     operations: { inventories: {}, workers: {}, active: {}, nodeDeltas: {}, transfers: {} },
     stats: {
       built: {},
-      produced: { money: 0, wood: 0, stone: 0, food: 0, freshwater: 0 },
+      produced: { money: 0, wood: 0, stone: 0, food: 0, freshwater: 0, planks: 0, cut_stone: 0 },
       mayorActions: {},
       // Counts only regions the player actively unlocks — the start region is
       // free and does not count towards expansion quests (§5).

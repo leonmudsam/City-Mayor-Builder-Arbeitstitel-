@@ -18,6 +18,8 @@ const RESOURCE_LABEL: Record<ResourceId, string> = {
   stone: 'Stein',
   food: 'Nahrung',
   freshwater: 'Frischwasser',
+  planks: 'Bretter',
+  cut_stone: 'Werkstein',
 };
 
 const amount = (value: number): string => Math.round(value).toLocaleString('de-DE');

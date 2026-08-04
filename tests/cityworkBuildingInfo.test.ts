@@ -20,7 +20,7 @@ function deliveryCity(): GameController {
   const { controller } = newController();
   setLevel(controller, 14);
   flattenTerrain(controller);
-  controller.state.resources = { money: 5_000_000, wood: 100_000, stone: 100_000, food: 0, freshwater: 0 };
+  controller.state.resources = { money: 5_000_000, wood: 100_000, stone: 100_000, food: 0, freshwater: 0, planks: 0, cut_stone: 0 };
   for (let dx = 0; dx <= 24; dx++) controller.placeBuilding('road', at(dx, 4).x, at(dx, 4).y);
   for (const [defId, dx] of [['warehouse', 6], ['supermarket', 16]] as [string, number][]) {
     const result = controller.placeBuilding(defId, at(dx, 5).x, at(dx, 5).y);
@@ -34,7 +34,7 @@ function deliveryCity(): GameController {
   if (houses === 0) throw new Error('Fixture: kein Wohnhaus platzierbar');
   for (const building of Object.values(controller.state.buildings)) building.status = 'active';
   refreshDerived(controller);
-  controller.state.resources = { money: 500_000, wood: 400, stone: 400, food: 400, freshwater: 0 };
+  controller.state.resources = { money: 500_000, wood: 400, stone: 400, food: 400, freshwater: 0, planks: 0, cut_stone: 0 };
   reconcileStock(controller.state, controller.config, controller.derived);
   return controller;
 }

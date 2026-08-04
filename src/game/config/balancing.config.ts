@@ -34,7 +34,9 @@ export const balancingConfig: BalancingConfig = {
   growthHappinessThreshold: 60,
   declineHappinessThreshold: 40,
   foodWithoutDistributionCap: 0.3,
-  startResources: { money: 45_000, wood: 60, stone: 0, food: 40, freshwater: 0 },
+  // Bretter/Werkstein starten bei 0 und haben das auch zu tun: Sie sind das
+  // Ergebnis einer Kette, die der Spieler ab Level 5 selbst baut (§3/§4).
+  startResources: { money: 45_000, wood: 60, stone: 0, food: 40, freshwater: 0, planks: 0, cut_stone: 0 },
   startGold: 0,
   // Expansion (§ Welt 2.0): Freischaltkosten stehen explizit pro Region in
   // regions.config.ts — keine Distanz-Formel mehr.

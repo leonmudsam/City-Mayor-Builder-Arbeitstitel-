@@ -23,7 +23,7 @@ function deliveryCity(): GameController {
   const { controller } = newController();
   setLevel(controller, 20);
   flattenTerrain(controller);
-  controller.state.resources = { money: 10_000_000, wood: 100_000, stone: 100_000, food: 100_000, freshwater: 100_000 };
+  controller.state.resources = { money: 10_000_000, wood: 100_000, stone: 100_000, food: 100_000, freshwater: 100_000, planks: 0, cut_stone: 0 };
   for (let dx = 0; dx <= 18; dx++) controller.placeBuilding('road', at(dx, 5).x, at(dx, 5).y);
   controller.placeBuilding('warehouse', at(0, 6).x, at(0, 6).y);
   controller.placeBuilding('house_small', at(6, 6).x, at(6, 6).y);

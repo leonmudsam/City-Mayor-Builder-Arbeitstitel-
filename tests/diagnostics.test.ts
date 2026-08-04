@@ -10,7 +10,7 @@ describe('building diagnostics (v0.19)', () => {
   it('flags a ready upgrade as a benefit + upgrade marker', () => {
     const { controller } = newController();
     setLevel(controller, 6);
-    controller.state.resources = { money: 5_000_000, wood: 5_000, stone: 5_000, food: 1_000, freshwater: 0 };
+    controller.state.resources = { money: 5_000_000, wood: 5_000, stone: 5_000, food: 1_000, freshwater: 0, planks: 0, cut_stone: 0 };
     for (let dx = 5; dx <= 11; dx++) controller.placeBuilding('road', at(dx, 5).x, at(dx, 5).y);
     controller.placeBuilding('house_small', at(5, 6).x, at(5, 6).y);
     controller.update(T0 + 30_000); // construction (20s) finishes → active

@@ -119,7 +119,7 @@ describe('routeAnalysis — Controller-Integration (§ C2)', () => {
   function cityWithRoute() {
     const { controller } = newController();
     setLevel(controller, 12);
-    controller.state.resources = { money: 5_000_000, wood: 5_000, stone: 5_000, food: 5_000, freshwater: 0 };
+    controller.state.resources = { money: 5_000_000, wood: 5_000, stone: 5_000, food: 5_000, freshwater: 0, planks: 0, cut_stone: 0 };
     // Start-Straßenzeile (y+5) nach Osten verlängern.
     for (let dx = 5; dx <= 12; dx++) controller.placeBuilding('road', at(dx, 5).x, at(dx, 5).y);
     // Zwei Wohnhäuser an die Straße legen.

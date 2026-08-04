@@ -40,7 +40,7 @@ describe('Aktives Spiel: keine Offline-Produktion (§ C7/§26)', () => {
     const { controller } = newController();
     setLevel(controller, 4);
     setLevel(controller, 9);
-    controller.state.resources = { money: 500_000, wood: 400, stone: 400, food: 0, freshwater: 0 };
+    controller.state.resources = { money: 500_000, wood: 400, stone: 400, food: 0, freshwater: 0, planks: 0, cut_stone: 0 };
     for (let dx = 1; dx <= 5; dx++) controller.placeBuilding('road', at(dx, 5).x, at(dx, 5).y);
     // § Active Operations 2.0 / A6+A7: Sägewerk, Steinbruch und Farm gewinnen ihre
     // Ware nur noch aktiv über Arbeiter (siehe operations.test.ts /

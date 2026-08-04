@@ -215,6 +215,45 @@ export interface BuildingOperationProfile {
   stages: BuildingOperationStage[];
 }
 
+/**
+ * § Wirtschafts-/Lieferketten-Overhaul §4 — DER UMWANDLUNGSBETRIEB.
+ *
+ * Eine Werkstatt ist ausdrücklich **kein** `operation`: Sie hat kein
+ * Arbeitsgebiet, keinen Knotentyp und keine Arbeiter, die irgendwohin laufen.
+ * Sie steht, wo der Spieler sie hinstellt, und wartet auf Nachschub. Genau
+ * darin liegt der Reiz — der Standort entscheidet nicht über den Ertrag,
+ * sondern über die LIEFERWEGE.
+ *
+ * Warum kein `produce` mit `inputsPerMinute` (der Haken existiert seit MVP 2):
+ * Der zieht seinen Eingang aus `state.resources`, also aus der Bilanzsumme der
+ * ganzen Stadt. Seit D-052 ist genau das die „globale magische Ressource", die
+ * §8 des Vorauftrags abgeschafft hat — eine Werkstatt am anderen Inselende
+ * würde ohne eine einzige Fahrt produzieren. Der Umwandlungsbetrieb hat
+ * deshalb ein EIGENES Lager (dasselbe `BuildingInventory` wie Sägewerk & Co.,
+ * kein drittes Lagermodell) und verarbeitet nur, was wirklich angekommen ist.
+ */
+export interface BuildingConversionStage {
+  /** Ausstoß je Ingame-Minute bei voller Versorgung. */
+  outputPerMinute: number;
+  /** Arbeitsplätze der Stufe (Anzeige; die Jobs stehen als Effekt am Gebäude). */
+  workerSlots: number;
+  /** Lagerplatz für den Rohstoff. */
+  inputCapacity: number;
+  /** Lagerplatz für das fertige Produkt. */
+  outputCapacity: number;
+}
+
+export interface BuildingConversionProfile {
+  /** Rohstoff (Holz, Stein). */
+  input: ResourceId;
+  /** Produkt (Bretter, Werkstein). */
+  output: ResourceId;
+  /** Einheiten Rohstoff je Einheit Produkt — die Veredelung kostet Substanz. */
+  inputPerOutput: number;
+  /** Werte je Ausbaustufe (Index = upgradeLevel). */
+  stages: BuildingConversionStage[];
+}
+
 export interface BuildingDef {
   id: BuildingDefId;
   category: BuildingCategory;
@@ -252,6 +291,13 @@ export interface BuildingDef {
    * lokales Lager. Nur Gebäude MIT diesem Feld sind aktive Betriebe.
    */
   operation?: BuildingOperationProfile;
+  /**
+   * Umwandlungsbetrieb (§ Lieferketten-Overhaul §4): schaltet den passiven
+   * `produce`-Pfad ebenso ab wie `operation` und verarbeitet stattdessen
+   * angelieferten Rohstoff aus dem eigenen Lager. Ein Gebäude hat nie beides —
+   * `tests/workshops.test.ts` prüft das über die ganze Config.
+   */
+  conversion?: BuildingConversionProfile;
   locationBonus?: LocationBonusDef;
   /**
    * Per-level build cap (production buildings). Ascending breakpoints: the
@@ -371,6 +417,20 @@ export interface ResourceDef {
   nameKey: string;
   /** Base storage cap; Infinity for money. */
   baseStorage: number;
+  /**
+   * § Lieferketten-Overhaul §6: Ab welchem Stadtlevel ist diese Ware Thema?
+   * Ausschließlich eine ANZEIGE-Eigenschaft — die Simulation kennt keine
+   * gesperrten Ressourcen, sie kennt Gebäude, die es noch nicht gibt. Ohne
+   * Werkstatt entsteht kein Brett, mit Cheat-Bestand wird er trotzdem korrekt
+   * gebucht. Eine zweite Sperre im Tick wäre eine zweite Wahrheit.
+   */
+  unlockLevel?: number;
+  /**
+   * Veredelte Ware (aus einer Werkstatt statt aus der Welt). Trägt die
+   * HUD-Gruppierung „Rohstoff → Produkt" und macht in Werkzeugen erkennbar,
+   * dass diese Ware nie durch einen Betrieb mit Arbeitsgebiet entsteht.
+   */
+  refined?: boolean;
 }
 
 export interface NeedDef {

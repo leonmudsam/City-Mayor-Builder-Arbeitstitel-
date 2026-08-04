@@ -14,7 +14,9 @@ const DRAW: Record<ArtResourceId, () => JSX.Element> = {
   money: Coins,
   gold: GoldBars,
   wood: Wood,
+  planks: Planks,
   stone: Stone,
+  cut_stone: CutStone,
   food: FoodCrate,
   freshwater: WaterDrop,
   population: Citizens,
@@ -86,6 +88,51 @@ function Wood() {
       {log(14, 22)}
       {log(26, 22)}
       {log(20, 14)}
+    </g>
+  );
+}
+
+/**
+ * Bretter (§ Lieferketten-Overhaul §3). Bewusst gesägt statt rund: die
+ * Rundhölzer aus `Wood` und dieser Stapel dürfen sich in der HUD-Leiste nicht
+ * ähneln, sonst liest niemand, dass hier zwei verschiedene Waren stehen.
+ */
+function Planks() {
+  const plank = (y: number, tone: string, top: string) => (
+    <g>
+      <rect x="6" y={y} width="28" height="5.2" rx="1.2" fill={tone} />
+      <rect x="6" y={y} width="28" height="2" rx="1" fill={top} />
+      <path d={`M12 ${y + 1.2} L12 ${y + 4}`} stroke="#8a5a30" strokeWidth="0.9" opacity="0.55" />
+      <path d={`M25 ${y + 1.2} L25 ${y + 4}`} stroke="#8a5a30" strokeWidth="0.9" opacity="0.55" />
+    </g>
+  );
+  return (
+    <g>
+      {plank(26, '#b8853f', '#d9a75c')}
+      {plank(19.5, '#c1904a', '#e2b268')}
+      {plank(13, '#cb9a53', '#eebd75')}
+    </g>
+  );
+}
+
+/**
+ * Werkstein: behauene Quader mit sichtbarer Fuge — die Gegenform zum
+ * unregelmäßigen Findling in `Stone`.
+ */
+function CutStone() {
+  const block = (x: number, y: number, w: number) => (
+    <g>
+      <rect x={x} y={y} width={w} height="7" rx="0.8" fill="#98a2ae" />
+      <rect x={x} y={y} width={w} height="2.4" rx="0.8" fill="#b6c0cb" />
+      <rect x={x} y={y + 5} width={w} height="2" fill="#828c99" />
+    </g>
+  );
+  return (
+    <g>
+      {block(6, 25, 13)}
+      {block(21, 25, 13)}
+      {block(13, 17, 13)}
+      <path d="M14.5 18.5 L24 18.5" stroke="#d3dae2" strokeWidth="1" strokeLinecap="round" opacity="0.8" />
     </g>
   );
 }

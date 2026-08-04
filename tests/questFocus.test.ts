@@ -13,7 +13,7 @@ describe('questFocus — reine Anliegen-Kartenprojektion (§ C3)', () => {
 
   it('fokussiert ein echtes Gebäude eines gebäudebezogenen Ziels', () => {
     const { controller } = newController();
-    controller.state.resources = { money: 500_000, wood: 500, stone: 200, food: 40, freshwater: 0 };
+    controller.state.resources = { money: 500_000, wood: 500, stone: 200, food: 40, freshwater: 0, planks: 0, cut_stone: 0 };
     // Start-Straße verlängern + ein Wohnhaus setzen (q02_houses: build house_small).
     for (let dx = 3; dx <= 6; dx++) controller.placeBuilding('road', at(dx, 5).x, at(dx, 5).y);
     expect(controller.placeBuilding('house_small', at(3, 6).x, at(3, 6).y)).toEqual({ ok: true });

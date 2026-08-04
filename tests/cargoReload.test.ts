@@ -29,7 +29,7 @@ function deliveryCity(): { controller: GameController; warehouseId: string } {
   const { controller } = newController();
   setLevel(controller, 20);
   flattenTerrain(controller);
-  controller.state.resources = { money: 10_000_000, wood: 500_000, stone: 500_000, food: 500_000, freshwater: 500_000 };
+  controller.state.resources = { money: 10_000_000, wood: 500_000, stone: 500_000, food: 500_000, freshwater: 500_000, planks: 0, cut_stone: 0 };
   for (let dx = 0; dx <= 24; dx++) controller.placeBuilding('road', at(dx, 5).x, at(dx, 5).y);
   expect(controller.placeBuilding('warehouse', at(1, 6).x, at(1, 6).y)).toEqual({ ok: true });
   for (let dx = 8; dx <= 22; dx += 3) controller.placeBuilding('house_small', at(dx, 6).x, at(dx, 6).y);
@@ -38,7 +38,7 @@ function deliveryCity(): { controller: GameController; warehouseId: string } {
   // füllt der Abgleich aus D-052 jedes Lager sofort wieder randvoll — eine
   // Entnahme wäre dann unsichtbar, und der Test hätte den Abgleich gemessen
   // statt den Vorgang.
-  controller.state.resources = { ...controller.state.resources, wood: 600, stone: 400, food: 300, freshwater: 300 };
+  controller.state.resources = { ...controller.state.resources, wood: 600, stone: 400, food: 300, freshwater: 300, planks: 0, cut_stone: 0 };
   controller.update(T0 + 3_601_000, false);
 
   // Ohne Straßenanschluss hat ein Lagerhaus keine Lagerwirkung (D-047) und

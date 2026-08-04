@@ -583,8 +583,11 @@ export const BUILDING_PROMPTS: Record<string, string> = {
   house_small: 'a small cozy family house with a red pitched roof, a chimney, a tiny front garden and warm windows',
   residential_tower: 'a tall residential tower with many balconies, a flat roof and a modern colorful facade',
   sawmill: "a wooden sawmill with a pitched roof, log piles, a saw shed and a chimney (name the chimney node 'chimney')",
+  stone_pit_small: 'a tiny one-tile stone gathering spot: a shallow hand-dug scrape with a few loose surface rocks, a small sorted stone pile, a pickaxe leaning on a wooden post and a single wheelbarrow — humble, hand-worked, no machinery',
   stone_pit: 'a small open-air stone gathering pit: a shallow scrape in the ground with loose surface rocks, hand tools, a wheelbarrow, sorted stone piles and a lean-to shelter',
   quarry: 'a stone quarry site with terraced rock, a small crane, gravel piles and a work shed',
+  wood_workshop: 'a small timber joinery workshop: a wooden workshop hall with a wide open door, a sawbench, stacked fresh-cut planks under a lean-to, sawdust and a delivery bay — clearly a place where logs become boards',
+  stone_workshop: "a small stonemason's workshop: a stone-walled work hall, a cutting yard with a saw frame, rough blocks on one side and neatly dressed ashlar stones on the other, a hoist and a delivery bay",
   farm: 'a farm with a barn, a farmhouse, silos and fenced fields, warm rural look',
   well: 'a small stone village well with a little wooden roof and a bucket',
   water_pump: 'a compact water pumping station: a small building with pipes, valves and a tank',
@@ -652,6 +655,16 @@ export const BUILDING_STAGE_PROMPTS: Record<string, readonly string[]> = {
   stone_pit: [
     'a small open-air stone gathering pit on a 3×3 plot: a shallow scrape with loose surface rocks, a wheelbarrow, hand tools, sorted stone piles and a lean-to shelter',
     'a stone collection yard on the same 3×3 plot: a sorting table, a simple hand crane, stacked pallets of dressed stone and a short cart track',
+  ],
+  wood_workshop: [
+    'a small timber joinery workshop on a 3×3 yard: a wooden hall with a wide door, a sawbench, stacked fresh planks under a lean-to and a delivery bay',
+    'a timber manufactory on the same 3×3 yard: a larger hall with a powered saw, a drying rack of boards, a small crane and a loaded handcart',
+    'a timber works on the 3×3 yard: an industrial joinery with a tall hall, conveyor, dense plank stacks, a chimney and a busy loading bay',
+  ],
+  stone_workshop: [
+    "a small stonemason's workshop on a 3×3 yard: a stone-walled hall, a cutting frame, rough blocks on one side and dressed ashlar on the other",
+    'a stonemasonry on the same 3×3 yard: a bigger cutting hall with a hoist, several saw frames, pallets of dressed stone and a delivery bay',
+    'a stone works on the 3×3 yard: an industrial stone-dressing plant with gantry, cutting bays, stacked ashlar blocks and a dust extractor',
   ],
   quarry: [
     'a stone quarry site with terraced rock, a small crane, gravel piles and a work shed on a 5×5 excavation plot',

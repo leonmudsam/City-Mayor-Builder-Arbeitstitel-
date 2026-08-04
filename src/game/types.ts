@@ -1,7 +1,12 @@
 // Core game state types. This file (like everything under src/game) is pure
 // TypeScript — it must never import UI, rendering, or DOM code.
 
-export type ResourceId = 'money' | 'wood' | 'stone' | 'food' | 'freshwater';
+// § Wirtschafts-/Lieferketten-Overhaul §3: `planks` (Bretter) und `cut_stone`
+// (Werkstein) sind VEREDELTE Waren — sie kommen nie aus der Welt, sondern
+// ausschließlich aus einer Werkstatt (§4). Deshalb tragen sie auch keinen
+// Ressourcenknoten und keinen Betrieb mit Arbeitsgebiet; wer sie will, baut
+// eine Kette.
+export type ResourceId = 'money' | 'wood' | 'stone' | 'food' | 'freshwater' | 'planks' | 'cut_stone';
 export type NeedId = 'housing' | 'water' | 'food' | 'work' | 'leisure' | 'energy' | 'safety' | 'health' | 'freshwater';
 export type BuildingCategory =
   | 'roads'
@@ -543,6 +548,34 @@ export interface OperationsState {
    * ausdrückliches `false` schaltet sie für einen Betrieb ab.
    */
   autoTransport?: Record<BuildingInstanceId, boolean>;
+  /**
+   * § Wirtschafts-/Lieferketten-Overhaul §5 (Save v33): Lieferregel je Werkstatt.
+   * **Fehlender Eintrag = Standardregel** (`DEFAULT_SUPPLY_RULE`) — eine Werkstatt
+   * ist damit sofort nach dem Bau in Betrieb, ohne dass der Spieler erst etwas
+   * einstellen muss (D-039: automatisiert wird die Ausführung, nicht die Wahl).
+   * Gespeichert wird nur, was der Spieler ABWEICHEND entschieden hat.
+   */
+  supplyRules?: Record<BuildingInstanceId, WorkshopSupplyRule>;
+}
+
+/**
+ * Was der Spieler an einer Werkstatt einstellt. Bewusst klein: jede Zeile hier
+ * ist eine ENTSCHEIDUNG (was verarbeiten, woher, wer zuerst), keine Ausführung.
+ * Fahrzeugwahl, Route und Zeitpunkt bleiben Sache der Automatik.
+ */
+export interface WorkshopSupplyRule {
+  /** Aus = die Werkstatt lagert nur noch, sie verarbeitet nichts. */
+  enabled: boolean;
+  /**
+   * Anteil des Eingangslagers, der verarbeitet werden darf (0…1). Der Rest ist
+   * Reserve und wird nie angetastet — dieselbe Zahl in zwei Lesarten: „70 %
+   * verarbeiten" ist identisch zu „mindestens 30 % des Lagers behalten".
+   */
+  processRatio: number;
+  /** Bevorzugter Lagerort für den Nachschub; leer = nächstes erreichbares. */
+  sourceBuildingId?: BuildingInstanceId;
+  /** Reihenfolge bei knappem Rohstoff (größer = zuerst beliefert). */
+  priority?: number;
 }
 
 export interface GameState {

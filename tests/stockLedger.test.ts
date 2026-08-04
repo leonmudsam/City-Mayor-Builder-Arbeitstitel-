@@ -42,7 +42,7 @@ function storageCity() {
   const { controller } = bundle;
   setLevel(controller, 14);
   flattenTerrain(controller);
-  controller.state.resources = { money: 5_000_000, wood: 100_000, stone: 100_000, food: 0, freshwater: 0 };
+  controller.state.resources = { money: 5_000_000, wood: 100_000, stone: 100_000, food: 0, freshwater: 0, planks: 0, cut_stone: 0 };
   // Von der Rathauskante nach außen wachsen — eine isolierte Kachel lehnt
   // `validatePlacement` zu Recht mit `needs_road` ab.
   for (let dx = 0; dx <= 26; dx++) {
@@ -65,7 +65,7 @@ function storageCity() {
   refreshDerived(controller);
   // Erst jetzt die Bilanz auf einen Wert unterhalb der Deckel setzen, damit der
   // Abgleich eine reguläre Lage vorfindet (Baukosten sind bezahlt).
-  controller.state.resources = { money: 500_000, wood: 300, stone: 300, food: 300, freshwater: 0 };
+  controller.state.resources = { money: 500_000, wood: 300, stone: 300, food: 300, freshwater: 0, planks: 0, cut_stone: 0 };
   reconcileStock(controller.state, controller.config, controller.derived);
   return controller;
 }
@@ -284,11 +284,11 @@ describe('Bestandsregister — Abgrenzung zum lokalen Betriebslager', () => {
 });
 
 describe('Bestandsregister — Save', () => {
-  it('Schema steht auf v32 und ein neuer Save lädt unverändert', () => {
-    expect(SCHEMA_VERSION).toBe(32);
+  it('Schema steht auf v33 und ein neuer Save lädt unverändert', () => {
+    expect(SCHEMA_VERSION).toBe(33);
     const controller = storageCity();
     const restored = migrateAndValidate(JSON.parse(exportSave(controller.state)));
-    expect(restored.schemaVersion).toBe(32);
+    expect(restored.schemaVersion).toBe(33);
     expect(restored.resources.food).toBeCloseTo(controller.state.resources.food, 5);
   });
 
@@ -302,7 +302,7 @@ describe('Bestandsregister — Save', () => {
     const food = (raw.resources as Record<string, number>).food ?? 0;
 
     const migrated = migrateAndValidate(raw);
-    expect(migrated.schemaVersion).toBe(32);
+    expect(migrated.schemaVersion).toBe(33);
     expect(migrated.resources.food).toBeCloseTo(food, 5);
 
     // Der Ladepfad bekommt keine Sonderbehandlung — derselbe Abgleich verortet.

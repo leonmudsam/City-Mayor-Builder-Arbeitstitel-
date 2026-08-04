@@ -28,7 +28,7 @@ describe('simulation tick', () => {
     const { controller } = newController();
     setLevel(controller, 9);
     flattenTerrain(controller);
-    controller.state.resources = { money: 500_000, wood: 400, stone: 400, food: 0, freshwater: 0 };
+    controller.state.resources = { money: 500_000, wood: 400, stone: 400, food: 0, freshwater: 0, planks: 0, cut_stone: 0 };
     controller.placeBuilding('bakery', at(1, 6).x, at(1, 6).y); // 90 food/min, 2×2
     controller.update(T0 + 241_000, true); // construction (240s) done
     const foodAfterBuild = controller.state.resources.food;
@@ -55,7 +55,7 @@ describe('simulation tick', () => {
       const { controller } = newController();
       setLevel(controller, 4);
       flattenTerrain(controller);
-      controller.state.resources = { money: 500_000, wood: 400, stone: 0, food: 100, freshwater: 0 };
+      controller.state.resources = { money: 500_000, wood: 400, stone: 0, food: 100, freshwater: 0, planks: 0, cut_stone: 0 };
       // Abbaubarer Fels im Arbeitsgebiet — ohne ihn gäbe es gar keine Knoten.
       const pit: [number, number][] = [];
       for (let dy = 0; dy < 4; dy++) for (let dx = 0; dx < 4; dx++) pit.push([at(8 + dx, 6 + dy).x, at(8 + dx, 6 + dy).y]);
@@ -145,7 +145,7 @@ describe('simulation tick', () => {
   it('feeds only homes a market reaches (food distribution coverage)', () => {
     const { controller } = newController();
     setLevel(controller, 5);
-    controller.state.resources = { money: 200_000, wood: 500, stone: 500, food: 100, freshwater: 0 };
+    controller.state.resources = { money: 200_000, wood: 500, stone: 500, food: 100, freshwater: 0, planks: 0, cut_stone: 0 };
     for (let dx = 5; dx <= 10; dx++) controller.placeBuilding('road', at(dx, 5).x, at(dx, 5).y);
     controller.placeBuilding('house_small', at(3, 6).x, at(3, 6).y);
     controller.update(T0 + 25_000); // house finishes construction
@@ -159,7 +159,7 @@ describe('simulation tick', () => {
     const { controller } = newController();
     setLevel(controller, 12);
     flattenTerrain(controller);
-    controller.state.resources = { money: 2_000_000, wood: 2_000, stone: 2_000, food: 2_000, freshwater: 0 };
+    controller.state.resources = { money: 2_000_000, wood: 2_000, stone: 2_000, food: 2_000, freshwater: 0, planks: 0, cut_stone: 0 };
     for (let dx = 5; dx <= 19; dx++) controller.placeBuilding('road', at(dx, 5).x, at(dx, 5).y);
     paintTerrain(controller, [[at(4, 8).x, at(4, 8).y]], 'river'); // a river tile beside the waterworks spot
 

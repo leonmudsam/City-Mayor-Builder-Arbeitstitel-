@@ -28,9 +28,12 @@ Bauplots sind **fix über alle Stufen** und grundsätzlich quadratisch; Waterfro
 | Kleines Haus | `house_small` | Wohnen | M | 3×3 | L1 | 6 |
 | Wohnturm | `residential_tower` | Wohnen | L | 5×5 | L15 | 3 |
 | Sägewerk | `sawmill` | Produktion & Ressourcen | L | 4×4 | L2 | 3 |
+| Kleine Steingrube | `stone_pit_small` | Produktion & Ressourcen | XS | 1×1 | L1 | 1 |
 | Steingrube | `stone_pit` | Produktion & Ressourcen | M | 3×3 | L2 | 2 |
 | Steinbruch | `quarry` | Produktion & Ressourcen | L | 5×5 | L4 | 3 |
 | Bauernhof | `farm` | Produktion & Ressourcen | XL | 6×6 | L4 | 3 |
+| Holzwerkstatt | `wood_workshop` | Produktion & Ressourcen | M | 3×3 | L5 | 3 |
+| Steinwerkstatt | `stone_workshop` | Produktion & Ressourcen | M | 3×3 | L5 | 3 |
 | Brunnen | `well` | Versorgung & Dienste | XS | 1×1 | L3 | 2 |
 | Wasserpumpe | `water_pump` | Versorgung & Dienste | M | 3×3 | L7 | 2 |
 | Lagerhaus | `warehouse` | Produktion & Ressourcen | L | 4×4 | L6 | 2 |
@@ -147,6 +150,18 @@ Bauplots sind **fix über alle Stufen** und grundsätzlich quadratisch; Waterfro
 | 2 | Großsägewerk | L7 | 220.000 Geld · 160 Holz · 130 Stein | +100 Holz/min · +1.200 Industrie/min · 7 Jobs |
 | 3 | Holzkombinat | L12 | 1.800.000 Geld · 500 Holz · 450 Stein | +260 Holz/min · +2.900 Industrie/min · 13 Jobs |
 
+### Kleine Steingrube — `stone_pit_small`
+
+- **Größenklasse:** XS (1×1) · **Footprint:** 1×1 (fix über alle Stufen)
+- **Asset-Budget:** < 600 Tris, ≤ 256², 1 Material
+- **Ab Level:** 1 · **Stufen:** 1 · **Kategorie:** Produktion & Ressourcen
+- **Benötigte GLBs:** `stone_pit_small.glb` · `stone_pit_small_construction.glb`
+- **Besonderheiten:** kein Straßenanschluss nötig · Baugrenze bis 5 (ab L5) · versetzbar
+
+| Stufe | Name | ab Level | Kosten | Kern-Wirkung |
+|---|---|---|---|---|
+| 1 | Kleine Steingrube | L1 | 1.800 Geld | +4 Stein/min · 1 Jobs |
+
 ### Steingrube — `stone_pit`
 
 - **Größenklasse:** M (3×3) · **Footprint:** 3×3 (fix über alle Stufen)
@@ -188,6 +203,34 @@ Bauplots sind **fix über alle Stufen** und grundsätzlich quadratisch; Waterfro
 | 2 | Großfarm | L8 | 320.000 Geld · 150 Holz · 130 Stein | +500 Nahrung/min · +1.300 Industrie/min · 18 Jobs |
 | 3 | Agrarkomplex | L13 | 2.400.000 Geld · 480 Holz · 480 Stein | +1.100 Nahrung/min · +2.900 Industrie/min · 28 Jobs |
 
+### Holzwerkstatt — `wood_workshop`
+
+- **Größenklasse:** M (3×3) · **Footprint:** 3×3 (fix über alle Stufen)
+- **Asset-Budget:** 1 500–3 500 Tris, ≤ 512², 2 Materialien
+- **Ab Level:** 5 · **Stufen:** 3 · **Kategorie:** Produktion & Ressourcen
+- **Benötigte GLBs:** `wood_workshop.glb` · `wood_workshop_stage2`…`wood_workshop_stage3.glb` · `wood_workshop_construction.glb`
+- **Besonderheiten:** Baugrenze bis 4 (ab L11) · versetzbar
+
+| Stufe | Name | ab Level | Kosten | Kern-Wirkung |
+|---|---|---|---|---|
+| 1 | Holzwerkstatt | L5 | 38.000 Geld · 90 Holz | +700 Industrie/min · 5 Jobs · Ambiente -1 r=3 |
+| 2 | Holzmanufaktur | L8 | 210.000 Geld · 180 Holz · 120 Stein | +1.500 Industrie/min · 9 Jobs · Ambiente -1 r=3 |
+| 3 | Holzwerk | L13 | 1.100.000 Geld · 460 Holz · 380 Stein | +3.100 Industrie/min · 16 Jobs · Ambiente -2 r=4 |
+
+### Steinwerkstatt — `stone_workshop`
+
+- **Größenklasse:** M (3×3) · **Footprint:** 3×3 (fix über alle Stufen)
+- **Asset-Budget:** 1 500–3 500 Tris, ≤ 512², 2 Materialien
+- **Ab Level:** 5 · **Stufen:** 3 · **Kategorie:** Produktion & Ressourcen
+- **Benötigte GLBs:** `stone_workshop.glb` · `stone_workshop_stage2`…`stone_workshop_stage3.glb` · `stone_workshop_construction.glb`
+- **Besonderheiten:** Baugrenze bis 4 (ab L11) · versetzbar
+
+| Stufe | Name | ab Level | Kosten | Kern-Wirkung |
+|---|---|---|---|---|
+| 1 | Steinwerkstatt | L5 | 42.000 Geld · 70 Holz · 60 Stein | +780 Industrie/min · 5 Jobs · Ambiente -2 r=3 |
+| 2 | Steinmetzerei | L8 | 240.000 Geld · 140 Holz · 180 Stein | +1.650 Industrie/min · 9 Jobs · Ambiente -2 r=3 |
+| 3 | Steinwerk | L13 | 1.300.000 Geld · 380 Holz · 520 Stein | +3.300 Industrie/min · 16 Jobs · Ambiente -3 r=4 |
+
 ### Lagerhaus — `warehouse`
 
 - **Größenklasse:** L (4×4–5×5) · **Footprint:** 4×4 (fix über alle Stufen)
@@ -198,8 +241,8 @@ Bauplots sind **fix über alle Stufen** und grundsätzlich quadratisch; Waterfro
 
 | Stufe | Name | ab Level | Kosten | Kern-Wirkung |
 |---|---|---|---|---|
-| 1 | Lagerhaus | L6 | 95.000 Geld · 160 Holz · 100 Stein | Lager +1.000 Holz · Lager +1.000 Stein · Lager +4.000 Nahrung · Lager +4.000 Wasser · 3 Jobs |
-| 2 | Hochregallager | L10 | 260.000 Geld · 200 Holz · 150 Stein | Lager +1.800 Holz · Lager +1.800 Stein · Lager +7.000 Nahrung · Lager +7.000 Wasser · 5 Jobs |
+| 1 | Lagerhaus | L6 | 95.000 Geld · 160 Holz · 100 Stein | Lager +1.000 Holz · Lager +1.000 Stein · Lager +4.000 Nahrung · Lager +4.000 Wasser · Lager +900 planks · Lager +900 cut_stone · 3 Jobs |
+| 2 | Hochregallager | L10 | 260.000 Geld · 200 Holz · 150 Stein | Lager +1.800 Holz · Lager +1.800 Stein · Lager +7.000 Nahrung · Lager +7.000 Wasser · Lager +1.600 planks · Lager +1.600 cut_stone · 5 Jobs |
 
 ### Logistikzentrum — `depot`
 
@@ -492,11 +535,11 @@ L15–L20 schalten kaum neue Gebäude frei, sondern gaten die Top-Stufen der Ket
 
 | Level | XP (kumuliert) | Schaltet frei | Belohnung |
 |---|---|---|---|
-| 1 | 0 | Straße, Kleines Haus | — |
+| 1 | 0 | Straße, Kleines Haus, Kleine Steingrube | — |
 | 2 | 36 | Sägewerk, Steingrube, Höhenstraße | 13.000 Geld |
 | 3 | 130 | Brunnen, Bürgermeisterhaus | 20.000 Geld · 10 Gold |
 | 4 | 310 | Bauernhof, Steinbruch | 30.000 Geld |
-| 5 | 620 | Markt, Handelskontor | 47.000 Geld · 15 Gold |
+| 5 | 620 | Markt, Handelskontor, Holzwerkstatt, Steinwerkstatt | 47.000 Geld · 15 Gold |
 | 6 | 1.120 | Kleiner Laden, Lagerhaus, Kleiner Anleger | 85.000 Geld |
 | 7 | 1.780 | Park, Spielplatz, Wasserpumpe, Logistikzentrum, Baum, Blumenbeet, Zierbrunnen, Parkbank | 130.000 Geld · 20 Gold |
 | 8 | 2.680 | Feuerwache, Kleines Büro | 200.000 Geld |

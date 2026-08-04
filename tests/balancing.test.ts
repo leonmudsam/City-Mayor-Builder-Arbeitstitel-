@@ -24,7 +24,7 @@ describe('long-term balancing (v0.15)', () => {
   it('does not let residential spam carry level progression (§4)', () => {
     const { controller } = newController();
     // Plenty of resources, still level 1 — isolate XP from the housing spam.
-    controller.state.resources = { money: 500_000, wood: 500, stone: 100, food: 40, freshwater: 0 };
+    controller.state.resources = { money: 500_000, wood: 500, stone: 100, food: 40, freshwater: 0, planks: 0, cut_stone: 0 };
     for (let dx = 5; dx <= 17; dx++) controller.placeBuilding('road', at(dx, 5).x, at(dx, 5).y);
     // A street of small houses (3×3 footprints, spaced) beside the town-hall
     // road strip — lots of housing capacity…
@@ -40,7 +40,7 @@ describe('long-term balancing (v0.15)', () => {
   it('makes each extra warehouse pricier — storage is an investment (§7)', () => {
     const { controller } = newController();
     setLevel(controller, 10);
-    controller.state.resources = { money: 5_000_000, wood: 5_000, stone: 5_000, food: 1_000, freshwater: 0 };
+    controller.state.resources = { money: 5_000_000, wood: 5_000, stone: 5_000, food: 1_000, freshwater: 0, planks: 0, cut_stone: 0 };
     for (let dx = 5; dx <= 13; dx++) controller.placeBuilding('road', at(dx, 5).x, at(dx, 5).y);
     // The first warehouse carries a first-build discount (§3), so measure the
     // escalating copies AFTER it: the third costs 40 % more than the second.
@@ -78,7 +78,7 @@ describe('big-city scaling (v0.16)', () => {
     const { controller } = newController();
     setLevel(controller, 14);
     flattenTerrain(controller);
-    controller.state.resources = { money: 5_000_000, wood: 5_000, stone: 5_000, food: 5_000, freshwater: 0 };
+    controller.state.resources = { money: 5_000_000, wood: 5_000, stone: 5_000, food: 5_000, freshwater: 0, planks: 0, cut_stone: 0 };
     for (let dx = 5; dx <= 10; dx++) controller.placeBuilding('road', at(dx, 5).x, at(dx, 5).y);
     controller.placeBuilding('house_small', at(3, 6).x, at(3, 6).y);
     expect(controller.placeBuilding('police_station', at(7, 6).x, at(7, 6).y)).toEqual({ ok: true });
@@ -101,7 +101,7 @@ describe('big-city scaling (v0.16)', () => {
     const { controller } = newController();
     setLevel(controller, 15); // Wohnturm-Band (§ Gebaeudesystem 2.0)
     flattenTerrain(controller);
-    controller.state.resources = { money: 5_000_000, wood: 5_000, stone: 5_000, food: 5_000, freshwater: 0 };
+    controller.state.resources = { money: 5_000_000, wood: 5_000, stone: 5_000, food: 5_000, freshwater: 0, planks: 0, cut_stone: 0 };
     for (let dx = 5; dx <= 9; dx++) controller.placeBuilding('road', at(dx, 5).x, at(dx, 5).y);
     // One tower houses thousands — a real city scale.
     expect(controller.placeBuilding('residential_tower', at(5, 6).x, at(5, 6).y)).toEqual({ ok: true });

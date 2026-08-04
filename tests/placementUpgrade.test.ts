@@ -8,7 +8,7 @@ const HOUR = 3_600_000;
 describe('placementDiagnostics — Read-Projektion für die Ghost-Vorschau (§ C4)', () => {
   it('meldet gültige Platzierung mit Straßenanschluss und Terrain', () => {
     const { controller } = newController();
-    controller.state.resources = { money: 500_000, wood: 500, stone: 200, food: 40, freshwater: 0 };
+    controller.state.resources = { money: 500_000, wood: 500, stone: 200, food: 40, freshwater: 0, planks: 0, cut_stone: 0 };
     for (let dx = 3; dx <= 7; dx++) controller.placeBuilding('road', at(dx, 5).x, at(dx, 5).y);
     const diag = controller.placementDiagnostics('house_small', at(4, 6).x, at(4, 6).y);
     expect(diag).toBeDefined();
@@ -20,7 +20,7 @@ describe('placementDiagnostics — Read-Projektion für die Ghost-Vorschau (§ C
 
   it('meldet ungültige Platzierung mit Grund auf belegter Fläche', () => {
     const { controller } = newController();
-    controller.state.resources = { money: 500_000, wood: 500, stone: 200, food: 40, freshwater: 0 };
+    controller.state.resources = { money: 500_000, wood: 500, stone: 200, food: 40, freshwater: 0, planks: 0, cut_stone: 0 };
     for (let dx = 3; dx <= 7; dx++) controller.placeBuilding('road', at(dx, 5).x, at(dx, 5).y);
     controller.placeBuilding('house_small', at(4, 6).x, at(4, 6).y);
     const diag = controller.placementDiagnostics('house_small', at(4, 6).x, at(4, 6).y);
@@ -39,7 +39,7 @@ describe('Gebäude verschieben erhält den Zustand (§ C4/15)', () => {
     const { controller } = newController();
     controller.config.features.moveBuildings = true; // Dev-Flag: alles verschiebbar
     setLevel(controller, 6);
-    controller.state.resources = { money: 2_000_000, wood: 2_000, stone: 1_000, food: 500, freshwater: 0 };
+    controller.state.resources = { money: 2_000_000, wood: 2_000, stone: 1_000, food: 500, freshwater: 0, planks: 0, cut_stone: 0 };
     for (let dx = 3; dx <= 10; dx++) controller.placeBuilding('road', at(dx, 5).x, at(dx, 5).y);
     controller.placeBuilding('house_small', at(4, 6).x, at(4, 6).y);
     controller.update(T0 + HOUR); // fertig bauen
@@ -67,7 +67,7 @@ describe('Upgrade lässt Werte NICHT auf null fallen (§ C4/16)', () => {
   it('ein Versorgungsgebäude versorgt während des Upgrades weiter', () => {
     const { controller } = newController();
     setLevel(controller, 6); // well-Upgrade (Tiefbrunnen) ist ab L6 verfügbar
-    controller.state.resources = { money: 2_000_000, wood: 2_000, stone: 1_000, food: 500, freshwater: 0 };
+    controller.state.resources = { money: 2_000_000, wood: 2_000, stone: 1_000, food: 500, freshwater: 0, planks: 0, cut_stone: 0 };
     for (let dx = 3; dx <= 8; dx++) controller.placeBuilding('road', at(dx, 5).x, at(dx, 5).y);
     controller.placeBuilding('well', at(3, 6).x, at(3, 6).y);
     controller.placeBuilding('house_small', at(5, 6).x, at(5, 6).y);

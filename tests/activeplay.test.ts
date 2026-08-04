@@ -19,7 +19,7 @@ describe('no AFK farming (§1/§16)', () => {
     // § Active Operations 2.0 / A6+A7: Sägewerk, Steinbruch und Farm produzieren
     // nicht mehr passiv; der „nichts offline"-Vertrag wird an der Bäckerei geprüft.
     setLevel(controller, 9);
-    controller.state.resources = { money: 500_000, wood: 400, stone: 400, food: 0, freshwater: 0 };
+    controller.state.resources = { money: 500_000, wood: 400, stone: 400, food: 0, freshwater: 0, planks: 0, cut_stone: 0 };
     for (let dx = 5; dx <= 12; dx++) controller.placeBuilding('road', at(dx, 5).x, at(dx, 5).y);
     controller.placeBuilding('house_small', at(3, 6).x, at(3, 6).y);
     expect(controller.placeBuilding('bakery', at(6, 6).x, at(6, 6).y)).toEqual({ ok: true });
@@ -60,7 +60,7 @@ function deliveryCity() {
   const { controller } = bundle;
   setLevel(controller, 6);
   flattenTerrain(controller);
-  controller.state.resources = { money: 100_000, wood: 500, stone: 500, food: 1_000, freshwater: 0 };
+  controller.state.resources = { money: 100_000, wood: 500, stone: 500, food: 1_000, freshwater: 0, planks: 0, cut_stone: 0 };
   for (let dx = 5; dx <= 23; dx++) controller.placeBuilding('road', at(dx, 5).x, at(dx, 5).y);
   for (const dx of [3, 6, 9, 12, 15]) controller.placeBuilding('house_small', at(dx, 6).x, at(dx, 6).y);
   controller.placeBuilding('farm', at(18, 6).x, at(18, 6).y); // the food source (requiresAnyBuilding, 6×6)
@@ -95,7 +95,7 @@ describe('Stadtarbeit activities', () => {
     const { controller } = newController();
     setLevel(controller, 6);
     flattenTerrain(controller);
-    controller.state.resources = { money: 100_000, wood: 500, stone: 500, food: 1_000, freshwater: 0 };
+    controller.state.resources = { money: 100_000, wood: 500, stone: 500, food: 1_000, freshwater: 0, planks: 0, cut_stone: 0 };
     for (let dx = 5; dx <= 16; dx++) controller.placeBuilding('road', at(dx, 5).x, at(dx, 5).y);
     for (const dx of [3, 6, 9, 12, 15]) controller.placeBuilding('house_small', at(dx, 6).x, at(dx, 6).y);
     controller.update(T0 + 40_000, true); // homes active, but no farm/market yet
@@ -129,7 +129,7 @@ describe('Stadtarbeit activities', () => {
   it('applies a decision with multiple simultaneous effects (§12)', () => {
     const { controller } = newController();
     setLevel(controller, 6);
-    controller.state.resources = { money: 100_000, wood: 100, stone: 100, food: 100, freshwater: 0 };
+    controller.state.resources = { money: 100_000, wood: 100, stone: 100, food: 100, freshwater: 0, planks: 0, cut_stone: 0 };
     const money0 = controller.state.resources.money;
     // The "big" option carries two buffs at once: production + happiness.
     expect(controller.chooseDecision('decision_farm_subsidy', 'big')).toEqual({ ok: true });
@@ -141,7 +141,7 @@ describe('Stadtarbeit activities', () => {
   it('locks a decision option behind a required building (§12)', () => {
     const { controller } = newController();
     setLevel(controller, 6);
-    controller.state.resources = { money: 100_000, wood: 100, stone: 100, food: 100, freshwater: 0 };
+    controller.state.resources = { money: 100_000, wood: 100, stone: 100, food: 100, freshwater: 0, planks: 0, cut_stone: 0 };
     // The "contract" option needs a trading_post the city doesn't have.
     expect(controller.chooseDecision('decision_farm_subsidy', 'contract')).toEqual({ ok: false, error: 'locked' });
   });
@@ -156,7 +156,7 @@ describe('Stadtarbeit activities', () => {
     const offers = controller.getTradeContracts();
     expect(offers.length).toBeGreaterThan(0);
     // Give enough of everything to fulfil the first offer.
-    controller.state.resources = { money: 0, wood: 10_000, stone: 10_000, food: 10_000, freshwater: 0 };
+    controller.state.resources = { money: 0, wood: 10_000, stone: 10_000, food: 10_000, freshwater: 0, planks: 0, cut_stone: 0 };
     const offer = controller.getTradeContracts()[0]!;
     expect(controller.fulfillTradeContract(offer.id)).toEqual({ ok: true });
     expect(controller.state.resources.money).toBe(offer.template.rewardMoney);

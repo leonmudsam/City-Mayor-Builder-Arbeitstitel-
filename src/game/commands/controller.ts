@@ -18,7 +18,7 @@ import {
   rewardTierFor,
   type TradeContractOffer,
 } from '../simulation/activities.ts';
-import type { ActiveBuildingOperation, ActivityPlanningSelection, BuildingWorkerState, GameState, InventoryTransfer, RegionId, ResourceId, ResourceNodeType, RoadVariant, TerrainType } from '../types.ts';
+import type { ActiveBuildingOperation, ActivityPlanningSelection, BuildingWorkerState, GameState, InventoryTransfer, RegionId, ResourceId, ResourceNodeType, RoadVariant, TerrainType, WorkshopSupplyRule } from '../types.ts';
 import { recomputeDerived, type Derived } from '../simulation/derived.ts';
 import { advance, moveInPerMin } from '../simulation/tick.ts';
 import { updateQuests, objectiveTarget, questFocus, type QuestFocus } from '../simulation/quests.ts';
@@ -37,7 +37,7 @@ import { buildLimitAt, countOf, nextLimitLevel } from '../buildings/limits.ts';
 import { coverageOverlay, type CoverageOverlay } from '../buildings/coverage.ts';
 import { buildingDiagnostics, primaryMarker, type Diagnosis } from '../buildings/diagnostics.ts';
 import { canAfford, grantGold, grantResources, spendCost, spendGold } from '../economy/economyService.ts';
-import { depositStock, reconcileStock, stockAt, withdrawStock } from '../economy/stockLedger.ts';
+import { depositStock, reconcileStock, stockAt, stockShares, withdrawStock } from '../economy/stockLedger.ts';
 import { computeIncome, type IncomeBreakdown } from '../economy/income.ts';
 import { addXp, FREE_EXPANSION_LEVEL } from '../progression/levels.ts';
 import {
@@ -117,6 +117,15 @@ import {
   type OperationThroughput,
   type WorkerRenderState,
 } from '../operations/operations.ts';
+// § Lieferketten-Overhaul §4/§5: Werkstätten (Umwandlungsbetriebe).
+import {
+  conversionStage,
+  isWorkshopBuilding,
+  setSupplyRule,
+  supplyRuleOf,
+  workshopThroughput,
+  type WorkshopThroughput,
+} from '../operations/workshops.ts';
 import { nodeProfile, resolveNode, type ResourceNode } from '../operations/nodes.ts';
 import {
   availableForTransfer,
@@ -282,6 +291,32 @@ export const CITYWORK_RELOAD_BLOCKERS = [
 export type CityworkReloadBlocker = (typeof CITYWORK_RELOAD_BLOCKERS)[number];
 
 /** § P5 (§6): Ein Gebäude, wie es die Stadtarbeitskarte zeigt. Reine Projektion. */
+/**
+ * § Lieferketten-Overhaul §8 — was das Werkstatt-Fenster zeigt. Reine
+ * Projektion; jede Zahl stammt aus der Simulation, keine wird hier gebildet.
+ */
+export interface WorkshopSupplyOption {
+  buildingId: string;
+  nameKey: string;
+  stored: number;
+  capacity: number;
+  distanceTiles?: number;
+  /** Gibt es eine Straßenverbindung? Ohne sie kommt nichts an. */
+  reachable: boolean;
+}
+
+export interface WorkshopView {
+  buildingId: string;
+  nameKey: string;
+  upgradeLevel: number;
+  workerSlots: number;
+  flow: WorkshopThroughput;
+  rule: WorkshopSupplyRule;
+  /** Bereits beauftragte, noch nicht zugestellte Menge Rohstoff. */
+  incoming: number;
+  sources: WorkshopSupplyOption[];
+}
+
 export interface CityworkBuildingInfo {
   buildingId: string;
   defId: string;
@@ -3539,6 +3574,96 @@ export class GameController {
    */
   getLogisticsWarnings(): LogisticsWarning[] {
     return getLogisticsWarnings(this.state, this.config, this.derived);
+  }
+
+  // ---- Werkstätten & Lieferketten (§ Lieferketten-Overhaul §4/§5) ------------
+
+  /**
+   * Alles, was das Werkstatt-Fenster braucht — Eingang, Ausgang, Durchsatz,
+   * Regel und der Grund für einen Stillstand.
+   *
+   * Der Durchsatz kommt aus **derselben** `workshopThroughput`, nach der der
+   * Tick verarbeitet (D-048): Die Anzeige kann deshalb nicht „läuft" behaupten,
+   * während die Werkstatt steht — und umgekehrt.
+   */
+  getWorkshopView(buildingId: string): WorkshopView | undefined {
+    const b = this.state.buildings[buildingId];
+    const def = b && this.config.buildings.get(b.defId);
+    if (!b || !isWorkshopBuilding(def)) return undefined;
+    const flow = workshopThroughput(this.state, this.config, this.derived, buildingId);
+    if (!flow) return undefined;
+    const stage = conversionStage(def.conversion, b.upgradeLevel);
+    const incoming = Object.values(this.state.operations?.transfers ?? {})
+      .filter((t) => t.targetBuildingId === buildingId)
+      .reduce((sum, t) => sum + Math.max(0, t.amount - (t.delivered ?? 0)), 0);
+    return {
+      buildingId,
+      nameKey: def.nameKey,
+      upgradeLevel: b.upgradeLevel,
+      workerSlots: stage.workerSlots,
+      flow,
+      rule: supplyRuleOf(this.state, buildingId),
+      /** Auf dem Weg hierher — macht sichtbar, dass „leer" nicht „vergessen" heißt. */
+      incoming,
+      sources: this.getWorkshopSupplyOptions(buildingId),
+    };
+  }
+
+  /**
+   * Lagerorte, aus denen diese Werkstatt beliefert werden kann — aus dem
+   * Bestandsregister (D-052), nicht aus einer zweiten Lagerliste. Die
+   * Reihenfolge ist die der Automatik: der bestandsstärkste zuerst.
+   */
+  getWorkshopSupplyOptions(buildingId: string): WorkshopSupplyOption[] {
+    const b = this.state.buildings[buildingId];
+    const def = b && this.config.buildings.get(b.defId);
+    if (!b || !isWorkshopBuilding(def)) return [];
+    const resource = def.conversion.input;
+    return stockShares(this.state, this.derived, resource).map((share) => {
+      const site = this.state.buildings[share.site.buildingId];
+      const siteDef = site && this.config.buildings.get(site.defId);
+      const route = transferRoute(this.state, this.config, this.derived, share.site.buildingId, buildingId, undefined);
+      return {
+        buildingId: share.site.buildingId,
+        nameKey: siteDef?.nameKey ?? 'building.warehouse',
+        stored: share.stored,
+        capacity: share.capacity,
+        ...(route ? { distanceTiles: route.distanceTiles } : {}),
+        reachable: route !== undefined,
+      };
+    });
+  }
+
+  /**
+   * Die eine Einstellung an einer Werkstatt. Bewusst ein einziger Command mit
+   * Teilmenge statt vier: Verarbeitungsanteil, Quelle, Priorität und An/Aus
+   * werden im selben Fenster verstellt, und jede Änderung soll denselben
+   * Nachlauf haben (speichern → melden).
+   */
+  setWorkshopRule(buildingId: string, patch: Partial<WorkshopSupplyRule>): CommandResult {
+    const b = this.state.buildings[buildingId];
+    const def = b && this.config.buildings.get(b.defId);
+    if (!b || !isWorkshopBuilding(def)) return fail('invalid');
+    // Eine Quelle, die diese Ware gar nicht führt, wäre eine Regel, die nie
+    // greift — und der Spieler stünde vor einer Werkstatt, die ohne Grund
+    // leer bleibt. Lieber jetzt ablehnen.
+    if (patch.sourceBuildingId) {
+      const known = this.getWorkshopSupplyOptions(buildingId).some((o) => o.buildingId === patch.sourceBuildingId);
+      if (!known) return fail('invalid');
+    }
+    setSupplyRule(this.state, buildingId, patch);
+    this.notify({ type: 'change' });
+    return ok;
+  }
+
+  /** Alle Werkstätten der Stadt (Übersicht/Wirtschaftsfenster). */
+  getWorkshops(): WorkshopView[] {
+    const out: WorkshopView[] = [];
+    for (const b of Object.values(this.state.buildings)) {
+      const view = this.getWorkshopView(b.id);
+      if (view) out.push(view);
+    }
+    return out.sort((a, b) => (a.buildingId < b.buildingId ? -1 : 1));
   }
 
   /** Startet einen Auftrag über eine explizite Knotenauswahl (§26.3 Einzelbäume). */

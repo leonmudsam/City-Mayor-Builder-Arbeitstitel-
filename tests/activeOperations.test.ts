@@ -37,7 +37,7 @@ function quarryWithRock(rockW = 6, rockH = 6, exactNodes?: number) {
   const { controller } = bundle;
   setLevel(controller, 4);
   flattenTerrain(controller);
-  controller.state.resources = { money: 900_000, wood: 800, stone: 0, food: 200, freshwater: 0 };
+  controller.state.resources = { money: 900_000, wood: 800, stone: 0, food: 200, freshwater: 0, planks: 0, cut_stone: 0 };
   // Grundfläche (1..5, 6..10); Fels ab dx 7, damit er nicht überbaut wird.
   if (exactNodes !== undefined) paintResourceNodes(controller, 'rock', at(7, 6), exactNodes, 3);
   else paintBlock(controller, at(7, 6).x, at(7, 6).y, rockW, rockH, 'mountain');
@@ -54,7 +54,7 @@ function farmWithFields(fieldW = 6, fieldH = 6, exactNodes?: number) {
   const { controller } = bundle;
   setLevel(controller, 4);
   flattenTerrain(controller);
-  controller.state.resources = { money: 900_000, wood: 800, stone: 400, food: 0, freshwater: 0 };
+  controller.state.resources = { money: 900_000, wood: 800, stone: 400, food: 0, freshwater: 0, planks: 0, cut_stone: 0 };
   // Grundfläche (1..6, 6..11); Felder ab dx 8.
   if (exactNodes !== undefined) paintResourceNodes(controller, 'crop', at(8, 6), exactNodes, 3);
   else paintBlock(controller, at(8, 6).x, at(8, 6).y, fieldW, fieldH, 'fertile');
@@ -83,7 +83,7 @@ describe('§A6 Steinbruch — aktiver Abbau statt Passivrate', () => {
     const { controller } = bundle;
     setLevel(controller, 4);
     flattenTerrain(controller); // nur Gras
-    controller.state.resources = { money: 900_000, wood: 800, stone: 0, food: 200, freshwater: 0 };
+    controller.state.resources = { money: 900_000, wood: 800, stone: 0, food: 200, freshwater: 0, planks: 0, cut_stone: 0 };
     expect(controller.placeBuilding('quarry', at(1, 6).x, at(1, 6).y)).toEqual({ ok: true });
     controller.update(T0 + 91_000, true);
     const quarry = Object.values(controller.state.buildings).find((b) => b.defId === 'quarry')!;
@@ -179,7 +179,7 @@ describe('§A6/A7 Kalibrierung — die Umstellung kippt die Progression nicht', 
     const { controller } = bundle;
     setLevel(controller, 4);
     flattenTerrain(controller);
-    controller.state.resources = { money: 900_000, wood: 800, stone: 400, food: 200, freshwater: 0 };
+    controller.state.resources = { money: 900_000, wood: 800, stone: 400, food: 200, freshwater: 0, planks: 0, cut_stone: 0 };
     paintBlock(controller, at(6, 6).x, at(6, 6).y, 8, 8, 'forest');
     expect(controller.placeBuilding('sawmill', at(1, 6).x, at(1, 6).y)).toEqual({ ok: true });
     controller.update(T0 + 31_000, true);

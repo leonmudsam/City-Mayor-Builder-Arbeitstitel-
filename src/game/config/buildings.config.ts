@@ -46,6 +46,8 @@ export const buildingsConfig: BuildingDef[] = [
       { type: 'storage', resource: 'wood', amount: 400 },
       { type: 'storage', resource: 'stone', amount: 400 },
       { type: 'storage', resource: 'food', amount: 400 },
+      { type: 'storage', resource: 'planks', amount: 150 },
+      { type: 'storage', resource: 'cut_stone', amount: 150 },
       // Civic presence: a small attractiveness aura for the surrounding blocks
       // (§9), reusing the same ambience → happiness path as parks/zoning.
       { type: 'ambience', amount: 2, radius: 4 },
@@ -65,6 +67,8 @@ export const buildingsConfig: BuildingDef[] = [
           { type: 'storage', resource: 'wood', amount: 700 },
           { type: 'storage', resource: 'stone', amount: 700 },
           { type: 'storage', resource: 'food', amount: 700 },
+          { type: 'storage', resource: 'planks', amount: 400 },
+          { type: 'storage', resource: 'cut_stone', amount: 400 },
           { type: 'ambience', amount: 3, radius: 5 },
         ],
       },
@@ -79,6 +83,8 @@ export const buildingsConfig: BuildingDef[] = [
           { type: 'storage', resource: 'wood', amount: 1_100 },
           { type: 'storage', resource: 'stone', amount: 1_100 },
           { type: 'storage', resource: 'food', amount: 1_100 },
+          { type: 'storage', resource: 'planks', amount: 700 },
+          { type: 'storage', resource: 'cut_stone', amount: 700 },
           { type: 'ambience', amount: 4, radius: 6 },
         ],
       },
@@ -93,6 +99,8 @@ export const buildingsConfig: BuildingDef[] = [
           { type: 'storage', resource: 'wood', amount: 1_700 },
           { type: 'storage', resource: 'stone', amount: 1_700 },
           { type: 'storage', resource: 'food', amount: 1_700 },
+          { type: 'storage', resource: 'planks', amount: 1_100 },
+          { type: 'storage', resource: 'cut_stone', amount: 1_100 },
           { type: 'ambience', amount: 6, radius: 8 },
         ],
       },
@@ -139,6 +147,8 @@ export const buildingsConfig: BuildingDef[] = [
       { type: 'storage', resource: 'wood', amount: 300 },
       { type: 'storage', resource: 'stone', amount: 300 },
       { type: 'storage', resource: 'food', amount: 300 },
+      { type: 'storage', resource: 'planks', amount: 120 },
+      { type: 'storage', resource: 'cut_stone', amount: 120 },
       { type: 'ambience', amount: 2, radius: 4 },
     ],
   },
@@ -448,6 +458,50 @@ export const buildingsConfig: BuildingDef[] = [
     locationBonus: { terrain: 'forest', radius: 3, perTilePct: 5, maxPct: 50 },
     buildLimit: [{ level: 2, max: 2 }, { level: 5, max: 3 }, { level: 8, max: 5 }],
   },
+  // § Wirtschafts-/Lieferketten-Overhaul §1 — DIE KLEINE STEINGRUBE.
+  //
+  // Gemessener Ist-Zustand vor diesem Eintrag: Der Deadlock „Stein braucht
+  // Stein" gibt es seit D-055 nicht mehr — `stone_pit` öffnet auf L2, der erste
+  // ist gratis, und die erste Steinkosten-Stelle ist das Wohnhaus-Upgrade auf
+  // **L3** (25 Stein). Der Riegel ist also nicht die Kette, sondern die **Form**:
+  // eine 3×3-Grube mit Straßenzwang und 60 Holz Baukosten — genau dem gesamten
+  // Startvorrat — auf einer Insel, deren Startregion 1.039 Gras- gegen 46
+  // Bergkacheln hat. Wer sich bei der Stadtgründung verplant, hat keinen Platz
+  // und keine Ausweichfläche.
+  //
+  // Die kleine Steingrube ist deshalb bewusst das ANSPRUCHSLOSESTE Gebäude des
+  // Spiels: 1×1, ab Level 1, **ohne Straßenanschluss** und **ohne Materialkosten**.
+  // Sie kann damit an keiner Voraussetzung scheitern — ein Einstieg, der eine
+  // Bedingung hat, ist kein Einstieg. Ihr Preis dafür ist die Rate: 4 Stein/min
+  // sind ein Zehntel des Steinbruchs; drei Gruben (Baugrenze) ersetzen nicht
+  // einmal die alte Steingrube. Wer Stein in Mengen will, erschließt weiterhin
+  // ein Bergrevier (§7 Gameplay vor Bequemlichkeit).
+  {
+    id: 'stone_pit_small',
+    category: 'production',
+    nameKey: 'building.stone_pit_small',
+    size: { w: 1, h: 1 },
+    sizeClass: 'XS',
+    // KEIN Straßenzwang: Der Einstieg darf nicht an der Infrastruktur hängen,
+    // die er erst finanziert. Sie produziert passiv in den Pool und braucht
+    // dafür keine Logistik (anders als die Werkstätten, §4).
+    requiresRoad: false,
+    unlockLevel: 1,
+    // Nur Geld — der Startvorrat Holz (60) gehört dem ersten Wohnhaus.
+    cost: { money: 1_800 },
+    firstBuildDiscount: 1,
+    constructionSec: 10,
+    xpReward: 6,
+    canRelocate: true,
+    effects: [
+      { type: 'produce', resource: 'stone', perMinute: 4 },
+      { type: 'jobs', amount: 1 },
+      { type: 'upkeep', resource: 'money', perMinute: 30 },
+    ],
+    // Keine Ausbaustufe: Diese Grube soll NICHT mitwachsen. Sie ist der
+    // Anfang, nicht der Weg.
+    buildLimit: [{ level: 1, max: 3 }, { level: 5, max: 5 }],
+  },
   // Steinbruch: 5×5-Abbaugelände (Bruchkante, Förderband, Halden).
   {
     // § Frühspiel-Audit (02.08.2026): DIE EINSTIEGSQUELLE FÜR STEIN.
@@ -677,6 +731,153 @@ export const buildingsConfig: BuildingDef[] = [
     locationBonus: { terrain: 'fertile', radius: 2, perTilePct: 6, maxPct: 50 },
     buildLimit: [{ level: 4, max: 2 }, { level: 6, max: 3 }, { level: 9, max: 5 }, { level: 12, max: 8 }],
   },
+  // § Wirtschafts-/Lieferketten-Overhaul §4 — DIE ZWEITE VERARBEITUNGSSTUFE.
+  //
+  // Holzwerkstatt und Steinwerkstatt sind die ersten Gebäude des Spiels, deren
+  // Ertrag NICHT am Standort hängt. Sie haben kein Arbeitsgebiet, keinen
+  // Knotentyp und keinen Standortbonus — nur Eingang, Ausgang und ein
+  // Verhältnis. Damit verschiebt sich die Frage von „wo steht es?" zu „wie
+  // kommt der Rohstoff hin?", und genau das ist der Punkt des Auftrags.
+  //
+  // Kalibrierung (§6/§10): Ein Sägewerk Stufe 1 liefert ~53 Holz/min. Eine
+  // Holzwerkstatt verbraucht bei voller Auslastung 2 Holz je Brett und
+  // 14 Bretter/min, also 28 Holz/min — gut die Hälfte eines Sägewerks. Ein
+  // Betrieb ernährt damit eine Werkstatt und behält Reserve für den Bau; wer
+  // zwei Werkstätten betreibt, braucht ein zweites Sägewerk. Die Kette ist
+  // spürbar, aber nicht erdrückend.
+  {
+    id: 'wood_workshop',
+    category: 'production',
+    nameKey: 'building.wood_workshop',
+    size: { w: 3, h: 3 },
+    sizeClass: 'M',
+    // Straßenzwang ist hier KEINE Formalie, sondern die Mechanik: Ohne
+    // Anschluss kommt kein Rohstoff an und nichts geht hinaus. Der Ghost warnt
+    // seit D-047 vorher.
+    requiresRoad: true,
+    unlockLevel: 5,
+    cost: { money: 38_000, wood: 90 },
+    firstBuildDiscount: 0.5,
+    constructionSec: 60,
+    xpReward: 22,
+    canRelocate: true,
+    relocationCost: { money: 9_000 },
+    effects: [
+      { type: 'jobs', amount: 5 },
+      { type: 'revenue', category: 'industrial', perMinute: 700 },
+      { type: 'upkeep', resource: 'money', perMinute: 420 },
+      { type: 'demand', need: 'energy', amount: 6 },
+      { type: 'ambience', amount: -1, radius: 3 },
+    ],
+    upgrades: [
+      {
+        cost: { money: 210_000, wood: 180, stone: 120 },
+        constructionSec: 240,
+        xpReward: 48,
+        unlockLevel: 8,
+        nameKey: 'building.wood_workshop.2', // Holzmanufaktur
+        effects: [
+          { type: 'jobs', amount: 9 },
+          { type: 'revenue', category: 'industrial', perMinute: 1_500 },
+          { type: 'upkeep', resource: 'money', perMinute: 880 },
+          { type: 'demand', need: 'energy', amount: 12 },
+          { type: 'ambience', amount: -1, radius: 3 },
+        ],
+      },
+      {
+        cost: { money: 1_100_000, wood: 460, stone: 380, cut_stone: 120 },
+        constructionSec: 420,
+        xpReward: 120,
+        unlockLevel: 13,
+        nameKey: 'building.wood_workshop.3', // Holzwerk
+        effects: [
+          { type: 'jobs', amount: 16 },
+          { type: 'revenue', category: 'industrial', perMinute: 3_100 },
+          { type: 'upkeep', resource: 'money', perMinute: 2_000 },
+          { type: 'demand', need: 'energy', amount: 26 },
+          { type: 'ambience', amount: -2, radius: 4 },
+        ],
+      },
+    ],
+    conversion: {
+      input: 'wood',
+      output: 'planks',
+      // 2 Holz je Brett: Die Veredelung kostet spürbar Substanz, sonst wäre
+      // „alles zu Brettern machen" immer richtig und nie eine Entscheidung.
+      inputPerOutput: 2,
+      stages: [
+        { outputPerMinute: 14, workerSlots: 5, inputCapacity: 240, outputCapacity: 160 },
+        { outputPerMinute: 34, workerSlots: 9, inputCapacity: 560, outputCapacity: 380 },
+        { outputPerMinute: 78, workerSlots: 16, inputCapacity: 1_200, outputCapacity: 820 },
+      ],
+    },
+    buildLimit: [{ level: 5, max: 1 }, { level: 8, max: 2 }, { level: 11, max: 4 }],
+  },
+  {
+    id: 'stone_workshop',
+    category: 'production',
+    nameKey: 'building.stone_workshop',
+    size: { w: 3, h: 3 },
+    sizeClass: 'M',
+    requiresRoad: true,
+    unlockLevel: 5,
+    cost: { money: 42_000, wood: 70, stone: 60 },
+    firstBuildDiscount: 0.5,
+    constructionSec: 70,
+    xpReward: 24,
+    canRelocate: true,
+    relocationCost: { money: 10_000 },
+    effects: [
+      { type: 'jobs', amount: 5 },
+      { type: 'revenue', category: 'industrial', perMinute: 780 },
+      { type: 'upkeep', resource: 'money', perMinute: 470 },
+      { type: 'demand', need: 'energy', amount: 7 },
+      { type: 'ambience', amount: -2, radius: 3 },
+    ],
+    upgrades: [
+      {
+        cost: { money: 240_000, wood: 140, stone: 180 },
+        constructionSec: 260,
+        xpReward: 52,
+        unlockLevel: 8,
+        nameKey: 'building.stone_workshop.2', // Steinmetzerei
+        effects: [
+          { type: 'jobs', amount: 9 },
+          { type: 'revenue', category: 'industrial', perMinute: 1_650 },
+          { type: 'upkeep', resource: 'money', perMinute: 960 },
+          { type: 'demand', need: 'energy', amount: 14 },
+          { type: 'ambience', amount: -2, radius: 3 },
+        ],
+      },
+      {
+        cost: { money: 1_300_000, wood: 380, stone: 520, planks: 140 },
+        constructionSec: 440,
+        xpReward: 130,
+        unlockLevel: 13,
+        nameKey: 'building.stone_workshop.3', // Steinwerk
+        effects: [
+          { type: 'jobs', amount: 16 },
+          { type: 'revenue', category: 'industrial', perMinute: 3_300 },
+          { type: 'upkeep', resource: 'money', perMinute: 2_200 },
+          { type: 'demand', need: 'energy', amount: 28 },
+          { type: 'ambience', amount: -3, radius: 4 },
+        ],
+      },
+    ],
+    conversion: {
+      input: 'stone',
+      output: 'cut_stone',
+      // 2,5 Stein je Werkstein — Stein ist die knappere Ware (er wächst nie
+      // nach), Werkstein deshalb bewusst teurer als das Brett.
+      inputPerOutput: 2.5,
+      stages: [
+        { outputPerMinute: 9, workerSlots: 5, inputCapacity: 260, outputCapacity: 150 },
+        { outputPerMinute: 22, workerSlots: 9, inputCapacity: 600, outputCapacity: 360 },
+        { outputPerMinute: 52, workerSlots: 16, inputCapacity: 1_300, outputCapacity: 780 },
+      ],
+    },
+    buildLimit: [{ level: 5, max: 1 }, { level: 8, max: 2 }, { level: 11, max: 4 }],
+  },
   {
     id: 'well',
     category: 'services',
@@ -766,6 +967,8 @@ export const buildingsConfig: BuildingDef[] = [
       { type: 'storage', resource: 'stone', amount: 1_000 },
       { type: 'storage', resource: 'food', amount: 4_000 },
       { type: 'storage', resource: 'freshwater', amount: 4_000 },
+      { type: 'storage', resource: 'planks', amount: 900 },
+      { type: 'storage', resource: 'cut_stone', amount: 900 },
       { type: 'jobs', amount: 3 },
       { type: 'upkeep', resource: 'money', perMinute: 350 },
       { type: 'demand', need: 'energy', amount: 5 },
@@ -783,6 +986,8 @@ export const buildingsConfig: BuildingDef[] = [
           { type: 'storage', resource: 'stone', amount: 1_800 },
           { type: 'storage', resource: 'food', amount: 7_000 },
           { type: 'storage', resource: 'freshwater', amount: 7_000 },
+          { type: 'storage', resource: 'planks', amount: 1_600 },
+          { type: 'storage', resource: 'cut_stone', amount: 1_600 },
           { type: 'jobs', amount: 5 },
           { type: 'upkeep', resource: 'money', perMinute: 650 },
           { type: 'demand', need: 'energy', amount: 8 },
@@ -1421,6 +1626,8 @@ export const buildingsConfig: BuildingDef[] = [
       { type: 'storage', resource: 'wood', amount: 650 },
       { type: 'storage', resource: 'stone', amount: 650 },
       { type: 'storage', resource: 'food', amount: 420 },
+      { type: 'storage', resource: 'planks', amount: 800 },
+      { type: 'storage', resource: 'cut_stone', amount: 800 },
       { type: 'jobs', amount: 18 },
       { type: 'logistics', boostPct: 12, radius: 8 },
       { type: 'upkeep', resource: 'money', perMinute: 1_650 },

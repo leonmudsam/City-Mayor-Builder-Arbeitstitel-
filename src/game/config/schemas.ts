@@ -3,7 +3,7 @@ import { z } from 'zod';
 // Zod schemas validate the static configs at startup (fail fast on broken
 // balancing data) and every save game after loading.
 
-const resourceId = z.enum(['money', 'wood', 'stone', 'food', 'freshwater']);
+const resourceId = z.enum(['money', 'wood', 'stone', 'food', 'freshwater', 'planks', 'cut_stone']);
 const needId = z.enum(['housing', 'water', 'food', 'work', 'leisure', 'energy', 'safety', 'health', 'freshwater']);
 
 const terrainType = z.enum(['grass', 'forest', 'water', 'river', 'mountain', 'sand', 'fertile']);
@@ -104,6 +104,26 @@ export const buildingDefSchema = z.object({
       (op) => op.stages.every((s) => (s.maxRadius ?? op.maxRadius) >= (s.efficientRadius ?? op.efficientRadius)),
       { message: 'operation: Stufe mit maxRadius < efficientRadius' },
     )
+    .optional(),
+  // § Lieferketten-Overhaul §4: Umwandlungsbetrieb (Werkstatt). Kein
+  // Arbeitsgebiet, kein Knotentyp — nur Eingang, Ausgang und ein Verhältnis.
+  conversion: z
+    .object({
+      input: resourceId,
+      output: resourceId,
+      inputPerOutput: z.number().positive(),
+      stages: z
+        .array(
+          z.object({
+            outputPerMinute: z.number().positive(),
+            workerSlots: z.number().int().positive(),
+            inputCapacity: z.number().positive(),
+            outputCapacity: z.number().positive(),
+          }),
+        )
+        .min(1),
+    })
+    .refine((c) => c.input !== c.output, { message: 'conversion: Eingang und Ausgang sind dieselbe Ware' })
     .optional(),
   locationBonus: z
     .object({ terrain: terrainType, radius: z.number().positive(), perTilePct: z.number().positive(), maxPct: z.number().positive() })
@@ -505,6 +525,19 @@ export const saveGameSchema = z.object({
       // § Active Simplicity / AS-1 (Save v24): Auto-Warenfluss je Betrieb.
       // Fehlender Eintrag = an (D-039).
       autoTransport: z.record(z.string(), z.boolean()).optional(),
+      // § Lieferketten-Overhaul §5 (Save v33): Lieferregel je Werkstatt.
+      // Fehlender Eintrag = Standardregel; gespeichert wird nur die Abweichung.
+      supplyRules: z
+        .record(
+          z.string(),
+          z.object({
+            enabled: z.boolean(),
+            processRatio: z.number().min(0).max(1),
+            sourceBuildingId: z.string().optional(),
+            priority: z.number().optional(),
+          }),
+        )
+        .optional(),
     })
     .optional(),
   // § Infrastruktur 2.0 / I4 (Save v22): persistente Schiffsrouten. Optional/additiv —
