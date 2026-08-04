@@ -471,3 +471,4 @@ export const useUiStore = create<UiState>((set) => ({
     }),
   dismissEvent: (id) => set((s) => ({ events: s.events.filter((e) => e.id !== id) })),
 }));
+

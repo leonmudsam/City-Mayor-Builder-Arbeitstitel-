@@ -77,7 +77,11 @@
 
   --res-money: #f5ba43;
   --res-wood: #d09252;
+  /* Veredelte Waren: heller als ihr Rohstoff, damit Kette und Rohstoff in der
+     Leiste als Paar lesbar sind, ohne sich zu doppeln. */
+  --res-planks: #e8b877;
   --res-stone: #b7c0c8;
+  --res-cut-stone: #8fa3b8;
   --res-food: #e98545;
   --res-water: #4db8ef;
   --res-gold: #ffd54f;

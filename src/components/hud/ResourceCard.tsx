@@ -12,6 +12,7 @@ export function ResourceCard({
   sub,
   subTone = 'good',
   warn = false,
+  dim = false,
   accent,
   title,
   detail,
@@ -21,6 +22,12 @@ export function ResourceCard({
   sub?: string | undefined;
   subTone?: 'good' | 'bad' | 'muted';
   warn?: boolean;
+  /**
+   * Die Ware ist noch kein Thema (§6: Bretter/Werkstein ab Level 5). Sichtbar,
+   * aber zurückgenommen — ausgeblendet wäre schlechter: Der Spieler soll
+   * sehen, dass da noch etwas kommt, und nicht überrascht werden.
+   */
+  dim?: boolean;
   accent?: string | undefined;
   title?: string;
   detail?: ReactNode | ((close: () => void) => ReactNode);
@@ -38,7 +45,7 @@ export function ResourceCard({
 
   if (!detail) {
     return (
-      <div className={`res-card${warn ? ' res-card-warn' : ''}`} style={style} title={title}>
+      <div className={`res-card${dim ? ' res-card-dim' : ''}${warn ? ' res-card-warn' : ''}`} style={style} title={title}>
         {body}
       </div>
     );
@@ -49,7 +56,7 @@ export function ResourceCard({
       trigger={({ toggle, open, ref }) => (
         <button
           ref={ref}
-          className={`res-card res-card-btn${warn ? ' res-card-warn' : ''}${open ? ' active' : ''}`}
+          className={`res-card res-card-btn${dim ? ' res-card-dim' : ''}${warn ? ' res-card-warn' : ''}${open ? ' active' : ''}`}
           style={style}
           onClick={toggle}
           title={title}

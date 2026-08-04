@@ -35,6 +35,9 @@ export function GameHud() {
   const growth = game.getGrowthStatus();
   const happiness = Math.round(state.citizens.happiness);
   const crest = brandImage('mayor_crest');
+  // Ab wann sind die veredelten Waren Thema? Aus der Config, nicht hier gesetzt
+  // — sonst stünde die Zahl an zwei Stellen und liefe auseinander.
+  const refinedLevel = game.config.resources.find((r) => r.id === 'planks')?.unlockLevel ?? 1;
 
   return (
     <header className="game-hud">
@@ -80,6 +83,21 @@ export function GameHud() {
           title={t('resource.wood')}
           detail={(close) => <ResourceDetailPopover id="wood" onNavigate={close} />}
         />
+        {/* § Lieferketten-Overhaul §3: Das Produkt steht direkt hinter seinem
+            Rohstoff — Holz · Bretter · Stein · Werkstein. Die Kette ist damit
+            an der Leiste ablesbar, ohne dass irgendwo ein Pfeil gezeichnet
+            werden muss. Vor Level 5 sind die beiden gedimmt statt versteckt:
+            Der Spieler soll sehen, dass da noch etwas kommt. */}
+        <ResourceCard
+          icon={<ResourceArt id="planks" size={30} />}
+          value={int(res.planks)}
+          sub={perMin(prod.planks)}
+          warn={caps.planks > 0 && res.planks >= caps.planks}
+          dim={level < refinedLevel}
+          accent="var(--res-planks)"
+          title={level < refinedLevel ? `${t('resource.planks')} — ab Level ${refinedLevel}` : t('resource.planks')}
+          detail={(close) => <ResourceDetailPopover id="planks" onNavigate={close} />}
+        />
         <ResourceCard
           icon={<ResourceArt id="stone" size={30} />}
           value={int(res.stone)}
@@ -88,6 +106,16 @@ export function GameHud() {
           accent="var(--res-stone)"
           title={t('resource.stone')}
           detail={(close) => <ResourceDetailPopover id="stone" onNavigate={close} />}
+        />
+        <ResourceCard
+          icon={<ResourceArt id="cut_stone" size={30} />}
+          value={int(res.cut_stone)}
+          sub={perMin(prod.cut_stone)}
+          warn={caps.cut_stone > 0 && res.cut_stone >= caps.cut_stone}
+          dim={level < refinedLevel}
+          accent="var(--res-cut-stone)"
+          title={level < refinedLevel ? `${t('resource.cut_stone')} — ab Level ${refinedLevel}` : t('resource.cut_stone')}
+          detail={(close) => <ResourceDetailPopover id="cut_stone" onNavigate={close} />}
         />
         <ResourceCard
           icon={<ResourceArt id="food" size={30} />}

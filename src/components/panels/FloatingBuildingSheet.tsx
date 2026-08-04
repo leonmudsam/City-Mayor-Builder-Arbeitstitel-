@@ -48,6 +48,7 @@ import { useEscapeClose } from '../common/useEscapeClose.ts';
 import { TransportPlanner } from '../logistics/TransportPlanner.tsx';
 import { buildBuildingOperationView, defaultWorkAreaSelection } from '../operations/adapters.ts';
 import { nodeVocabulary } from '../operations/nodeVocabulary.ts';
+import { WorkshopPanel } from '../operations/WorkshopPanel.tsx';
 
 function costLabel(cost: Partial<Record<string, number>>): string {
   return Object.entries(cost)
@@ -320,6 +321,12 @@ export function FloatingBuildingSheet() {
             </button>
           )}
         </section>
+
+        {/* § Lieferketten-Overhaul §8: Die Werkstatt-Steuerung steht GANZ OBEN,
+            nicht unter „Mehr Details". Verarbeitungsanteil, Quelle und
+            Priorität sind die einzigen Regler dieses Gebäudes — sie zwei Klicks
+            tief zu legen hieße, das Gebäude hätte keine. */}
+        {def.conversion && building.status === 'active' && <WorkshopPanel buildingId={building.id} />}
 
         {(radius > 0 || activeOperationInfo || isFarm) && (
           <div className="as3-building-map-actions">
