@@ -1,5 +1,217 @@
 # Patch Notes
 
+## v1.39 — DIE ZWEITE VERARBEITUNGSSTUFE (Save v33, D-063 bis D-067)
+
+Auftrag „Wirtschafts- und Lieferketten-Overhaul — Farmfelder, kleine Steingrube,
+Holz-/Stein-Weiterverarbeitung". Alle elf Punkte sind umgesetzt; was bewusst
+offen bleibt, steht am Ende — namentlich.
+Verbindlicher Einstieg: `docs/agents/SUPPLY_CHAIN_EXPANSION_PLAN.md`.
+
+### 0. Was die Messung am Auftrag korrigiert
+
+**Was war.** Der Auftrag nennt vier Probleme. Zwei davon liegen anders, und das
+ist wichtig, weil sonst nach einem Riegel gesucht worden wäre, den es nicht mehr
+gibt.
+
+**Stein blockiert nicht mehr.** Der Deadlock „Stein braucht Stein“ ist seit
+D-055 weg: `stone_pit` öffnet auf L2, der erste Bau ist gratis und kostet
+**keinen** Stein; die erste Steinkosten-Stelle ist das Wohnhaus-Upgrade auf L3
+(25 Stein). Was blockiert, ist die **Form** — eine 3x3-Grube mit Straßenzwang
+und 60 Holz Baukosten, also exakt dem gesamten Startvorrat, auf einer
+Startregion mit 1.039 Gras- gegen 46 Bergkacheln.
+
+**Die Farm blockiert nicht mehr.** Felder gibt es seit D-058/D-059,
+Fruchtbarkeit ist kein Gate. Gefehlt haben modulare Kacheln, die Zuordnung zur
+Farm, Bodenqualität und eine Ertragszahl.
+
+**Bestätigt hat sich:** Es gibt keine zweite Verarbeitungsstufe. Der Haken
+`produce.inputsPerMinute` existiert seit MVP 2 — und wird von **keinem**
+Gebäude benutzt.
+
+### 1. Die kleine Steingrube (§1)
+
+**Was jetzt.** `stone_pit_small` ist das anspruchsloseste Gebäude des Spiels:
+1x1, ab Level 1, **ohne Straßenanschluss**, **ohne Materialkosten**, erster Bau
+gratis. Sie kann damit an keiner Voraussetzung scheitern — ein Einstieg mit
+Bedingung ist kein Einstieg.
+
+**Der Preis dafür ist die Rate.** 4 Stein/min sind ein Zehntel des Steinbruchs;
+drei Gruben (Baugrenze) ersetzen nicht einmal die alte Steingrube, und eine
+Ausbaustufe gibt es bewusst nicht. Wer Stein in Mengen will, erschließt
+weiterhin ein Bergrevier.
+
+### 2. Felder ab einer Kachel, mit echtem Boden (§2)
+
+Die kaufbaren Größen beginnen bei **1x1**; die großen Zuschnitte bleiben, weil
+niemand 36 Mal klicken will. Jede Kachel nennt die Farm, in deren Arbeitsgebiet
+sie liegt.
+
+**Bodenqualität wirkt (+30 % auf natürlich fruchtbarem Grund) — und der heikle
+Punkt steckt in der Quelle.** Ein angelegtes Feld SETZT `fertile` als
+Terrain-Override. Über `worldTerrainAt` gelesen hätte jede gekaufte Kachel
+automatisch Bestnote, der Bonus wäre geschenkt und die Landschaft bedeutungslos.
+Gelesen wird deshalb der Bake. Eine zweite Effizienzformel entsteht nicht:
+Entfernung bleibt `fieldEfficiency`, Boden wirkt über die Ergiebigkeit der
+Kachel (D-067).
+
+**Der Ertrag ist abgeleitet, nicht gesetzt:** Kachelmenge geteilt durch
+Nachwachsdauer, gewichtet mit Entfernung und Boden — mehr kann das Land auf
+Dauer nicht liefern, egal wie viele Arbeiter danebenstehen. Die zweite Grenze
+(Hände) steht daneben als „benötigt / vorhanden“, statt beide in einer
+geglätteten Zahl zu verlieren.
+
+### 3. Bretter und Werkstein (§3, Save v33)
+
+Zwei veredelte Waren, die **nie aus der Welt kommen**. Sie stehen im HUD direkt
+hinter ihrem Rohstoff — Geld · Holz · **Bretter** · Stein · **Werkstein** ·
+Essen —, damit die Kette an der Leiste ablesbar ist, ohne dass irgendwo ein
+Pfeil gezeichnet werden muss. Vor Level 5 sind sie gedimmt statt versteckt:
+ausgeblendet wäre eine Überraschung später.
+
+Sie liegen im Bestandsregister (`LEDGER_RESOURCES`) wie jede andere Ware — sonst
+wäre der Pool ausgerechnet für die interessanteste Ware wieder die "globale
+magische Ressource", die §8 des Vorauftrags abgeschafft hat. `baseStorage: 0`
+wie Trinkwasser: Lager bringt die Kette mit (Rathaus, Distriktzentrum,
+Lagerhaus, Flusshafen).
+
+### 4. Holzwerkstatt und Steinwerkstatt (§4, D-063)
+
+Die ersten Gebäude des Spiels, deren Ertrag **nicht am Standort hängt**: kein
+Arbeitsgebiet, kein Knotentyp, kein Standortbonus. Damit verschiebt sich die
+Frage von „wo steht es?“ zu „wie kommt der Rohstoff hin?“.
+
+**Warum ein drittes Produktionsmuster.** `operation` setzt ein Terrain voraus,
+das es hier nicht gibt. Und `produce` mit `inputsPerMinute` zieht seinen Eingang
+aus `state.resources` — der Bilanzsumme der ganzen Stadt: Eine Werkstatt am
+anderen Inselende produzierte ohne eine einzige Fahrt. `BuildingDef.conversion`
+hat deshalb ein eigenes Lager, aber dasselbe `BuildingInventory` wie das
+Sägewerk seit Save v17 (kein drittes Lagermodell).
+
+`workshopThroughput` ist die eine Durchsatzrechnung: Der Tick verarbeitet damit,
+die Anzeige zeigt damit. Eine Werkstatt kann nicht „läuft“ melden und
+stillstehen.
+
+**Kalibrierung:** Eine Holzwerkstatt verbraucht bei voller Auslastung 28
+Holz/min gegen die 45 eines Sägewerks — ein Betrieb ernährt eine Werkstatt, zwei
+Werkstätten brauchen ein zweites Sägewerk. Beide Richtungen sind testgesichert.
+Werkstein kostet 2,5 Stein statt 2 Holz, weil Stein nie nachwächst.
+
+### 5. Die Lieferkette (§5, D-064 bis D-066)
+
+Der Nachschub ist ein **Sog**, kein zweites Transportsystem:
+`advanceWorkshopSupply` erteilt nur Aufträge an denselben
+`createInventoryTransfer`, den die Betriebe schon benutzen. `transferTargets`
+bleibt bewusst lagerbeschränkt — stünde die Werkstatt dort, lüde ein Sägewerk
+sein Holz automatisch bei ihr ab, und der Stadt fehlte Baumaterial, ohne dass
+der Spieler es entschieden hätte.
+
+**Ein Regler, zwei Lesarten.** „Verarbeiten 80 % · 20 % lagern (mind. 48 Holz)“
+ist eine einzige Zahl, gleichzeitig als Prozentsatz und als Mindestbestand
+gezeigt. Zwei getrennte Einstellungen wären zwei Wahrheiten über dieselbe
+Grenze.
+
+**`priority` wirkt hier wirklich:** Bei knappem Rohstoff bekommt die vordere
+Werkstatt die Ladung, die hintere geht leer aus. (Das gleichnamige Feld der
+Stadtarbeit ist bis heute wirkungslos und deshalb bis heute nicht in der UI.)
+
+**Gefunden beim Bauen, und es wäre still schiefgegangen:** Wird an einem
+Stadtlager geladen, muss auch die Bilanzsumme sinken (`withdrawStock`). Ohne das
+hätte `reconcileStock` den Bestand aus dem unveränderten Pool sofort wieder
+aufgefüllt — das Fahrzeug führe mit einer Kopie los.
+
+### 6./7. Level 5 und die Upgrade-Kosten (§6/§7)
+
+Beide Werkstätten öffnen **gleichzeitig** auf L5 — sonst wäre die erste Wahl
+keine, sondern eine Reihenfolge. Ab L6 sind Bretter und Werkstein echte
+Baukosten, gestaffelt über zehn Stellen: Wohnhaus-Stufe 2 und Rathaus-Stufe 2
+(L6), Sägewerk-Stufe 2 und Logistikzentrum (L7), Feuerwache, Büro, Großfarm und
+Tiefbruch (L8), Hochregallager (L10), Stadtpalais (L11). Das Büro ist die erste
+Stelle, die **beide** veredelten Waren verlangt.
+
+Neue Testregel: Eine veredelte Ware kommt nie aus der Welt, also darf keine
+Kostenstelle vor dem Level liegen, ab dem ihre Werkstatt steht — geprüft über
+die ganze Config, nicht nur bis L8.
+
+### 8. Bedienung (§8)
+
+Das Werkstatt-Fenster beantwortet vier Fragen in der Reihenfolge, in der der
+Spieler sie stellt: Läuft es (Durchsatz, sonst der GRUND)? Was ist drin (Eingang
+und Ausgang als Füllstände mit dem Verhältnis dazwischen)? Was mache ich mit dem
+Rohstoff (der Regler)? Woher kommt er (Quelle, Priorität, was unterwegs ist)?
+
+Es sitzt **ganz oben** im Gebäudefenster, nicht unter „Mehr Details“ (dort war
+es zuerst gelandet): Diese Regler sind die einzigen dieses Gebäudes.
+
+### 9./10. Assets und Simulation
+
+Tripo-Prompts für `stone_pit_small.glb`, `wood_workshop.glb`,
+`stone_workshop.glb` (je drei Stufen) und `field_farm_tile.glb` stehen in
+`src/assets/modelManifest.ts` und den generierten `PROMPTS.md`. Solange die
+Dateien fehlen, greift wie immer der prozedurale Fallback.
+
+`tests/earlyEconomySimulation.test.ts` spielt Level 1-8 auf dem **echten**
+Inselterrain und ohne vorgegründetes Rathaus: 0 Stein am Start, sofort eine
+Steinquelle baubar, nach einer Stunde mehr Stein als die erste Kostenstelle
+verlangt, Farm nimmt ohne fruchtbare Kachel den Betrieb auf, beide Werkstätten
+aus der Level-5-Prämie bezahlbar.
+
+### Auswirkung
+
+* Save **v33** (Migration `v32 auf v33`, additiv). Alte Stände behalten alles;
+  Bretter/Werkstein starten bei 0.
+* Im laufenden Spiel gemessen (Playwright, 0 Konsolenfehler): HUD zeigt
+  „Holz 1.524 · Bretter 96 · Stein 1.088 · Werkstein 92“ — die Kette hat ohne
+  einen einzigen Klick produziert. Das Werkstatt-Fenster meldet "Eingang
+  182/240 · 2:1 · Ausgang 71/160 · 14/min von 14/min möglich".
+* 800 Tests in 94 Dateien.
+
+### Dateien
+
+`src/game/operations/workshops.ts` (neu) · `src/components/operations/WorkshopPanel.tsx`
+(neu) · `tests/workshops.test.ts` (neu) · `tests/earlyEconomySimulation.test.ts`
+(neu) · `docs/agents/SUPPLY_CHAIN_EXPANSION_PLAN.md` (neu) ·
+`config/{buildings,levels,resources,balancing,types,schemas}` ·
+`operations/{autoLogistics,transport,nodes,farmFields}` · `economy/stockLedger.ts` ·
+`simulation/{tick,derived}.ts` · `commands/controller.ts` · `storage/migrations.ts` ·
+`newGame.ts` · `components/hud/{GameHud,ResourceCard}.tsx` ·
+`components/panels/FloatingBuildingSheet.tsx` ·
+`components/operations/FarmFieldPanel.tsx` · `assets/modelManifest.ts` ·
+`styles/{tokens,active-operations}.css` · `i18n/de.json`
+
+### Assets
+
+Neu als Drop-in erwartet (Fallback greift, solange sie fehlen):
+`stone_pit_small.glb`, `wood_workshop.glb` (+ `_stage2`, `_stage3`),
+`stone_workshop.glb` (+ `_stage2`, `_stage3`), `field_farm_tile.glb`.
+
+### Zukunft
+
+Die Kette ist zweistufig und endet bei Bretter/Werkstein. Eine dritte Stufe
+(Möbel, Fassaden) wäre dasselbe Muster — `conversion` mit einem anderen Ein- und
+Ausgang, kein neues System. Der nächste sinnvolle Schritt ist aber nicht mehr
+Tiefe, sondern **Nachfrage**: Solange die veredelten Waren reine Baustoffe sind,
+ist die Kette eine Wahl. Werden sie Bürgerbedarf, wird sie Pflicht — und das ist
+eine Balancing-Entscheidung, keine technische.
+
+### Offen, nicht vorgetäuscht
+
+* **Feld-Balancing bleibt eine Setzung** (260 pro Kachel, 1,4 je Minute) — das
+  galt schon für D-059.
+* **Kein Zwischenlager in der Lieferkette.** Die Fahrt geht direkt von der
+  gewählten Quelle zur Werkstatt; ein Umweg über ein drittes Gebäude wäre echte
+  Routenplanung und damit ein zweites System.
+* **Kein Intervall- und kein Ladungsregler.** Die Automatik bestellt, wenn Platz
+  ist, und lädt, was das Fahrzeug fasst. Ein Intervallregler wäre Bedienung ohne
+  Entscheidung (D-039).
+* **Arbeiter sind Arbeitsplätze, kein zweiter Regler.** Der Durchsatz hängt
+  allein an der Ausbaustufe.
+* **`field_farm_tile.glb` ist geplant, nicht verdrahtet.** Felder zeichnet
+  `farmFieldMesh.ts` prozedural — nach D-044 richtig, weil ein Natur-`.glb` rund
+  29.000 Dreiecke wiegt und ein Feld Masse ist.
+* **Bretter und Werkstein sind reine Baustoffe** — kein Bürgerbedarf, keine
+  Handelsware.
+
+
 ## v1.38 — DIE KARTE IST DIE GERENDERTE WELT (Save bleibt v32)
 
 Prioritäten 4 bis 7 des Auftrags „Stadtarbeit Overhaul — aktive Logistik,

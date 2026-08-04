@@ -795,6 +795,15 @@ export const FOLDER_PROMPTS: FolderPrompts[] = [
           { name: 'sand_tile', footprint: '1×1', sizeClass: 'terrain_tile', biome: 'Strand/Küste', placeOn: 'sand', instancing: true, status: 'live', motif: 'a light sandy beach tile, tileable' },
           { name: 'fertile_ground_tile', footprint: '1×1', sizeClass: 'terrain_tile', biome: 'Fruchtbares Land', placeOn: 'fertile', instancing: true, status: 'live', motif: 'a ploughed fertile farmland soil tile with brown furrows, tileable' },
           { name: 'mountain_peak_medium', footprint: '1–2 Kacheln', sizeClass: 'terrain_feature', heightRange: '≈2–3 Kacheln', biome: 'Gebirge', placeOn: 'mountain', spawnRule: '~⅓ der Gebirgs-Kacheln, zufällig gestreut', instancing: true, randomize: 'Zufallsrotation + leichte Zufallsskalierung', status: 'live', motif: 'a stylized rocky mountain peak / large boulder cluster, layered rock, no snow' },
+          // § Wirtschafts-/Lieferketten-Overhaul §9. EHRLICHER STAND: Angelegte
+          // Farm-Felder zeichnet `renderer/three/farmFieldMesh.ts` derzeit
+          // prozedural (Scholle + vier Fruchtreihen, 12 Dreiecke je Instanz) —
+          // und das ist eine Entscheidung, keine Lücke: Nach D-044 wiegt ein
+          // Natur-`.glb` rund 29.000 Dreiecke, und ein Feld ist Masse (Hunderte
+          // Kacheln). Ein Drop-in ist deshalb nur als LOW-POLY-Variante
+          // sinnvoll; die Vorgabe im Prompt nennt das ausdrücklich. Solange die
+          // Datei fehlt, bleibt die prozedurale Fassung im Bild.
+          { name: 'field_farm_tile', footprint: '1×1, modular', sizeClass: 'terrain_tile', biome: 'Ackerland', placeOn: 'angelegte Farm-Feldkachel (terrainOverride `fertile`)', spawnRule: 'eine Instanz je gekaufter Feldkachel', instancing: true, randomize: '90°-Rotation + leichte Farbstreuung nach Reifegrad', status: 'planned', motif: 'a single low-poly ploughed farm field tile: brown soil with four straight crop rows of young green plants, a low earthen ridge on two edges so tiles read as one field when placed side by side, flat top, seamless tileable edges, cartoon low-poly, UNDER 200 TRIANGLES (this is mass geometry, not a hero prop)' },
         ],
       },
       {

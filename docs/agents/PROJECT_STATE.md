@@ -1,6 +1,63 @@
-# Projektstand — v1.34
+# Projektstand — v1.39
 
-Stand: 2. August 2026
+Stand: 4. August 2026
+
+## Wirtschafts- und Lieferketten-Overhaul (v1.39, Save v33, D-063…D-067) — AKTUELL
+
+Alle elf Punkte des Auftrags sind umgesetzt. Verbindlicher Einstieg:
+**`SUPPLY_CHAIN_EXPANSION_PLAN.md`**.
+
+**Zwei der vier gemeldeten Probleme lagen anders — deshalb zuerst messen.**
+„Stein blockiert" ist seit D-055 nicht mehr wahr: `stone_pit` öffnet auf L2, der
+erste Bau ist gratis und kostet **keinen** Stein; die erste Steinkosten-Stelle
+ist L3 (25). Blockiert hat die **Form** — 3×3, Straßenzwang, 60 Holz = der
+gesamte Startvorrat. „Farm zu starr" war seit D-058/D-059 gelöst. Bestätigt
+hat sich nur der vierte Punkt: Es gab **keine** zweite Verarbeitungsstufe.
+
+**Die vier neuen Bausteine.**
+* `stone_pit_small` — 1×1, ab **Level 1**, ohne Straße, ohne Material, erster
+  Bau gratis. Ein Einstieg mit Bedingung ist kein Einstieg; der Preis ist die
+  Rate (4 Stein/min, Baugrenze 3, keine Ausbaustufe).
+* **Felder ab 1×1** mit Bodenqualität aus dem **Bake** (+30 % auf natürlich
+  fruchtbarem Grund) und einem abgeleiteten Ertrag.
+* **Bretter und Werkstein** — veredelte Waren, die nie aus der Welt kommen; im
+  HUD direkt hinter ihrem Rohstoff, im Bestandsregister wie jede andere Ware.
+* **Holz- und Steinwerkstatt** (`BuildingDef.conversion`) — die ersten Gebäude,
+  deren Ertrag nicht am Standort hängt.
+
+**Architektur, die man nicht umgehen darf.**
+1. Eine Werkstatt ist **weder** `operation` (setzt Terrain voraus) **noch**
+   `produce.inputsPerMinute` (zieht aus der Bilanzsumme und hübe D-052 auf).
+   Sie hat ein eigenes Lager — aber dasselbe `BuildingInventory` wie das
+   Sägewerk seit v17. **Kein drittes Lagermodell** (D-063).
+2. `workshopThroughput` ist die **eine** Durchsatzrechnung; Tick und Anzeige
+   lesen sie (D-048).
+3. Der Nachschub ist ein **Sog**: `advanceWorkshopSupply` erteilt nur Aufträge
+   an denselben `createInventoryTransfer`. `transferTargets` bleibt bewusst
+   lagerbeschränkt, sonst lüde ein Sägewerk sein Holz automatisch bei der
+   Werkstatt ab und der Stadt fehlte Baumaterial (D-064).
+4. Beim Laden an einem **Stadtlager** muss die Bilanz über `withdrawStock`
+   sinken — sonst füllt `reconcileStock` sie sofort wieder auf und das Fahrzeug
+   fährt mit einer **Kopie** los.
+5. Bodengüte liest den **Bake**, nicht `worldTerrainAt`: Ein Feld setzt
+   `fertile`, über den Override gelesen hätte jede gekaufte Kachel Bestnote
+   (D-067).
+
+**Save v33** (Migration `v32→v33`, additiv): `resources.planks`/`cut_stone`,
+ihre `stats.produced`-Zähler und `operations.supplyRules`.
+
+**Im laufenden Spiel gemessen** (0 Konsolenfehler): „Holz 1.524 · Bretter 96 ·
+Stein 1.088 · Werkstein 92" ohne einen Klick; Werkstatt-Fenster „Eingang
+182/240 · 2:1 · Ausgang 71/160 · 14/min von 14/min möglich".
+
+**Offen, nicht vortäuschen:** kein Zwischenlager in der Lieferkette · kein
+Intervall-/Ladungsregler (D-039) · Arbeiter sind Arbeitsplätze, kein Regler ·
+`field_farm_tile.glb` geplant, nicht verdrahtet · Feld-Balancing bleibt eine
+Setzung · Bretter/Werkstein sind reine Baustoffe.
+
+---
+
+## Frühere Stände
 
 ## Stadtarbeit P4 — Jedes Lager hat seinen eigenen Bestand (v1.34, Save v32, D-052) — AKTUELL
 

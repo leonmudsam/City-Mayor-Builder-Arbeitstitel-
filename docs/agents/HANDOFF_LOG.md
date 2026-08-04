@@ -1,5 +1,47 @@
 # Handoff-Log
 
+## 2026-08-04 — Wirtschafts-/Lieferketten-Overhaul (v1.39, Save v33, D-063…D-067)
+
+**Auftrag:** „Farmfelder, kleine Steingrube, Holz-/Stein-Weiterverarbeitung" —
+elf Punkte, vier Mockups.
+
+**Befund, der den Auftrag korrigiert hat.** Zwei der vier gemeldeten Probleme
+lagen anders. Der Stein-Deadlock ist seit D-055 weg (erste Steinkosten L3, erste
+Grube gratis und ohne Stein); was blockiert, ist die **Form** — 3×3,
+Straßenzwang und 60 Holz, also der gesamte Startvorrat, auf einer Startregion
+mit 1.039 Gras- gegen 46 Bergkacheln. Und die Farm war seit D-058/D-059 gelöst.
+Wer hier nach dem gemeldeten Riegel gesucht hätte, hätte ihn nicht gefunden.
+
+**Die Entwurfsentscheidung, die alles trägt.** Für die Werkstatt gab es zwei
+naheliegende vorhandene Muster, und beide sind falsch. `operation` setzt einen
+`nodeType` und damit ein Terrain voraus. `produce.inputsPerMinute` — der Haken
+existiert seit MVP 2 und wird von keinem Gebäude benutzt — zieht seinen Eingang
+aus `state.resources`, seit D-052 also aus der **Bilanzsumme der ganzen Stadt**:
+Zwei Zeilen Config hätten die teuerste Regel des Vorauftrags („keine globale
+magische Ressource") ausgerechnet für die interessanteste Ware zurückgenommen.
+`BuildingDef.conversion` mit eigenem Lager ist deshalb kein Luxus, sondern die
+einzige Fassung, die §8 überlebt.
+
+**Zwei Fallen, die still schiefgegangen wären.**
+1. Beim Beladen an einem Stadtlager muss `withdrawStock` laufen. Ohne das füllt
+   `reconcileStock` beim nächsten `notify` den Bestand aus dem unveränderten
+   Pool wieder auf — das Fahrzeug fährt mit einer Kopie los, und die Stadt
+   vermehrt Holz.
+2. Die Bodengüte eines Feldes darf nicht aus `worldTerrainAt` kommen: Ein Feld
+   SETZT `fertile`, also hätte jede gekaufte Kachel automatisch Bestnote. Der
+   Bake ist die einzige Quelle, die die Handlung nicht mit dem Ort verwechselt.
+
+**Was die Tests fast verdeckt hätten.** Die erste Fassung von
+`tests/workshops.test.ts` schlug fehl, weil die Lieferkette **funktionierte**:
+Sie füllte das Eingangslager mitten im Test nach. Die Fixture räumt jetzt
+laufende Fahrten ab — ein Test, der die Automatik nicht abschaltet, misst die
+Automatik statt der Aussage.
+
+**Nächster sinnvoller Schritt.** Nicht mehr Tiefe (eine dritte Stufe wäre
+dasselbe Muster), sondern **Nachfrage**: Solange Bretter und Werkstein reine
+Baustoffe sind, ist die Kette eine Wahl. Werden sie Bürgerbedarf, wird sie
+Pflicht — eine Balancing-Entscheidung, keine technische.
+
 ## 2026-08-02 — Stadtarbeit P4: Bestandsregister je Lager (v1.34, Save v32, D-052)
 
 **Auftrag:** §8 des Stadtarbeit-Overhauls („Keine globale magische Ressource.

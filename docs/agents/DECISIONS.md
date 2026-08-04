@@ -1,5 +1,100 @@
 # Entscheidungen
 
+## D-063 — Ein Umwandlungsbetrieb ist weder `operation` noch `produce`
+
+**Kontext.** Der Auftrag verlangt Holz → Bretter und Stein → Werkstein in
+Gebäuden **ohne eigenes Arbeitsgebiet**. Zwei vorhandene Muster kamen in Frage,
+und beide sind falsch:
+
+* **`operation`** setzt einen `nodeType` voraus — also Terrain, Arbeitsgebiet
+  und laufende Arbeiter. Eine Werkstatt hat nichts davon.
+* **`produce` mit `inputsPerMinute`** (der Haken existiert seit MVP 2,
+  unbenutzt) zieht seinen Eingang aus `state.resources`. Seit D-052 ist das die
+  **Bilanzsumme der ganzen Stadt**: Eine Werkstatt am anderen Inselende
+  produzierte damit ohne eine einzige Fahrt, und §8 des Vorauftrags („Keine
+  globale magische Ressource") wäre ausgerechnet für die interessanteste Ware
+  wieder aufgehoben.
+
+**Entscheidung.** `BuildingDef.conversion` als drittes Produktionsmuster, mit
+**eigenem Lager** — aber demselben `BuildingInventory` und derselben
+`operations.inventories`-Map wie das Sägewerk seit Save v17. Kein drittes
+Lagermodell. Die Teilung in Eingangs- und Ausgangsplatz macht `conversionStage`,
+nicht ein neues Save-Feld.
+
+**Eine Rechnung, zwei Leser.** `workshopThroughput` liefert Zahlen *und*
+Stillstandsgrund; der Tick verarbeitet damit, die UI zeigt damit an (D-048).
+Eine Werkstatt kann nicht „läuft" melden und stillstehen.
+
+**Merksatz.** Ein vorhandener Haken ist kein Argument, wenn er aus der falschen
+Quelle liest. `inputsPerMinute` hätte zwei Zeilen gekostet und die teuerste
+Regel des Vorauftrags stillschweigend zurückgenommen.
+
+## D-064 — Der Nachschub ist ein Sog, kein zweites Transportsystem
+
+**Kontext.** Bis hierher lief jeder Transport in eine Richtung: aus dem Lager
+eines Betriebs in ein Stadtlager. Die Werkstatt ist das erste Gebäude, das Ware
+**empfängt**.
+
+**Entscheidung.** Zwei Funktionen beantworten die Frage einmal für alle Fälle
+(`canSupplyResource`/`canReceiveResource`), und `advanceWorkshopSupply`
+**erteilt nur Aufträge** an denselben `createInventoryTransfer`. Route,
+Fahrzeug, Ladezeit und Betriebskosten bleiben unverändert (§2/§8).
+
+**`transferTargets` bleibt bewusst lagerbeschränkt.** Es wäre einen Einzeiler
+wert gewesen, die Werkstatt dort aufzunehmen — dann lüde ein Sägewerk sein Holz
+automatisch bei ihr ab, und der Stadt fehlte Baumaterial, **ohne dass der
+Spieler es entschieden hätte**. Abtransport (schieben) und Lieferkette (ziehen)
+sind zwei Richtungen, kein zweites System.
+
+**Gefunden beim Bauen, und es wäre still schiefgegangen:** Wird an einem
+STADTLAGER geladen, muss auch die Bilanzsumme sinken (`withdrawStock`). Ohne das
+hätte `reconcileStock` beim nächsten `notify` den Bestand aus dem unveränderten
+Pool sofort wieder aufgefüllt — das Fahrzeug führe mit einer **Kopie** los. Wer
+Ware aus einem Ledger-Lager nimmt, nimmt sie aus der Stadt.
+
+## D-065 — Ein Prioritätsregler braucht eine Konsequenz
+
+Die Stadtarbeit trägt seit D-050 ein `priority`-Feld **ohne Wirkung**; es ist
+bis heute nicht in der UI, weil dahinter keine Simulation steht. Hier steht
+eine: `workshopSupplyDemand` sortiert die Nachfrage, und bei knappem Rohstoff
+bekommt die vordere Werkstatt die Ladung, die hintere geht leer aus.
+
+**Regel:** Ein Regler ohne messbare Folge ist eine Attrappe. Entweder die
+Sortierung entscheidet wirklich etwas, oder der Regler gehört nicht ins Fenster.
+
+## D-066 — Der Verarbeitungsanteil ist EINE Zahl in zwei Lesarten
+
+Der Auftrag nennt zwei Bedienmodelle: „30 % lagern / 70 % verarbeiten" **oder**
+„Mindestbestand halten und den Überschuss verarbeiten". Umgesetzt ist ein Wert:
+
+```
+reserve = (1 − processRatio) × inputCapacity
+```
+
+Verarbeitet wird nur, was darüber liegt. Die UI zeigt beide Lesarten
+gleichzeitig („Verarbeiten 80 % · 20 % lagern, mind. 48 Holz").
+
+**Warum nicht beides als eigene Einstellung:** Zwei Regler auf dieselbe Grenze
+sind zwei Wahrheiten, und die Frage „was gilt, wenn sie sich widersprechen?" hat
+keine gute Antwort — nur eine willkürliche.
+
+## D-067 — Bodenqualität kommt aus dem Bake, nicht aus dem Feld
+
+Ein angelegtes Feld **setzt** `fertile` als Terrain-Override (D-059). Wer die
+Bodengüte über `worldTerrainAt` liest, gibt damit jeder gekauften Kachel
+automatisch Bestnote: Der Bonus wäre geschenkt, die Landschaft bedeutungslos und
+der Unterschied zwischen Wiese und Marsch verschwunden — sichtbar erst, wenn
+jemand nachmisst, warum jedes Feld 130 % zeigt.
+
+`nodeSoilFactor` liest deshalb `terrainAt`, den Bake. Der Bonus (+30 %) wirkt
+über die **Ergiebigkeit der Kachel**; die Entfernung bleibt allein
+`fieldEfficiency` (D-059), es entsteht keine zweite Distanzrechnung.
+
+**Merksatz:** Wenn eine Spielerhandlung das Terrain verändert, darf keine
+Bewertung dieses Terrains die veränderte Fassung lesen. Sonst bewertet das
+System die Handlung, nicht den Ort.
+
+
 ## D-061 — Die Übergabe ist der eine erlaubte Moduswechsel, und sie kostet
 
 **Kontext.** D-050 hat `ActiveActivity.mode` nach dem Start eingefroren. Der

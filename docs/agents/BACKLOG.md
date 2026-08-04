@@ -13,6 +13,26 @@ unverändert fortgeführt.
 
 ---
 
+## 0a. ABGESCHLOSSEN: Wirtschafts- und Lieferketten-Overhaul (v1.39) `[P0]`
+> Master-Spec: [`SUPPLY_CHAIN_EXPANSION_PLAN.md`](SUPPLY_CHAIN_EXPANSION_PLAN.md) ·
+> Entscheide **D-063…D-067**.
+- ✅ `[P0]` §1 Kleine Steingrube (1×1, L1, ohne Straße/Material)
+- ✅ `[P0]` §2 Felder ab 1×1, Bodenqualität aus dem Bake, Ertrag abgeleitet
+- ✅ `[P0]` §3 Bretter + Werkstein (Save v33, Bestandsregister, HUD)
+- ✅ `[P0]` §4 Holz-/Steinwerkstatt als `BuildingDef.conversion`
+- ✅ `[P0]` §5 Lieferkette als Sog + Verarbeitungsanteil + wirksame Priorität
+- ✅ `[P0]` §6/§7 Level-5-Freischaltung, Upgrade-Kosten ab L6 (zehn Stellen)
+- ✅ `[P0]` §8 HUD-Reihenfolge + Werkstatt-Fenster
+- ✅ `[P0]` §9 Assets/Prompts · §10 Simulation L1–8 · §11 Doku
+- ❌ `[P2]` **Zwischenlager in der Lieferkette** — wäre echte Routenplanung.
+- ❌ `[P2]` **Intervall-/Ladungsregler** — wäre Bedienung ohne Entscheidung (D-039).
+- ❌ `[P2]` **Arbeiterzuteilung an Werkstätten** — `workerSlots` ist Anzeige.
+- ❌ `[P2]` **`field_farm_tile.glb` verdrahten** — Felder sind prozedural (D-044).
+- ❌ `[P1]` **Feld-Balancing messen** (260 ⌾/Kachel, 1,4 ⌾/min) — Setzung seit D-059.
+- ❌ `[P2]` **Bretter/Werkstein als Bürgerbedarf** — macht die Kette zur Pflicht.
+
+---
+
 ## 0. AKTIVER AUFTRAG: Infrastruktur 2.0 — Höhenstraßen, Brücken, Schifffahrt `[P0]`
 > Master-Spec: [`INFRASTRUCTURE_2_PLAN.md`](INFRASTRUCTURE_2_PLAN.md) · Entscheid: **D-036**.
 > **Vorgezogen auf ausdrücklichen Nutzerwunsch (24.07.2026):** entscheidender Punkt

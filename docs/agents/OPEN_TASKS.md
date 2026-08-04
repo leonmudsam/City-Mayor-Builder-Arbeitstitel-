@@ -2,7 +2,34 @@
 > Auftrag genau einmal, nach Thema (Straßen, Stadtarbeit, Betriebe, Bauen/Kamera,
 > Welt/Grafik, Häfen …). Diese Datei hier bleibt die auftrags-/phasenbezogene Detailsicht.
 
-# Offene Aufgaben nach v1.38
+# Offene Aufgaben nach v1.39
+
+## Auftrag „Wirtschafts- und Lieferketten-Overhaul" (v1.39, ABGESCHLOSSEN)
+
+Ist-Zustand, Architektur und Balancing:
+**`SUPPLY_CHAIN_EXPANSION_PLAN.md`** (verbindlicher Einstieg).
+
+Alle elf Punkte sind umgesetzt (§1 Steingrube · §2 Felder · §3 Bretter/Werkstein ·
+§4 Werkstätten · §5 Lieferketten · §6 Level 5 · §7 Upgrades · §8 UI · §9 Assets ·
+§10 Simulation · §11 Doku). Was bewusst offen bleibt:
+
+* **Zwischenlager in der Lieferkette** (§5 „optional ein Zwischenlager"): Die
+  Fahrt geht direkt von der gewählten Quelle zur Werkstatt. Ein Umweg über ein
+  drittes Gebäude wäre echte Routenplanung — ein zweites System.
+* **Intervall- und Ladungsregler** (§5): Die Automatik bestellt, wenn Platz ist,
+  und lädt, was das Fahrzeug fasst. Ein Intervallregler wäre Bedienung ohne
+  Entscheidung (D-039); die Frage „wie oft?" hat genau eine sinnvolle Antwort.
+* **Arbeiterzuteilung an Werkstätten**: `workerSlots` ist eine Anzeige, der
+  Durchsatz hängt allein an der Ausbaustufe. Echte Personalverteilung wäre ein
+  eigenes System.
+* **`field_farm_tile.glb`**: Prompt und Manifest stehen, das Modell ist nicht
+  verdrahtet. Felder zeichnet `farmFieldMesh.ts` prozedural — nach D-044
+  richtig (ein Natur-`.glb` wiegt ~29.000 Dreiecke, ein Feld ist Masse).
+* **Feld-Balancing** (260 ⌀/Kachel, 1,4 ⌀/min) bleibt eine Setzung, keine
+  Messung — unverändert seit D-059.
+* **Bretter/Werkstein sind reine Baustoffe**: kein Bürgerbedarf, keine
+  Handelsware. Wer sie zur Nachfrage macht, macht die Kette zur Pflicht — das
+  ist eine Balancing-Entscheidung, keine technische.
 
 ## Auftrag „Stadtarbeit Overhaul — Logistik, Farm-Felder, visueller Umbau"
 

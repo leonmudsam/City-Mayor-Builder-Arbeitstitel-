@@ -75,6 +75,14 @@ Low-poly stylized 3D city-builder game asset, colorful cartoon look, clean shape
 
 **Spec:** Größenklasse `terrain_feature` — Terrain-Feature (800–3 000 Tris, ≤ 512², 1–2 Materialien) · Höhe ≈2–3 Kacheln · Pivot unten-mittig (X/Z zentriert, Unterkante Y = 0) · Front +Z · Biom: Gebirge · platzierbar auf: mountain · Zufallsrotation + leichte Zufallsskalierung · Instancing: ja · Spawn: ~⅓ der Gebirgs-Kacheln, zufällig gestreut · **live** (bereits verdrahtet)
 
+### `field_farm_tile.glb` — 1×1, modular
+
+```text
+Low-poly stylized 3D city-builder game asset, colorful cartoon look, clean shapes, soft bevels, hand-painted feel, optimized for realtime rendering, embedded textures, no lights, no cameras, centered object, pivot at bottom center, +Y up, front facing +Z — a single low-poly ploughed farm field tile: brown soil with four straight crop rows of young green plants, a low earthen ridge on two edges so tiles read as one field when placed side by side, flat top, seamless tileable edges, cartoon low-poly, UNDER 200 TRIANGLES (this is mass geometry, not a hero prop)
+```
+
+**Spec:** Größenklasse `terrain_tile` — Terrain-/Straßen-Kachel (200–800 Tris, ≤ 512² (bevorzugt geteilt), 1 Material) · Pivot unten-mittig (X/Z zentriert, Unterkante Y = 0) · Front +Z · Biom: Ackerland · platzierbar auf: angelegte Farm-Feldkachel (terrainOverride `fertile`) · 90°-Rotation + leichte Farbstreuung nach Reifegrad · Instancing: ja · Spawn: eine Instanz je gekaufter Feldkachel · *geplant* (noch nicht verdrahtet)
+
 ## Geplant — Gebirge (schroffe Felsen statt runder Blöcke)
 
 Bilden zusammen ein zerklüftetes Gebirge mit Tälern/Pässen statt flacher grauer Blöcke (siehe World-Graphics-V2 §2).

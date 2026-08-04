@@ -62,7 +62,61 @@ der Cloud-Umgebung** (kein Rust/Windows) — dort nur den Browser-Pfad verifizie
 (gitignored). GitHub Pages ist abgeschaltet — kein Deploy-Workflow wieder einführen.
 `archive/legacy-2d/` = archivierte 2D-/Iso-Reste (nicht reaktivieren).
 
-## Status: v1.38 — DIE KARTE IST DIE GERENDERTE WELT (Save v32, D-061/D-062) — AKTUELL
+## Status: v1.39 — DIE ZWEITE VERARBEITUNGSSTUFE (Save v33, D-063…D-067) — AKTUELL
+Auftrag „Wirtschafts- und Lieferketten-Overhaul"; **alle elf Punkte** umgesetzt.
+Verbindlicher Einstieg: `docs/agents/SUPPLY_CHAIN_EXPANSION_PLAN.md`.
+**(0) Zwei der vier gemeldeten Probleme lagen anders.** „Stein blockiert" ist
+seit D-055 falsch — `stone_pit` öffnet L2, erster Bau gratis **ohne Stein**,
+erste Steinkosten L3 (25). Blockiert hat die **Form**: 3×3, Straßenzwang, 60
+Holz = der gesamte Startvorrat. „Farm zu starr" war seit D-058/D-059 gelöst.
+Bestätigt: **keine** zweite Verarbeitungsstufe; `produce.inputsPerMinute`
+existiert seit MVP 2 und wird von **keinem** Gebäude benutzt.
+**(1) `stone_pit_small` ist der bedingungslose Einstieg.** 1×1, ab **Level 1**,
+**ohne Straße**, **ohne Material**, erster Bau gratis — ein Einstieg mit
+Bedingung ist kein Einstieg. Preis: 4 Stein/min (ein Zehntel des Steinbruchs),
+Baugrenze 3, **keine Ausbaustufe**.
+**(2) Felder ab 1×1 mit echtem Boden (D-067).** Bodenqualität +30 % auf
+natürlich fruchtbarem Grund — gelesen aus dem **Bake**, nicht aus
+`worldTerrainAt`: Ein Feld SETZT `fertile` als Override, über den Override
+gelesen hätte jede gekaufte Kachel automatisch Bestnote. Keine zweite
+Effizienzformel (Entfernung bleibt `fieldEfficiency`, D-059). Ertrag ist
+**abgeleitet** (Kachelmenge ÷ Nachwachsdauer); die Grenze „Hände" steht daneben
+statt in einer geglätteten Zahl.
+**(3) Bretter + Werkstein (Save v33).** Veredelte Waren, die **nie aus der Welt
+kommen**. HUD: Geld · Holz · **Bretter** · Stein · **Werkstein** · Essen — die
+Kette ist an der Leiste ablesbar; vor L5 gedimmt statt versteckt. Im
+Bestandsregister (`LEDGER_RESOURCES`), `baseStorage: 0` wie Trinkwasser.
+**(4) Werkstätten = drittes Produktionsmuster (D-063).**
+`BuildingDef.conversion` — **kein** `operation` (das setzt Terrain voraus) und
+**kein** `produce.inputsPerMinute` (das zieht aus `state.resources`, also der
+Bilanzsumme: eine Werkstatt am anderen Inselende produzierte ohne eine einzige
+Fahrt und höbe §8/D-052 wieder auf). Eigenes Lager, aber dasselbe
+`BuildingInventory` wie das Sägewerk seit v17 — **kein drittes Lagermodell**.
+`workshopThroughput` ist die EINE Durchsatzrechnung für Tick und Anzeige
+(D-048). Kalibriert: Werkstatt frisst 28 Holz/min gegen 45 eines Sägewerks.
+**(5) Nachschub ist ein SOG (D-064).** `advanceWorkshopSupply` erteilt nur
+Aufträge an denselben `createInventoryTransfer`; `transferTargets` bleibt
+**bewusst lagerbeschränkt** — stünde die Werkstatt dort, lüde ein Sägewerk sein
+Holz automatisch bei ihr ab und der Stadt fehlte Baumaterial, ohne Entscheidung
+des Spielers. **`priority` wirkt hier wirklich** (D-065, anders als das
+gleichnamige Feld der Stadtarbeit). Verarbeitungsanteil ist **eine** Zahl in
+zwei Lesarten (D-066). **Gefunden beim Bauen:** Beim Laden an einem Stadtlager
+muss die Bilanz über `withdrawStock` sinken — sonst füllt `reconcileStock` sie
+sofort wieder auf und das Fahrzeug fährt mit einer **Kopie** los.
+**(6/7) L5 öffnet beide Werkstätten gleichzeitig**, ab L6 kosten zehn Stellen
+Bretter/Werkstein. Neue Testregel: Eine veredelte Ware kommt nie aus der Welt,
+also darf keine Kostenstelle vor dem Level ihrer Werkstatt liegen.
+**Gemessen im laufenden Spiel (0 Konsolenfehler):** „Holz 1.524 · Bretter 96 ·
+Stein 1.088 · Werkstein 92" ohne einen einzigen Klick; Werkstatt-Fenster
+„Eingang 182/240 · 2:1 · Ausgang 71/160 · 14/min von 14/min möglich".
+**Offen, nicht vortäuschen:** Feld-Balancing bleibt eine Setzung · **kein**
+Zwischenlager in der Lieferkette (wäre echte Routenplanung) · **kein**
+Intervall-/Ladungsregler (wäre Bedienung ohne Entscheidung, D-039) · Arbeiter
+sind Arbeitsplätze, kein zweiter Regler · `field_farm_tile.glb` geplant, nicht
+verdrahtet (Felder sind prozedural, D-044) · Bretter/Werkstein sind reine
+Baustoffe, kein Bürgerbedarf.
+
+## Status: v1.38 — DIE KARTE IST DIE GERENDERTE WELT (Save v32, D-061/D-062)
 Prioritäten **4–7** des Auftrags „Stadtarbeit Overhaul"; damit sind **alle
 sieben** umgesetzt (P1/P3 in v1.37, P2 war erfüllt). Verbindlicher Einstieg
 bleibt `docs/agents/CITYWORK_OVERHAUL_PLAN.md`.
