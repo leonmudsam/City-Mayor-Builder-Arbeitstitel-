@@ -15,9 +15,11 @@
 // Reichweitenbegriffe, und das HUD böte „Laden" an, wo der Command ablehnt
 // (D-048).
 
-import { AlertTriangle, ArrowLeft, ArrowRight, ArrowUp, Gauge, LogOut, PackageMinus, PackagePlus, RotateCcw, Truck } from 'lucide-react';
+import { AlertTriangle, ArrowLeft, ArrowRight, ArrowUp, Gauge, LogOut, PackageMinus, PackagePlus, RotateCcw, Truck, Warehouse } from 'lucide-react';
 import { useMemo } from 'react';
+import type { MissionStopRole } from '../../game/activities/missionStops.ts';
 import type { CityworkReloadBlocker } from '../../game/commands/controller.ts';
+import { ROAD_TILE_METERS } from '../../game/roads/roadProfile.ts';
 import { t } from '../../i18n/index.ts';
 import { getMapApi, useGame, useUiStore } from '../../state/store.ts';
 
@@ -42,6 +44,23 @@ const TURN_ICON = {
 const TURN_KEY = { left: 'A', straight: 'W', right: 'D', around: 'S' } as const;
 const TURN_LABEL = { left: 'links', straight: 'geradeaus', right: 'rechts', around: 'wenden' } as const;
 
+/**
+ * § A6: So viele Halte zeigt das HUD. Vier, weil eine längere Liste unterwegs
+ * niemand liest — und weil eine vollständige Liste aller Stadtlager genau das
+ * „Excel" wäre, gegen das dieser Auftrag angetreten ist.
+ */
+const MAX_STOPS = 4;
+
+/** § D-046: jede Rolle beschriftet, vom Compiler eingefordert. */
+const STOP_ROLE: Record<MissionStopRole, { label: string; icon: JSX.Element }> = {
+  source: { label: 'Start', icon: <Warehouse size={13} /> },
+  target: { label: 'Ziel', icon: <PackageMinus size={13} /> },
+  storage: { label: 'Lager', icon: <PackagePlus size={13} /> },
+};
+
+/** Kacheln → Meter, mit derselben Kachelgröße wie die Straße (kein zweiter Maßstab). */
+const metres = (tiles: number) => Math.round(tiles * ROAD_TILE_METERS);
+
 export function MissionHud() {
   const game = useGame();
   const driveActive = useUiStore((s) => s.driveActive);
@@ -58,6 +77,25 @@ export function MissionHud() {
   const here = useMemo(
     () => (status?.atBuildingId ? game.getCityworkBuildingInfo(status.atBuildingId) : undefined),
     [game, game.version, status?.atBuildingId],
+  );
+  // § A6: Die Halte des Einsatzes — Quelle, offene Ziele, Lager mit Ware.
+  // Gefiltert wird in der Simulation (`open`), sortiert wird hier nach der
+  // Entfernung zum Wagen: „wo muss ich hin" ist eine Frage des Standorts, und
+  // die Liste selbst darf davon nicht abhängen (sonst wäre sie nicht mehr
+  // deterministisch).
+  const stops = useMemo(() => game.getMissionStops({ open: true }), [game, game.version]);
+  const at = status?.at;
+  const nearest = useMemo(
+    () => stops
+      .map((stop) => ({
+        stop,
+        // Ohne gemeldeten Standort bleibt die Ordnung die der Simulation
+        // (Quelle, Ziele, Lager) — geraten wird keine Entfernung.
+        distance: at ? Math.hypot(stop.cx - at.x, stop.cy - at.y) : undefined,
+      }))
+      .sort((a, b) => (a.distance ?? 0) - (b.distance ?? 0))
+      .slice(0, MAX_STOPS),
+    [stops, at?.x, at?.y],
   );
 
   if (!driveActive || !active) return null;
@@ -113,6 +151,37 @@ export function MissionHud() {
               />
             </span>
           </div>
+        )}
+
+        {/* § A6 — DIE HALTE. Nicht die Route, nicht die Reihenfolge: die ORTE,
+            die für diesen Einsatz etwas bedeuten, nach Entfernung sortiert. Wer
+            zuerst am näheren Ziel vorbeikommt, liefert dort (D-070) — deshalb
+            ist das eine Auskunft, keine Vorgabe. */}
+        {nearest.length > 0 && (
+          <section className="mission-stops">
+            <h4>Halte in der Nähe</h4>
+            <ul>
+              {nearest.map(({ stop, distance }) => (
+                <li key={stop.buildingId} className={stop.buildingId === here?.buildingId ? 'is-here' : ''}>
+                  <span className={`mission-stop-role role-${stop.role}`}>
+                    {STOP_ROLE[stop.role].icon}
+                    {STOP_ROLE[stop.role].label}
+                  </span>
+                  <span className="mission-stop-name">{t(stop.nameKey)}</span>
+                  {stop.amount !== undefined && stop.resource && (
+                    <span className="mission-stop-amount">{int(stop.amount)}</span>
+                  )}
+                  <span className="mission-stop-distance">
+                    {stop.buildingId === here?.buildingId
+                      ? 'hier'
+                      : distance === undefined
+                        ? '—'
+                        : `${int(metres(distance))} m`}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </section>
         )}
 
         {/* § A5 — DIE AKTION AM AKTUELLEN ORT. Der eigentliche Unterschied zum
@@ -189,7 +258,9 @@ export function MissionHud() {
         </span>
         <span className="mission-metric">
           <small>Gefahren</small>
-          <strong>{(drivenTiles * 0.02).toFixed(2)} km</strong>
+          {/* Kachel → Meter kommt aus dem Straßenprofil, nicht aus einer Zahl
+              im HUD: Zwei Umrechnungen wären zwei Kilometerstände. */}
+          <strong>{((drivenTiles * ROAD_TILE_METERS) / 1000).toFixed(2)} km</strong>
         </span>
         <span className="mission-hint">
           <kbd>W</kbd> <kbd>A</kbd> <kbd>S</kbd> <kbd>D</kbd> an der Kreuzung ·{' '}

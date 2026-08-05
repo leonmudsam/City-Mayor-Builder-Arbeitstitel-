@@ -1,5 +1,179 @@
 # Patch Notes
 
+## v1.40 — DER EINSATZ FINDET IN DER STADT STATT (Save v33, D-068 bis D-071)
+
+Auftrag „Stadtarbeit 3.0 — Open-World-Aufträge statt Routen-Minispiel".
+Umgesetzt sind **A1 bis A6** und der HUD-Teil von A7; A8 (weitere Missionstypen),
+A9 (Ereignisse) und A10 (Route automatisieren) sind offen und werden in der
+Oberfläche nicht vorgetäuscht.
+Verbindlicher Einstieg: `docs/agents/CITYWORK_OPEN_WORLD_OVERHAUL.md`.
+
+### 1. Was war — und was die Messung am Auftrag korrigiert hat
+
+**Was war.** Stadtarbeit fühlte sich wie ein Planer an, weil sie einer war:
+`ActivityRoutePlanner` und `ManualRouteMap` zusammen **2.692 Zeilen**
+Planungsoberfläche gegen **86 Zeilen** Ausführung.
+
+**Was die Prüfung des Arbeitsbaums ergeben hat - und den Auftrag verschiebt:**
+Der 3D-Fahrmodus **existierte vollständig**. Straßenbindung, Kreuzungsabsicht
+(D-060), Verfolgerkamera, Fahrzeugmodell - alles da, über `mapApi` exponiert,
+und **kein einziger Aufrufer** in `src/components/**`. Seit D-050 wurde
+ausschließlich in der 2D-Karte gefahren. Es fehlte also nicht die Fahrphysik und
+nicht die Weltdarstellung, sondern der Weg dorthin.
+
+### 2. Der Einsatz läuft in der Welt (D-068)
+
+Das **kehrt D-050/D-051 ausdrücklich um** - auf Nutzerwunsch ("echte
+Weltansicht statt flacher Karte"). Kein zweiter Renderer: derselbe
+`ThreeMapRenderer` mit einer Einsatzkamera. Keine zweite Fahrphysik:
+`game/activities/driving.ts` bleibt die eine Funktion.
+
+**Und die 2D-Fahrschleife ist entfernt, nicht danebengestellt.** Zwei
+Fahrflächen wären zwei Bedienkonzepte: zwei Orte für "wo steht mein Wagen",
+zwei Kreuzungsanzeigen, zwei Nachlade-Knöpfe. Die Karte wechselt die Rolle -
+von der Spielfläche zur **Übersicht**. Sie darf nur deshalb bleiben, weil sie
+seit D-062 kein zweites Weltbild ist, sondern eine Aufnahme derselben Szene.
+
+**Was dabei mitgehen MUSSTE und beinahe liegen geblieben wäre:** die
+Aufzeichnung der gefahrenen Strecke. Seit D-054 IST die gefahrene Strecke die
+Route des Auftrags - aber `recordActivityDrive` hing an der Karte. Wäre es dort
+geblieben, hätte ab dieser Version **jeder Auftrag eine leere Route**:
+Abschlussbericht, Kilometerstand und Handelswege lesen alle dieselbe Liste. Der
+Renderer meldet jetzt jeden Kachelwechsel (`onDriveRecord`).
+
+### 3. Der Wiedereinstieg war die eigentliche Arbeit (A1)
+
+Der erste Einstieg über den Planer war schnell verdrahtet. "Selbst fahren" im
+Auftrags-Widget öffnete aber weiterhin den **Planer** - den alten D-050-Weg.
+Wer mit Q ausstieg, landete also im Panel statt am Steuer. Ein Einstieg, der nur
+einmal funktioniert, ist keiner. Jetzt gibt es genau eine Funktion
+(`enterMission`), und drei Stellen rufen sie: Auftrag annehmen, Weiterfahren,
+Zwischenbilanz.
+
+Die Zwischenbilanz (D-061) ist mit umgezogen: Sie lag im Planer, weil dort
+gefahren wurde. Jetzt öffnet der **Ausstieg selbst** sie (`MissionReview`) -
+wer in der Welt aussteigt, käme sonst kommentarlos in der Stadt heraus.
+
+### 4. Die Halte (A6) — abgeleitet statt gespeichert (D-069 korrigiert)
+
+Geplant war ein Save-Feld `ActiveActivity.stops` mit Migration v33 auf v34. Beim
+Bauen zeigte sich, dass **jedes Feld dieser Liste bereits im Save steht, nur
+woanders**: Quelle in `sourceBuildingId` (D-052), Ziele in `targets[]`, Lager in
+`derived.storageSites`, Ware in `costPerTarget`. Eine persistierte Kopie wäre
+eine zweite Wahrheit - und die erste Stelle, die sie nach einem Abriss nicht
+nachzieht, schickt den Spieler zu einem Gebäude, das es nicht mehr gibt.
+
+Also: `game/activities/missionStops.ts` baut das Modell bei jeder Abfrage neu,
+`getMissionStops({ open })` gibt es heraus, und `tests/missionStops.test.ts`
+prüft genau die Eigenschaft, die den Ausschlag gab - **ein abgerissenes Lager
+verschwindet sofort aus den Halten, ohne dass jemand etwas nachzieht.**
+**Keine Migration. Save bleibt v33.**
+
+Drei Rollen statt der vorgeschlagenen vier: Der Auftrag nennt `optional`, aber
+es gibt im Spiel nichts, was einen Halt optional macht. Eine Rolle ohne
+Unterscheidungsmerkmal ist eine Beschriftung, keine Information.
+
+### 5. Das Einsatz-HUD (A4/A5/A7)
+
+Vier Flächen, keine davon eine Liste: Tempo unten links, Ziele und Kilometer
+unten mitte, die **nächste echte Kreuzung** mittig links (eine Kurve ist
+keine), rechts Fahrzeug, Ladung, **Halte in der Nähe** und die **Aktion am
+Ort**.
+
+Jede Zahl ist eine Projektion. "Hier laden" ist genau dann aktiv, wenn der
+Command annimmt (`reloadBlockerAt`, D-048); ist es das nicht, steht der Grund
+darunter statt eines grauen Knopfes ohne Erklärung.
+
+**Im Einsatz tritt das Stadt-HUD zurück** - Stadtstatus, Anliegen, Minimap,
+Info-Layer, Kamerasteuerung, Schnellleiste und das Auftrags-Widget. Sie
+beantworten Fragen, die man am Steuer nicht stellt, und sie lagen ausgerechnet
+dort, wo das eigene Fahrzeug fährt.
+
+### 6. Zwei Fehler, die erst der Umzug sichtbar gemacht hat
+
+**Die freie Reihenfolge galt nur in 2D (D-070).** `progressActivity` nimmt seit
+D-054 *jedes* offene Ziel; `updateDrive` prüfte `targets.find(!done)` - das
+erste. Im Einsatz wäre die Reihenfolge damit wieder erzwungen gewesen. Eine
+Freiheit, die nur eine von zwei Ansichten gewährt, ist keine.
+
+**Das Fahrzeug fuhr unter der Insel (D-071).** Gemessen im laufenden Spiel:
+Fahrzeughöhe **0,07** bei einem Boden von **6,47**.
+`roadEngineering.roadHeight` ist eine absolute Welthöhe im Spielstand; in einem
+Spielstand aus der Zeit vor dem Weltumbau trugen **91 von 96** Straßen dort
+eine 0, und `??` fängt nur `undefined`, nicht die 0. Betroffen war nicht nur
+der Wagen - die **Fahrbahnen selbst** lagen im Boden; aus der Stadtkamera sah
+das schlicht nach "hier ist keine Straße" aus. Jetzt lesen nur echte Hochlagen
+(`support`/`viaduct`/`bridge`) den gespeicherten Wert; flache Straßen leiten
+ihre Höhe wieder aus `terrainHeightAt` ab (D-043). Unsichtbar war das so lange,
+weil seit D-050 niemand den 3D-Fahrmodus ansteuern konnte.
+
+### 7. Einsatzkamera nachgemessen (A3)
+
+Bei Abstand 24 ist ein Lieferwagen von 0,44 x 0,74 Kacheln rund **27
+Bildpunkte** groß - ein grauer Fleck auf der Fahrbahn. Abstand **14** bei
+Neigung **0,92** verdoppelt ihn; vorausgeschaut wird immer noch rund 13 Kacheln
+(ca. 260 m), also deutlich weiter, als die Kreuzungsanzeige bei ca. 95 m
+braucht.
+
+### 8. Im laufenden Spiel gemessen (0 Konsolenfehler)
+
+* "Selbst fahren" öffnet den Einsatz - **der Planer bleibt zu**
+* fährt ohne gedrückte Taste: "80 km/h - offene Ziele 2 von 3 - gefahren 0,05 km"
+* "Nächste Kreuzung in 88 m - links A - rechts D - wenden S"
+* Halte: "LAGER Rathaus 280 / 41 m | ZIEL Kleines Haus 40 / 61 m | ZIEL ... 90 m"
+* Q öffnet die Zwischenbilanz in der Welt; "Weiterfahren" führt zurück ans Steuer
+
+### 9. Auswirkung auf Bestandsspielstände
+
+Keine Schema-, Simulations- oder Balancing-Änderung - **Save bleibt v33**. Alte
+Spielstände profitieren unmittelbar von D-071: Straßen, die bisher im Boden
+lagen, erscheinen wieder auf dem Gelände.
+
+### 10. Zukunft
+
+A8 weitere Missionstypen (Baustelle, Produktion, Lager-zu-Lager, Hafen als
+Etappe), A9 kleine aktive Ereignisse, A10 gefahrene Route speichern und
+automatisieren, dazu das Aufräumen der verbliebenen Planungsoberfläche nach
+den Mockups.
+
+### 11. Offen, nicht vortäuschen
+
+* **Der Planer ist noch groß.** Die Fahranteile sind raus, das Layout nach den
+  Mockups steht aus (A7, zweiter Teil).
+* **Keine Zwischenstopp-Liste und keine Priorität** - die Simulation kennt
+  beides nicht (D-054, D-050); ein Knopf dafür wäre eine Attrappe.
+* **Häfen sind kein Netzknoten der Stadtarbeit.**
+* **§5 Quicktime-Events** bleiben bewusst zurückgestellt.
+* Feld-Balancing bleibt eine Setzung; D-057s Traglast bindet in der
+  ausgelieferten Config praktisch nie.
+
+### 12. Dateien
+
+* Neu: `src/game/activities/missionStops.ts`, `src/components/hud/MissionReview.tsx`,
+  `tests/missionStops.test.ts`
+* Gelöscht: `src/components/hud/DriveHud.tsx`
+* Geändert: `src/renderer/three/ThreeMapRenderer.ts` (Aufzeichnung,
+  Einsatzkamera, Straßenhoehe), `src/renderer/IMapRenderer.ts`
+  (`onDriveRecord`, `DriveStatus.at`), `src/components/MapView.tsx`,
+  `src/components/hud/MissionHud.tsx`,
+  `src/components/citywork/ActivityExecutionWidget.tsx`,
+  `src/components/citywork/ManualRouteMap.tsx` (1.764 auf 1.290 Zeilen),
+  `src/components/panels/ActivityRoutePlanner.tsx`, `src/App.tsx`,
+  `src/state/store.ts`, `src/styles/mission-hud.css`,
+  `src/game/commands/controller.ts`
+* Doku: `docs/agents/CITYWORK_OPEN_WORLD_OVERHAUL.md`,
+  `docs/agents/DECISIONS.md`, `docs/agents/PROJECT_STATE.md`,
+  `docs/agents/OPEN_TASKS.md`, `CLAUDE.md`
+
+### 13. Assets
+
+Die vom Nutzer eingelegten Werkstatt-Modelle sind aufgenommen:
+`wood_workshop.glb`, `wood_workshop_stage2.glb`, `wood_workshop_stage3.glb`,
+`stone_workshop.glb`, `stone_workshop_stage2.glb`, `stone_workshop_stage3.glb`
+in `src/assets/models/buildings/resources/`. Sie brauchen keine Verdrahtung -
+die Drop-in-Registry findet sie über den Dateinamen (CLAUDE.md §5).
+
+
 ## v1.39 — DIE ZWEITE VERARBEITUNGSSTUFE (Save v33, D-063 bis D-067)
 
 Auftrag „Wirtschafts- und Lieferketten-Overhaul — Farmfelder, kleine Steingrube,

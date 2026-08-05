@@ -1,5 +1,36 @@
 # Handoff-Log
 
+## 2026-08-05 — Stadtarbeit 3.0, A1–A6 (v1.40, Save v33, D-068…D-071)
+
+**Auftrag:** „Open-World-Aufträge statt Routen-Minispiel" — fünf Mockups, vier
+Phasen, ausdrücklich mit der Auflage, zuerst den vorhandenen Code zu prüfen.
+
+**Genau das hat den Auftrag verschoben.** Der 3D-Fahrmodus war fertig und
+unerreichbar: `enterDrive()` mit Straßenbindung, Kreuzungsabsicht,
+Verfolgerkamera und Fahrzeugmodell — **kein Aufrufer**. Wer hier „Fahren bauen"
+gelesen hätte, hätte ein zweites Fahrmodell gebaut.
+
+**Was gebaut wurde.** Der Einsatz läuft in der Welt (D-068), die 2D-Fahrschleife
+ist entfernt, die Karte ist Übersicht. Die Halte sind ein abgeleitetes Modell
+(D-069 korrigiert — keine Migration, Save v33). Das Einsatz-HUD zeigt Tempo,
+Kreuzung, Halte und die Aktion am Ort; das Stadt-HUD tritt zurück.
+
+**Zwei Dinge, die beim Umzug beinahe liegen geblieben wären.** Die Aufzeichnung
+der gefahrenen Strecke hing an der Karte — ohne sie hätte ab dieser Version
+jeder Auftrag eine leere Route. Und die Zwischenbilanz lag im Planer; wer in der
+Welt aussteigt, wäre kommentarlos in der Stadt gelandet.
+
+**Der teuerste Befund kam aus dem Smoke, nicht aus einem Test.** Das Fahrzeug
+fuhr sechs Einheiten unter der Insel, samt Fahrbahn (D-071) — ein Fehler, den
+seit D-050 niemand ansteuern konnte, weil der 3D-Fahrmodus keinen Aufrufer
+hatte. Ein Fehler, den man nicht erreichen kann, wird nicht gemeldet; er wartet.
+
+**Für den Nächsten:** A8 (Missionstypen) ist der größte offene Brocken und der
+mit dem meisten Spielwert. Vorher `CITYWORK_OPEN_WORLD_OVERHAUL.md` lesen — vor
+allem den Risiko-Abschnitt: Wer wieder in der 2D-Karte fahren will, muss D-068
+zurücknehmen statt beides parallel zu betreiben.
+
+
 ## 2026-08-04 — Wirtschafts-/Lieferketten-Overhaul (v1.39, Save v33, D-063…D-067)
 
 **Auftrag:** „Farmfelder, kleine Steingrube, Holz-/Stein-Weiterverarbeitung" —

@@ -1,5 +1,90 @@
 # Entscheidungen
 
+## D-068 — Der Einsatz findet in der 3D-Welt statt (kehrt D-050/D-051 um)
+
+**Kontext.** D-050 hatte festgelegt: „gefahren wird in der bestehenden
+2D-Stadtarbeitskarte, **nicht** in der 3D-Welt." D-051/D-062 haben diese Karte
+danach so weit verbessert, dass sie eine orthografische **Aufnahme derselben
+Szene** ist. Der Auftrag „Stadtarbeit 3.0" verlangt ausdrücklich das Gegenteil:
+„echte Weltansicht statt flacher Karte", „wie ein hochwertiger Spielmodus in der
+echten Welt".
+
+**Entscheidung.** Der Einsatz läuft im vorhandenen `ThreeMapRenderer` mit einer
+eigenen Einsatzkamera. **Kein zweiter Renderer** (CLAUDE.md §2) und **keine
+zweite Fahrphysik**: `game/activities/driving.ts` bleibt die eine Funktion, die
+2D-Karte und 3D-Welt schon vorher geteilt haben.
+
+**Und die 2D-Fahrschleife wird ENTFERNT, nicht danebengestellt.** Zwei
+Fahrflächen sind zwei Bedienkonzepte: zwei Orte für „wo steht mein Wagen", zwei
+Kreuzungsanzeigen, zwei Nachlade-Knöpfe. Die Karte wechselt die Rolle — von der
+Spielfläche zur **Übersicht** (wo liegen Ziele, Lager, Quellen). Sie darf nur
+deshalb bleiben, weil sie seit D-062 kein zweites Weltbild ist.
+
+**Was dabei mitgehen MUSS und beinahe liegen geblieben wäre:** die Aufzeichnung
+der gefahrenen Strecke. Seit D-054 IST die gefahrene Strecke die Route des
+Auftrags; `recordActivityDrive` hing aber an der Karte. Wäre sie dort geblieben,
+hätte ab sofort jeder Auftrag eine leere Route — Abschlussbericht, Kilometerstand
+und Handelswege lesen alle dieselbe Liste. Der Renderer meldet deshalb jeden
+**Kachelwechsel** über `onDriveRecord`.
+
+**Merksatz:** Wer eine Spielfläche verlegt, verlegt auch alles, was an ihr hing.
+Die Frage ist nicht „läuft das Neue?", sondern „was hat das Alte nebenbei getan?"
+
+## D-069 (korrigiert) — Die Halte werden ABGELEITET, nicht gespeichert
+
+**Ursprünglich** sah D-069 ein Save-Feld `ActiveActivity.stops` samt Migration
+v33→v34 vor: die anfahrbaren Orte mit Rolle, Ware und Menge, wie der Auftrag es
+als `CityWorkStop` vorschlägt.
+
+**Beim Bauen zeigte sich, dass jedes Feld dieser Liste bereits im Save steht,
+nur woanders:** Quelle → `active.sourceBuildingId` (D-052), Ziele →
+`active.targets[]`, Lager → `derived.storageSites`, Ware →
+`activityDef.costPerTarget`. Eine persistierte Kopie wäre eine **zweite
+Wahrheit** über dieselben Orte — und die erste Stelle, die sie nach einem Abriss
+nicht nachzieht, schickt den Spieler zu einem Gebäude, das es nicht mehr gibt.
+
+**Entscheidung.** Das Modell wird gebaut (`game/activities/missionStops.ts`,
+`getMissionStops`), die Migration nicht. **Save bleibt v33.** Persistiert wird
+erst, wenn der Spieler an einem Halt etwas ENTSCHEIDET, das sich nicht ableiten
+lässt. Bis dahin wäre ein Save-Feld nur ein Ort, an dem etwas veralten kann.
+`tests/missionStops.test.ts` prüft genau das: Ein abgerissenes Lager
+verschwindet sofort aus den Halten, ohne dass jemand etwas nachzieht.
+
+**Drei Rollen, nicht vier.** Der Auftrag nennt zusätzlich `optional` — es gibt
+im Spiel aber nichts, was einen Halt optional MACHT. Eine Rolle ohne
+Unterscheidungsmerkmal ist eine Beschriftung, keine Information.
+
+## D-070 — Freie Reihenfolge heißt: jeder Halt zählt, überall
+
+Die Regel steht seit D-054 in der Simulation (`progressActivity` nimmt *jedes*
+offene Ziel). Die 3D-Fahrt prüfte nur `targets.find(!done)` — das **erste**. Im
+Einsatz wäre die Reihenfolge dadurch wieder erzwungen gewesen, obwohl die
+Simulation sie längst freigegeben hatte.
+
+**Merksatz:** Eine Freiheit, die nur eine von zwei Ansichten gewährt, ist keine.
+
+## D-071 — Eine ebene Straße liegt auf dem Boden, nicht auf einer gespeicherten Zahl
+
+**Gefunden, weil der Einsatz in die Welt zog (D-068).** Das Fahrzeug fuhr im
+laufenden Spiel bei Höhe **0,07**, während der Boden an derselben Stelle auf
+**6,47** lag — sechs Einheiten unter der eigenen Stadt, zusammen mit der
+Fahrbahn. Ursache: `roadEngineering.roadHeight` ist eine **absolute Welthöhe im
+Spielstand**. In einem Spielstand aus der Zeit vor dem Weltumbau trugen **91 von
+96** Straßen dort eine 0. Der Renderer las sie als Fahrbahnhöhe, und `??` fängt
+nur `undefined` — nicht die 0.
+
+**Entscheidung.** Nur echte Hochlagen (`support`/`viaduct`/`bridge`) lesen den
+gespeicherten Wert; dort ist die Fahrbahnhöhe eine Entscheidung des Bauwerks.
+Für flache Straßen gilt D-043: **Die Geometrie wird abgeleitet, nicht
+gespeichert** — `terrainHeightAt` ist die eine Bodenhöhe und kann nicht
+veralten.
+
+**Warum es so lange unsichtbar war:** Seit D-050 war der 3D-Fahrmodus gar nicht
+erreichbar (`enterDrive` hatte keinen Aufrufer), und aus der Stadtkamera sieht
+eine versunkene Straße nur nach „hier ist keine Straße" aus. Ein Fehler, den
+niemand ansteuern kann, wird nicht gemeldet — er wartet.
+
+
 ## D-063 — Ein Umwandlungsbetrieb ist weder `operation` noch `produce`
 
 **Kontext.** Der Auftrag verlangt Holz → Bretter und Stein → Werkstein in

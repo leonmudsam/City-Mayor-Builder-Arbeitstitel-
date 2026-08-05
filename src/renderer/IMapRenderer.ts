@@ -132,6 +132,13 @@ export interface DriveStatus {
   junction?: { distanceMeters: number; turns: ('straight' | 'left' | 'right' | 'around')[] };
   /** Gebäude, an dem der Wagen gerade steht — Grundlage jeder Aktion vor Ort. */
   atBuildingId?: string;
+  /**
+   * § A6: Standort des Wagens in Kacheln. Nur so grob, wie die Anzeige es
+   * braucht — die Meldung ist auf KACHELWECHSEL gedrosselt (≈1×/s bei Tempo),
+   * nicht auf jedes Bild. Damit lassen sich die Halte nach Entfernung ordnen,
+   * ohne dass die Oberfläche 60×/s neu rendert.
+   */
+  at?: { x: number; y: number };
 }
 
 export interface RendererCallbacks {
@@ -167,6 +174,16 @@ export interface RendererCallbacks {
    * spürbare Änderungen; ein Update je Frame würde die Oberfläche mitziehen.
    */
   onDriveStatus?(status: DriveStatus): void;
+  /**
+   * § D-054/D-068: JEDE NEU BEFAHRENE KACHEL. Die Strecke des Auftrags ist die
+   * gefahrene Strecke — aufgezeichnet, nicht geplant. Solange gefahren wurde,
+   * hing diese Aufzeichnung an der 2D-Karte; zieht der Einsatz in die Welt und
+   * die Meldung bleibt dort, hätte jeder Auftrag ab sofort eine leere Route
+   * (Abschlussbericht, „gefahren: 0,00 km", Handelswege — alles aus derselben
+   * Liste). Gemeldet wird nur der KACHELWECHSEL: 60 Commands je Sekunde für
+   * dieselbe Kachel wäre die teuerste Art, nichts zu sagen.
+   */
+  onDriveRecord?(tiles: { x: number; y: number }[]): void;
   /** Coverage overlay is active (or cleared) — UI shows/hides the legend (§1). */
   onCoverageInfo(
     info:

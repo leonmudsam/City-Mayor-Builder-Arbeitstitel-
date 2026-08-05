@@ -152,6 +152,13 @@ interface UiState {
    */
   driveStatus: DriveStatus | undefined;
   setDriveStatus(status: DriveStatus | undefined): void;
+  /**
+   * § D-061 (§8 Phase 4): Die Zwischenbilanz nach dem Aussteigen. Sie lag im
+   * Planer, weil dort gefahren wurde; seit D-068 fährt der Spieler in der Welt
+   * und steigt dort aus — der Ausstieg selbst öffnet sie.
+   */
+  missionReviewOpen: boolean;
+  setMissionReviewOpen(open: boolean): void;
   missionFollow: boolean;
   setMissionFollow(active: boolean): void;
   /** UI-only draft route. Targets are committed only through startActivity(). */
@@ -265,6 +272,8 @@ export const useUiStore = create<UiState>((set) => ({
   setDriveActive: (active) => set({ driveActive: active, ...(active ? {} : { driveStatus: undefined }) }),
   driveStatus: undefined,
   setDriveStatus: (status) => set({ driveStatus: status }),
+  missionReviewOpen: false,
+  setMissionReviewOpen: (open) => set({ missionReviewOpen: open }),
   missionFollow: false,
   setMissionFollow: (active) => {
     getMapApi()?.setMissionFollow(active);

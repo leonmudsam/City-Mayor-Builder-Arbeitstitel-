@@ -2,7 +2,30 @@
 > Auftrag genau einmal, nach Thema (Straßen, Stadtarbeit, Betriebe, Bauen/Kamera,
 > Welt/Grafik, Häfen …). Diese Datei hier bleibt die auftrags-/phasenbezogene Detailsicht.
 
-# Offene Aufgaben nach v1.39
+# Offene Aufgaben nach v1.40
+
+## Auftrag „Stadtarbeit 3.0 — Open-World-Aufträge" (v1.40, A1–A6 erledigt)
+
+Ist-Zustand, Architektur, Messwerte: **`CITYWORK_OPEN_WORLD_OVERHAUL.md`**
+(verbindlicher Einstieg vor jeder Arbeit an Stadtarbeit, Missionen oder Fahren).
+
+Erledigt: A1 Einsatz erreichbar · A2 freie Reihenfolge in 3D (D-070) ·
+A3 Einsatzkamera · A4 Kreuzungsanzeige · A5 Aktion am Ort · A6 Halte
+(abgeleitet, keine Migration) · A7 Einsatz-HUD samt Zurücktreten des Stadt-HUD.
+
+Offen:
+
+* **A7, zweiter Teil — das Planer-Layout nach den Mockups.** Die Fahranteile
+  sind raus (`ManualRouteMap` 1.764 → 1.290 Zeilen), das Layout steht aus.
+* **A8 — weitere Missionstypen.** Der Auftrag verlangt mindestens acht; die
+  Config kennt `delivery`/`inspection`/`decision`. Es fehlen Baustelle,
+  Produktion, Lager-zu-Lager und der Hafen als Etappe.
+* **A9 — kleine aktive Ereignisse** unterwegs.
+* **A10 — gefahrene Route speichern und automatisieren.** Erst danach ist
+  D-039 („aus manuellem Spiel wächst Automatisierung") wirklich eingelöst.
+* **Häfen als Netzknoten der Stadtarbeit** — unverändert offen.
+* **§5 Quicktime-Events** — bewusst zurückgestellt.
+
 
 ## Auftrag „Wirtschafts- und Lieferketten-Overhaul" (v1.39, ABGESCHLOSSEN)
 

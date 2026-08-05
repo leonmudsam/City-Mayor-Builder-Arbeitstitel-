@@ -2,7 +2,7 @@ import { Bot, Camera, CameraOff, Flag, Gamepad2, Map, Route, Timer, Truck, X } f
 import { vehicleImage } from '../../assets/registry.ts';
 import { formatDuration, t } from '../../i18n/index.ts';
 import { playFeedback } from '../../services/feedback.ts';
-import { useGame, useUiStore } from '../../state/store.ts';
+import { getMapApi, useGame, useUiStore } from '../../state/store.ts';
 
 export function ActivityExecutionWidget() {
   const game = useGame();
@@ -10,6 +10,7 @@ export function ActivityExecutionWidget() {
   const openPlanner = useUiStore((state) => state.openActivityPlanner);
   const missionFollow = useUiStore((state) => state.missionFollow);
   const setMissionFollow = useUiStore((state) => state.setMissionFollow);
+  const pushToast = useUiStore((state) => state.pushToast);
   if (!active) return null;
   const definition = game.config.activities.activities.find((activity) => activity.id === active.defId);
   if (!definition?.drive) return null;
@@ -47,14 +48,19 @@ export function ActivityExecutionWidget() {
         </div>
       </div>
       <div className="citywork-execution-actions">
-        {/* § P2 (D-050): DER Einstieg ans Lenkrad — und er führt in die
-            2D-Stadtarbeitskarte, nicht in die 3D-Welt. Wer mit Q/ESC aussteigt,
-            kommt hier wieder hinein. */}
+        {/* § D-068 (Stadtarbeit 3.0): DER Einstieg ans Lenkrad — und er führt
+            jetzt in die WELT, nicht mehr in die 2D-Karte (D-050 ist damit
+            umgekehrt). Wer mit Q/ESC aussteigt, kommt hier wieder hinein;
+            vorher landete er im Planer und musste den Auftrag erneut annehmen.
+            Ein Einstieg, der nur einmal funktioniert, ist keiner. */}
         {mode === 'manual' && (
           <button
             onClick={() => {
+              if (!getMapApi()?.enterDrive()) {
+                pushToast('Kein befahrbarer Straßenanschluss für diesen Einsatz.', 'error');
+                return;
+              }
               playFeedback('activity_start');
-              openPlanner(active.defId);
             }}
           >
             <Gamepad2 size={15} /> {t('ui.drive.start')}
@@ -70,7 +76,11 @@ export function ActivityExecutionWidget() {
           {missionFollow ? <CameraOff size={15} /> : <Camera size={15} />}
           {missionFollow ? 'Freie Kamera' : 'Fahrzeug folgen'}
         </button>
-        <button onClick={() => openPlanner(active.defId)}><Route size={15} /> 2D-Route</button>
+        {/* § D-068: Die Karte hat die Rolle gewechselt — von der Spielfläche zur
+            ÜBERSICHT (wo liegen Ziele, Lager, Quellen). Gefahren wird in der
+            Welt. Sie darf nur deshalb bleiben, weil sie seit D-062 kein zweites
+            Weltbild ist, sondern eine Aufnahme derselben Szene. */}
+        <button onClick={() => openPlanner(active.defId)}><Route size={15} /> Übersichtskarte</button>
         <button
           className="danger"
           onClick={() => {

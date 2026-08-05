@@ -775,6 +775,8 @@ export class ThreeMapRenderer implements IMapRenderer {
     | undefined;
   /** § A4: letzter gemeldeter Fahrstatus — drosselt die Meldung an die UI. */
   private driveStatusKey = '';
+  /** § D-054: zuletzt AN DEN COMMAND gemeldete Kachel — gemeldet wird der Wechsel. */
+  private driveRecordedTile = { x: Number.NaN, y: Number.NaN };
   /** Drop-in-Geometrie für Feldkacheln (CLAUDE.md §5); fehlt sie, bleibt es prozedural. */
   private cropDropIn: { geometry: TBufferGeometry; material: TMaterial } | undefined;
   private cropDropInState: 'idle' | 'loading' | 'ready' | 'absent' = 'idle';
@@ -1570,6 +1572,8 @@ export class ThreeMapRenderer implements IMapRenderer {
       return false;
     }
     this.drive = { mesh, arrow, state, intent: undefined, stopped: false };
+    this.driveRecordedTile = { x: Number.NaN, y: Number.NaN };
+    this.driveStatusKey = '';
     const pose = drivePose(state);
     const vehicleY = this.roadSurfaceHeightAt(pose.x, pose.y) + VEHICLE_ROAD_CLEARANCE;
     mesh.position.set(pose.x, vehicleY, pose.y);
@@ -1672,6 +1676,19 @@ export class ThreeMapRenderer implements IMapRenderer {
     d.mesh.position.set(dx, y, dz);
     d.mesh.rotation.y = pose.heading;
 
+    // § D-054/D-068 — DIE GEFAHRENE STRECKE IST DIE ROUTE, auch hier.
+    //
+    // Die Aufzeichnung hing an der 2D-Karte, weil dort gefahren wurde. Zieht
+    // der Einsatz in die Welt, muss sie mit — sonst bliebe `plannedRoadPath`
+    // leer und der Abschlussbericht bewertete eine Fahrt, von der er nichts
+    // weiß. Nur der Kachelwechsel geht raus.
+    const tileX = Math.floor(dx);
+    const tileY = Math.floor(dz);
+    if (tileX !== this.driveRecordedTile.x || tileY !== this.driveRecordedTile.y) {
+      this.driveRecordedTile = { x: tileX, y: tileY };
+      this.callbacks.onDriveRecord?.([{ x: tileX, y: tileY }]);
+    }
+
     // § D-070 — FREIE REIHENFOLGE GILT ÜBERALL.
     //
     // Hier stand `targets.find((t) => !t.done)`: geprüft wurde nur das ERSTE
@@ -1742,12 +1759,15 @@ export class ThreeMapRenderer implements IMapRenderer {
     const speedKph = Math.round(d.state.speed * ROAD_TILE_METERS * 3.6);
     // Nur bei echter Änderung melden: Tempo in 2-km/h-Stufen, Kreuzung in
     // ganzen Kacheln. Sonst feuert jede Bewegung ein React-Update.
-    const key = `${Math.round(speedKph / 2)}|${junction ? Math.round(junction.distanceTiles) : -1}|${junction?.options.map((o) => o.turn).join('') ?? ''}|${atBuilding ?? ''}|${d.stopped ? 1 : 0}`;
+    const tileX = Math.floor(at.x);
+    const tileY = Math.floor(at.y);
+    const key = `${Math.round(speedKph / 2)}|${junction ? Math.round(junction.distanceTiles) : -1}|${junction?.options.map((o) => o.turn).join('') ?? ''}|${atBuilding ?? ''}|${d.stopped ? 1 : 0}|${tileX},${tileY}`;
     if (key === this.driveStatusKey) return;
     this.driveStatusKey = key;
     report({
       speedKph,
       stopped: d.stopped,
+      at: { x: at.x, y: at.y },
       ...(junction
         ? {
             junction: {
@@ -4054,7 +4074,24 @@ export class ThreeMapRenderer implements IMapRenderer {
               ? WATER_LEVEL + 0.5
               : terrainHeightAt(b.x + 0.5, b.y + 0.5) + 0.62)
           : terrainHeightAt(b.x + 0.5, b.y + 0.5);
-        this.roadDeckHeights.set(roadKey, b.roadEngineering?.roadHeight ?? fallbackHeight);
+        // § D-068 — EINE EBENE STRASSE LIEGT AUF DEM BODEN, NICHT AUF EINER ZAHL.
+        //
+        // `roadEngineering.roadHeight` ist eine ABSOLUTE Welthöhe im Spielstand.
+        // Für Brücken und Viadukte muss sie das sein: Dort ist die Fahrbahn eine
+        // Entscheidung des Bauwerks. Für flache Straßen ist sie eine gespeicherte
+        // Kopie des Geländes — und Kopien veralten. Gemessen an einem Spielstand
+        // aus der Zeit vor dem Weltumbau: 91 von 96 Straßen trugen
+        // `roadHeight: 0`, während der Boden dort auf 6,47 lag. Die Fahrbahn
+        // (und mit ihr das Fahrzeug, `roadSurfaceHeightAt`) lag also SECHS
+        // Einheiten unter der Insel — unsichtbar, bis der Einsatz mit D-068 in
+        // die Welt zog und man plötzlich unter der eigenen Stadt fuhr.
+        //
+        // Deshalb gilt jetzt D-043 auch hier: Die Geometrie wird abgeleitet,
+        // nicht gespeichert. Nur echte Hochlagen lesen den Wert aus dem Save.
+        const engineered = b.roadEngineering;
+        const elevatedDeck = engineered
+          && (engineered.variant === 'support' || engineered.variant === 'viaduct' || engineered.variant === 'bridge');
+        this.roadDeckHeights.set(roadKey, elevatedDeck ? engineered.roadHeight : fallbackHeight);
       }
     }
 
@@ -7419,8 +7456,15 @@ const ANIMAL_CAP = 48; // § A7: Obergrenze aller Weidetiere (Draw-Call-Budget)
 // Norden-oben verliert man die Fahrtrichtung, und „links abbiegen" wird zur
 // Kopfrechenaufgabe. Die Kachelzuordnung bleibt davon unberührt: Ziele und
 // Abbiegungen entstehen aus dem Straßengraphen, nicht aus dem Bildpunkt (D-062).
-const DRIVE_CAM_DIST = 24;
-const DRIVE_CAM_PITCH = 1.02; // rad über der Horizontalen — taktische Schrägsicht
+//
+// Nachmessung im laufenden Spiel (A3): Bei Abstand 24 ist ein Lieferwagen von
+// 0,44 × 0,74 Kacheln rund 27 Bildpunkte groß — ein grauer Fleck auf der
+// Fahrbahn. Der Auftrag verlangt einen „hochwertigen Spielmodus"; das eigene
+// Fahrzeug muss man als Fahrzeug erkennen. Abstand 14 verdoppelt es, und
+// vorausgeschaut wird immer noch rund 13 Kacheln (≈ 260 m) weit — mehr als die
+// Kreuzungsanzeige braucht, die bei ~95 m anschlägt.
+const DRIVE_CAM_DIST = 14;
+const DRIVE_CAM_PITCH = 0.92; // rad über der Horizontalen — taktische Schrägsicht
 
 /** Gebündeltes, typabhängig lesbares Missionsfahrzeug. Jede Variante bleibt ein
  * Draw-Call; ein passendes Drop-in-GLB ersetzt sie weiterhin automatisch. */

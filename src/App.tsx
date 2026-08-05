@@ -11,6 +11,7 @@ import { getController, setController, useUiStore } from './state/store.ts';
 import { MapView } from './components/MapView.tsx';
 import { GameHud } from './components/hud/GameHud.tsx';
 import { MissionHud } from './components/hud/MissionHud.tsx';
+import { MissionReview } from './components/hud/MissionReview.tsx';
 import { FoundingHud } from './components/hud/FoundingHud.tsx';
 import { QuickActionBar } from './components/hud/QuickActionBar.tsx';
 import { CameraControls } from './components/hud/CameraControls.tsx';
@@ -278,6 +279,8 @@ function GameScreen({ onImport, onReset }: { onImport(json: string): boolean; on
   const events = useUiStore((s) => s.events);
   const dismissEvent = useUiStore((s) => s.dismissEvent);
   const currentEvent = events[0];
+  /** § A7: Läuft ein Einsatz, tritt das Stadt-HUD zurück (siehe unten). */
+  const driveActive = useUiStore((s) => s.driveActive);
   const rightSheetOpen =
     selectedBuildingId !== undefined ||
     regionDialog !== undefined ||
@@ -295,6 +298,7 @@ function GameScreen({ onImport, onReset }: { onImport(json: string): boolean; on
             <span>{t('ui.quick.show')}</span>
           </button>
           <MissionHud />
+          <MissionReview />
         </main>
         <Toasts />
       </div>
@@ -335,17 +339,27 @@ function GameScreen({ onImport, onReset }: { onImport(json: string): boolean; on
           <>
             {/* Eine große Arbeitsfläche hat Vorrang vor dem passiven HUD. Zuvor
                 blieben Status, Minimap und Info-Layer unter Bau-Shop/Sheets
-                liegen und erzeugten die gemeldeten Überlagerungen. */}
-            {!rightSheetOpen && <CityStatusPanel />}
-            {!rightSheetOpen && <WorldMiniMap />}
-            {!rightSheetOpen && <InfoLayerControl />}
-            {!rightSheetOpen && (
+                liegen und erzeugten die gemeldeten Überlagerungen.
+
+                § A7 (Stadtarbeit 3.0): Der laufende EINSATZ ist die größte
+                Arbeitsfläche von allen. „Großer Fokus auf Welt, wenige klare
+                Panels" heißt: Stadtstatus, Anliegen, Minimap, Info-Layer,
+                Kamerasteuerung und Schnellleiste treten zurück — sie
+                beantworten Fragen, die man am Steuer nicht stellt, und sie
+                lagen ausgerechnet dort, wo das eigene Fahrzeug fährt. Das
+                Auftrags-Widget geht mit: Seine drei Knöpfe (einsteigen,
+                folgen, Karte) sind Wege IN den Einsatz — im Einsatz sind sie
+                Wege im Kreis. */}
+            {!rightSheetOpen && !driveActive && <CityStatusPanel />}
+            {!rightSheetOpen && !driveActive && <WorldMiniMap />}
+            {!rightSheetOpen && !driveActive && <InfoLayerControl />}
+            {!rightSheetOpen && !driveActive && (
               <div className="right-hud-stack">
                 <CitizenRequestsPanel />
               </div>
             )}
-            {!rightSheetOpen && <CameraControls />}
-            <QuickActionBar />
+            {!rightSheetOpen && !driveActive && <CameraControls />}
+            {!driveActive && <QuickActionBar />}
 
             {/* Large right-docked detail sheets (§5) — one at a time. */}
             {openPanel === 'mayor' && <MayorPanel />}
@@ -359,8 +373,10 @@ function GameScreen({ onImport, onReset }: { onImport(json: string): boolean; on
             <FloatingBuildingSheet />
             <RegionDialog />
             {openPanel === 'build' && <BuildMenu />}
-            <ActivityExecutionWidget />
+            {!driveActive && <ActivityExecutionWidget />}
             <MissionHud />
+            {/* § D-061: erscheint beim Aussteigen, nicht auf Knopfdruck. */}
+            <MissionReview />
             {/* § 12.2: Gründung — erscheint nur, solange kein Rathaus steht. */}
             <FoundingHud />
             {placingDefId !== undefined

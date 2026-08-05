@@ -62,7 +62,66 @@ der Cloud-Umgebung** (kein Rust/Windows) — dort nur den Browser-Pfad verifizie
 (gitignored). GitHub Pages ist abgeschaltet — kein Deploy-Workflow wieder einführen.
 `archive/legacy-2d/` = archivierte 2D-/Iso-Reste (nicht reaktivieren).
 
-## Status: v1.39 — DIE ZWEITE VERARBEITUNGSSTUFE (Save v33, D-063…D-067) — AKTUELL
+## Status: v1.40 — DER EINSATZ FINDET IN DER STADT STATT (Save v33, D-068…D-071) — AKTUELL
+Auftrag „Stadtarbeit 3.0 — Open-World-Aufträge statt Routen-Minispiel";
+**A1–A6 plus der HUD-Teil von A7** umgesetzt. Verbindlicher Einstieg:
+`docs/agents/CITYWORK_OPEN_WORLD_OVERHAUL.md`.
+**(0) Der Befund verschiebt den Auftrag.** Der 3D-Fahrmodus existierte
+**vollständig** — Straßenbindung, Kreuzungsabsicht (D-060), Verfolgerkamera,
+Fahrzeugmodell, über `mapApi` exponiert — und hatte **keinen einzigen
+Aufrufer**. Seit D-050 wurde ausschließlich in der 2D-Karte gefahren. Gefehlt
+hat nicht die Fahrphysik, sondern der Weg dorthin. Gemessen: 2.692 Zeilen
+Planungsoberfläche gegen 86 Zeilen Ausführung.
+**(1) D-068 kehrt D-050/D-051 um.** Gefahren wird in der **Welt** — derselbe
+`ThreeMapRenderer` mit einer Einsatzkamera, **kein zweiter Renderer**, und
+`game/activities/driving.ts` bleibt die eine Fahrphysik. **Die 2D-Fahrschleife
+ist ENTFERNT, nicht danebengestellt**: Zwei Fahrflächen sind zwei
+Bedienkonzepte (zwei Orte für „wo steht mein Wagen", zwei Kreuzungsanzeigen,
+zwei Nachlade-Knöpfe). Die Karte wechselt die Rolle zur **Übersicht** und darf
+nur bleiben, weil sie seit D-062 kein zweites Weltbild ist.
+**(2) Was beim Umzug mitgehen MUSSTE.** Die **Aufzeichnung der gefahrenen
+Strecke** hing an der Karte — seit D-054 IST sie die Route des Auftrags; wäre
+sie dort geblieben, hätte ab v1.40 jeder Auftrag eine leere Route
+(Abschlussbericht, Kilometerstand, Handelswege lesen dieselbe Liste). Der
+Renderer meldet jetzt jeden Kachelwechsel (`onDriveRecord`). Ebenso die
+**Zwischenbilanz** (D-061): Sie lag im Planer; jetzt öffnet der **Ausstieg
+selbst** sie (`MissionReview`).
+**(3) Der Wiedereinstieg war die eigentliche Arbeit (A1).** „Selbst fahren" im
+Auftrags-Widget öffnete den **Planer** — den alten D-050-Weg; wer mit Q
+ausstieg, landete im Panel statt am Steuer. Ein Einstieg, der nur einmal
+funktioniert, ist keiner. Es gibt jetzt **eine** Funktion (`enterMission`), und
+drei Stellen rufen sie.
+**(4) A6 ohne Migration — D-069 ausdrücklich korrigiert.** Geplant war
+`ActiveActivity.stops` samt v33→v34. Beim Bauen zeigte sich: Quelle
+(`sourceBuildingId`, D-052), Ziele (`targets[]`), Lager (`derived.storageSites`)
+und Ware (`costPerTarget`) stehen **schon im Save, nur woanders**. Eine
+persistierte Kopie wäre eine zweite Wahrheit — ein abgerissenes Lager bliebe
+darin stehen. `game/activities/missionStops.ts` leitet die Halte deshalb bei
+jeder Abfrage ab (`getMissionStops({ open })`); `tests/missionStops.test.ts`
+prüft genau das. **Drei Rollen, nicht vier** — `optional` hat im Spiel kein
+Unterscheidungsmerkmal. **Save bleibt v33.**
+**(5) Zwei Fehler, die erst der Umzug sichtbar machte.** Die freie
+Zielreihenfolge galt **nur in 2D** (D-070: `updateDrive` prüfte nur das erste
+offene Ziel). Und **das Fahrzeug fuhr unter der Insel** (D-071): Höhe 0,07 bei
+einem Boden von 6,47, weil `roadEngineering.roadHeight` eine **absolute**
+Welthöhe ist und 91 von 96 Straßen dort eine 0 aus einer früheren Welt trugen
+(`??` fängt nur `undefined`). Betroffen waren auch die **Fahrbahnen selbst** —
+aus der Stadtkamera sah das nach „hier ist keine Straße" aus. Jetzt lesen nur
+`support`/`viaduct`/`bridge` den gespeicherten Wert; flache Straßen leiten ihre
+Höhe wieder aus `terrainHeightAt` ab (D-043).
+**Gemessen im laufenden Spiel (0 Konsolenfehler):** „Selbst fahren" öffnet den
+Einsatz und der Planer bleibt zu · fährt ohne gedrückte Taste, „80 km/h · offene
+Ziele 2 von 3 · gefahren 0,05 km" · „Nächste Kreuzung in 88 m — links A · rechts
+D · wenden S" · Halte „LAGER Rathaus 280 · 41 m | ZIEL Kleines Haus 40 · 61 m" ·
+Q öffnet die Zwischenbilanz, „Weiterfahren" führt zurück ans Steuer.
+**Offen, nicht vortäuschen:** A8 weitere Missionstypen (Baustelle, Produktion,
+Lager-zu-Lager, Hafen als Etappe — der Auftrag verlangt ≥ 8) · A9 kleine aktive
+Ereignisse · A10 Route speichern → automatisieren · das Planer-Layout nach den
+Mockups (A7, zweiter Teil) · **keine** Zwischenstopp-Liste und **keine**
+Priorität (die Simulation kennt beides nicht) · Häfen sind kein Netzknoten ·
+§5 Quicktime-Events bleiben zurückgestellt.
+
+## Status: v1.39 — DIE ZWEITE VERARBEITUNGSSTUFE (Save v33, D-063…D-067)
 Auftrag „Wirtschafts- und Lieferketten-Overhaul"; **alle elf Punkte** umgesetzt.
 Verbindlicher Einstieg: `docs/agents/SUPPLY_CHAIN_EXPANSION_PLAN.md`.
 **(0) Zwei der vier gemeldeten Probleme lagen anders.** „Stein blockiert" ist

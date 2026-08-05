@@ -87,18 +87,51 @@ wieder erzwungen, obwohl die Simulation sie längst freigegeben hatte.
 
 | # | Schritt | Zustand |
 | --- | --- | --- |
-| A1 | Einsatzmodus in der 3D-Welt erreichbar machen (Board → Einsatz starten) | **offen** |
-| A2 | Freie Zielreihenfolge auch im 3D-Fahren (D-070) | **offen** |
-| A3 | Einsatzkamera („leicht von oben", taktisch) statt tiefer Verfolgerkamera | **offen** |
-| A4 | Kreuzungsanzeige in der 3D-Welt (aus `nextJunction`, wie die Karte) | **offen** |
-| A5 | Gebäudeaktion am aktuellen Ort (laden/entladen/prüfen) | **offen** |
-| A6 | Haltestellen-Modell `ActiveActivity.stops` (D-069) + Migration | **offen** |
-| A7 | Einsatz-HUD nach Mockup (unten Fahrt, rechts Fahrzeug/Ladung/Aktion) | **offen** |
+| A1 | Einsatzmodus in der 3D-Welt erreichbar machen (Board → Einsatz starten) | **erledigt** (v1.40) |
+| A2 | Freie Zielreihenfolge auch im 3D-Fahren (D-070) | **erledigt** |
+| A3 | Einsatzkamera („leicht von oben", taktisch) statt tiefer Verfolgerkamera | **erledigt** — Abstand 14, Neigung 0,92 |
+| A4 | Kreuzungsanzeige in der 3D-Welt (aus `nextJunction`, wie die Karte) | **erledigt** |
+| A5 | Gebäudeaktion am aktuellen Ort (laden/entladen/prüfen) | **erledigt** |
+| A6 | Haltestellen-Modell (D-069, **abgeleitet** statt persistiert) | **erledigt** — keine Migration, Save v33 |
+| A7 | Einsatz-HUD nach Mockup; Stadt-HUD tritt im Einsatz zurück | **teils** — HUD steht, Planer-Aufräumen offen |
 | A8 | Weitere Missionstypen (Baustelle, Produktion, Lager-zu-Lager) | **offen** |
 | A9 | Kleine aktive Ereignisse | **offen** |
 | A10 | Route speichern → automatisieren | **offen** |
 
----
+### Was A1 wirklich gekostet hat
+
+Der Einstieg über den Planer war schnell verdrahtet. Der **Wiedereinstieg** war
+die eigentliche Arbeit: „Selbst fahren" im Auftrags-Widget öffnete den Planer
+(der alte D-050-Weg), also führte jedes Q ins Panel statt zurück ans Steuer. Ein
+Einstieg, der nur einmal funktioniert, ist keiner. Jetzt gibt es genau eine
+Funktion dafür (`enterMission`), und drei Stellen rufen sie: Auftrag annehmen,
+Weiterfahren, Zwischenbilanz.
+
+### Was beim Abräumen der 2D-Fahrschleife mitging
+
+`ManualRouteMap` verlor 1.764 → 1.290 Zeilen: Fahrschleife, `DriveState`-Refs,
+Spur, Fahrzeugzeichnung, Tastenbelegung, `DriveReadout`. `ActivityRoutePlanner`
+verlor `JunctionChoice`, `DriveHud`, die Fahr-Seitenleiste und den
+„Hier nachladen"-Knopf; `src/components/hud/DriveHud.tsx` ist gelöscht.
+**Mitgehen musste** `recordActivityDrive` (siehe D-068) und die Zwischenbilanz
+(`MissionReview`, D-061) — beide hingen an der Karte, gehören aber zum Fahren.
+
+### Gefunden, weil der Einsatz in die Welt zog
+
+**D-071: Das Fahrzeug fuhr unter der Insel.** Gemessen im laufenden Spiel:
+Fahrzeughöhe 0,07 bei einem Boden von 6,47. 91 von 96 Straßen des Testspielstands
+trugen ein gespeichertes `roadEngineering.roadHeight: 0` aus einer früheren
+Welt. Das traf nicht nur den Wagen — die **Fahrbahnen selbst** lagen im Boden;
+in der Stadtansicht sah das schlicht nach „hier ist keine Straße" aus. Behoben,
+indem flache Straßen ihre Höhe wieder aus `terrainHeightAt` ableiten (D-043).
+
+### Im laufenden Spiel gemessen (Playwright, 0 Konsolenfehler)
+
+* „Selbst fahren" → Einsatz-HUD sichtbar, **Planer bleibt zu**
+* fährt ohne gedrückte Taste, HUD „80 km/h · offene Ziele 2 von 3 · gefahren 0,05 km"
+* Kreuzungsanzeige „Nächste Kreuzung in 88 m — links A · rechts D · wenden S"
+* Halte „LAGER Rathaus 280 · 41 m | ZIEL Kleines Haus 40 · 61 m | ZIEL … 90 m"
+* Q → Zwischenbilanz in der Welt; „Weiterfahren" führt zurück ans Steuer
 
 ## 5. Offene Risiken — ehrlich benannt
 

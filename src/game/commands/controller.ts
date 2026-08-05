@@ -91,6 +91,11 @@ import {
   type TransportMode,
   type TransportOrder,
 } from '../activities/transportOrder.ts';
+import {
+  missionStops,
+  openMissionStops,
+  type MissionStop,
+} from '../activities/missionStops.ts';
 import { newId } from '../engine/rng.ts';
 import {
   availableWorkNodes,
@@ -2585,6 +2590,22 @@ export class GameController {
       if (stockAt(this.state, buildingId, res as ResourceId) + 1e-6 < (amount ?? 0)) return 'insufficient';
     }
     return undefined;
+  }
+
+  /**
+   * § Stadtarbeit 3.0 / A6 — DIE HALTE DES LAUFENDEN EINSATZES.
+   *
+   * Quelle, Ziele und Stadtlager als EINE geordnete Liste mit Rolle, Ware und
+   * Menge (`missionStops`). Reine Ableitung, kein Save-Feld — die Begründung
+   * steht in `activities/missionStops.ts` und korrigiert D-069 ausdrücklich.
+   *
+   * `open` filtert auf das, was jetzt etwas bringt: offene Ziele und Lager, die
+   * die Ware wirklich führen. Der Filter liegt in der Simulation, nicht in der
+   * Oberfläche — sonst entschiede jedes Panel selbst, was „nützlich" heißt.
+   */
+  getMissionStops(options?: { open?: boolean }): MissionStop[] {
+    const stops = missionStops(this.state, this.config.buildings, this.config.activities, this.derived);
+    return options?.open ? openMissionStops(stops) : stops;
   }
 
   /**

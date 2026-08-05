@@ -149,9 +149,19 @@ export function MapView() {
         );
       },
       // § A6 Fahrmodus: Ein-/Ausstieg spiegeln + erreichte Ziele abschließen.
-      onDriveChange: (isActive) => useUiStore.getState().setDriveActive(isActive),
+      onDriveChange: (isActive) => {
+        useUiStore.getState().setDriveActive(isActive);
+        // § D-061 (§8 Phase 4): Aussteigen ist kein Abbruch, sondern eine
+        // Zwischenbilanz mit zwei Auswegen. Sie hing bisher am Planer — wer
+        // in der Welt aussteigt, käme sonst kommentarlos in der Stadt heraus.
+        useUiStore.getState().setMissionReviewOpen(
+          !isActive && controller.state.activities.active !== undefined,
+        );
+      },
       // § Stadtarbeit 3.0: Fahrstatus fürs Einsatz-HUD (bereits gedrosselt).
       onDriveStatus: (status) => useUiStore.getState().setDriveStatus(status),
+      // § D-054: die gefahrene Strecke IST die Route des Auftrags.
+      onDriveRecord: (tiles) => controller.recordActivityDrive(tiles),
       onDriveProgress: (id) => {
         const result = controller.progressActivity(id);
         if (result.ok) {

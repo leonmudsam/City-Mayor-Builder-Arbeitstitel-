@@ -1,26 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Building2, Focus, Gamepad2, Layers3, Minus, Plus, RotateCcw, TrafficCone, Trees } from 'lucide-react';
+import { Building2, Focus, Layers3, Minus, Plus, RotateCcw, TrafficCone, Trees } from 'lucide-react';
 import { uiImage } from '../../assets/registry.ts';
-import {
-  DRIVE_KEYS,
-  beginDrive,
-  drivePose,
-  nextJunction,
-  nextTurn,
-  reachedTarget,
-  stepDrive,
-  turnFromKey,
-  loadedTileSpeed,
-  vehicleTileSpeed,
-  type DriveState,
-  type TurnHint,
-} from '../../game/activities/driving.ts';
+
 import type { CargoRouteStop } from '../../game/activities/logistics.ts';
 import type { RouteAnalysis, RouteRoadAnchors, RouteSegment } from '../../game/activities/routeAnalysis.ts';
 import type { GameController } from '../../game/commands/controller.ts';
 import { WORLD_TILES, regionIdAt } from '../../game/config/startRegion.config.ts';
 import { worldTerrainAt } from '../../game/map/world.ts';
-import { ROAD_TILE_METERS } from '../../game/roads/roadProfile.ts';
 import type { BuildingCategory, BuildingInstance, RoadVariant } from '../../game/types.ts';
 import type { BuildingDef } from '../../game/config/types.ts';
 import {
@@ -54,12 +40,6 @@ const DETAIL_SCALE = 15;
  * Teppich aus Mindestbreiten — die Übersicht zeigte dann alles außer der Insel.
  */
 const OVERVIEW_SCALE = 5;
-/**
- * Sichtbare Fahrspur in Stützpunkten. Deckungsgleich gedeckelt mit der im
- * Spielstand aufgezeichneten Strecke (`ACTIVITY_DRIVE_PATH_MAX`) — die Spur
- * zeigt genau das, was auch gespeichert wird, und nicht mehr.
- */
-const DRIVE_TRAIL_MAX = 4096;
 /**
  * § P4: Mindestabstand zwischen zwei Weltaufnahmen. Eine Aufnahme ist ein
  * Renderdurchgang plus Rückweg aus dem Grafikspeicher — günstig genug für ein
@@ -111,28 +91,6 @@ export interface CityworkMapPoint {
   subtitle: string;
 }
 
-/** Was das Fahr-HUD anzeigt. Bewusst gedrosselt aus der Fahrschleife gemeldet. */
-export interface DriveReadout {
-  speedKph: number;
-  targetLabel: string | undefined;
-  targetMeters: number | undefined;
-  turn: TurnHint | undefined;
-  turnMeters: number | undefined;
-  remaining: number;
-  /**
-   * § D-060 — die NAVI-STRUKTUR, die der Auftrag verlangt. Die offenen
-   * Richtungen der nächsten echten Kreuzung samt Entfernung; dazu, was der
-   * Spieler gerade vorgemerkt hat und ob der Wagen steht. Alles abgeleitet,
-   * nichts gespeichert.
-   */
-  junctionTurns?: TurnHint[];
-  junctionMeters?: number;
-  intent?: TurnHint;
-  stopped?: boolean;
-  /** § P5: Wo der Wagen steht — die Gebäudekarte misst damit ihre Entfernung. */
-  vehicle?: { x: number; y: number };
-}
-
 interface ViewState {
   centerX: number;
   centerY: number;
@@ -168,18 +126,9 @@ export function ManualRouteMap({
   cargoStops,
   fitNonce,
   focusRequest,
-  vehicleSpeedKph,
-  loadRatio,
   editEnabled = true,
-  driving = false,
   inspectedId,
   onInspect,
-  onArrive,
-  onStorageReach,
-  onDriveControls,
-  onRecordDrive,
-  onExitDrive,
-  onDriveReadout,
   onPathChange,
   onInvalid,
 }: {
@@ -196,22 +145,8 @@ export function ManualRouteMap({
   cargoStops?: CargoRouteStop[];
   fitNonce: number;
   focusRequest?: { x: number; y: number; nonce: number };
-  /** Höchstgeschwindigkeit des gewählten Fahrzeugs (Config-Wert, kein zweiter Tempowert). */
-  vehicleSpeedKph?: number | undefined;
-  /**
-   * § P4: Füllstand des Fahrzeugs 0..1. Ein volles Fahrzeug fährt langsamer
-   * (`loadedTileSpeed`) — dieselbe Regel wie in der Sim, keine zweite Tabelle.
-   */
-  loadRatio?: number | undefined;
   /** Ohne Bearbeitungsmodus bleibt die Route unangetastet; Zoomen und Verschieben funktionieren weiter. */
   editEnabled?: boolean;
-  /**
-   * § P2 (D-050): DIESE Karte ist die Fahransicht. Ist `driving` gesetzt, steuert
-   * der Spieler das Fahrzeug hier mit WASD/Pfeiltasten über dasselbe
-   * Straßennetz, das er sonst mit der Maus zeichnet — kein zweiter Renderer,
-   * keine 3D-Welt, keine zweite Karte.
-   */
-  driving?: boolean;
   /**
    * § P5 (§6): Das Gebäude, dessen Karte gerade offen ist. Die Karte hält den
    * Zustand NICHT selbst — sie meldet den Klick, der Planer zeigt die Auskunft.
@@ -219,27 +154,6 @@ export function ManualRouteMap({
    */
   inspectedId?: string | undefined;
   onInspect?(buildingId: string | undefined): void;
-  /** Zielgebäude erreicht — der Aufrufer schließt den Stopp über den Command ab. */
-  onArrive?(buildingId: string): void;
-  /** Wagen steht an einem Lager (oder an keinem mehr): Id oder . */
-  onStorageReach?(buildingId: string | undefined): void;
-  /**
-   * § D-060: Die Fahrschleife reicht ihre Bedienung nach außen, damit die
-   * Kreuzungsanzeige ANKLICKBAR ist (§3 des Auftrags). Bewusst dieselben Refs
-   * wie die Tastatur — sonst gäbe es zwei Wege, eine Absicht zu setzen, und
-   * einer davon würde irgendwann anders wirken.
-   */
-  onDriveControls?(controls: { turn(turn: TurnHint): void; toggleStop(): void } | undefined): void;
-  /**
-   * § Overhaul 2.0 (§4): Jede neu befahrene Kachel. Die Karte entscheidet nichts
-   * über die Route — sie meldet, wo das Fahrzeug war; die Strecke entsteht im
-   * Command (`recordActivityDrive`).
-   */
-  onRecordDrive?(tiles: { x: number; y: number }[]): void;
-  /** Q/ESC: aussteigen. */
-  onExitDrive?(): void;
-  /** Gedrosselte Fahrdaten fürs HUD (≈4×/s, nicht je Bild). */
-  onDriveReadout?(readout: DriveReadout): void;
   onPathChange(path: { x: number; y: number }[]): void;
   onInvalid(): void;
 }) {
@@ -253,24 +167,6 @@ export function ManualRouteMap({
   const [routePhase, setRoutePhase] = useState(0);
   const fit = useMemo(() => fitView([source, ...targets]), [source, targets]);
   const [view, setView] = useState<ViewState>(fit);
-  // § P2: Zustand der laufenden Fahrt. Bewusst Refs — 60 Bilder/s durch React
-  // zu schicken wäre genau die Art Re-Render, die CLAUDE.md §6 verbietet.
-  const driveRef = useRef<DriveState>();
-  const viewRef = useRef<ViewState>();
-  /**
-   * § D-060: die gemerkte Kreuzungsabsicht (ein Druck, kein gehaltener Zustand)
-   * und das Anhalten. Beides als Ref, weil die Fahrschleife an React vorbeiläuft.
-   */
-  const intentRef = useRef<TurnHint | undefined>(undefined);
-  const stoppedRef = useRef(false);
-  const drivingRef = useRef(false);
-  /** Bereits gefahrene Strecke (§5 „Handelswege"), gedeckelt. */
-  const trailRef = useRef<{ x: number; y: number }[]>([]);
-  /**
-   * Zuletzt AN DEN COMMAND GEMELDETE Kachel. Ohne diesen Vergleich liefe je Bild
-   * ein Command — 60×/s dieselbe Kachel. Gemeldet wird nur der Wechsel.
-   */
-  const recordedTileRef = useRef<{ x: number; y: number }>({ x: Number.NaN, y: Number.NaN });
   /**
    * § P4: Die aufgenommene Welt. Als Ref, weil die Fahrschleife sie 60×/s liest;
    * `backdropNonce` löst nur außerhalb der Fahrt ein Neuzeichnen aus.
@@ -291,8 +187,6 @@ export function ManualRouteMap({
     }
     return roads;
   }, [game, game.version]);
-  /** Befahrbare Kacheln als reine Menge — die Form, die `stepDrive` erwartet. */
-  const roadSet = useMemo<ReadonlySet<string>>(() => new Set(roadTiles.keys()), [roadTiles]);
   /** Alle von Stadtgebäuden belegten Kacheln — dort wird Vegetation verdeckt. */
   const occupied = useMemo(() => {
     const result = new Set<string>();
@@ -382,7 +276,7 @@ export function ManualRouteMap({
     if (backdropFailuresRef.current >= BACKDROP_MAX_FAILURES) return;
     if (!hasWorldSnapshotSource()) return;
     const current = backdropRef.current;
-    const stale = backdropWorldKeyRef.current !== worldKey && !drivingRef.current;
+    const stale = backdropWorldKeyRef.current !== worldKey;
     if (current && !stale && snapshotCovers(current, visible, scale)) return;
     const now = performance.now();
     if (now - backdropAtRef.current < BACKDROP_MIN_INTERVAL_MS) return;
@@ -400,8 +294,7 @@ export function ManualRouteMap({
       backdropFailuresRef.current = 0;
       backdropWorldKeyRef.current = key;
       backdropRef.current = snapshot;
-      // Während der Fahrt zeichnet die rAF-Schleife ohnehin jedes Bild neu.
-      if (!drivingRef.current) setBackdropNonce((value) => value + 1);
+      setBackdropNonce((value) => value + 1);
     }, 0);
   }, [worldKey]);
 
@@ -420,38 +313,6 @@ export function ManualRouteMap({
     // `game` liefert nur die Terrain-Overrides; die Verteilung selbst hängt am
     // Freischaltzustand, deshalb ist `unlockKey` der Schlüssel.
   }, [unlockKey, isLocked, game]);
-
-  /**
-   * Noch offene Ziele in Reihenfolge, mit Footprint. Als Ref, damit die
-   * Fahr-Schleife sie ohne Neuaufbau lesen kann; die Wahrheit über „erledigt"
-   * bleibt der Spielstand (`targets[].done`), nicht die Karte.
-   */
-  const arrivalTargetsRef = useRef<
-    { buildingId: string; label: string; x: number; y: number; size: { w: number; h: number } }[]
-  >([]);
-  arrivalTargetsRef.current = (game.state.activities.active?.targets ?? [])
-    .filter((target) => !target.done)
-    .flatMap((target) => {
-      const building = game.state.buildings[target.buildingId];
-      const definition = building && game.config.buildings.get(building.defId);
-      if (!building || !definition) return [];
-      const label = targets.find((point) => point.id === target.buildingId)?.label ?? 'Ziel';
-      return [{ buildingId: target.buildingId, label, x: building.x, y: building.y, size: definition.size }];
-    });
-  /**
-   * § D-057: Lagerplätze, an denen nachgeladen werden kann. Bewusst dieselbe
-   * Ankunftsregel (`reachedTarget`) wie bei Lieferzielen — eine zweite
-   * Reichweitenregel wäre ein zweites Fahrmodell (D-050).
-   */
-  const storageStopsRef = useRef<
-    { buildingId: string; x: number; y: number; size: { w: number; h: number } }[]
-  >([]);
-  storageStopsRef.current = game.derived.storageSites.flatMap((site) => {
-    const building = game.state.buildings[site.buildingId];
-    const definition = building && game.config.buildings.get(building.defId);
-    if (!building || !definition) return [];
-    return [{ buildingId: site.buildingId, x: building.x, y: building.y, size: definition.size }];
-  });
 
   const traffic = useMemo(() => {
     const result = new Map<string, number>();
@@ -510,10 +371,10 @@ export function ManualRouteMap({
     };
   }, []);
 
-  // § P2: Der Zeichenvorgang ist eine FUNKTION, kein Effekt-Rumpf — die
-  // Fahr-Schleife muss ihn 60×/s aufrufen können, ohne React neu zu rendern
-  // (CLAUDE.md §6: keine unnötigen Re-Renders).
-  const drawScene = useCallback((view: ViewState, drive: DriveState | undefined) => {
+  // Der Zeichenvorgang bleibt eine FUNKTION statt eines Effekt-Rumpfs: Die
+  // Karte zeichnet auch außerhalb des React-Zyklus (Zoomen, Aufnahme der Welt),
+  // ohne dafür neu zu rendern (CLAUDE.md §6).
+  const drawScene = useCallback((view: ViewState) => {
     const canvas = canvasRef.current;
     const ctx = canvas?.getContext('2d');
     if (!canvas || !ctx) return;
@@ -600,8 +461,7 @@ export function ManualRouteMap({
     drawBuildingFocus(ctx, game, hoverId, 'rgba(255,255,255,.5)', transform);
     drawBuildingFocus(ctx, game, inspectedId, 'rgba(90, 214, 232, .95)', transform);
     drawInfrastructure(ctx, game, bounds, transform);
-    if (referencePath && referencePath.length > 1 && !drive) drawAlternativeRoute(ctx, referencePath, transform);
-    if (trailRef.current.length > 1) drawTrail(ctx, trailRef.current, transform);
+    if (referencePath && referencePath.length > 1) drawAlternativeRoute(ctx, referencePath, transform);
     drawRoute(ctx, roadPath, cargoStops, transform, routePhase, analysis !== undefined);
 
     if (anchors) {
@@ -634,7 +494,6 @@ export function ManualRouteMap({
       });
     }
 
-    if (drive) drawVehicle(ctx, drive, transform);
   }, [
     analysis,
     anchors,
@@ -665,247 +524,15 @@ export function ManualRouteMap({
   // `backdropNonce` gehört dazu: Die Aufnahme kommt einen Schritt später an und
   // hat keinen anderen Weg ins Bild.
   useEffect(() => {
-    if (drivingRef.current) return; // während der Fahrt führt die rAF-Schleife
-    drawScene(view, undefined);
+    drawScene(view);
   }, [drawScene, view, backdropNonce]);
 
-  /**
-   * Alles, was die Fahr-Schleife braucht, aber bei jedem Command eine neue
-   * Identität bekommt. Über diesen Ref sieht sie stets die aktuellen Werte,
-   * ohne dass der Effekt (und mit ihm die Fahrt) neu aufgesetzt wird.
-   */
-  const liveRef = useRef({
-    drawScene,
-    roadSet,
-    roadPath,
-    anchors,
-    zoom: view.zoom,
-    maxSpeed: loadedTileSpeed(vehicleTileSpeed(vehicleSpeedKph ?? 0), loadRatio ?? 0),
-    onArrive,
-    onStorageReach,
-    onDriveControls,
-    onRecordDrive,
-    onExitDrive,
-    onDriveReadout,
-  });
-  liveRef.current = {
-    drawScene,
-    roadSet,
-    roadPath,
-    anchors,
-    zoom: view.zoom,
-    maxSpeed: loadedTileSpeed(vehicleTileSpeed(vehicleSpeedKph ?? 0), loadRatio ?? 0),
-    onArrive,
-    onStorageReach,
-    onDriveControls,
-    onRecordDrive,
-    onExitDrive,
-    onDriveReadout,
-  };
-  /**
-   * Der Startpunkt als WERT, nicht als Objektidentität.
-   *
-   * `anchors` ist ein `useMemo` über `game.version` — es bekommt bei JEDEM
-   * Command eine neue Identität. Stand es im Abhängigkeitsarray der Fahrt (so
-   * war es zuerst), setzte schon ein erreichter Stopp die Schleife neu auf: das
-   * Fahrzeug sprang an den Start zurück und der Zoom auf den Anfangswert. Der
-   * Fahrer merkt das sofort, ein Test ohne Ankunft nie — gefunden hat es der
-   * Smoke im laufenden Spiel.
-   */
-  const spawnKey = anchors ? `${anchors.source.x},${anchors.source.y}` : '';
-
-  // ---- § P2/P3: die Fahrt in DIESER Karte ---------------------------------
-  //
-  // Physik und Reichweite kommen aus `game/activities/driving.ts` — derselben
-  // Quelle, aus der auch der 3D-Renderer fährt (§2/§8: kein zweites Fahrmodell).
-  // Seit D-060 ist die Fahrt eine Kreuzungsentscheidung: das Fahrzeug fährt von
-  // selbst, W/A/D/S merken die Richtung für die nächste
-  // Kreuzung, S wendet, Leertaste hält an. Die Schleife läuft an React vorbei
-  // über Refs; nur Ein-/Aussteigen und erreichte Ziele lösen ein Update aus.
-  useEffect(() => {
-    drivingRef.current = driving;
-    if (!driving) {
-      driveRef.current = undefined;
-      intentRef.current = undefined;
-      stoppedRef.current = false;
-      trailRef.current = [];
-      recordedTileRef.current = { x: Number.NaN, y: Number.NaN };
-      // Beim Aussteigen die zuletzt gefahrene Ansicht in den React-Zustand
-      // zurückschreiben, damit die Karte nicht zurückspringt.
-      if (viewRef.current) setView(viewRef.current);
-      return;
-    }
-
-    // Startpunkt: der Quellanker der Route, sonst der Anfang des Weges.
-    const spawn = liveRef.current.anchors?.source ?? liveRef.current.roadPath[0];
-    if (!spawn) return;
-    const towards = liveRef.current.roadPath.find((point) => point.x !== spawn.x || point.y !== spawn.y);
-    const initial = beginDrive(liveRef.current.roadSet, spawn, towards);
-    if (!initial) {
-      // Eine einzelne Straßenkachel ist kein Netz — das wird gesagt, nicht
-      // durch ein stehendes Fahrzeug vorgetäuscht.
-      liveRef.current.onExitDrive?.();
-      return;
-    }
-    driveRef.current = initial;
-    trailRef.current = [drivePose(initial)];
-    // Fahrzoom: nah genug, um Abzweigungen zu erkennen, weit genug, um die
-    // Umgebung zu sehen. Ein engerer Wert (der erste Ansatz stand bei 4,2)
-    // zeigte nur noch Fahrbahn und Wiese.
-    viewRef.current = { centerX: spawn.x, centerY: spawn.y, zoom: clamp(liveRef.current.zoom, 2.1, 2.8) };
-
-    const onKey = (event: KeyboardEvent, down: boolean) => {
-      const element = event.target as HTMLElement | null;
-      if (element?.tagName === 'INPUT' || element?.tagName === 'TEXTAREA' || element?.isContentEditable) return;
-      const key = event.key.toLowerCase();
-      if (down && (key === 'escape' || key === 'q')) {
-        liveRef.current.onExitDrive?.();
-        return;
-      }
-      // § D-060: Anhalten/Weiterfahren liegt auf der Leertaste — S ist wenden.
-      if (key === ' ' || key === 'spacebar') {
-        if (down) stoppedRef.current = !stoppedRef.current;
-        event.preventDefault();
-        return;
-      }
-      if (!DRIVE_KEYS.has(key)) return;
-      // Nur das Drücken zählt. Die Absicht überlebt das Loslassen und wird an
-      // der nächsten Kreuzung eingelöst — genau deshalb ist es gleichgültig,
-      // WANN der Spieler drückt.
-      if (down) intentRef.current = turnFromKey(key);
-      event.preventDefault();
-    };
-    const onKeyDown = (event: KeyboardEvent) => onKey(event, true);
-    const onKeyUp = (event: KeyboardEvent) => onKey(event, false);
-    window.addEventListener('keydown', onKeyDown);
-    window.addEventListener('keyup', onKeyUp);
-
-    liveRef.current.onDriveControls?.({
-      turn: (turn) => {
-        intentRef.current = turn;
-      },
-      toggleStop: () => {
-        stoppedRef.current = !stoppedRef.current;
-      },
-    });
-
-    let raf = 0;
-    let last = performance.now();
-    let lastReadout = 0;
-    /** Zuletzt gemeldetes Lager — nur der Wechsel geht an React (D-057). */
-    let lastStorageId: string | undefined;
-    const frame = (now: number) => {
-      raf = requestAnimationFrame(frame);
-      // Ein Tabwechsel darf das Fahrzeug nicht quer über die Insel schleudern.
-      const dt = Math.min(0.05, (now - last) / 1000);
-      last = now;
-      const drive = driveRef.current;
-      const currentView = viewRef.current;
-      if (!drive || !currentView) return;
-
-      const live = liveRef.current;
-      const intent = intentRef.current;
-      intentRef.current = undefined; // einmal übergeben, dann führt der Zustand sie weiter
-      const stepped = stepDrive(
-        drive,
-        { ...(intent ? { intent } : {}), stopped: stoppedRef.current },
-        dt,
-        live.roadSet,
-        live.maxSpeed,
-      );
-      driveRef.current = stepped;
-      const pose = drivePose(stepped);
-      // Gefahrene Strecke mitschreiben — sichtbar (Spur) und verbindlich
-      // (Command). § Overhaul 2.0 (§4): DAS ist die Route des Auftrags.
-      const lastTrail = trailRef.current.at(-1);
-      if (!lastTrail || Math.hypot(pose.x - lastTrail.x, pose.y - lastTrail.y) > 0.6) {
-        if (trailRef.current.length < DRIVE_TRAIL_MAX) trailRef.current.push({ x: pose.x, y: pose.y });
-      }
-      const tileX = Math.floor(pose.x);
-      const tileY = Math.floor(pose.y);
-      if (tileX !== recordedTileRef.current.x || tileY !== recordedTileRef.current.y) {
-        recordedTileRef.current = { x: tileX, y: tileY };
-        live.onRecordDrive?.([{ x: tileX, y: tileY }]);
-      }
-      // Die Karte folgt dem Fahrzeug (Verfolgerblick von oben).
-      currentView.centerX += (pose.x - currentView.centerX) * Math.min(1, dt * 6);
-      currentView.centerY += (pose.y - currentView.centerY) * Math.min(1, dt * 6);
-      live.drawScene(currentView, stepped);
-
-      // § Overhaul 2.0 (§5): JEDES offene Ziel zählt — wer zuerst am näheren Haus
-      // vorbeikommt, liefert dort. Vorher galt nur `[0]`, die Reihenfolge des
-      // Planers. Die Ankunftsregel selbst (`reachedTarget`) bleibt dieselbe wie
-      // in 3D; nur die Auswahl ist jetzt frei.
-      const openTargets = arrivalTargetsRef.current;
-      const reached = openTargets.find((candidate) => reachedTarget(pose, candidate, candidate.size));
-      if (reached) live.onArrive?.(reached.buildingId);
-      // § D-057: Steht der Wagen an einem Lager, darf dort nachgeladen werden.
-      // Gemeldet wird nur der WECHSEL — 60 Meldungen je Sekunde durch React zu
-      // schicken wäre genau der Re-Render, den diese Schleife vermeidet.
-      const atStorage = storageStopsRef.current.find((site) => reachedTarget(pose, site, site.size));
-      if (atStorage?.buildingId !== lastStorageId) {
-        lastStorageId = atStorage?.buildingId;
-        live.onStorageReach?.(lastStorageId);
-      }
-      // Fürs HUD bleibt das NÄCHSTGELEGENE offene Ziel die sinnvolle Auskunft.
-      const openTarget = nearestTarget(pose, openTargets);
-
-      // HUD-Daten gedrosselt melden — 60×/s durch React zu schicken wäre genau
-      // der Re-Render, den die Schleife vermeidet.
-      if (now - lastReadout > 240 && live.onDriveReadout) {
-        lastReadout = now;
-        const turn = nextTurn(stepped, live.roadSet);
-        const junction = nextJunction(stepped, live.roadSet);
-        const distance = openTarget
-          ? Math.hypot(
-              openTarget.x + openTarget.size.w / 2 - pose.x,
-              openTarget.y + openTarget.size.h / 2 - pose.y,
-            )
-          : undefined;
-        live.onDriveReadout({
-          speedKph: Math.abs(stepped.speed) * ROAD_TILE_METERS * 3.6,
-          targetLabel: openTarget?.label,
-          targetMeters: distance === undefined ? undefined : distance * ROAD_TILE_METERS,
-          turn: turn?.turn,
-          turnMeters: turn ? turn.distanceTiles * ROAD_TILE_METERS : undefined,
-          remaining: arrivalTargetsRef.current.length,
-          // § D-060: Die Kreuzungsoptionen kommen aus derselben Funktion, nach
-          // der gleich gefahren wird — die Anzeige kann nichts ankündigen, was
-          // dann nicht passiert.
-          ...(junction
-            ? {
-                junctionTurns: junction.options.map((option) => option.turn),
-                junctionMeters: junction.distanceTiles * ROAD_TILE_METERS,
-              }
-            : {}),
-          ...(stepped.intent ? { intent: stepped.intent } : {}),
-          stopped: stoppedRef.current,
-          vehicle: { x: pose.x, y: pose.y },
-        });
-      }
-    };
-    raf = requestAnimationFrame(frame);
-    return () => {
-      cancelAnimationFrame(raf);
-      liveRef.current.onDriveControls?.(undefined);
-      window.removeEventListener('keydown', onKeyDown);
-      window.removeEventListener('keyup', onKeyUp);
-    };
-    // ABSICHTLICH nur `driving` und der Startanker ALS WERT: Straßen,
-    // Zeichenfunktion, Anker und Rückrufe wechseln bei JEDEM Command die
-    // Identität (`game.version`). Stünden sie hier, würde ein erreichter Stopp
-    // die Fahrt neu aufsetzen und das Fahrzeug zum Startpunkt zurückwerfen.
-    // Sie kommen deshalb aus `liveRef`.
-  }, [driving, spawnKey]);
 
   const worldAt = (clientX: number, clientY: number) => {
     const canvas = canvasRef.current;
     if (!canvas) return undefined;
     const rect = canvas.getBoundingClientRect();
-    // Während der Fahrt führt die Verfolgeransicht (`viewRef`), nicht der
-    // React-Zustand. Ohne diese Zeile zeigte ein Klick am Steuer auf die
-    // Stelle, an der die Karte vor dem Losfahren stand.
-    const current = drivingRef.current && viewRef.current ? viewRef.current : view;
+    const current = view;
     const transform = mapTransform(current);
     return {
       x: current.centerX + ((clientX - rect.left) / rect.width) * CANVAS_W / transform.scale - CANVAS_W / transform.scale / 2,
@@ -981,20 +608,15 @@ export function ManualRouteMap({
           rightDraggedRef.current = false;
         }}
         onPointerDown={(event) => {
-          // § P5 (§6): Ein Gebäude befragen geht IMMER — auch am Steuer. Genau
-          // dort will man wissen, was im Lager liegt, an dem man gerade steht.
+          // § P5 (§6): Ein Gebäude befragen geht immer.
           if (event.button === 0) {
             const hit = buildingAtPointer(event.clientX, event.clientY);
             if (hit) {
               onInspect?.(hit === inspectedId ? undefined : hit);
-              if (driving) return;
             } else if (!editEnabled && inspectedId) {
               onInspect?.(undefined);
             }
           }
-          // § P2: Während der Fahrt führt die Verfolgeransicht — Ziehen und
-          // Zeichnen würden gegen sie arbeiten.
-          if (driving) return;
           const world = worldAt(event.clientX, event.clientY);
           const overRoad = world ? roadTiles.has(`${Math.floor(world.x)},${Math.floor(world.y)}`) : false;
           const pan = !editEnabled || event.button === 1 || event.button === 2 || spaceHeld || !overRoad;
@@ -1014,7 +636,7 @@ export function ManualRouteMap({
           if (!interaction) {
             // Nur ohne laufende Geste: Während des Ziehens gehört der Zeiger der
             // Karte, und ein wanderndes Gebäude-Highlight wäre reine Unruhe.
-            const hit = driving ? undefined : buildingAtPointer(event.clientX, event.clientY);
+            const hit = buildingAtPointer(event.clientX, event.clientY);
             if (hit !== hoverId) setHoverId(hit);
             return;
           }
@@ -1053,29 +675,16 @@ export function ManualRouteMap({
           // Kein `preventDefault()`: React hängt `wheel` passiv ein, der Aufruf
           // wirkt nicht und schreibt nur eine Warnung in die Konsole.
           const factor = event.deltaY < 0 ? 1.14 : 0.87;
-          // Beim Fahren gehört die Ansicht der Schleife: den Zoom dort ändern,
-          // sonst würde ein React-Update die Verfolgeransicht überschreiben.
-          if (driving && viewRef.current) {
-            viewRef.current.zoom = clamp(viewRef.current.zoom * factor, MIN_ZOOM, MAX_ZOOM);
-            return;
-          }
           setView((current) => ({ ...current, zoom: clamp(current.zoom * factor, MIN_ZOOM, MAX_ZOOM) }));
         }}
       />
 
-      {driving ? (
-        <div className="citywork-v4-map-drive">
-          <span><Gamepad2 size={15} /> A/W/D/S: links · geradeaus · rechts · wenden — Leertaste hält an</span>
-          <span>Q oder ESC: aussteigen</span>
-        </div>
-      ) : (
-        <div className="citywork-v4-map-hint">
-          {editEnabled
-            ? <span>Auf Straße ziehen: Route korrigieren</span>
-            : <span>Ziehen: Karte verschieben</span>}
-          <span>Mausrad: Zoom</span>
-        </div>
-      )}
+      <div className="citywork-v4-map-hint">
+        {editEnabled
+          ? <span>Auf Straße ziehen: Route korrigieren</span>
+          : <span>Ziehen: Karte verschieben</span>}
+        <span>Mausrad: Zoom</span>
+      </div>
       <div className="citywork-v4-map-zoom">
         <button onClick={() => setView((current) => ({ ...current, zoom: clamp(current.zoom * 1.2, MIN_ZOOM, MAX_ZOOM) }))} title="Hineinzoomen"><Plus size={18} /></button>
         <button onClick={() => setView((current) => ({ ...current, zoom: clamp(current.zoom / 1.2, MIN_ZOOM, MAX_ZOOM) }))} title="Herauszoomen"><Minus size={18} /></button>
@@ -1142,64 +751,6 @@ function toScreen(x: number, y: number, transform: Transform) {
   };
 }
 
-/**
- * § D-060: Das gesteuerte Fahrzeug in der Draufsicht — ein LIEFERWAGEN, keine
- * Pfeilspitze. Der Auftrag benennt das ausdrücklich („Der Pfeil als Fahrzeug ist
- * nicht intuitiv"), und der Grund ist mehr als Geschmack: Eine Pfeilspitze liest
- * sich als Marker/Cursor, also als etwas, das man ZIEHT — nicht als etwas, das
- * fährt. Ein Aufbau mit Kabine, Fenster und Rädern sagt in einem Blick, dass hier
- * etwas transportiert wird und wo vorne ist.
- *
- * Bewusst weiter Canvas-Geometrie statt eines Bildes: eine Draufsicht muss bei
- * jedem Zoom scharf bleiben, und die Karte ist eine Logistikansicht, kein
- * zweiter Renderer.
- */
-function drawVehicle(ctx: CanvasRenderingContext2D, drive: DriveState, transform: Transform): void {
-  const pose = drivePose(drive);
-  const point = toScreen(pose.x, pose.y, transform);
-  const size = Math.max(11, transform.scale * 0.7);
-  const halfW = size * 0.34;
-  ctx.save();
-  ctx.translate(point.x, point.y);
-  // Der Wagen zeigt ungedreht nach oben (−y). Weltvorwärts ist `(sin h, cos h)`,
-  // und die Karte bildet +y nach UNTEN ab — daraus folgt der Bildwinkel π − h.
-  ctx.rotate(Math.PI - pose.heading);
-
-  // Räder zuerst, damit sie unter dem Aufbau hervorschauen.
-  ctx.fillStyle = 'rgba(24, 20, 16, 0.9)';
-  const wheelW = size * 0.13;
-  const wheelH = size * 0.2;
-  for (const [wx, wy] of [
-    [-halfW - wheelW * 0.35, -size * 0.22],
-    [halfW - wheelW * 0.65, -size * 0.22],
-    [-halfW - wheelW * 0.35, size * 0.28],
-    [halfW - wheelW * 0.65, size * 0.28],
-  ] as const) {
-    ctx.fillRect(wx, wy, wheelW, wheelH);
-  }
-
-  ctx.shadowColor = 'rgba(0, 0, 0, 0.5)';
-  ctx.shadowBlur = size * 0.45;
-  // Kofferaufbau.
-  ctx.fillStyle = '#f2f5f7';
-  roundedRect(ctx, -halfW, -size * 0.12, halfW * 2, size * 0.68, size * 0.1);
-  ctx.fill();
-  ctx.shadowBlur = 0;
-  // Kabine — sie zeigt, wo vorne ist.
-  ctx.fillStyle = '#ffd45e';
-  roundedRect(ctx, -halfW, -size * 0.56, halfW * 2, size * 0.46, size * 0.12);
-  ctx.fill();
-  // Windschutzscheibe.
-  ctx.fillStyle = 'rgba(38, 62, 78, 0.85)';
-  roundedRect(ctx, -halfW * 0.68, -size * 0.5, halfW * 1.36, size * 0.18, size * 0.05);
-  ctx.fill();
-
-  ctx.lineWidth = Math.max(1, size * 0.07);
-  ctx.strokeStyle = 'rgba(30, 22, 8, 0.8)';
-  roundedRect(ctx, -halfW, -size * 0.56, halfW * 2, size * 1.12, size * 0.11);
-  ctx.stroke();
-  ctx.restore();
-}
 
 function drawRegionBorders(ctx: CanvasRenderingContext2D, bounds: Bounds, transform: Transform) {
   ctx.strokeStyle = 'rgba(245,217,145,.16)';
@@ -1534,50 +1085,7 @@ function drawAlternativeRoute(
   ctx.restore();
 }
 
-/** Bereits gefahrene Strecke (§5) — die eigene Spur, hell und ohne Pfeile. */
-function drawTrail(
-  ctx: CanvasRenderingContext2D,
-  trail: readonly { x: number; y: number }[],
-  transform: Transform,
-) {
-  ctx.save();
-  ctx.strokeStyle = 'rgba(255, 226, 150, .34)';
-  ctx.lineWidth = Math.max(3, transform.scale * 0.24);
-  ctx.lineCap = 'round';
-  ctx.lineJoin = 'round';
-  ctx.beginPath();
-  trail.forEach((point, index) => {
-    const screen = toScreen(point.x, point.y, transform);
-    if (index === 0) ctx.moveTo(screen.x, screen.y);
-    else ctx.lineTo(screen.x, screen.y);
-  });
-  ctx.stroke();
-  ctx.restore();
-}
 
-/**
- * Nächstgelegenes offenes Ziel — die einzige Auskunft, die ohne feste
- * Reihenfolge noch sinnvoll ist („welches Haus liegt gerade vor mir?").
- * Gemessen wird zur Gebäudemitte, wie bei der Ankunftsprüfung.
- */
-function nearestTarget<T extends { x: number; y: number; size: { w: number; h: number } }>(
-  pose: { x: number; y: number },
-  targets: readonly T[],
-): T | undefined {
-  let best: T | undefined;
-  let bestDistance = Number.POSITIVE_INFINITY;
-  for (const target of targets) {
-    const distance = Math.hypot(
-      target.x + target.size.w / 2 - pose.x,
-      target.y + target.size.h / 2 - pose.y,
-    );
-    if (distance < bestDistance) {
-      bestDistance = distance;
-      best = target;
-    }
-  }
-  return best;
-}
 
 function drawRoute(
   ctx: CanvasRenderingContext2D,

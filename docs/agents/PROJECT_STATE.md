@@ -1,6 +1,41 @@
-# Projektstand — v1.39
+# Projektstand — v1.40
 
-Stand: 4. August 2026
+Stand: 5. August 2026
+
+## Stadtarbeit 3.0 — DER EINSATZ FINDET IN DER STADT STATT (v1.40, Save v33, D-068…D-071) — AKTUELL
+
+Auftrag „Open-World-Aufträge statt Routen-Minispiel". Umgesetzt: **A1–A6** und
+der HUD-Teil von A7. Verbindlicher Einstieg:
+**`CITYWORK_OPEN_WORLD_OVERHAUL.md`**.
+
+**Der Befund, der den Auftrag verschoben hat.** Der 3D-Fahrmodus existierte
+vollständig — Straßenbindung, Kreuzungsabsicht (D-060), Verfolgerkamera,
+Fahrzeugmodell — und hatte **keinen einzigen Aufrufer**. Gefehlt hat nicht die
+Fahrphysik, sondern der Weg dorthin.
+
+**D-068 kehrt D-050/D-051 um:** Gefahren wird in der Welt, nicht in der Karte.
+Die 2D-Fahrschleife ist **entfernt**, nicht danebengestellt — zwei Fahrflächen
+wären zwei Bedienkonzepte. Die Karte bleibt als **Übersicht**, weil sie seit
+D-062 kein zweites Weltbild ist. Mit umziehen musste die **Aufzeichnung der
+gefahrenen Strecke** (D-054) und die **Zwischenbilanz** (D-061); beide hingen
+an der Karte, gehören aber zum Fahren.
+
+**A6 ohne Migration (D-069 korrigiert).** Die Halte (`missionStops.ts`,
+`getMissionStops`) sind **abgeleitet**: Quelle, Ziele und Lager stehen bereits
+im Save, nur an drei verschiedenen Stellen. Eine persistierte Kopie wäre eine
+zweite Wahrheit — ein abgerissenes Lager bliebe darin stehen. **Save bleibt v33.**
+
+**Zwei Fehler, die erst der Umzug sichtbar gemacht hat.** Die freie
+Zielreihenfolge galt nur in 2D (D-070). Und das Fahrzeug fuhr **unter der
+Insel**: Höhe 0,07 bei einem Boden von 6,47, weil 91 von 96 Straßen ein
+gespeichertes `roadHeight: 0` aus einer früheren Welt trugen (D-071). Betroffen
+waren auch die Fahrbahnen selbst — aus der Stadtkamera sah das nach „hier ist
+keine Straße" aus.
+
+**Offen, nicht vortäuschen:** A8 weitere Missionstypen · A9 Ereignisse · A10
+Route automatisieren · das Layout des Planers nach den Mockups · Häfen als
+Netzknoten.
+
 
 ## Wirtschafts- und Lieferketten-Overhaul (v1.39, Save v33, D-063…D-067) — AKTUELL
 

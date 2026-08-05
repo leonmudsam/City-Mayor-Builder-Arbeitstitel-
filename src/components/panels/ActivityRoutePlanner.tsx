@@ -7,10 +7,8 @@ import {
   Bot,
   Filter,
   Gamepad2,
-  Gauge,
   HelpCircle,
   PackageCheck,
-  PackagePlus,
   Play,
   Route,
   SlidersHorizontal,
@@ -30,9 +28,8 @@ import { playFeedback } from '../../services/feedback.ts';
 import { getMapApi, useGame, useUiStore } from '../../state/store.ts';
 import '../../styles/citywork-smart.css';
 import { CitizenPortrait } from '../art/index.ts';
-import { ManualRouteMap, type CityworkMapPoint, type DriveReadout } from '../citywork/ManualRouteMap.tsx';
+import { ManualRouteMap, type CityworkMapPoint } from '../citywork/ManualRouteMap.tsx';
 import { MapBuildingCard } from '../citywork/MapBuildingCard.tsx';
-import { RouteReview } from '../citywork/RouteReview.tsx';
 import { RouteSummary } from '../citywork/RouteSummary.tsx';
 import { SupplyPicker } from '../citywork/SupplyPicker.tsx';
 import { TourOverview, type TourDisplayPoint } from '../citywork/TourOverview.tsx';
@@ -109,37 +106,19 @@ export function ActivityRoutePlanner({ defId }: { defId: string }) {
   // § P2 (D-050/D-054): Ausführungsart des Auftrags — WER fährt. Läuft die
   // Mission schon, ist die Wahl gefallen und wird nur noch angezeigt.
   const [executionMode, setExecutionMode] = useState<TransportMode>(active?.mode ?? 'auto');
-  // Sitzt der Spieler gerade in dieser Karte am Steuer? Eine laufende
-  // Manuell-Mission darf beim erneuten Öffnen des Planers weiterfahren.
-  const [driving, setDriving] = useState(active?.mode === 'manual');
   /**
-   * § D-057: Lager, an dem der Wagen GERADE steht. Kommt aus der Fahrschleife
-   * (dieselbe Ankunftsregel wie bei Lieferzielen) — die Oberfläche misst keine
-   * eigene Entfernung, sonst gäbe es zwei Reichweitenbegriffe.
+   * § D-068: Wo der Wagen GERADE steht — gemeldet aus der Fahrschleife der
+   * WELT, nicht aus dieser Karte. Die Karte fährt nicht mehr; sie zeigt, was
+   * draußen passiert. Dieselbe Ankunftsregel wie beim Abliefern, also misst
+   * die Oberfläche keine eigene Entfernung (D-057).
    */
-  const [storageAtHand, setStorageAtHand] = useState<string | undefined>(undefined);
+  const storageAtHand = useUiStore((state) => state.driveStatus?.atBuildingId);
   /**
    * § P5 (§6): Das befragte Gebäude. Der Zustand liegt HIER und nicht in der
    * Karte — die Karte meldet den Klick, der Planer beantwortet ihn. Zwei Stellen
    * für „was ist ausgewählt" laufen unweigerlich auseinander.
    */
   const [inspectedId, setInspectedId] = useState<string | undefined>(undefined);
-  /**
-   * § P6 (§8 Phase 4): Die Prüfung der gefahrenen Route. Sie öffnet sich beim
-   * Aussteigen und führt zurück ans Steuer oder in die 3D-Welt.
-   */
-  const [reviewOpen, setReviewOpen] = useState(false);
-  /**
-   * § D-060: Die Bedienung der laufenden Fahrt, von der Karte herausgereicht.
-   * Damit ist ein Klick auf eine Richtung exakt derselbe Vorgang wie ein
-   * Tastendruck — es gibt keinen zweiten Weg, eine Absicht zu setzen.
-   */
-  const [driveControls, setDriveControls] = useState<
-    { turn(turn: NonNullable<DriveReadout['turn']>): void; toggleStop(): void } | undefined
-  >(undefined);
-  // Gedrosselte Fahrdaten fürs HUD (≈4×/s) — die Fahrt selbst läuft an React
-  // vorbei, sonst wäre jedes Bild ein Re-Render (CLAUDE.md §6).
-  const [driveReadout, setDriveReadout] = useState<DriveReadout>();
   const [fitNonce, setFitNonce] = useState(0);
   const [boardFilter, setBoardFilter] = useState<BoardFilter>('all');
   const [showJobs, setShowJobs] = useState(false);
@@ -195,10 +174,6 @@ export function ActivityRoutePlanner({ defId }: { defId: string }) {
     const onKey = (event: KeyboardEvent) => {
       const target = event.target as HTMLElement | null;
       if (target?.tagName === 'INPUT' || target?.tagName === 'TEXTAREA' || target?.isContentEditable) return;
-      // § P2: Am Steuer gehören die Tasten der Fahrt. ESC/Q steigen dort aus —
-      // sie dürfen nicht zugleich den Planer schließen, und R/F würden dem
-      // Fahrenden die Route unter dem Fahrzeug wegziehen.
-      if (driving) return;
       if (event.key === 'Escape') {
         event.preventDefault();
         if (showJobs) setShowJobs(false);
@@ -209,7 +184,7 @@ export function ActivityRoutePlanner({ defId }: { defId: string }) {
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [closePlanner, driving, showAdjustments, showJobs]);
+  }, [closePlanner, showAdjustments, showJobs]);
 
   const selectedVehicleDef = context?.vehicles.find((vehicle) => vehicle.id === selectedVehicle);
   const preview = useMemo(
@@ -290,6 +265,24 @@ export function ActivityRoutePlanner({ defId }: { defId: string }) {
     (modeRewardFactor('manual', game.config.activities.manualDriveBonusFactor) - 1) * 100,
   );
 
+  /**
+   * § D-068: Der EINE Weg ans Steuer — Planer schließen, dann in der Welt
+   * einsteigen. Er steht hier als Funktion, weil ihn drei Stellen brauchen
+   * (Auftrag annehmen, Weiterfahren, Zwischenbilanz); drei Kopien wären drei
+   * Gelegenheiten, das Schließen zu vergessen und die Kamera gegen ein
+   * halboffenes Panel arbeiten zu lassen.
+   */
+  const enterMission = () => {
+    closePlanner();
+    requestAnimationFrame(() => {
+      if (getMapApi()?.enterDrive()) {
+        pushToast('Einsatz gestartet – W/A/S/D an der Kreuzung, Q zum Verlassen.', 'success');
+      } else {
+        pushToast('Kein befahrbarer Straßenanschluss für diesen Einsatz.', 'error');
+      }
+    });
+  };
+
   // § Overhaul 2.0 (§4): Angenommen wird der AUFTRAG, nicht eine Lösung. Es geht
   // keine Route mit an den Command — sie entsteht unterwegs. Die Zielliste ist
   // die eingefrorene Auswahl des Auftrags, KEINE Reihenfolge: welches Ziel wann
@@ -312,16 +305,7 @@ export function ActivityRoutePlanner({ defId }: { defId: string }) {
     // `ThreeMapRenderer` mit einer Einsatzkamera, und `activities/driving.ts`
     // bleibt die eine Fahrphysik, die beide Ansichten schon heute teilen.
     if (executionMode === 'manual') {
-      closePlanner();
-      // Nach dem Schließen, damit die Kamera nicht gegen ein sich schließendes
-      // Panel arbeitet und der Renderer die frische Zielmenge kennt.
-      requestAnimationFrame(() => {
-        if (getMapApi()?.enterDrive()) {
-          pushToast('Einsatz gestartet – W/A/S/D an der Kreuzung, Q zum Verlassen.', 'success');
-        } else {
-          pushToast('Kein befahrbarer Straßenanschluss für diesen Einsatz.', 'error');
-        }
-      });
+      enterMission();
       return;
     }
     closePlanner();
@@ -331,12 +315,12 @@ export function ActivityRoutePlanner({ defId }: { defId: string }) {
 
   // Reine Projektionen — die Oberfläche rechnet weder Bestand noch Betrieb nach.
   const inspectedInfo = inspectedId ? game.getCityworkBuildingInfo(inspectedId) : undefined;
-  const inspectedDistance = inspectedInfo && driveReadout?.vehicle
-    ? Math.hypot(
-        inspectedInfo.x + inspectedInfo.w / 2 - driveReadout.vehicle.x,
-        inspectedInfo.y + inspectedInfo.h / 2 - driveReadout.vehicle.y,
-      )
-    : undefined;
+  // § D-068: Die Entfernung zum Fahrzeug stand hier, solange die Karte selbst
+  // fuhr und die Position aus ihrer Fahrschleife kam. Sie fährt nicht mehr —
+  // und eine Entfernung aus einer zweiten Rechnung wäre genau der zweite
+  // Reichweitenbegriff, den D-057 vermeidet. Die Karte sagt jetzt, WO der Wagen
+  // steht (`atBuildingId`), nicht wie weit er weg ist.
+  const inspectedDistance = undefined;
 
   const selectedImage = selectedVehicleDef ? vehicleImage(selectedVehicleDef.imageKey) : undefined;
   const openTargets = active ? active.targets.filter((target) => !target.done).length : targetIds.length;
@@ -375,7 +359,7 @@ export function ActivityRoutePlanner({ defId }: { defId: string }) {
           )}
           <span className={active ? 'active' : ''}>{openTargets} Ziele offen</span>
           <span className="done">
-            {driving ? <><Gamepad2 size={13} /> Du fährst</> : active?.mode === 'auto' ? <><Bot size={13} /> Die Stadt fährt</> : <><Gamepad2 size={13} /> Bereit</>}
+            {active?.mode === 'auto' ? <><Bot size={13} /> Die Stadt fährt</> : <><Gamepad2 size={13} /> Du fährst</>}
           </span>
         </div>
 
@@ -390,31 +374,27 @@ export function ActivityRoutePlanner({ defId }: { defId: string }) {
         </div>
       </header>
 
-      <div className={`citywork-smart-workspace${driving ? ' is-driving' : ''}`}>
+      <div className="citywork-smart-workspace">
         <main className="citywork-smart-map-panel">
           <div className="citywork-smart-map-head">
             <div>
               <span className={`citywork-smart-state${active ? ' ready' : ''}`}>
                 <Gamepad2 size={13} />
-                {driving ? 'Du fährst' : active ? 'Auftrag läuft' : 'Deine Aufgabe'}
+                {active ? 'Auftrag läuft' : 'Deine Aufgabe'}
               </span>
               <h2>{source.label} → {targetIds.length} Ziele</h2>
+              {/* § D-068: Die Karte ist die ÜBERSICHT — wo liegen Ziele, Lager,
+                  Quellen. Gefahren wird in der Stadt. */}
               <p>
-                {driving
-                  ? `Fahre die Ziele in deiner Reihenfolge an. ${drivenTiles} Kacheln aufgezeichnet.`
-                  : active
-                    ? 'Der Auftrag ist angenommen. Steig ein — welchen Weg du nimmst, entscheidest du.'
-                    : 'Ladeort und Fahrzeug wählst du. Der Weg entsteht beim Fahren, nicht vorher.'}
+                {active
+                  ? `Übersicht über deinen Einsatz. ${drivenTiles} Kacheln gefahren — weiter geht es in der Stadt.`
+                  : 'Ladeort und Fahrzeug wählst du. Der Weg entsteht beim Fahren, nicht vorher.'}
               </p>
             </div>
             <div className="citywork-smart-map-actions">
-              {/* Am Steuer wechselt niemand den Auftrag — der Knopf wäre ein
-                  Ausweg, den es nicht gibt (§7: weniger, dafür Zutreffendes). */}
-              {!driving && (
-                <button onClick={() => setShowJobs((value) => !value)}>
-                  <PackageCheck size={15} /> Auftrag wechseln
-                </button>
-              )}
+              <button onClick={() => setShowJobs((value) => !value)}>
+                <PackageCheck size={15} /> Auftrag wechseln
+              </button>
               <button onClick={() => setFitNonce((value) => value + 1)}>
                 <Route size={15} /> Alles zeigen
               </button>
@@ -438,61 +418,11 @@ export function ActivityRoutePlanner({ defId }: { defId: string }) {
                 ? { loadRatio: Math.min(1, preview.cargoPlan.totalRequired / preview.cargoPlan.capacity) }
                 : {})}
               editEnabled={false}
-              driving={driving}
               inspectedId={inspectedId}
               onInspect={setInspectedId}
-              onDriveReadout={setDriveReadout}
-              onRecordDrive={(tiles) => game.recordActivityDrive(tiles)}
-              onArrive={(buildingId) => {
-                // Der Command entscheidet, ob der Stopp zählt — die Karte meldet
-                // nur die Ankunft. Ist der Auftrag danach fertig, endet die Fahrt.
-                const result = game.progressActivity(buildingId);
-                if (!result.ok) return;
-                playFeedback('activity_start');
-                if (!game.state.activities.active) {
-                  setDriving(false);
-                  pushToast('Auftrag abgeschlossen – gute Fahrt war das.', 'success');
-                }
-              }}
-              onStorageReach={setStorageAtHand}
-              onDriveControls={(controls) => setDriveControls(() => controls)}
-              onExitDrive={() => {
-                setDriving(false);
-                // § P6 (§8 Phase 4): Aussteigen ist kein Abbruch, sondern eine
-                // Zwischenbilanz — mit genau zwei Auswegen.
-                if (game.state.activities.active) {
-                  setReviewOpen(true);
-                  return;
-                }
-                pushToast('Ausgestiegen. Über „Selbst fahren" geht es weiter.', 'info');
-              }}
               onPathChange={setRoadPath}
               onInvalid={() => pushToast('Nutze einen direkt angrenzenden Straßenabschnitt.', 'info')}
             />
-            {reviewOpen && active && (
-              <RouteReview
-                drivenTiles={drivenTiles}
-                stopsDone={visitedTargetIds.length}
-                stopsTotal={active.targets.length}
-                cargoOnboard={cargoStatus?.onboard}
-                cargoCapacity={cargoStatus?.capacity}
-                rewardMoney={Math.round(context.reward.money * rewardFactor)}
-                rewardXp={Math.round(context.reward.xp * rewardFactor)}
-                bonusLostPercent={bonusPercent}
-                onResume={() => { setReviewOpen(false); setDriving(true); }}
-                onHandOver={() => {
-                  const result = game.handOverActivityDrive();
-                  if (!result.ok) {
-                    pushToast(t(`error.${result.error}`), 'error');
-                    return;
-                  }
-                  setReviewOpen(false);
-                  closePlanner();
-                  pushToast('Übergeben. Die Stadt fährt die offenen Ziele in der Welt ab.', 'success');
-                  requestAnimationFrame(() => setMissionFollow(true));
-                }}
-              />
-            )}
             {inspectedInfo && (
               <MapBuildingCard
                 info={inspectedInfo}
@@ -506,71 +436,10 @@ export function ActivityRoutePlanner({ defId }: { defId: string }) {
                 }}
               />
             )}
-            {driving && storageAtHand && cargoStatus && cargoStatus.missingLoads > 0 && (
-              <button
-                type="button"
-                className="citywork-reload-here"
-                onClick={() => {
-                  const result = game.reloadActivityCargo(storageAtHand);
-                  if (result.ok) {
-                    pushToast('Nachgeladen. Die Ware kommt aus genau diesem Lager.', 'success');
-                  } else {
-                    pushToast(
-                      result.error === 'insufficient'
-                        ? 'Dieses Lager führt zu wenig Ware für eine ganze Lieferung.'
-                        : t(`error.${result.error}`),
-                      'error',
-                    );
-                  }
-                }}
-              >
-                <PackagePlus size={16} /> Hier nachladen
-                <small>{game.state.buildings[storageAtHand] ? t(`building.${game.state.buildings[storageAtHand]!.defId}`) : 'Lager'}</small>
-              </button>
-            )}
-            {driving && (
-              <JunctionChoice readout={driveReadout} onChoose={(turn) => driveControls?.turn(turn)} />
-            )}
-            {driving
-              ? <DriveHud readout={driveReadout} targetsTotal={targetIds.length} />
-              : <RouteSummary preview={preview} roadPath={roadPath} targetsTotal={targetIds.length} cargoStatus={cargoStatus} />}
+            <RouteSummary preview={preview} roadPath={roadPath} targetsTotal={targetIds.length} cargoStatus={cargoStatus} />
           </div>
         </main>
 
-        {/*
-          § 7: „Die Karte ist der Fokus. Nicht die Seitenleisten." Am Steuer
-          bleibt von der Entscheidungsspalte genau das übrig, was dann noch eine
-          Entscheidung ist — Fahrzeug und Ladung. Modus-Wahl, Prämie,
-          Start-Knopf, Ladeortwahl und Tourliste beantworten alle Fragen, die
-          VOR der Fahrt gestellt werden; unterwegs sind sie Ballast.
-        */}
-        {driving ? (
-          <aside className="citywork-smart-drive-rail">
-            <div className="citywork-smart-vehicle-hero">
-              <span>{selectedImage ? <img src={selectedImage} alt="" /> : <Truck size={40} />}</span>
-              <div>
-                <small>Dein Fahrzeug</small>
-                <strong>{selectedVehicleDef ? t(selectedVehicleDef.nameKey) : 'Lieferfahrzeug'}</strong>
-                <p>{planExplanation}</p>
-              </div>
-            </div>
-            {cargoStatus && (
-              <div className="citywork-smart-drive-cargo">
-                <small>Ladung</small>
-                <b>{Math.floor(cargoStatus.onboard)}{cargoStatus.capacity > 0 ? ` / ${cargoStatus.capacity}` : ''}</b>
-                <i style={{ width: `${cargoStatus.capacity > 0 ? Math.min(100, (cargoStatus.onboard / cargoStatus.capacity) * 100) : 0}%` }} />
-                <em>
-                  {cargoStatus.missingLoads > 0
-                    ? `${cargoStatus.missingLoads} Lieferung(en) passen noch drauf`
-                    : 'Ladung reicht für die offenen Ziele'}
-                </em>
-              </div>
-            )}
-            <p className="citywork-smart-drive-hint">
-              Klick ein Gebäude an, um Bestand und Bedarf zu sehen. Q oder ESC beendet die Fahrt und zeigt deine Route.
-            </p>
-          </aside>
-        ) : (
         <aside className="citywork-smart-decision">
           <section className={`citywork-smart-ready-card${active ? ' ready' : ''}`}>
             <span className="citywork-smart-kicker">{active ? 'Auftrag läuft' : 'Deine Entscheidung'}</span>
@@ -632,20 +501,17 @@ export function ActivityRoutePlanner({ defId }: { defId: string }) {
               § Overhaul 2.0 (§4): Der Knopf nimmt den AUFTRAG an. Er wartete
               vorher auf eine vollständige automatische Route — jetzt gibt es
               keine, die fertig sein könnte. Läuft der Auftrag bereits, führt
-              derselbe Knopf zurück ans Steuer.
+              derselbe Knopf zurück ans Steuer — und zwar IN DIE STADT (D-068),
+              nicht in diese Karte; sie hört hier auf, Spielfläche zu sein.
             */}
-            {active && executionMode === 'manual' && !driving ? (
-              <button className="citywork-smart-start" onClick={() => setDriving(true)}>
+            {active && executionMode === 'manual' ? (
+              <button className="citywork-smart-start" onClick={enterMission}>
                 <Play size={17} /> Weiterfahren
               </button>
             ) : (
-              <button className="citywork-smart-start" disabled={driving} onClick={startRoute}>
+              <button className="citywork-smart-start" onClick={startRoute}>
                 <Play size={17} />
-                {driving
-                  ? 'Du bist unterwegs'
-                  : executionMode === 'manual'
-                    ? 'Auftrag annehmen und einsteigen'
-                    : 'Auftrag annehmen'}
+                {executionMode === 'manual' ? 'Auftrag annehmen und einsteigen' : 'Auftrag annehmen'}
               </button>
             )}
           </section>
@@ -711,7 +577,6 @@ export function ActivityRoutePlanner({ defId }: { defId: string }) {
             </div>
           )}
         </aside>
-        )}
       </div>
 
       {showJobs && (
@@ -779,113 +644,6 @@ function MissionCard({
       </span>
       <CitizenPortrait role={entry.def.sender} seed={entry.def.id} size={34} />
     </button>
-  );
-}
-
-const TURN_LABELS: Record<NonNullable<DriveReadout['turn']>, string> = {
-  straight: 'geradeaus',
-  left: 'links abbiegen',
-  right: 'rechts abbiegen',
-  around: 'wenden',
-};
-
-/**
- * § 10 des Auftrags: „Unten, während Fahrt: Ladung, Ziele, Zeit, Entfernung,
- * Status." Alle Werte kommen gedrosselt aus der Fahrschleife — die Anzeige
- * rechnet nichts nach, sonst gäbe es zwei Wahrheiten über dieselbe Fahrt.
- */
-/**
- * § D-060 — DIE KREUZUNG IST DIE ENTSCHEIDUNG.
- *
- * Die vier Richtungen mit ihrer Taste, angeklickt genauso gültig wie gedrückt
- * (§3 des Auftrags: „per WASD / Pfeiltasten / oder Klick auf Richtung"). Was
- * hier steht, kommt aus `nextJunction` — derselben Funktion, nach der gleich
- * gefahren wird; die Anzeige kann also nichts ankündigen, was dann nicht geht.
- * Die vorgemerkte Richtung ist markiert, damit der Spieler SIEHT, dass seine
- * Eingabe angekommen ist. Genau dieses Signal fehlte vorher.
- */
-function JunctionChoice({
-  readout,
-  onChoose,
-}: {
-  readout: DriveReadout | undefined;
-  onChoose(turn: NonNullable<DriveReadout['turn']>): void;
-}) {
-  const options = readout?.junctionTurns;
-  if (!options || options.length === 0) return null;
-  return (
-    <div className="citywork-junction">
-      <header>
-        <small>Nächste Kreuzung</small>
-        <b>{readout?.junctionMeters !== undefined ? `in ${Math.round(readout.junctionMeters)} m` : 'voraus'}</b>
-      </header>
-      <div className="citywork-junction-options">
-        {(['left', 'straight', 'right', 'around'] as const)
-          .filter((turn) => options.includes(turn))
-          .map((turn) => (
-            <button
-              key={turn}
-              type="button"
-              className={readout?.intent === turn ? 'active' : ''}
-              onClick={() => onChoose(turn)}
-            >
-              <span aria-hidden>{TURN_GLYPHS[turn]}</span>
-              {TURN_LABELS[turn]}
-              <small>{TURN_KEYS[turn]}</small>
-            </button>
-          ))}
-      </div>
-    </div>
-  );
-}
-
-const TURN_GLYPHS: Record<NonNullable<DriveReadout['turn']>, string> = {
-  straight: '↑',
-  left: '←',
-  right: '→',
-  around: '↺',
-};
-
-const TURN_KEYS: Record<NonNullable<DriveReadout['turn']>, string> = {
-  straight: 'W',
-  left: 'A',
-  right: 'D',
-  around: 'S',
-};
-
-function DriveHud({ readout, targetsTotal }: { readout: DriveReadout | undefined; targetsTotal: number }) {
-  const done = targetsTotal - (readout?.remaining ?? targetsTotal);
-  return (
-    <div className="citywork-drive-hud">
-      <span className="citywork-drive-speed">
-        <Gauge size={16} />
-        <b>{Math.round(readout?.speedKph ?? 0)}</b> km/h
-      </span>
-      <span>
-        <small>Nächstes Ziel</small>
-        <b>{readout?.targetLabel ?? '—'}</b>
-        {readout?.targetMeters !== undefined && <em>{Math.round(readout.targetMeters)} m Luftlinie</em>}
-      </span>
-      <span>
-        <small>Nächste Anweisung</small>
-        <b>{readout?.turn ? TURN_LABELS[readout.turn] : 'der Straße folgen'}</b>
-        {readout?.turnMeters !== undefined && readout.turn && <em>in {Math.round(readout.turnMeters)} m</em>}
-      </span>
-      <span>
-        <small>Ziele</small>
-        <b>{Math.max(0, done)} / {targetsTotal}</b>
-        <em>erledigt</em>
-      </span>
-      <span>
-        <small>Fahrt</small>
-        <b>{readout?.stopped ? 'angehalten' : 'unterwegs'}</b>
-        {/* § D-060: Die vorgemerkte Richtung gehört sichtbar hierher, nicht nur
-            an die Kreuzungskarte. Sie ist der Beleg, dass die Eingabe angekommen
-            ist — und sie steht auch dann, wenn gerade keine Kreuzung in Sicht
-            ist, also genau in der Situation, in der man früher zweifelte. */}
-        <em>{readout?.intent ? `vorgemerkt: ${TURN_LABELS[readout.intent]}` : 'Leertaste hält an'}</em>
-      </span>
-    </div>
   );
 }
 
